@@ -1,0 +1,174 @@
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from "react-native";
+import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { Colors } from "@/constants/colors";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
+import * as Haptics from "expo-haptics";
+import { useQueryClient } from "@tanstack/react-query";
+
+const MEMBER_TYPES = ["person", "pet"];
+const RELATIONSHIPS = ["Spouse / Partner", "Child", "Parent", "Sibling", "Other"];
+const PET_TYPES = ["Dog", "Cat", "Bird", "Fish", "Rabbit", "Other"];
+
+export default function AddFamilyMemberScreen() {
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  const [name, setName] = useState("");
+  const [memberType, setMemberType] = useState("person");
+  const [relationship, setRelationship] = useState("");
+  const [petType, setPetType] = useState("");
+  const [dob, setDob] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function formatDob(text: string) {
+    const digits = text.replace(/\D/g, "");
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+  }
+
+  async function handleSave() {
+    if (!user) return;
+    if (!name.trim()) { setError("Name is required"); return; }
+    setIsLoading(true);
+    setError(null);
+
+    let dateOfBirth: string | null = null;
+    if (dob && dob.length === 10) {
+      const [month, day, year] = dob.split("/");
+      if (month && day && year) dateOfBirth = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    }
+
+    const { error: err } = await supabase.from("family_members").insert({
+      user_id: user.id,
+      name: name.trim(),
+      member_type: memberType,
+      relationship: memberType === "person" ? relationship || null : null,
+      pet_type: memberType === "pet" ? petType || null : null,
+      date_of_birth: dateOfBirth,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    setIsLoading(false);
+    if (err) { setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
+    else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      queryClient.invalidateQueries({ queryKey: ["family_members"] });
+      router.back();
+    }
+  }
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <View style={[styles.container, { backgroundColor: Colors.background }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+          <Pressable onPress={() => router.back()} style={styles.closeBtn}>
+            <Ionicons name="close" size={22} color={Colors.text} />
+          </Pressable>
+          <Text style={styles.title}>Add Family Member</Text>
+          <Pressable style={({ pressed }) => [styles.saveBtn, { opacity: pressed ? 0.8 : 1 }]} onPress={handleSave} disabled={isLoading}>
+            {isLoading ? <ActivityIndicator size="small" color={Colors.textInverse} /> : <Text style={styles.saveBtnText}>Save</Text>}
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {error && <View style={styles.errorBox}><Ionicons name="alert-circle" size={16} color={Colors.overdue} /><Text style={styles.errorText}>{error}</Text></View>}
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Type</Text>
+            <View style={styles.typeRow}>
+              {MEMBER_TYPES.map(t => (
+                <Pressable key={t} style={[styles.typeBtn, memberType === t && styles.typeBtnSelected]} onPress={() => { Haptics.selectionAsync(); setMemberType(t); }}>
+                  <Ionicons name={t === "pet" ? "paw-outline" : "person-outline"} size={18} color={memberType === t ? Colors.health : Colors.textSecondary} />
+                  <Text style={[styles.typeBtnText, memberType === t && styles.typeBtnTextSelected]}>{t === "pet" ? "Pet" : "Person"}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Name</Text>
+            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder={memberType === "pet" ? "Buddy, Whiskers..." : "First name"} placeholderTextColor={Colors.textTertiary} autoCapitalize="words" returnKeyType="next" />
+          </View>
+
+          {memberType === "person" ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Relationship</Text>
+              <View style={styles.grid}>
+                {RELATIONSHIPS.map(r => (
+                  <Pressable key={r} style={[styles.chip, relationship === r && styles.chipSelected]} onPress={() => { Haptics.selectionAsync(); setRelationship(r); }}>
+                    <Text style={[styles.chipText, relationship === r && styles.chipTextSelected]}>{r}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Pet Type</Text>
+              <View style={styles.grid}>
+                {PET_TYPES.map(p => (
+                  <Pressable key={p} style={[styles.chip, petType === p && styles.chipSelected]} onPress={() => { Haptics.selectionAsync(); setPetType(p); }}>
+                    <Text style={[styles.chipText, petType === p && styles.chipTextSelected]}>{p}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Date of Birth</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="calendar-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+              <TextInput style={styles.inputInner} value={dob} onChangeText={t => setDob(formatDob(t))} placeholder="MM/DD/YYYY" placeholderTextColor={Colors.textTertiary} keyboardType="numeric" maxLength={10} />
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  saveBtn: { backgroundColor: Colors.health, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7 },
+  saveBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 20 },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: 10, padding: 12 },
+  errorText: { flex: 1, fontSize: 13, color: Colors.overdue, fontFamily: "Inter_400Regular" },
+  section: { gap: 8 },
+  sectionTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.8 },
+  typeRow: { flexDirection: "row", gap: 10 },
+  typeBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
+  typeBtnSelected: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
+  typeBtnText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  typeBtnTextSelected: { color: Colors.health },
+  input: { backgroundColor: Colors.card, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
+  chipSelected: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
+  chipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  chipTextSelected: { color: Colors.health },
+  inputWrapper: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14, height: 52 },
+  inputIcon: { marginRight: 10 },
+  inputInner: { flex: 1, fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
+});

@@ -1,0 +1,341 @@
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  RefreshControl,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
+import { Colors } from "@/constants/colors";
+import { supabase } from "@/lib/supabase";
+import * as Haptics from "expo-haptics";
+import { parseISO, isBefore, addDays, format, differenceInDays } from "date-fns";
+
+function getStatus(date: string | null) {
+  if (!date) return "good";
+  const d = parseISO(date);
+  if (isBefore(d, new Date())) return "overdue";
+  if (isBefore(d, addDays(new Date(), 30))) return "due_soon";
+  return "good";
+}
+
+const PRIORITY_COLORS: Record<string, string> = {
+  high: Colors.overdue,
+  medium: Colors.dueSoon,
+  low: Colors.good,
+};
+
+export default function VehicleDetailScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<"tasks" | "history">("tasks");
+
+  const { data: vehicle, isLoading: loadingVehicle } = useQuery({
+    queryKey: ["vehicle", id],
+    queryFn: async () => {
+      const { data } = await supabase.from("vehicles").select("*").eq("id", id).single();
+      return data;
+    },
+  });
+
+  const { data: tasks, isLoading: loadingTasks, refetch } = useQuery({
+    queryKey: ["vehicle_tasks", id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("vehicle_maintenance_tasks")
+        .select("*")
+        .eq("vehicle_id", id)
+        .order("next_due_date", { ascending: true });
+      return data ?? [];
+    },
+  });
+
+  const { data: logs } = useQuery({
+    queryKey: ["maintenance_logs", id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("maintenance_logs")
+        .select("*")
+        .eq("vehicle_id", id)
+        .order("date", { ascending: false });
+      return data ?? [];
+    },
+  });
+
+  async function markComplete(taskId: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const task = tasks?.find(t => t.id === taskId);
+    if (!task) return;
+
+    let nextDate: string | null = null;
+    if (task.interval) {
+      const next = new Date();
+      next.setDate(next.getDate() + task.interval);
+      nextDate = next.toISOString().split("T")[0];
+    }
+
+    await supabase.from("vehicle_maintenance_tasks").update({
+      last_completed_at: new Date().toISOString(),
+      next_due_date: nextDate,
+      last_service_mileage: vehicle?.mileage,
+      updated_at: new Date().toISOString(),
+    }).eq("id", taskId);
+
+    queryClient.invalidateQueries({ queryKey: ["vehicle_tasks", id] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  }
+
+  const isLoading = loadingVehicle || loadingTasks;
+  const vehicleName = vehicle ? (vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`) : "Vehicle";
+
+  const overdue = tasks?.filter(t => getStatus(t.next_due_date) === "overdue") ?? [];
+  const dueSoon = tasks?.filter(t => getStatus(t.next_due_date) === "due_soon") ?? [];
+  const good = tasks?.filter(t => getStatus(t.next_due_date) === "good") ?? [];
+
+  return (
+    <View style={[styles.container, { backgroundColor: Colors.background }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={22} color={Colors.text} />
+        </Pressable>
+        <Text style={styles.headerTitle} numberOfLines={1}>{vehicleName}</Text>
+        <Pressable
+          style={styles.logBtn}
+          onPress={() => router.push(`/log-service/${id}` as any)}
+        >
+          <Ionicons name="add" size={20} color={Colors.vehicle} />
+        </Pressable>
+      </View>
+
+      {isLoading ? (
+        <ActivityIndicator color={Colors.accent} style={{ marginTop: 60 }} />
+      ) : vehicle ? (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} tintColor={Colors.accent} />}
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
+        >
+          <View style={styles.vehicleCard}>
+            <View style={styles.vehicleCardLeft}>
+              <View style={styles.vehicleIconBig}>
+                <Ionicons name="car-outline" size={32} color={Colors.vehicle} />
+              </View>
+              <View>
+                <Text style={styles.vehicleFullName}>{vehicle.year} {vehicle.make} {vehicle.model}</Text>
+                {vehicle.trim && <Text style={styles.vehicleTrim}>{vehicle.trim}</Text>}
+              </View>
+            </View>
+            <View style={styles.vehicleStats}>
+              {vehicle.mileage != null && (
+                <View style={styles.statBox}>
+                  <Text style={styles.statValue}>{vehicle.mileage.toLocaleString()}</Text>
+                  <Text style={styles.statLabel}>miles</Text>
+                </View>
+              )}
+              <View style={styles.statBox}>
+                <Text style={[styles.statValue, { color: overdue.length > 0 ? Colors.overdue : dueSoon.length > 0 ? Colors.dueSoon : Colors.good }]}>
+                  {overdue.length + dueSoon.length}
+                </Text>
+                <Text style={styles.statLabel}>need attention</Text>
+              </View>
+            </View>
+
+            <View style={styles.vehicleActions}>
+              <Pressable
+                style={({ pressed }) => [styles.vehicleActionBtn, { opacity: pressed ? 0.8 : 1 }]}
+                onPress={() => router.push(`/update-mileage/${id}` as any)}
+              >
+                <Ionicons name="speedometer-outline" size={14} color={Colors.textSecondary} />
+                <Text style={styles.vehicleActionText}>Update Mileage</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.vehicleActionBtnAccent, { opacity: pressed ? 0.8 : 1 }]}
+                onPress={() => router.push(`/log-service/${id}` as any)}
+              >
+                <Ionicons name="construct-outline" size={14} color={Colors.textInverse} />
+                <Text style={styles.vehicleActionTextAccent}>Log Service</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.tabs}>
+            {(["tasks", "history"] as const).map(tab => (
+              <Pressable
+                key={tab}
+                style={[styles.tab, activeTab === tab && styles.tabActive]}
+                onPress={() => { Haptics.selectionAsync(); setActiveTab(tab); }}
+              >
+                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                  {tab === "tasks" ? "Maintenance Tasks" : "Service History"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {activeTab === "tasks" ? (
+            <View style={styles.tasksContainer}>
+              {tasks?.length === 0 ? (
+                <View style={styles.emptyTasks}>
+                  <Ionicons name="checkmark-circle-outline" size={36} color={Colors.good} />
+                  <Text style={styles.emptyTasksText}>No maintenance tasks yet</Text>
+                </View>
+              ) : (
+                <>
+                  {overdue.length > 0 && <TaskGroup title="Overdue" color={Colors.overdue} tasks={overdue} onComplete={markComplete} vehicle={vehicle} />}
+                  {dueSoon.length > 0 && <TaskGroup title="Due Soon" color={Colors.dueSoon} tasks={dueSoon} onComplete={markComplete} vehicle={vehicle} />}
+                  {good.length > 0 && <TaskGroup title="Up to Date" color={Colors.good} tasks={good} onComplete={markComplete} vehicle={vehicle} />}
+                </>
+              )}
+            </View>
+          ) : (
+            <View style={styles.tasksContainer}>
+              {logs?.length === 0 ? (
+                <View style={styles.emptyTasks}>
+                  <Ionicons name="document-outline" size={36} color={Colors.textTertiary} />
+                  <Text style={styles.emptyTasksText}>No service records yet</Text>
+                </View>
+              ) : (
+                logs?.map(log => (
+                  <View key={log.id} style={styles.logCard}>
+                    <View style={styles.logTop}>
+                      <Text style={styles.logTask}>{log.task ?? "Service"}</Text>
+                      {log.cost != null && (
+                        <Text style={styles.logCost}>${log.cost.toFixed(2)}</Text>
+                      )}
+                    </View>
+                    <View style={styles.logMeta}>
+                      {log.date && <Text style={styles.logDate}>{format(parseISO(log.date), "MMM d, yyyy")}</Text>}
+                      {log.mileage != null && <Text style={styles.logMileage}>{log.mileage.toLocaleString()} mi</Text>}
+                      {log.provider && <Text style={styles.logProvider}>{log.provider}</Text>}
+                    </View>
+                    {log.notes && <Text style={styles.logNotes}>{log.notes}</Text>}
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+        </ScrollView>
+      ) : null}
+    </View>
+  );
+}
+
+function TaskGroup({ title, color, tasks, onComplete, vehicle }: {
+  title: string;
+  color: string;
+  tasks: any[];
+  onComplete: (id: string) => void;
+  vehicle: any;
+}) {
+  return (
+    <View style={styles.taskGroup}>
+      <View style={styles.taskGroupHeader}>
+        <View style={[styles.taskGroupDot, { backgroundColor: color }]} />
+        <Text style={[styles.taskGroupTitle, { color }]}>{title}</Text>
+      </View>
+      {tasks.map(task => {
+        const status = getStatus(task.next_due_date);
+        const statusColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
+        const daysLeft = task.next_due_date ? differenceInDays(parseISO(task.next_due_date), new Date()) : null;
+        return (
+          <View key={task.id} style={styles.taskCard}>
+            <View style={styles.taskCardLeft}>
+              <Text style={styles.taskName}>{task.task}</Text>
+              <View style={styles.taskMeta}>
+                {task.next_due_date && (
+                  <Text style={[styles.taskDue, { color: statusColor }]}>
+                    {daysLeft !== null && daysLeft < 0
+                      ? `${Math.abs(daysLeft)} days overdue`
+                      : daysLeft === 0 ? "Due today"
+                      : daysLeft != null ? `In ${daysLeft} days`
+                      : format(parseISO(task.next_due_date), "MMM d, yyyy")}
+                  </Text>
+                )}
+                {task.mileage_interval && vehicle?.mileage != null && (
+                  <Text style={styles.taskInterval}>{task.mileage_interval.toLocaleString()} mi interval</Text>
+                )}
+                {task.estimated_cost && (
+                  <Text style={styles.taskCost}>~${task.estimated_cost}</Text>
+                )}
+              </View>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.completeBtn, { opacity: pressed ? 0.7 : 1 }]}
+              onPress={() => onComplete(task.id)}
+            >
+              <Ionicons name="checkmark" size={18} color={Colors.good} />
+            </Pressable>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  backBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
+  headerTitle: { flex: 1, fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
+  logBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center", backgroundColor: Colors.vehicleMuted, borderRadius: 10 },
+  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 16 },
+  vehicleCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 12, borderWidth: 1, borderColor: Colors.border },
+  vehicleCardLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  vehicleIconBig: { width: 56, height: 56, borderRadius: 16, backgroundColor: Colors.vehicleMuted, alignItems: "center", justifyContent: "center" },
+  vehicleFullName: { fontSize: 18, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  vehicleTrim: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  vehicleStats: { flexDirection: "row", gap: 12 },
+  statBox: { flex: 1, backgroundColor: Colors.surface, borderRadius: 12, padding: 12, alignItems: "center" },
+  statValue: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text },
+  statLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  vehicleActions: { flexDirection: "row", gap: 8 },
+  vehicleActionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, backgroundColor: Colors.surface, borderRadius: 10, paddingVertical: 9, borderWidth: 1, borderColor: Colors.border },
+  vehicleActionText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  vehicleActionBtnAccent: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, backgroundColor: Colors.vehicle, borderRadius: 10, paddingVertical: 9 },
+  vehicleActionTextAccent: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textInverse },
+  tabs: { flexDirection: "row", backgroundColor: Colors.card, borderRadius: 12, padding: 4, borderWidth: 1, borderColor: Colors.border },
+  tab: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center" },
+  tabActive: { backgroundColor: Colors.vehicleMuted },
+  tabText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  tabTextActive: { color: Colors.vehicle, fontFamily: "Inter_600SemiBold" },
+  tasksContainer: { gap: 12 },
+  taskGroup: { gap: 8 },
+  taskGroupHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  taskGroupDot: { width: 6, height: 6, borderRadius: 3 },
+  taskGroupTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8 },
+  taskCard: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 12, padding: 12, gap: 12, borderWidth: 1, borderColor: Colors.border },
+  taskCardLeft: { flex: 1 },
+  taskName: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
+  taskMeta: { flexDirection: "row", gap: 8, marginTop: 3, flexWrap: "wrap" },
+  taskDue: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  taskInterval: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  taskCost: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  completeBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.goodMuted, alignItems: "center", justifyContent: "center" },
+  emptyTasks: { alignItems: "center", paddingVertical: 32, gap: 8 },
+  emptyTasksText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  logCard: { backgroundColor: Colors.card, borderRadius: 12, padding: 14, gap: 8, borderWidth: 1, borderColor: Colors.border },
+  logTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  logTask: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text, flex: 1 },
+  logCost: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.accent },
+  logMeta: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
+  logDate: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  logMileage: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  logProvider: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  logNotes: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, fontStyle: "italic" },
+});

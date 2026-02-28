@@ -1,0 +1,226 @@
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from "react-native";
+import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { Colors } from "@/constants/colors";
+import { useAuth } from "@/context/AuthContext";
+import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
+
+export default function SignUpScreen() {
+  const insets = useSafeAreaInsets();
+  const { signUp } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSignUp() {
+    if (!email.trim() || !password || !confirmPassword) {
+      setError("Please fill in all fields");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    const { error } = await signUp(email.trim(), password);
+    setIsLoading(false);
+    if (error) {
+      setError(error.message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.push("/(auth)/verify");
+    }
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <View style={[styles.container, { backgroundColor: Colors.background }]}>
+        <LinearGradient
+          colors={["rgba(0,201,167,0.08)", "transparent"]}
+          style={styles.topGradient}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+        />
+
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Pressable onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={22} color={Colors.text} />
+          </Pressable>
+
+          <View style={styles.header}>
+            <Text style={styles.title}>Create account</Text>
+            <Text style={styles.subtitle}>Start tracking everything that matters</Text>
+          </View>
+
+          <View style={styles.form}>
+            {error && (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="mail-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@example.com"
+                  placeholderTextColor={Colors.textTertiary}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoComplete="email"
+                  textContentType="emailAddress"
+                  returnKeyType="next"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Min. 6 characters"
+                  placeholderTextColor={Colors.textTertiary}
+                  secureTextEntry={!showPassword}
+                  textContentType="newPassword"
+                  returnKeyType="next"
+                />
+                <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={18}
+                    color={Colors.textTertiary}
+                  />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Repeat password"
+                  placeholderTextColor={Colors.textTertiary}
+                  secureTextEntry={!showPassword}
+                  textContentType="newPassword"
+                  returnKeyType="done"
+                  onSubmitEditing={handleSignUp}
+                />
+              </View>
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [styles.primaryButton, { opacity: pressed ? 0.85 : 1 }]}
+              onPress={handleSignUp}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color={Colors.textInverse} />
+              ) : (
+                <Text style={styles.primaryButtonText}>Create Account</Text>
+              )}
+            </Pressable>
+
+            <View style={styles.loginRow}>
+              <Text style={styles.loginText}>Already have an account?</Text>
+              <Pressable onPress={() => router.back()}>
+                <Text style={styles.loginLink}>Sign In</Text>
+              </Pressable>
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  topGradient: { position: "absolute", top: 0, left: 0, right: 0, height: 200 },
+  scroll: { paddingHorizontal: 24, gap: 28 },
+  backButton: { width: 40, height: 40, justifyContent: "center" },
+  header: { gap: 6 },
+  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
+  subtitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  form: { gap: 16 },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.overdueMuted,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.overdue + "30",
+  },
+  errorText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.overdue },
+  inputGroup: { gap: 6 },
+  label: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 14,
+    height: 52,
+  },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
+  eyeButton: { padding: 4 },
+  primaryButton: {
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    height: 54,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  primaryButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  loginRow: { flexDirection: "row", justifyContent: "center", gap: 6 },
+  loginText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  loginLink: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.accent },
+});

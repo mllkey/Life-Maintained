@@ -1,35 +1,73 @@
-// template
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
+import { View, ActivityIndicator } from "react-native";
+import { Colors } from "@/constants/colors";
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
+  const { session, isLoading, onboardingCompleted } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading) {
+      SplashScreen.hideAsync();
+    }
+  }, [isLoading]);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator color={Colors.accent} />
+      </View>
+    );
+  }
+
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.background } }}>
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Screen name="(onboarding)" options={{ headerShown: false, presentation: "modal" }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="add-vehicle" options={{ headerShown: false, presentation: "modal" }} />
+      <Stack.Screen name="vehicle/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="log-service/[vehicleId]" options={{ headerShown: false, presentation: "modal" }} />
+      <Stack.Screen name="add-property" options={{ headerShown: false, presentation: "modal" }} />
+      <Stack.Screen name="property/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="add-property-task/[propertyId]" options={{ headerShown: false, presentation: "modal" }} />
+      <Stack.Screen name="add-appointment" options={{ headerShown: false, presentation: "modal" }} />
+      <Stack.Screen name="add-medication" options={{ headerShown: false, presentation: "modal" }} />
+      <Stack.Screen name="add-family-member" options={{ headerShown: false, presentation: "modal" }} />
+      <Stack.Screen name="health-profile" options={{ headerShown: false, presentation: "modal" }} />
+      <Stack.Screen name="update-mileage/[vehicleId]" options={{ headerShown: false, presentation: "modal" }} />
     </Stack>
   );
 }
 
 export default function RootLayout() {
-  useEffect(() => {
-    SplashScreen.hideAsync();
-  }, []);
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+  });
+
+  if (!fontsLoaded) return null;
 
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <GestureHandlerRootView>
+        <GestureHandlerRootView style={{ flex: 1 }}>
           <KeyboardProvider>
-            <RootLayoutNav />
+            <AuthProvider>
+              <RootLayoutNav />
+            </AuthProvider>
           </KeyboardProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>
