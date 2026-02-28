@@ -1,0 +1,95 @@
+Build a native iOS app called LifeMaintained using React Native and Expo. This is a maintenance tracker for vehicles, home/property, and health.
+I have an existing Supabase project — connect to it, do not recreate the database.
+Tables already exist:
+
+vehicles — year, make, model, trim, vehicle_type, vehicle_category, motorcycle_type, mileage, is_seasonal, average_miles_per_month
+vehicle_maintenance_tasks — task, interval, mileage_interval, next_due_date, last_completed_at, last_service_mileage, priority, estimated_cost
+vehicle_mileage_history — mileage tracking over time
+maintenance_logs — service records with cost, mileage, provider, receipt_url (shared between vehicles and properties)
+maintenance_templates — manufacturer schedules by make/model/year with mileage AND time intervals
+manufacturer_schedules — per-vehicle manufacturer data
+properties — address, property_type, year_built, square_footage
+property_maintenance_tasks — task, interval, category, estimated_cost, next_due_date
+health_profiles — date_of_birth, sex_at_birth
+health_appointments — appointment_type, provider_name, interval_months, next_due_date, family_member_id
+family_members — name, relationship, member_type, pet_type, date_of_birth
+medications — name, reminder_time, reminders_enabled
+notifications — full notification system with priority levels and types
+user_notification_preferences — push_enabled, quiet_hours, advance_warning_days, muted categories/vehicles/properties
+profiles — subscription_tier, trial dates, stripe fields, onboarding data
+promo_codes + promo_code_redemptions — promo code system
+budget_notification_tiers — cost threshold alerts
+
+Features to build:
+Authentication:
+
+Sign up, log in, email verification screen
+Welcome screen for new users
+
+Onboarding:
+
+Guided setup flow on first login — asks what they want to track (vehicles, home, health), collects basic info, sets up first items
+
+Dashboard:
+
+Shows everything overdue or due soon across all three categories
+Color coded: overdue = red, due soon = yellow, good = green
+Age-based health screening alerts surface here (e.g. "You're 45 — time to schedule a colonoscopy")
+
+Vehicles tab:
+
+Add vehicles by type (car, truck, motorcycle, superbike, seasonal, etc.)
+Each maintenance task has its own interval — miles OR time, not uniform across tasks. A superbike oil change interval differs from a car's.
+Log service: date, mileage, cost, provider, notes
+Receipt photo capture using device camera — OCR auto-extracts date, cost, service type to pre-fill the log
+Update current mileage to recalculate next due dates
+One-tap export of full service history as PDF and CSV for resale documentation
+
+Home tab:
+
+Add properties with type and year built
+Tasks by category: HVAC, roof, gutters, appliances, plumbing, electrical, pest control, etc.
+Each task has its own interval (seasonal, annual, as-needed)
+Log completed work with cost and provider
+
+Health tab:
+
+Track appointments for self, family members, and pets separately
+Each appointment type has its own reminder interval
+Medications with daily reminder times
+Age and sex-based screening recommendations pulled from health_profiles (colonoscopy at 45, mammogram at 40 for females, prostate screening at 50 for males, annual physicals, skin checks, eye exams, etc.)
+Screening recommendations appear as suggested tasks user can add and track
+Log completed appointments
+
+Notifications:
+
+Push notifications via Expo for overdue and upcoming items across all three categories
+Age-based health screening reminders — user can opt in per recommendation
+Budget alerts when estimated upcoming costs exceed user-set thresholds
+Quiet hours respected
+Advance warning days configurable per user
+User can mute specific vehicles, properties, or categories
+
+Subscription:
+
+Free tier with limited items
+Premium tier unlocking unlimited tracking
+Trial period support
+Stripe integration for payments
+Promo code redemption at checkout
+
+Settings:
+
+Notification preferences (push, email, quiet hours, advance warning days, muted items)
+Subscription management
+Health profile (date of birth, sex at birth)
+Legal pages: Terms of Service, Privacy Policy
+Account management
+
+Design:
+
+Clean, modern, dark mode friendly
+Bottom tab navigation: Dashboard, Vehicles, Home, Health, Settings
+Native iOS feel throughout
+
+Start with: Authentication flow → Onboarding → Dashboard. Then build Vehicles tab fully before moving to Home and Health.
