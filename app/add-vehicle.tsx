@@ -19,6 +19,8 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 
+const MILEAGE_TRACKED_TYPES = new Set(["car", "truck", "suv", "motorcycle", "superbike", "rv", "electric"]);
+
 const VEHICLE_TYPES = [
   { value: "car", label: "Car" },
   { value: "truck", label: "Truck" },
@@ -44,6 +46,7 @@ export default function AddVehicleScreen() {
   const [nickname, setNickname] = useState("");
   const [vehicleType, setVehicleType] = useState("car");
   const [mileage, setMileage] = useState("");
+  const [avgMilesPerMonth, setAvgMilesPerMonth] = useState("");
   const [isSeasonal, setIsSeasonal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +62,10 @@ export default function AddVehicleScreen() {
       setError("Please enter a valid year");
       return;
     }
+    if (MILEAGE_TRACKED_TYPES.has(vehicleType) && !avgMilesPerMonth.trim()) {
+      setError("Estimated monthly miles is required for this vehicle type");
+      return;
+    }
     setIsLoading(true);
     setError(null);
     const { error: err } = await supabase.from("vehicles").insert({
@@ -70,6 +77,7 @@ export default function AddVehicleScreen() {
       nickname: nickname.trim() || null,
       vehicle_type: vehicleType,
       mileage: mileage ? parseInt(mileage) : null,
+      average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth) : null,
       is_seasonal: isSeasonal,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -154,6 +162,16 @@ export default function AddVehicleScreen() {
 
           <FieldGroup label="Mileage">
             <TextInputField label="Current Mileage" value={mileage} onChangeText={setMileage} placeholder="45000" keyboardType="numeric" />
+            {MILEAGE_TRACKED_TYPES.has(vehicleType) && (
+              <TextInputField
+                label="Estimated Monthly Miles *"
+                value={avgMilesPerMonth}
+                onChangeText={setAvgMilesPerMonth}
+                placeholder="1000"
+                keyboardType="numeric"
+                hint="Used to calculate mileage-based maintenance intervals"
+              />
+            )}
           </FieldGroup>
 
           <FieldGroup label="Options">
@@ -185,7 +203,7 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-function TextInputField({ label, value, onChangeText, placeholder, keyboardType, maxLength, autoCapitalize }: {
+function TextInputField({ label, value, onChangeText, placeholder, keyboardType, maxLength, autoCapitalize, hint }: {
   label: string;
   value: string;
   onChangeText: (t: string) => void;
@@ -193,6 +211,7 @@ function TextInputField({ label, value, onChangeText, placeholder, keyboardType,
   keyboardType?: any;
   maxLength?: number;
   autoCapitalize?: any;
+  hint?: string;
 }) {
   return (
     <View style={styles.field}>
@@ -208,6 +227,7 @@ function TextInputField({ label, value, onChangeText, placeholder, keyboardType,
         autoCapitalize={autoCapitalize ?? "none"}
         returnKeyType="done"
       />
+      {hint && <Text style={styles.fieldHint}>{hint}</Text>}
     </View>
   );
 }
@@ -236,6 +256,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 10 },
   field: { gap: 5 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  fieldHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 },
   fieldInput: {
     backgroundColor: Colors.card,
     borderRadius: 12,
