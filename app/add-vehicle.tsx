@@ -44,7 +44,6 @@ export default function AddVehicleScreen() {
   const [nickname, setNickname] = useState("");
   const [vehicleType, setVehicleType] = useState("car");
   const [mileage, setMileage] = useState("");
-  const [avgMilesPerMonth, setAvgMilesPerMonth] = useState("");
   const [isSeasonal, setIsSeasonal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +70,6 @@ export default function AddVehicleScreen() {
       nickname: nickname.trim() || null,
       vehicle_type: vehicleType,
       mileage: mileage ? parseInt(mileage) : null,
-      average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth) : null,
       is_seasonal: isSeasonal,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -156,7 +154,6 @@ export default function AddVehicleScreen() {
 
           <FieldGroup label="Mileage">
             <TextInputField label="Current Mileage" value={mileage} onChangeText={setMileage} placeholder="45000" keyboardType="numeric" />
-            <TextInputField label="Avg Miles/Month" value={avgMilesPerMonth} onChangeText={setAvgMilesPerMonth} placeholder="1000" keyboardType="numeric" />
           </FieldGroup>
 
           <FieldGroup label="Options">
