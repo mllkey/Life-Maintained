@@ -27,7 +27,9 @@ A native iOS / cross-platform mobile app built with Expo React Native that track
 - `lib/supabase.ts` — Supabase client
 - `lib/query-client.ts` — React Query client with default fetcher
 - `constants/colors.ts` — Design system color palette
-- `server/routes.ts` — Express routes including `/api/ocr` endpoint using tesseract.js
+- `server/routes.ts` — Express routes (OCR removed; receipt scanning is handled via Supabase Edge Function)
+- `lib/receiptScanner.ts` — Calls `scan-receipt` Supabase Edge Function with base64 image; returns structured result
+- `components/ReceiptScanButton.tsx` — Self-contained receipt scan button (camera or gallery); calls receiptScanner and fires onScanComplete callback
 
 ## Modal Screens
 
@@ -73,7 +75,7 @@ A native iOS / cross-platform mobile app built with Expo React Native that track
 - **Subscription**: Free vs Premium UI, 14-day trial, promo code input, connected to profiles table
 - **Notifications**: Push permissions, advance warning days (7/14/30), quiet hours, per-vehicle/property mute, budget alerts via budget_notification_tiers table
 - **Export**: PDF (expo-print) and CSV (expo-file-system) export of vehicle service history for resale
-- **Receipt OCR**: Camera/gallery photo → "Scan Receipt" → server tesseract.js extracts date/cost/service/provider
+- **Receipt OCR**: ReceiptScanButton (camera or gallery) → Supabase Edge Function `scan-receipt` → auto-fills date, cost, provider, service type in the log form
 - **Settings**: Health profile, notifications, subscription management, Terms of Service, Privacy Policy, account deletion, email branding note
 
 ## Design Tokens
@@ -98,7 +100,7 @@ A native iOS / cross-platform mobile app built with Expo React Native that track
 - `expo-print@~15.0.8` — PDF generation for service history export
 - `expo-sharing@~14.0.8` — Share PDFs and CSVs via native share sheet
 - `expo-file-system@~19.0.21` — File read/write for CSV export and OCR base64 encoding
-- `tesseract.js` — Server-side OCR for receipt scanning
+- `expo-image-picker@~16.0.6` — Camera and gallery picker used inside ReceiptScanButton
 
 ## NativeTabs Setup
 
