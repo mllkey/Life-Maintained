@@ -1,0 +1,127 @@
+Create two new files in the project:
+
+FILE 1: lib/receiptScanner.ts
+FILE 2: components/ReceiptScanButton.tsx
+
+Here is the code for each file. Create them exactly as shown.
+
+--- lib/receiptScanner.ts ---
+
+import { supabase } from "./supabase";
+
+export interface ReceiptScanResult {
+  date: string | null;
+  cost: number | null;
+  provider: string | null;
+  serviceType: string | null;
+  rawText: string;
+  error?: string;
+}
+
+export async function scanReceipt(base64Image: string): Promise<ReceiptScanResult> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error("You must be logged in to scan receipts.");
+    }
+    const { data, error } = await supabase.functions.invoke("scan-receipt", {
+      body: { image: base64Image },
+    });
+    if (error) {
+      throw new Error(error.message || "Failed to scan receipt");
+    }
+    return {
+      date: data.date || null,
+      cost: data.cost != null ? Number(data.cost) : null,
+      provider: data.provider || null,
+      serviceType: data.serviceType || null,
+      rawText: data.rawText || "",
+      error: data.error || undefined,
+    };
+  } catch (err) {
+    console.error("Receipt scan failed:", err);
+    return {
+      date: null,
+      cost: null,
+      provider: null,
+      serviceType: null,
+      rawText: "",
+      error: err instanceof Error ? err.message : "Could not scan receipt",
+    };
+  }
+}
+
+--- components/ReceiptScanButton.tsx ---
+
+import React, { useState } from "react";
+import { TouchableOpacity, Text, Alert, ActivityIndicator, StyleSheet, View } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { scanReceipt, ReceiptScanResult } from "../lib/receiptScanner";
+
+interface Props {
+  onScanComplete: (result: ReceiptScanResult) => void;
+}
+
+export default function ReceiptScanButton({ onScanComplete }: Props) {
+  const [scanning, setScanning] = useState(false);
+
+  const handleScan = async (useCamera: boolean) => {
+    try {
+      if (useCamera) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Permission needed", "Camera access is required to scan receipts.");
+          return;
+        }
+      }
+      const pickerResult = useCamera
+        ? await ImagePicker.launchCameraAsync({ base64: true, quality: 0.8, allowsEditing: true })
+        : await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.8, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+      if (pickerResult.canceled || !pickerResult.assets?.[0]?.base64) {
+        return;
+      }
+      setScanning(true);
+      const base64Image = pickerResult.assets[0].base64;
+      const result = await scanReceipt(base64Image);
+      if (result.error) {
+        Alert.alert("Scan Issue", "We couldn't read all fields automatically. You can fill in the remaining fields manually.");
+      }
+      onScanComplete(result);
+    } catch (err) {
+      console.error("Receipt scan error:", err);
+      Alert.alert("Scan Failed", "Something went wrong scanning the receipt. Please enter the details manually.");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const showOptions = () => {
+    Alert.alert("Scan Receipt", "How would you like to add a receipt?", [
+      { text: "Take Photo", onPress: () => handleScan(true) },
+      { text: "Choose from Library", onPress: () => handleScan(false) },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  if (scanning) {
+    return (
+      <View style={styles.scanningContainer}>
+        <ActivityIndicator size="small" color="#4F46E5" />
+        <Text style={styles.scanningText}>Scanning receipt...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <TouchableOpacity style={styles.button} onPress={showOptions}>
+      <Text style={styles.buttonText}>📷 Scan Receipt</Text>
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  button: { backgroundColor: "#4F46E5", paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, alignItems: "center", marginVertical: 8 },
+  buttonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
+  scanningContainer: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 12, gap: 8 },
+  scanningText: { color: "#4F46E5", fontSize: 14 },
+});
