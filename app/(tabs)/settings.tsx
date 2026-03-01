@@ -14,12 +14,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
+  const queryClient = useQueryClient();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
   const { data: profile } = useQuery({
@@ -47,6 +48,49 @@ export default function SettingsScreen() {
     ]);
   }
 
+  async function handleDeleteAccount() {
+    Alert.alert(
+      "Delete Account",
+      "This will permanently delete your account and all data including vehicles, properties, health records, and service history. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Forever",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              "Are you absolutely sure?",
+              "Type DELETE in the next step to confirm.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Yes, Delete My Account",
+                  style: "destructive",
+                  onPress: async () => {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                    if (!user) return;
+                    const { error } = await supabase.rpc("delete_user_account", { user_id: user.id }).maybeSingle();
+                    if (error) {
+                      await supabase.auth.signOut();
+                      queryClient.clear();
+                      router.replace("/(auth)");
+                    } else {
+                      await supabase.auth.signOut();
+                      queryClient.clear();
+                      router.replace("/(auth)");
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  }
+
+  const isPremium = profile?.subscription_tier === "premium";
+
   const sections = [
     {
       title: "Account",
@@ -56,14 +100,14 @@ export default function SettingsScreen() {
           label: "Health Profile",
           sublabel: "Date of birth, sex at birth",
           color: Colors.health,
-          onPress: () => router.push("/health-profile"),
+          onPress: () => router.push("/health-profile" as any),
         },
         {
           icon: "notifications-outline",
           label: "Notifications",
           sublabel: "Push, quiet hours, advance warnings",
           color: Colors.blue,
-          onPress: () => {},
+          onPress: () => router.push("/notifications-settings" as any),
         },
       ],
     },
@@ -72,10 +116,10 @@ export default function SettingsScreen() {
       items: [
         {
           icon: "star-outline",
-          label: profile?.subscription_tier === "premium" ? "Premium Plan" : "Upgrade to Premium",
-          sublabel: profile?.subscription_tier === "premium" ? "Unlimited tracking" : "Unlimited vehicles, properties & health items",
+          label: isPremium ? "Premium Plan" : "Upgrade to Premium",
+          sublabel: isPremium ? "Unlimited tracking — manage subscription" : "Unlimited vehicles, properties & health items",
           color: Colors.vehicle,
-          onPress: () => {},
+          onPress: () => router.push("/subscription" as any),
         },
       ],
     },
@@ -87,14 +131,14 @@ export default function SettingsScreen() {
           label: "Terms of Service",
           sublabel: null,
           color: Colors.textTertiary,
-          onPress: () => {},
+          onPress: () => router.push("/terms-of-service" as any),
         },
         {
           icon: "shield-outline",
           label: "Privacy Policy",
           sublabel: null,
           color: Colors.textTertiary,
-          onPress: () => {},
+          onPress: () => router.push("/privacy-policy" as any),
         },
       ],
     },
@@ -107,6 +151,14 @@ export default function SettingsScreen() {
           sublabel: null,
           color: Colors.overdue,
           onPress: handleSignOut,
+          destructive: true,
+        },
+        {
+          icon: "trash-outline",
+          label: "Delete Account",
+          sublabel: "Permanently delete all data",
+          color: Colors.overdue,
+          onPress: handleDeleteAccount,
           destructive: true,
         },
       ],
@@ -130,16 +182,23 @@ export default function SettingsScreen() {
           </View>
           <View style={styles.userInfo}>
             <Text style={styles.userEmail}>{user?.email}</Text>
-            <Text style={styles.userTier}>{profile?.subscription_tier === "premium" ? "Premium" : "Free Plan"}</Text>
+            <Text style={styles.userTier}>{isPremium ? "Premium Plan" : "Free Plan"}</Text>
           </View>
-          <View style={[styles.tierBadge, profile?.subscription_tier === "premium" ? styles.tierBadgePremium : styles.tierBadgeFree]}>
-            {profile?.subscription_tier === "premium" ? (
-              <Ionicons name="star" size={12} color={Colors.vehicle} />
-            ) : null}
-            <Text style={[styles.tierBadgeText, profile?.subscription_tier === "premium" ? { color: Colors.vehicle } : { color: Colors.textTertiary }]}>
-              {profile?.subscription_tier === "premium" ? "Premium" : "Free"}
+          <View style={[styles.tierBadge, isPremium ? styles.tierBadgePremium : styles.tierBadgeFree]}>
+            {isPremium && <Ionicons name="star" size={12} color={Colors.vehicle} />}
+            <Text style={[styles.tierBadgeText, isPremium ? { color: Colors.vehicle } : { color: Colors.textTertiary }]}>
+              {isPremium ? "Premium" : "Free"}
             </Text>
           </View>
+        </View>
+
+        <View style={styles.emailNote}>
+          <Ionicons name="mail-outline" size={16} color={Colors.blue} />
+          <Text style={styles.emailNoteText}>
+            Maintenance reminders and account emails are sent from{" "}
+            <Text style={styles.emailNoteEmail}>noreply@lifemaintained.app</Text>
+            {". "}Add it to your contacts so they don't go to spam.
+          </Text>
         </View>
 
         {sections.map(section => (
@@ -152,16 +211,17 @@ export default function SettingsScreen() {
                   style={({ pressed }) => [
                     styles.settingItem,
                     i === 0 && styles.settingItemFirst,
-                    i === section.items.length - 1 && styles.settingItemLast,
                     { opacity: pressed ? 0.8 : 1 },
                   ]}
-                  onPress={item.onPress}
+                  onPress={() => { Haptics.selectionAsync(); item.onPress(); }}
                 >
                   <View style={[styles.settingIcon, { backgroundColor: item.color + "18" }]}>
                     <Ionicons name={item.icon as any} size={18} color={item.color} />
                   </View>
                   <View style={styles.settingContent}>
-                    <Text style={[styles.settingLabel, (item as any).destructive && { color: Colors.overdue }]}>{item.label}</Text>
+                    <Text style={[styles.settingLabel, (item as any).destructive && { color: Colors.overdue }]}>
+                      {item.label}
+                    </Text>
                     {item.sublabel && <Text style={styles.settingSubLabel}>{item.sublabel}</Text>}
                   </View>
                   {!(item as any).destructive && (
@@ -208,8 +268,20 @@ const styles = StyleSheet.create({
   userTier: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   tierBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, flexDirection: "row", alignItems: "center", gap: 4 },
   tierBadgePremium: { backgroundColor: Colors.vehicleMuted },
-  tierBadgeFree: { backgroundColor: Colors.card },
+  tierBadgeFree: { backgroundColor: Colors.surface },
   tierBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  emailNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: Colors.blueMuted,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.blue + "33",
+  },
+  emailNoteText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 20 },
+  emailNoteEmail: { fontFamily: "Inter_500Medium", color: Colors.blue },
   section: { gap: 8 },
   sectionTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.8, paddingHorizontal: 4 },
   sectionItems: { backgroundColor: Colors.card, borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: Colors.border },
@@ -222,7 +294,6 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
   },
   settingItemFirst: { borderTopWidth: 0 },
-  settingItemLast: {},
   settingIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   settingContent: { flex: 1 },
   settingLabel: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },

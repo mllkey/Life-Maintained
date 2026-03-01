@@ -1,0 +1,14 @@
+Please make the following improvements to the LifeMaintained app:
+
+Subscription screen is missing — add a subscription/paywall screen that shows Free vs Premium tiers, trial period countdown, and a promo code input field. Connect to the profiles table fields: subscription_tier, trial_end_date, stripe_customer_id.
+Notification preferences are missing from Settings — add a full notifications settings section including: push notifications toggle, advance warning days (how many days before due date to notify), quiet hours start/end time, and ability to mute specific vehicles or properties.
+Budget alerts are missing — add a budget threshold setting where users can set a cost amount and get notified when upcoming maintenance costs exceed it. Connect to budget_notification_tiers table.
+Receipt OCR is not implemented in log-service — when user takes or uploads a receipt photo, use OCR to auto-extract date, cost, and service type to pre-fill the form fields.
+Export service history is missing — on the vehicle detail screen, add a button to export full service history as PDF and CSV for resale documentation.
+Health screening opt-in notifications are missing — when age-based screening recommendations appear on the dashboard, each one should have a toggle so users can opt into push notification reminders for that specific screening.
+Medications need push notifications — the daily reminder time stored in the medications table should trigger an actual push notification at that time each day.
+Settings screen is incomplete — add: Terms of Service page, Privacy Policy page, account deletion option, and subscription management.
+Email templates need branding — all auth emails currently say 'Supabase Auth' instead of LifeMaintained. Add a note in the app settings or onboarding that directs users to expect emails from LifeMaintained.
+Property task completion — when a property maintenance task is marked complete, it should auto-calculate the next due date based on its interval, same as vehicle tasks already do.
+
+Fix these one at a time, starting with the most impactful user-facing features first."

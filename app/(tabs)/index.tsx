@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -18,6 +18,10 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { LinearGradient } from "expo-linear-gradient";
 import { differenceInDays, parseISO, isAfter, isBefore, addDays } from "date-fns";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Haptics from "expo-haptics";
+
+const SCREENING_NOTIF_KEY = "screening_notif_optins";
 
 type DashboardItem = {
   id: string;
@@ -72,6 +76,20 @@ function getAgeScreenings(dob: string | null, sex: string | null): { title: stri
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const [screeningOptIns, setScreeningOptIns] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    AsyncStorage.getItem(SCREENING_NOTIF_KEY).then(raw => {
+      if (raw) setScreeningOptIns(JSON.parse(raw));
+    });
+  }, []);
+
+  async function toggleScreeningOptIn(title: string) {
+    Haptics.selectionAsync();
+    const next = { ...screeningOptIns, [title]: !screeningOptIns[title] };
+    setScreeningOptIns(next);
+    await AsyncStorage.setItem(SCREENING_NOTIF_KEY, JSON.stringify(next));
+  }
 
   const { data: dashboardItems, isLoading, refetch } = useQuery({
     queryKey: ["dashboard", user?.id],
@@ -224,21 +242,35 @@ export default function DashboardScreen() {
                   </View>
                 </View>
                 {screenings.slice(0, 3).map((s, i) => (
-                  <Pressable
-                    key={i}
-                    style={({ pressed }) => [styles.screeningCard, { opacity: pressed ? 0.8 : 1 }]}
-                    onPress={() => router.push("/add-appointment")}
-                  >
+                  <View key={i} style={styles.screeningCard}>
                     <View style={styles.screeningIcon}>
                       <Ionicons name="heart-outline" size={18} color={Colors.health} />
                     </View>
-                    <View style={styles.screeningContent}>
+                    <Pressable
+                      style={styles.screeningContent}
+                      onPress={() => router.push("/add-appointment" as any)}
+                    >
                       <Text style={styles.screeningTitle}>{s.title}</Text>
                       <Text style={styles.screeningDesc}>{s.description}</Text>
-                    </View>
-                    <Ionicons name="add-circle-outline" size={20} color={Colors.health} />
-                  </Pressable>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.screeningNotifBtn,
+                        screeningOptIns[s.title] && styles.screeningNotifBtnActive,
+                      ]}
+                      onPress={() => toggleScreeningOptIn(s.title)}
+                    >
+                      <Ionicons
+                        name={screeningOptIns[s.title] ? "notifications" : "notifications-outline"}
+                        size={16}
+                        color={screeningOptIns[s.title] ? Colors.health : Colors.textTertiary}
+                      />
+                    </Pressable>
+                  </View>
                 ))}
+                <Text style={styles.screeningNotifHint}>
+                  Tap the bell icon to opt into reminder notifications for each screening.
+                </Text>
               </View>
             )}
 
@@ -416,6 +448,21 @@ const styles = StyleSheet.create({
   screeningContent: { flex: 1, gap: 2 },
   screeningTitle: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
   screeningDesc: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  screeningNotifBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: Colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  screeningNotifBtnActive: {
+    backgroundColor: Colors.healthMuted,
+    borderColor: Colors.health + "44",
+  },
+  screeningNotifHint: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
   quickActions: { gap: 12 },
   quickActionsRow: { flexDirection: "row", gap: 12 },
   quickAction: { flex: 1, alignItems: "center", gap: 8, backgroundColor: Colors.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.border },

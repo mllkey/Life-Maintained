@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Image,
+  Alert,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,7 +20,9 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 import { useQueryClient } from "@tanstack/react-query";
+import { getApiUrl } from "@/lib/query-client";
 
 export default function LogServiceScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
@@ -35,6 +38,8 @@ export default function LogServiceScreen() {
   const [notes, setNotes] = useState("");
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [ocrApplied, setOcrApplied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function formatDate(text: string) {
@@ -45,10 +50,6 @@ export default function LogServiceScreen() {
   }
 
   async function pickReceipt() {
-    const [permission, requestPermission] = await ImagePicker.getCameraPermissionsAsync() as any;
-    if (!permission?.granted) {
-      await ImagePicker.requestCameraPermissionsAsync();
-    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
@@ -56,6 +57,7 @@ export default function LogServiceScreen() {
     });
     if (!result.canceled && result.assets[0]) {
       setReceiptUri(result.assets[0].uri);
+      setOcrApplied(false);
     }
   }
 
@@ -67,6 +69,46 @@ export default function LogServiceScreen() {
     });
     if (!result.canceled && result.assets[0]) {
       setReceiptUri(result.assets[0].uri);
+      setOcrApplied(false);
+    }
+  }
+
+  async function scanReceipt() {
+    if (!receiptUri) return;
+    setIsScanning(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const base64 = await FileSystem.readAsStringAsync(receiptUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const apiUrl = new URL("/api/ocr", getApiUrl());
+      const response = await fetch(apiUrl.toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64 }),
+      });
+
+      if (!response.ok) throw new Error("OCR service unavailable");
+      const result = await response.json();
+
+      if (result.date && !date) setDate(result.date);
+      else if (result.date) setDate(result.date);
+      if (result.cost && !cost) setCost(result.cost);
+      else if (result.cost) setCost(result.cost);
+      if (result.service && !task) setTask(result.service);
+      if (result.provider && !provider) setProvider(result.provider);
+
+      setOcrApplied(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert(
+        "Scan Failed",
+        "Could not read the receipt automatically. Please enter the details manually.",
+        [{ text: "OK" }]
+      );
+    } finally {
+      setIsScanning(false);
     }
   }
 
@@ -149,6 +191,55 @@ export default function LogServiceScreen() {
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.groupLabel}>Receipt</Text>
+            {receiptUri ? (
+              <View style={styles.receiptContainer}>
+                <View style={styles.receiptPreview}>
+                  <Image source={{ uri: receiptUri }} style={styles.receiptImage} resizeMode="cover" />
+                  <Pressable onPress={() => { setReceiptUri(null); setOcrApplied(false); }} style={styles.removeReceipt}>
+                    <Ionicons name="close-circle" size={24} color={Colors.overdue} />
+                  </Pressable>
+                </View>
+                {ocrApplied ? (
+                  <View style={styles.ocrSuccess}>
+                    <Ionicons name="checkmark-circle" size={14} color={Colors.good} />
+                    <Text style={styles.ocrSuccessText}>Receipt scanned — fields auto-filled below</Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={({ pressed }) => [styles.scanBtn, { opacity: pressed ? 0.8 : 1 }]}
+                    onPress={scanReceipt}
+                    disabled={isScanning}
+                  >
+                    {isScanning ? (
+                      <>
+                        <ActivityIndicator size="small" color={Colors.textInverse} />
+                        <Text style={styles.scanBtnText}>Analyzing receipt...</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="scan-outline" size={16} color={Colors.textInverse} />
+                        <Text style={styles.scanBtnText}>Scan Receipt</Text>
+                      </>
+                    )}
+                  </Pressable>
+                )}
+              </View>
+            ) : (
+              <View style={styles.receiptRow}>
+                <Pressable style={({ pressed }) => [styles.receiptBtn, { opacity: pressed ? 0.8 : 1 }]} onPress={takePhoto}>
+                  <Ionicons name="camera-outline" size={20} color={Colors.textSecondary} />
+                  <Text style={styles.receiptBtnText}>Camera</Text>
+                </Pressable>
+                <Pressable style={({ pressed }) => [styles.receiptBtn, { opacity: pressed ? 0.8 : 1 }]} onPress={pickReceipt}>
+                  <Ionicons name="image-outline" size={20} color={Colors.textSecondary} />
+                  <Text style={styles.receiptBtnText}>Gallery</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.groupLabel}>Service Type</Text>
@@ -235,29 +326,6 @@ export default function LogServiceScreen() {
               textAlignVertical="top"
             />
           </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.groupLabel}>Receipt</Text>
-            {receiptUri ? (
-              <View style={styles.receiptPreview}>
-                <Image source={{ uri: receiptUri }} style={styles.receiptImage} resizeMode="cover" />
-                <Pressable onPress={() => setReceiptUri(null)} style={styles.removeReceipt}>
-                  <Ionicons name="close-circle" size={24} color={Colors.overdue} />
-                </Pressable>
-              </View>
-            ) : (
-              <View style={styles.receiptRow}>
-                <Pressable style={({ pressed }) => [styles.receiptBtn, { opacity: pressed ? 0.8 : 1 }]} onPress={takePhoto}>
-                  <Ionicons name="camera-outline" size={20} color={Colors.textSecondary} />
-                  <Text style={styles.receiptBtnText}>Camera</Text>
-                </Pressable>
-                <Pressable style={({ pressed }) => [styles.receiptBtn, { opacity: pressed ? 0.8 : 1 }]} onPress={pickReceipt}>
-                  <Ionicons name="image-outline" size={20} color={Colors.textSecondary} />
-                  <Text style={styles.receiptBtnText}>Gallery</Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
@@ -312,10 +380,23 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   textArea: { height: 80, paddingTop: 12 },
+  receiptContainer: { gap: 8 },
   receiptRow: { flexDirection: "row", gap: 10 },
   receiptBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: Colors.card, borderRadius: 12, paddingVertical: 16, borderWidth: 1, borderColor: Colors.border, borderStyle: "dashed" },
   receiptBtnText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
   receiptPreview: { borderRadius: 12, overflow: "hidden", position: "relative" },
   receiptImage: { width: "100%", height: 180 },
   removeReceipt: { position: "absolute", top: 8, right: 8 },
+  scanBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.accent,
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  scanBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  ocrSuccess: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 },
+  ocrSuccessText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good },
 });

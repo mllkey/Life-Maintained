@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,18 +8,29 @@ import {
   RefreshControl,
   ActivityIndicator,
   Platform,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
+import * as Notifications from "expo-notifications";
 import { parseISO, isBefore, addDays, format } from "date-fns";
 
 type Tab = "appointments" | "medications" | "family";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowList: true,
+  }),
+});
 
 function getStatus(date: string | null) {
   if (!date) return "good";
@@ -29,10 +40,38 @@ function getStatus(date: string | null) {
   return "good";
 }
 
+async function scheduleMedicationNotification(medName: string, reminderTime: string): Promise<boolean> {
+  const { status } = await Notifications.requestPermissionsAsync();
+  if (status !== "granted") return false;
+
+  const [hourStr, minuteStr] = reminderTime.split(":");
+  const hour = parseInt(hourStr ?? "8");
+  const minute = parseInt(minuteStr ?? "0");
+  if (isNaN(hour) || isNaN(minute)) return false;
+
+  await Notifications.cancelAllScheduledNotificationsAsync();
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "Medication Reminder",
+      body: `Time to take your ${medName}`,
+      sound: true,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      hour,
+      minute,
+    },
+  });
+
+  return true;
+}
+
 export default function HealthScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("appointments");
+  const [schedulingMed, setSchedulingMed] = useState<string | null>(null);
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
   const { data: appointments, isLoading: loadingAppts, refetch: refetchAppts } = useQuery({
@@ -71,6 +110,28 @@ export default function HealthScreen() {
     refetchAppts();
     refetchMeds();
     refetchFamily();
+  }
+
+  async function handleScheduleNotification(med: any) {
+    if (!med.reminder_time) {
+      Alert.alert("No Reminder Time", "This medication doesn't have a reminder time set. Edit it to add one.");
+      return;
+    }
+    setSchedulingMed(med.id);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const success = await scheduleMedicationNotification(med.name, med.reminder_time);
+      if (success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert("Reminder Set", `You'll be reminded to take ${med.name} daily at ${med.reminder_time}.`);
+      } else {
+        Alert.alert("Permission Required", "Please enable notifications in Settings to receive medication reminders.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setSchedulingMed(null);
+    }
   }
 
   const tabs: { key: Tab; label: string; icon: string }[] = [
@@ -120,73 +181,91 @@ export default function HealthScreen() {
         {isLoading ? (
           <ActivityIndicator color={Colors.accent} style={{ marginTop: 40 }} />
         ) : activeTab === "appointments" ? (
-          appointments?.length === 0 ? <EmptyState icon="calendar-outline" title="No appointments yet" text="Add your health appointments to track when they're due." onAdd={() => router.push("/add-appointment")} addLabel="Add Appointment" /> :
-          appointments?.map(a => {
-            const status = getStatus(a.next_due_date);
-            const statusColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
-            const member = (a as any).family_members;
-            return (
-              <Pressable
-                key={a.id}
-                style={({ pressed }) => [styles.card, { borderLeftColor: statusColor, opacity: pressed ? 0.88 : 1 }]}
-              >
-                <View style={styles.cardTop}>
-                  <View style={[styles.cardIcon, { backgroundColor: Colors.healthMuted }]}>
-                    <Ionicons name="heart-outline" size={20} color={Colors.health} />
+          appointments?.length === 0
+            ? <EmptyState icon="calendar-outline" title="No appointments yet" text="Add your health appointments to track when they're due." onAdd={() => router.push("/add-appointment")} addLabel="Add Appointment" />
+            : appointments?.map(a => {
+              const status = getStatus(a.next_due_date);
+              const statusColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
+              const member = (a as any).family_members;
+              return (
+                <Pressable
+                  key={a.id}
+                  style={({ pressed }) => [styles.card, { borderLeftColor: statusColor, opacity: pressed ? 0.88 : 1 }]}
+                >
+                  <View style={styles.cardTop}>
+                    <View style={[styles.cardIcon, { backgroundColor: Colors.healthMuted }]}>
+                      <Ionicons name="heart-outline" size={20} color={Colors.health} />
+                    </View>
+                    <View style={styles.cardInfo}>
+                      <Text style={styles.cardTitle}>{a.appointment_type}</Text>
+                      {member && <Text style={styles.cardMeta}>{member.name}</Text>}
+                      {a.provider_name && <Text style={styles.cardMeta}>{a.provider_name}</Text>}
+                    </View>
+                    <View style={[styles.statusPill, { backgroundColor: statusColor + "22" }]}>
+                      <Text style={[styles.statusPillText, { color: statusColor }]}>
+                        {a.next_due_date ? format(parseISO(a.next_due_date), "MMM d, yyyy") : "No date"}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.cardTitle}>{a.appointment_type}</Text>
-                    {member && <Text style={styles.cardMeta}>{member.name}</Text>}
-                    {a.provider_name && <Text style={styles.cardMeta}>{a.provider_name}</Text>}
-                  </View>
-                  <View style={[styles.statusPill, { backgroundColor: statusColor + "22" }]}>
-                    <Text style={[styles.statusPillText, { color: statusColor }]}>
-                      {a.next_due_date ? format(parseISO(a.next_due_date), "MMM d, yyyy") : "No date"}
-                    </Text>
-                  </View>
-                </View>
-                {a.interval_months && (
-                  <Text style={styles.cardDetail}>Every {a.interval_months} months</Text>
-                )}
-              </Pressable>
-            );
-          })
+                  {a.interval_months && (
+                    <Text style={styles.cardDetail}>Every {a.interval_months} months</Text>
+                  )}
+                </Pressable>
+              );
+            })
         ) : activeTab === "medications" ? (
-          medications?.length === 0 ? <EmptyState icon="medical-outline" title="No medications" text="Add medications to track daily reminders." onAdd={() => router.push("/add-medication")} addLabel="Add Medication" /> :
-          medications?.map(m => (
-            <View key={m.id} style={styles.medCard}>
-              <View style={[styles.medIcon, { backgroundColor: Colors.healthMuted }]}>
-                <Ionicons name="medical-outline" size={20} color={Colors.health} />
+          medications?.length === 0
+            ? <EmptyState icon="medical-outline" title="No medications" text="Add medications to track daily reminders." onAdd={() => router.push("/add-medication")} addLabel="Add Medication" />
+            : medications?.map(m => (
+              <View key={m.id} style={styles.medCard}>
+                <View style={[styles.medIcon, { backgroundColor: Colors.healthMuted }]}>
+                  <Ionicons name="medical-outline" size={20} color={Colors.health} />
+                </View>
+                <View style={styles.medInfo}>
+                  <Text style={styles.medName}>{m.name}</Text>
+                  {(m as any).family_members && <Text style={styles.medMeta}>For {(m as any).family_members.name}</Text>}
+                  {m.reminder_time && <Text style={styles.medMeta}>Daily at {m.reminder_time}</Text>}
+                </View>
+                <View style={styles.medRight}>
+                  <View style={[styles.reminderDot, { backgroundColor: m.reminders_enabled ? Colors.good : Colors.textTertiary }]} />
+                  {m.reminder_time && (
+                    <Pressable
+                      style={({ pressed }) => [styles.notifBtn, { opacity: pressed ? 0.7 : 1 }]}
+                      onPress={() => handleScheduleNotification(m)}
+                      disabled={schedulingMed === m.id}
+                    >
+                      {schedulingMed === m.id ? (
+                        <ActivityIndicator size="small" color={Colors.health} />
+                      ) : (
+                        <Ionicons name="notifications-outline" size={16} color={Colors.health} />
+                      )}
+                    </Pressable>
+                  )}
+                </View>
               </View>
-              <View style={styles.medInfo}>
-                <Text style={styles.medName}>{m.name}</Text>
-                {(m as any).family_members && <Text style={styles.medMeta}>For {(m as any).family_members.name}</Text>}
-                {m.reminder_time && <Text style={styles.medMeta}>Daily at {m.reminder_time}</Text>}
-              </View>
-              <View style={[styles.reminderDot, { backgroundColor: m.reminders_enabled ? Colors.good : Colors.textTertiary }]} />
-            </View>
-          ))
+            ))
         ) : (
-          familyMembers?.length === 0 ? <EmptyState icon="people-outline" title="No family members" text="Add family members and pets to track their health separately." onAdd={() => router.push("/add-family-member")} addLabel="Add Member" /> :
-          familyMembers?.map(fm => (
-            <View key={fm.id} style={styles.familyCard}>
-              <View style={[styles.familyIcon, { backgroundColor: Colors.healthMuted }]}>
-                <Ionicons name={fm.member_type === "pet" ? "paw-outline" : "person-outline"} size={20} color={Colors.health} />
+          familyMembers?.length === 0
+            ? <EmptyState icon="people-outline" title="No family members" text="Add family members and pets to track their health separately." onAdd={() => router.push("/add-family-member")} addLabel="Add Member" />
+            : familyMembers?.map(fm => (
+              <View key={fm.id} style={styles.familyCard}>
+                <View style={[styles.familyIcon, { backgroundColor: Colors.healthMuted }]}>
+                  <Ionicons name={fm.member_type === "pet" ? "paw-outline" : "person-outline"} size={20} color={Colors.health} />
+                </View>
+                <View style={styles.familyInfo}>
+                  <Text style={styles.familyName}>{fm.name}</Text>
+                  <Text style={styles.familyMeta}>
+                    {fm.relationship ?? fm.pet_type ?? fm.member_type ?? ""}
+                  </Text>
+                </View>
+                <Pressable
+                  style={({ pressed }) => [styles.addApptBtn, { opacity: pressed ? 0.8 : 1 }]}
+                  onPress={() => router.push("/add-appointment")}
+                >
+                  <Ionicons name="calendar-outline" size={16} color={Colors.health} />
+                </Pressable>
               </View>
-              <View style={styles.familyInfo}>
-                <Text style={styles.familyName}>{fm.name}</Text>
-                <Text style={styles.familyMeta}>
-                  {fm.relationship ?? fm.pet_type ?? fm.member_type ?? ""}
-                </Text>
-              </View>
-              <Pressable
-                style={({ pressed }) => [styles.addApptBtn, { opacity: pressed ? 0.8 : 1 }]}
-                onPress={() => router.push("/add-appointment")}
-              >
-                <Ionicons name="calendar-outline" size={16} color={Colors.health} />
-              </Pressable>
-            </View>
-          ))
+            ))
         )}
       </ScrollView>
     </View>
@@ -233,7 +312,9 @@ const styles = StyleSheet.create({
   medInfo: { flex: 1 },
   medName: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
   medMeta: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  medRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   reminderDot: { width: 10, height: 10, borderRadius: 5 },
+  notifBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: Colors.healthMuted, alignItems: "center", justifyContent: "center" },
   familyCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.border },
   familyIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   familyInfo: { flex: 1 },
