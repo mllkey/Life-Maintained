@@ -202,7 +202,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   primaryButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  backLink: { alignItems: "center", paddingVertical: 4 },
+  backLink: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
   backLinkText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
   emailHighlight: { fontFamily: "Inter_600SemiBold", color: Colors.text },
 });
