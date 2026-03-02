@@ -27,17 +27,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // onAuthStateChange fires INITIAL_SESSION on subscription, so we don't
     // need a separate getSession() call. Using a single source of truth
     // ensures isLoading stays true until the profile check completes.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mountedRef.current) return;
       setSession(session);
-      if (session?.user) {
-        setIsLoading(true);
-        checkOnboarding(session.user.id).finally(() => {
-          if (mountedRef.current) setIsLoading(false);
-        });
-      } else {
+
+      if (event === "SIGNED_OUT") {
         setOnboardingCompleted(false);
         setIsLoading(false);
+        return;
+      }
+
+      // Only re-check onboarding (and block navigation) on initial load or a new sign-in.
+      // TOKEN_REFRESHED, USER_UPDATED, etc. just update the session silently.
+      if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
+        if (session?.user) {
+          setIsLoading(true);
+          checkOnboarding(session.user.id).finally(() => {
+            if (mountedRef.current) setIsLoading(false);
+          });
+        } else {
+          setOnboardingCompleted(false);
+          setIsLoading(false);
+        }
       }
     });
 
