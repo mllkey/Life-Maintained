@@ -23,7 +23,7 @@ export async function scanReceipt(base64Image: string): Promise<ReceiptScanResul
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer " + session.access_token,
+        "Authorization": "Bearer " + supabaseAnonKey,
         "apikey": supabaseAnonKey || "",
       },
       body: JSON.stringify({ image: base64Image }),
