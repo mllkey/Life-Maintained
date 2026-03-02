@@ -46,6 +46,7 @@ export default function LogServiceScreen() {
   }
 
   function handleScanComplete(result: ReceiptScanResult) {
+    console.log("SCAN COMPLETE:", JSON.stringify(result));
     if (result.date) setDate(result.date);
     if (result.cost != null) setCost(String(result.cost));
     if (result.provider) setProvider(result.provider);

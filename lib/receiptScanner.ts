@@ -30,12 +30,13 @@ export async function scanReceipt(base64Image: string): Promise<ReceiptScanResul
     });
 
     const data = await response.json();
+    console.log("RAW RESPONSE:", JSON.stringify(data));
 
     if (data.error) {
       console.warn("Scan returned error:", data.error);
     }
 
-    return {
+    const result = {
       date: data.date || null,
       cost: data.cost != null ? Number(data.cost) : null,
       provider: data.provider || null,
@@ -43,6 +44,8 @@ export async function scanReceipt(base64Image: string): Promise<ReceiptScanResul
       rawText: data.rawText || "",
       error: data.error || undefined,
     };
+    console.log("RETURNING:", JSON.stringify(result));
+    return result;
   } catch (err) {
     console.error("Receipt scan failed:", err);
     return {
