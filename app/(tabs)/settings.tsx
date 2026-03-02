@@ -27,7 +27,7 @@ export default function SettingsScreen() {
     queryKey: ["profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+      const { data } = await supabase.from("profiles").select("*").eq("user_id", user.id).single();
       return data;
     },
     enabled: !!user,

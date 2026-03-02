@@ -22,13 +22,13 @@ export default function OnboardingCompleteScreen() {
     const { error } = await supabase
       .from("profiles")
       .update({ onboarding_completed: true, updated_at: new Date().toISOString() })
-      .eq("id", user.id);
+      .eq("user_id", user.id);
 
     if (error) {
       // Fallback: try upsert in case the row doesn't exist yet
       const { error: upsertError } = await supabase
         .from("profiles")
-        .upsert({ id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() });
+        .upsert({ user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() });
 
       if (upsertError) {
         setIsSaving(false);
