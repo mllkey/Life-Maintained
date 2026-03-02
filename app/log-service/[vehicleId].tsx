@@ -50,8 +50,13 @@ export default function LogServiceScreen() {
     if (result.date) setDate(result.date);
     if (result.cost != null) setCost(String(result.cost));
     if (result.provider) setProvider(result.provider);
-    if (result.serviceType) setTask(result.serviceType);
+    if (result.task) setTask(result.task);
+    else if (result.serviceType) setTask(result.serviceType);
     if (result.mileage != null) setMileage(String(result.mileage));
+    if (result.items && result.items.length > 0) {
+      const breakdown = result.items.map(item => item.name + (item.cost ? " - $" + item.cost.toFixed(2) : "")).join("\n");
+      setNotes("Service breakdown:\n" + breakdown);
+    }
     setOcrApplied(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
