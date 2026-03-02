@@ -1,5 +1,5 @@
-import React, { useEffect } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -12,21 +12,34 @@ import { useAuth } from "@/context/AuthContext";
 export default function OnboardingCompleteScreen() {
   const insets = useSafeAreaInsets();
   const { user, setOnboardingCompleted } = useAuth();
+  const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    if (user) {
-      supabase.from("profiles").upsert({
-        id: user.id,
-        onboarding_completed: true,
-        updated_at: new Date().toISOString(),
-      });
-    }
-  }, [user]);
-
-  function handleStart() {
-    setOnboardingCompleted(true);
+  async function handleStart() {
+    if (!user) return;
+    setIsSaving(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ onboarding_completed: true, updated_at: new Date().toISOString() })
+      .eq("id", user.id);
+
+    if (error) {
+      // Fallback: try upsert in case the row doesn't exist yet
+      const { error: upsertError } = await supabase
+        .from("profiles")
+        .upsert({ id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() });
+
+      if (upsertError) {
+        setIsSaving(false);
+        Alert.alert("Something went wrong", "Could not save your preferences. Please try again.");
+        return;
+      }
+    }
+
+    // Update in-memory state so index.tsx redirects to tabs immediately
+    setOnboardingCompleted(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.replace("/(tabs)");
   }
 
@@ -72,11 +85,18 @@ export default function OnboardingCompleteScreen() {
         </View>
 
         <Pressable
-          style={({ pressed }) => [styles.button, { opacity: pressed ? 0.85 : 1 }]}
+          style={({ pressed }) => [styles.button, { opacity: pressed || isSaving ? 0.85 : 1 }]}
           onPress={handleStart}
+          disabled={isSaving}
         >
-          <Text style={styles.buttonText}>Get Started</Text>
-          <Ionicons name="arrow-forward" size={18} color={Colors.textInverse} />
+          {isSaving ? (
+            <ActivityIndicator size="small" color={Colors.textInverse} />
+          ) : (
+            <>
+              <Text style={styles.buttonText}>Get Started</Text>
+              <Ionicons name="arrow-forward" size={18} color={Colors.textInverse} />
+            </>
+          )}
         </Pressable>
       </View>
     </View>
