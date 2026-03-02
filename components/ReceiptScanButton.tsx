@@ -30,8 +30,8 @@ export default function ReceiptScanButton({ onScanComplete }: Props) {
 
       const manipulated = await ImageManipulator.manipulateAsync(
         pickerResult.assets[0].uri,
-        [{ resize: { width: 1500 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        [{ resize: { width: 2000 } }],
+        { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       );
 
       if (!manipulated.base64) {
