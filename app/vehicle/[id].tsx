@@ -65,7 +65,7 @@ export default function VehicleDetailScreen() {
         .from("maintenance_logs")
         .select("*")
         .eq("vehicle_id", id)
-        .order("date", { ascending: false });
+        .order("service_date", { ascending: false });
       return data ?? [];
     },
   });
@@ -96,11 +96,11 @@ export default function VehicleDetailScreen() {
   function buildCsv(logsData: any[]) {
     const header = "Date,Service,Mileage,Cost,Provider,Notes";
     const rows = logsData.map(log => {
-      const date = log.date ?? "";
-      const task = (log.task ?? "").replace(/,/g, ";");
+      const date = log.service_date ?? "";
+      const task = (log.service_name ?? "").replace(/,/g, ";");
       const mileage = log.mileage ?? "";
       const cost = log.cost != null ? `$${log.cost.toFixed(2)}` : "";
-      const provider = (log.provider ?? "").replace(/,/g, ";");
+      const provider = (log.provider_name ?? "").replace(/,/g, ";");
       const notes = (log.notes ?? "").replace(/,/g, ";").replace(/\n/g, " ");
       return `${date},${task},${mileage},${cost},${provider},${notes}`;
     });
@@ -111,11 +111,11 @@ export default function VehicleDetailScreen() {
     const name = vehicleData?.nickname ?? `${vehicleData?.year} ${vehicleData?.make} ${vehicleData?.model}`;
     const rows = logsData.map(log => `
       <tr>
-        <td>${log.date ? format(parseISO(log.date), "MMM d, yyyy") : "—"}</td>
-        <td>${log.task ?? "Service"}</td>
+        <td>${log.service_date ? format(parseISO(log.service_date), "MMM d, yyyy") : "—"}</td>
+        <td>${log.service_name ?? "Service"}</td>
         <td>${log.mileage != null ? log.mileage.toLocaleString() + " mi" : "—"}</td>
         <td>${log.cost != null ? "$" + log.cost.toFixed(2) : "—"}</td>
-        <td>${log.provider ?? "—"}</td>
+        <td>${log.provider_name ?? "—"}</td>
         <td>${log.notes ?? ""}</td>
       </tr>`).join("");
 
@@ -312,15 +312,15 @@ export default function VehicleDetailScreen() {
                 logs?.map(log => (
                   <View key={log.id} style={styles.logCard}>
                     <View style={styles.logTop}>
-                      <Text style={styles.logTask}>{log.task ?? "Service"}</Text>
+                      <Text style={styles.logTask}>{log.service_name ?? "Service"}</Text>
                       {log.cost != null && (
                         <Text style={styles.logCost}>${log.cost.toFixed(2)}</Text>
                       )}
                     </View>
                     <View style={styles.logMeta}>
-                      {log.date && <Text style={styles.logDate}>{format(parseISO(log.date), "MMM d, yyyy")}</Text>}
+                      {log.service_date && <Text style={styles.logDate}>{format(parseISO(log.service_date), "MMM d, yyyy")}</Text>}
                       {log.mileage != null && <Text style={styles.logMileage}>{log.mileage.toLocaleString()} mi</Text>}
-                      {log.provider && <Text style={styles.logProvider}>{log.provider}</Text>}
+                      {log.provider_name && <Text style={styles.logProvider}>{log.provider_name}</Text>}
                     </View>
                     {log.notes && <Text style={styles.logNotes}>{log.notes}</Text>}
                   </View>

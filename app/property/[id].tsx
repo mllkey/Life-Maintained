@@ -50,7 +50,7 @@ export default function PropertyDetailScreen() {
   const { data: logs } = useQuery({
     queryKey: ["property_logs", id],
     queryFn: async () => {
-      const { data } = await supabase.from("maintenance_logs").select("*").eq("property_id", id!).order("date", { ascending: false });
+      const { data } = await supabase.from("maintenance_logs").select("*").eq("property_id", id!).order("service_date", { ascending: false });
       return data ?? [];
     },
     enabled: !!id,
@@ -168,12 +168,12 @@ export default function PropertyDetailScreen() {
                 logs?.map(log => (
                   <View key={log.id} style={styles.logCard}>
                     <View style={styles.logTop}>
-                      <Text style={styles.logTask}>{log.task ?? "Service"}</Text>
+                      <Text style={styles.logTask}>{log.service_name ?? "Service"}</Text>
                       {log.cost != null && <Text style={styles.logCost}>${log.cost.toFixed(2)}</Text>}
                     </View>
                     <View style={styles.logMeta}>
-                      {log.date && <Text style={styles.logDate}>{format(parseISO(log.date), "MMM d, yyyy")}</Text>}
-                      {log.provider && <Text style={styles.logProvider}>{log.provider}</Text>}
+                      {log.service_date && <Text style={styles.logDate}>{format(parseISO(log.service_date), "MMM d, yyyy")}</Text>}
+                      {log.provider_name && <Text style={styles.logProvider}>{log.provider_name}</Text>}
                     </View>
                     {log.notes && <Text style={styles.logNotes}>{log.notes}</Text>}
                   </View>

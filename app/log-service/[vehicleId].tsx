@@ -74,11 +74,11 @@ export default function LogServiceScreen() {
       if (scannedItems.length > 1) {
         const rows = scannedItems.map(item => ({
           vehicle_id: vehicleId,
-          task: item.name,
-          date: date || new Date().toISOString().split("T")[0],
+          service_name: item.name,
+          service_date: date || new Date().toISOString().split("T")[0],
           mileage: mileage ? parseInt(mileage) : null,
           cost: item.cost,
-          provider: provider.trim() || null,
+          provider_name: provider.trim() || null,
           notes: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -93,11 +93,11 @@ export default function LogServiceScreen() {
         }
         const { error: err } = await supabase.from("maintenance_logs").insert({
           vehicle_id: vehicleId,
-          task: task.trim(),
-          date: date || new Date().toISOString().split("T")[0],
+          service_name: task.trim(),
+          service_date: date || new Date().toISOString().split("T")[0],
           mileage: mileage ? parseInt(mileage) : null,
           cost: cost ? parseFloat(cost) : null,
-          provider: provider.trim() || null,
+          provider_name: provider.trim() || null,
           notes: notes.trim() || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
