@@ -73,6 +73,7 @@ export default function LogServiceScreen() {
     try {
       if (scannedItems.length > 1) {
         const rows = scannedItems.map(item => ({
+          user_id: user!.id,
           vehicle_id: vehicleId,
           service_name: item.name,
           service_date: date || new Date().toISOString().split("T")[0],
@@ -92,6 +93,7 @@ export default function LogServiceScreen() {
           return;
         }
         const { error: err } = await supabase.from("maintenance_logs").insert({
+          user_id: user!.id,
           vehicle_id: vehicleId,
           service_name: task.trim(),
           service_date: date || new Date().toISOString().split("T")[0],
