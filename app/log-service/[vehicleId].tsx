@@ -51,6 +51,7 @@ export default function LogServiceScreen() {
     if (result.cost != null) setCost(String(result.cost));
     if (result.provider) setProvider(result.provider);
     if (result.serviceType) setTask(result.serviceType);
+    if (result.mileage != null) setMileage(String(result.mileage));
     setOcrApplied(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }

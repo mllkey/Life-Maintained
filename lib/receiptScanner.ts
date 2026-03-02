@@ -5,6 +5,7 @@ export interface ReceiptScanResult {
   cost: number | null;
   provider: string | null;
   serviceType: string | null;
+  mileage: number | null;
   rawText: string;
   error?: string;
 }
@@ -41,6 +42,7 @@ export async function scanReceipt(base64Image: string): Promise<ReceiptScanResul
       cost: data.cost != null ? Number(data.cost) : null,
       provider: data.provider || null,
       serviceType: data.serviceType || null,
+      mileage: data.mileage != null ? Number(data.mileage) : null,
       rawText: data.rawText || "",
       error: data.error || undefined,
     };
@@ -53,6 +55,7 @@ export async function scanReceipt(base64Image: string): Promise<ReceiptScanResul
       cost: null,
       provider: null,
       serviceType: null,
+      mileage: null,
       rawText: "",
       error: err instanceof Error ? err.message : "Could not scan receipt",
     };
