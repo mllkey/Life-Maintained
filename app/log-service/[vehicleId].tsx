@@ -9,7 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -34,6 +33,7 @@ export default function LogServiceScreen() {
   const [cost, setCost] = useState("");
   const [provider, setProvider] = useState("");
   const [notes, setNotes] = useState("");
+  const [scannedItems, setScannedItems] = useState<Array<{ name: string; cost: number | null }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [ocrApplied, setOcrApplied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,67 +46,89 @@ export default function LogServiceScreen() {
   }
 
   function handleScanComplete(result: ReceiptScanResult) {
-    console.log("SCAN COMPLETE:", JSON.stringify(result));
     if (result.date) setDate(result.date);
-    if (result.cost != null) setCost(String(result.cost));
-    if (result.provider) setProvider(result.provider);
-    if (result.task) setTask(result.task);
-    else if (result.serviceType) setTask(result.serviceType);
     if (result.mileage != null) setMileage(String(result.mileage));
-    if (result.items && result.items.length > 0) {
-      const breakdown = result.items.map(item => item.name + (item.cost ? " - $" + item.cost.toFixed(2) : "")).join("\n");
-      setNotes("Service breakdown:\n" + breakdown);
+    if (result.provider) setProvider(result.provider);
+
+    if (result.items && result.items.length > 1) {
+      setScannedItems(result.items);
+      setCost(result.cost != null ? String(result.cost) : "");
+      setTask(result.task || "");
+    } else {
+      if (result.task) setTask(result.task);
+      else if (result.serviceType) setTask(result.serviceType);
+      if (result.cost != null) setCost(String(result.cost));
+      setScannedItems([]);
     }
+
     setOcrApplied(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
   async function handleSave() {
     if (!user || !vehicleId) return;
-    if (!task.trim()) {
-      setError("Service description is required");
-      return;
-    }
     setIsLoading(true);
     setError(null);
 
-    const { error: err } = await supabase.from("maintenance_logs").insert({
-      vehicle_id: vehicleId,
-      task: task.trim(),
-      date: date || new Date().toISOString().split("T")[0],
-      mileage: mileage ? parseInt(mileage) : null,
-      cost: cost ? parseFloat(cost) : null,
-      provider: provider.trim() || null,
-      notes: notes.trim() || null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
+    try {
+      if (scannedItems.length > 1) {
+        const rows = scannedItems.map(item => ({
+          vehicle_id: vehicleId,
+          task: item.name,
+          date: date || new Date().toISOString().split("T")[0],
+          mileage: mileage ? parseInt(mileage) : null,
+          cost: item.cost,
+          provider: provider.trim() || null,
+          notes: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+        const { error: err } = await supabase.from("maintenance_logs").insert(rows);
+        if (err) throw err;
+      } else {
+        if (!task.trim()) {
+          setError("Service description is required");
+          setIsLoading(false);
+          return;
+        }
+        const { error: err } = await supabase.from("maintenance_logs").insert({
+          vehicle_id: vehicleId,
+          task: task.trim(),
+          date: date || new Date().toISOString().split("T")[0],
+          mileage: mileage ? parseInt(mileage) : null,
+          cost: cost ? parseFloat(cost) : null,
+          provider: provider.trim() || null,
+          notes: notes.trim() || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        if (err) throw err;
+      }
 
-    if (!err && mileage) {
-      await supabase.from("vehicles").update({
-        mileage: parseInt(mileage),
-        updated_at: new Date().toISOString(),
-      }).eq("id", vehicleId);
+      if (mileage) {
+        await supabase.from("vehicles").update({
+          mileage: parseInt(mileage),
+          updated_at: new Date().toISOString(),
+        }).eq("id", vehicleId);
+        await supabase.from("vehicle_mileage_history").insert({
+          vehicle_id: vehicleId,
+          mileage: parseInt(mileage),
+          recorded_at: date || new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        });
+      }
 
-      await supabase.from("vehicle_mileage_history").insert({
-        vehicle_id: vehicleId,
-        mileage: parseInt(mileage),
-        recorded_at: date || new Date().toISOString(),
-        created_at: new Date().toISOString(),
-      });
-    }
-
-    setIsLoading(false);
-    if (err) {
-      setError(err.message);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["maintenance_logs", vehicleId] });
       queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       router.back();
+    } catch (err: any) {
+      setError(err.message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -152,28 +174,47 @@ export default function LogServiceScreen() {
             <ReceiptScanButton onScanComplete={handleScanComplete} />
           </View>
 
-          <View style={styles.fieldGroup}>
-            <Text style={styles.groupLabel}>Service Type</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickPicks}>
-              {COMMON_TASKS.map(t => (
-                <Pressable
-                  key={t}
-                  style={[styles.quickPick, task === t && styles.quickPickSelected]}
-                  onPress={() => { Haptics.selectionAsync(); setTask(t); }}
-                >
-                  <Text style={[styles.quickPickText, task === t && styles.quickPickTextSelected]}>{t}</Text>
-                </Pressable>
+          {scannedItems.length > 1 && (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.groupLabel}>Services Found ({scannedItems.length})</Text>
+              {scannedItems.map((item, index) => (
+                <View key={index} style={styles.itemRow}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  {item.cost != null && (
+                    <Text style={styles.itemCost}>${item.cost.toFixed(2)}</Text>
+                  )}
+                </View>
               ))}
-            </ScrollView>
-            <TextInput
-              style={styles.input}
-              value={task}
-              onChangeText={setTask}
-              placeholder="Or describe the service..."
-              placeholderTextColor={Colors.textTertiary}
-              returnKeyType="done"
-            />
-          </View>
+              <Text style={styles.itemHint}>
+                Each service will be saved as a separate entry in your service history.
+              </Text>
+            </View>
+          )}
+
+          {scannedItems.length <= 1 && (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.groupLabel}>Service Type</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickPicks}>
+                {COMMON_TASKS.map(t => (
+                  <Pressable
+                    key={t}
+                    style={[styles.quickPick, task === t && styles.quickPickSelected]}
+                    onPress={() => { Haptics.selectionAsync(); setTask(t); }}
+                  >
+                    <Text style={[styles.quickPickText, task === t && styles.quickPickTextSelected]}>{t}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <TextInput
+                style={styles.input}
+                value={task}
+                onChangeText={setTask}
+                placeholder="Or describe the service..."
+                placeholderTextColor={Colors.textTertiary}
+                returnKeyType="done"
+              />
+            </View>
+          )}
 
           <View style={styles.fieldGroup}>
             <Text style={styles.groupLabel}>Details</Text>
@@ -224,19 +265,21 @@ export default function LogServiceScreen() {
             </View>
           </View>
 
-          <View style={styles.fieldGroup}>
-            <Text style={styles.groupLabel}>Notes</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Additional notes..."
-              placeholderTextColor={Colors.textTertiary}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-          </View>
+          {scannedItems.length <= 1 && (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.groupLabel}>Notes</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Additional notes..."
+                placeholderTextColor={Colors.textTertiary}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+          )}
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
@@ -293,4 +336,17 @@ const styles = StyleSheet.create({
   textArea: { height: 80, paddingTop: 12 },
   ocrSuccess: { flexDirection: "row", alignItems: "center", gap: 6 },
   ocrSuccessText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good },
+  itemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: Colors.card,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  itemName: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text, flex: 1 },
+  itemCost: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.accent },
+  itemHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
 });

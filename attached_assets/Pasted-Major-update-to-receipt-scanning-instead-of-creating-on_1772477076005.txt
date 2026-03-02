@@ -1,0 +1,135 @@
+Major update to receipt scanning: instead of creating one maintenance log entry per receipt, create a SEPARATE entry for each service item found on the receipt. This makes service history clean and exportable.
+
+Replace the entire log-service/[vehicleId].tsx file's handleScanComplete and handleSave logic with this approach:
+
+1. Add a new state variable for scanned items:
+const [scannedItems, setScannedItems] = useState<Array<{name: string, cost: number | null}>>([]);
+
+2. Replace handleScanComplete with:
+function handleScanComplete(result: ReceiptScanResult) {
+  if (result.date) setDate(result.date);
+  if (result.mileage != null) setMileage(String(result.mileage));
+  if (result.provider) setProvider(result.provider);
+  
+  if (result.items && result.items.length > 1) {
+    // Multiple services found - store them for batch insert
+    setScannedItems(result.items);
+    setCost(result.cost != null ? String(result.cost) : "");
+    setTask(result.task || "");
+  } else {
+    // Single service - fill form normally
+    if (result.task) setTask(result.task);
+    if (result.cost != null) setCost(String(result.cost));
+    setScannedItems([]);
+  }
+  setOcrApplied(true);
+  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+}
+
+3. Update handleSave: if scannedItems has multiple items, insert a separate maintenance_logs row for each item, all with the same date, provider, mileage, and vehicle_id. Each row gets its own task name and cost from the items array:
+
+async function handleSave() {
+  if (!user || !vehicleId) return;
+  setIsLoading(true);
+  setError(null);
+
+  try {
+    if (scannedItems.length > 1) {
+      // Batch insert - one row per service item
+      const rows = scannedItems.map(item => ({
+        vehicle_id: vehicleId,
+        task: item.name,
+        date: date || new Date().toISOString().split("T")[0],
+        mileage: mileage ? parseInt(mileage) : null,
+        cost: item.cost,
+        provider: provider.trim() || null,
+        notes: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      
+      const { error: err } = await supabase.from("maintenance_logs").insert(rows);
+      if (err) throw err;
+    } else {
+      // Single entry
+      if (!task.trim()) {
+        setError("Service description is required");
+        setIsLoading(false);
+        return;
+      }
+      const { error: err } = await supabase.from("maintenance_logs").insert({
+        vehicle_id: vehicleId,
+        task: task.trim(),
+        date: date || new Date().toISOString().split("T")[0],
+        mileage: mileage ? parseInt(mileage) : null,
+        cost: cost ? parseFloat(cost) : null,
+        provider: provider.trim() || null,
+        notes: notes.trim() || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      if (err) throw err;
+    }
+
+    // Update vehicle mileage if provided
+    if (mileage) {
+      await supabase.from("vehicles").update({
+        mileage: parseInt(mileage),
+        updated_at: new Date().toISOString(),
+      }).eq("id", vehicleId);
+      await supabase.from("vehicle_mileage_history").insert({
+        vehicle_id: vehicleId,
+        mileage: parseInt(mileage),
+        recorded_at: date || new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    queryClient.invalidateQueries({ queryKey: ["maintenance_logs", vehicleId] });
+    queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
+    queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    router.back();
+  } catch (err: any) {
+    setError(err.message);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  } finally {
+    setIsLoading(false);
+  }
+}
+
+4. Add a preview section in the form that shows when scannedItems has multiple items. Put it right after the ReceiptScanButton, before the Service Type section:
+
+{scannedItems.length > 1 && (
+  <View style={styles.fieldGroup}>
+    <Text style={styles.groupLabel}>Services Found ({scannedItems.length})</Text>
+    {scannedItems.map((item, index) => (
+      <View key={index} style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        backgroundColor: Colors.card,
+        borderRadius: 10,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: Colors.border,
+      }}>
+        <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text, flex: 1 }}>{item.name}</Text>
+        {item.cost != null && (
+          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.accent }}>${item.cost.toFixed(2)}</Text>
+        )}
+      </View>
+    ))}
+    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary }}>
+      Each service will be saved as a separate entry in your service history.
+    </Text>
+  </View>
+)}
+
+5. When scannedItems has multiple items, hide the Service Type quick picks and task input since we're using the itemized list instead. Wrap the existing Service Type fieldGroup with:
+{scannedItems.length <= 1 && ( ... existing service type section ... )}
+
+6. Remove the old notes breakdown logic that was adding items to the notes field. The notes field should stay clean for user notes only.
+
+This way: scan a simple receipt = one entry. Scan a complex receipt with multiple services = each service gets its own clean row in the database. The service history and CSV/PDF export will show each service individually.
