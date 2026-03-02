@@ -29,6 +29,7 @@ A native iOS / cross-platform mobile app built with Expo React Native that track
 - `constants/colors.ts` — Design system color palette
 - `server/routes.ts` — Express routes (OCR removed; receipt scanning is handled via Supabase Edge Function)
 - `lib/receiptScanner.ts` — Calls `scan-receipt` Supabase Edge Function with base64 image; returns structured result
+- `supabase/functions/scan-receipt/index.ts` — Deno Edge Function: calls Anthropic claude-3-5-haiku-20241022 vision API to extract date/cost/provider/serviceType from receipt image; requires `ANTHROPIC_API_KEY` Supabase secret
 - `components/ReceiptScanButton.tsx` — Self-contained receipt scan button (camera or gallery); calls receiptScanner and fires onScanComplete callback
 
 ## Modal Screens
