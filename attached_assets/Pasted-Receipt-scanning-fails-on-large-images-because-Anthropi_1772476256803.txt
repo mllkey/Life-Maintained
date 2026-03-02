@@ -1,0 +1,50 @@
+Receipt scanning fails on large images because Anthropic has a 5MB limit for base64 images. Update components/ReceiptScanButton.tsx to resize images before sending them. Install expo-image-manipulator and use it to resize any image to max 1500px wide before passing it to scanReceipt. Here's the updated handleScan function:
+
+First run: npx expo install expo-image-manipulator
+
+Then update ReceiptScanButton.tsx - add this import at the top:
+import * as ImageManipulator from "expo-image-manipulator";
+
+And replace the handleScan function with:
+
+const handleScan = async (useCamera: boolean) => {
+    try {
+      if (useCamera) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Permission needed", "Camera access is required to scan receipts.");
+          return;
+        }
+      }
+      const pickerResult = useCamera
+        ? await ImagePicker.launchCameraAsync({ quality: 1, allowsEditing: false })
+        : await ImagePicker.launchImageLibraryAsync({ quality: 1, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+      if (pickerResult.canceled || !pickerResult.assets?.[0]?.uri) {
+        return;
+      }
+      setScanning(true);
+      
+      const manipulated = await ImageManipulator.manipulateAsync(
+        pickerResult.assets[0].uri,
+        [{ resize: { width: 1500 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      
+      if (!manipulated.base64) {
+        throw new Error("Failed to process image");
+      }
+      
+      const result = await scanReceipt(manipulated.base64);
+      if (result.error) {
+        Alert.alert("Scan Issue", "We couldn't read all fields automatically. You can fill in the remaining fields manually.");
+      }
+      onScanComplete(result);
+    } catch (err) {
+      console.error("Receipt scan error:", err);
+      Alert.alert("Scan Failed", "Something went wrong scanning the receipt. Please enter the details manually.");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+This resizes to 1500px wide and compresses to JPEG at 70% quality, keeping it well under 5MB while still readable.

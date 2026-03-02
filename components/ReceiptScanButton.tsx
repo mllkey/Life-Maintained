@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { TouchableOpacity, Text, Alert, ActivityIndicator, StyleSheet, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import { scanReceipt, ReceiptScanResult } from "../lib/receiptScanner";
 
 interface Props {
@@ -20,14 +21,24 @@ export default function ReceiptScanButton({ onScanComplete }: Props) {
         }
       }
       const pickerResult = useCamera
-        ? await ImagePicker.launchCameraAsync({ base64: true, quality: 0.8, allowsEditing: true })
-        : await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.8, mediaTypes: ImagePicker.MediaTypeOptions.Images });
-      if (pickerResult.canceled || !pickerResult.assets?.[0]?.base64) {
+        ? await ImagePicker.launchCameraAsync({ quality: 1, allowsEditing: false })
+        : await ImagePicker.launchImageLibraryAsync({ quality: 1, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+      if (pickerResult.canceled || !pickerResult.assets?.[0]?.uri) {
         return;
       }
       setScanning(true);
-      const base64Image = pickerResult.assets[0].base64;
-      const result = await scanReceipt(base64Image);
+
+      const manipulated = await ImageManipulator.manipulateAsync(
+        pickerResult.assets[0].uri,
+        [{ resize: { width: 1500 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+
+      if (!manipulated.base64) {
+        throw new Error("Failed to process image");
+      }
+
+      const result = await scanReceipt(manipulated.base64);
       if (result.error) {
         Alert.alert("Scan Issue", "We couldn't read all fields automatically. You can fill in the remaining fields manually.");
       }
