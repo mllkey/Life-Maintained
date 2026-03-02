@@ -17,6 +17,38 @@ interface ReceiptData {
   error?: string;
 }
 
+function detectMediaType(base64: string): string {
+  // Inspect the first few bytes (base64 decoded) to identify the format
+  const prefix = base64.substring(0, 16);
+  const decoded = atob(prefix);
+  const bytes = decoded.split("").map((c) => c.charCodeAt(0));
+
+  // PNG: 137 80 78 71
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return "image/png";
+  }
+  // JPEG: 255 216 255
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  // GIF: 71 73 70
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+    return "image/gif";
+  }
+  // WebP: RIFF....WEBP
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) {
+    return "image/webp";
+  }
+  // Default to JPEG
+  return "image/jpeg";
+}
+
+function stripDataUrlPrefix(base64: string): string {
+  // Strip "data:image/...;base64," prefix if present
+  const match = base64.match(/^data:[^;]+;base64,(.+)$/);
+  return match ? match[1] : base64;
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -30,23 +62,30 @@ serve(async (req: Request) => {
   }
 
   if (!ANTHROPIC_API_KEY) {
+    console.error("ANTHROPIC_API_KEY is not set");
     return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY secret is not configured" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  let image: string;
+  let rawImage: string;
   try {
     const body = await req.json();
-    image = body.image;
-    if (!image) throw new Error("No image provided");
+    rawImage = body.image;
+    if (!rawImage) throw new Error("No image provided");
   } catch (err) {
+    console.error("Bad request body:", err);
     return new Response(JSON.stringify({ error: "Invalid request body — expected { image: base64string }" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+
+  // Clean and detect
+  const base64 = stripDataUrlPrefix(rawImage);
+  const mediaType = detectMediaType(base64);
+  console.log(`Image media type detected: ${mediaType}, base64 length: ${base64.length}`);
 
   const prompt = `You are analyzing a service receipt or invoice image. Extract the following fields exactly as they appear:
 
@@ -65,6 +104,31 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
 }`;
 
   try {
+    const requestBody = {
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: 512,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: mediaType,
+                data: base64,
+              },
+            },
+            {
+              type: "text",
+              text: prompt,
+            },
+          ],
+        },
+      ],
+    };
+
+    console.log("Calling Anthropic API...");
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -72,61 +136,41 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        model: "claude-3-5-haiku-20241022",
-        max_tokens: 512,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: "image/jpeg",
-                  data: image,
-                },
-              },
-              {
-                type: "text",
-                text: prompt,
-              },
-            ],
-          },
-        ],
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!anthropicRes.ok) {
       const errText = await anthropicRes.text();
-      console.error("Anthropic API error:", anthropicRes.status, errText);
+      console.error(`Anthropic API error ${anthropicRes.status}:`, errText);
       return new Response(
-        JSON.stringify({ error: `Anthropic API returned ${anthropicRes.status}`, date: null, cost: null, provider: null, serviceType: null, rawText: "" }),
+        JSON.stringify({
+          error: `Anthropic API returned ${anthropicRes.status}: ${errText}`,
+          date: null, cost: null, provider: null, serviceType: null, rawText: "",
+        }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const anthropicData = await anthropicRes.json();
+    console.log("Anthropic response received, stop_reason:", anthropicData.stop_reason);
     const rawContent: string = anthropicData.content?.[0]?.text ?? "";
 
     let parsed: ReceiptData;
     try {
       const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found in response");
+      if (!jsonMatch) throw new Error("No JSON found in response: " + rawContent);
       const obj = JSON.parse(jsonMatch[0]);
       parsed = {
-        date: typeof obj.date === "string" && obj.date !== "null" ? obj.date : null,
+        date: obj.date && obj.date !== "null" ? String(obj.date) : null,
         cost: obj.cost != null && obj.cost !== "null" ? Number(obj.cost) : null,
-        provider: typeof obj.provider === "string" && obj.provider !== "null" ? obj.provider : null,
-        serviceType: typeof obj.serviceType === "string" && obj.serviceType !== "null" ? obj.serviceType : null,
+        provider: obj.provider && obj.provider !== "null" ? String(obj.provider) : null,
+        serviceType: obj.serviceType && obj.serviceType !== "null" ? String(obj.serviceType) : null,
         rawText: typeof obj.rawText === "string" ? obj.rawText : rawContent.slice(0, 300),
       };
-    } catch {
+    } catch (parseErr) {
+      console.error("Failed to parse Anthropic JSON response:", parseErr, "Raw:", rawContent);
       parsed = {
-        date: null,
-        cost: null,
-        provider: null,
-        serviceType: null,
+        date: null, cost: null, provider: null, serviceType: null,
         rawText: rawContent.slice(0, 300),
         error: "Could not parse receipt fields",
       };
@@ -137,7 +181,7 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("scan-receipt error:", err);
+    console.error("scan-receipt unexpected error:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error", date: null, cost: null, provider: null, serviceType: null, rawText: "" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

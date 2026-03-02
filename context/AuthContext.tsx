@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useMemo, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useMemo, ReactNode, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
 
@@ -19,40 +19,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        checkOnboarding(session.user.id);
-      }
-      setIsLoading(false);
-    });
+    mountedRef.current = true;
 
+    // onAuthStateChange fires INITIAL_SESSION on subscription, so we don't
+    // need a separate getSession() call. Using a single source of truth
+    // ensures isLoading stays true until the profile check completes.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mountedRef.current) return;
       setSession(session);
       if (session?.user) {
         setIsLoading(true);
-        checkOnboarding(session.user.id).finally(() => setIsLoading(false));
+        checkOnboarding(session.user.id).finally(() => {
+          if (mountedRef.current) setIsLoading(false);
+        });
       } else {
         setOnboardingCompleted(false);
         setIsLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mountedRef.current = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function checkOnboarding(userId: string) {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("onboarding_completed")
         .eq("id", userId)
         .single();
-      setOnboardingCompleted(data?.onboarding_completed ?? false);
+      if (error) throw error;
+      if (mountedRef.current) {
+        setOnboardingCompleted(data?.onboarding_completed === true);
+      }
     } catch {
-      setOnboardingCompleted(false);
+      if (mountedRef.current) setOnboardingCompleted(false);
     }
   }
 
