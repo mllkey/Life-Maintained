@@ -7,7 +7,7 @@ export interface ReceiptScanResult {
   serviceType: string | null;
   mileage: number | null;
   task: string | null;
-  items: Array<{ name: string; cost: number | null }>;
+  items: Array<{ name: string; cost: number | null; details: string | null }>;
   rawText: string;
   error?: string;
 }

@@ -33,7 +33,7 @@ export default function LogServiceScreen() {
   const [cost, setCost] = useState("");
   const [provider, setProvider] = useState("");
   const [notes, setNotes] = useState("");
-  const [scannedItems, setScannedItems] = useState<Array<{ name: string; cost: number | null }>>([]);
+  const [scannedItems, setScannedItems] = useState<Array<{ name: string; cost: number | null; details: string | null }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [ocrApplied, setOcrApplied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +80,7 @@ export default function LogServiceScreen() {
           mileage: mileage ? parseInt(mileage) : null,
           cost: item.cost,
           provider_name: provider.trim() || null,
-          notes: null,
+          notes: item.details || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }));
@@ -181,7 +181,12 @@ export default function LogServiceScreen() {
               <Text style={styles.groupLabel}>Services Found ({scannedItems.length})</Text>
               {scannedItems.map((item, index) => (
                 <View key={index} style={styles.itemRow}>
-                  <Text style={styles.itemName}>{item.name}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    {item.details && (
+                      <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 }}>{item.details}</Text>
+                    )}
+                  </View>
                   {item.cost != null && (
                     <Text style={styles.itemCost}>${item.cost.toFixed(2)}</Text>
                   )}
