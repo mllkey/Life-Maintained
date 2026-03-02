@@ -15,12 +15,26 @@ export async function scanReceipt(base64Image: string): Promise<ReceiptScanResul
     if (!session) {
       throw new Error("You must be logged in to scan receipts.");
     }
-    const { data, error } = await supabase.functions.invoke("scan-receipt", {
-      body: { image: base64Image },
+
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+    const response = await fetch(supabaseUrl + "/functions/v1/scan-receipt", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + session.access_token,
+        "apikey": supabaseAnonKey || "",
+      },
+      body: JSON.stringify({ image: base64Image }),
     });
-    if (error) {
-      throw new Error(error.message || "Failed to scan receipt");
+
+    const data = await response.json();
+
+    if (data.error) {
+      console.warn("Scan returned error:", data.error);
     }
+
     return {
       date: data.date || null,
       cost: data.cost != null ? Number(data.cost) : null,
