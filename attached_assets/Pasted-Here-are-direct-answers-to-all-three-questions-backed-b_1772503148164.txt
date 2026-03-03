@@ -1,0 +1,50 @@
+Here are direct answers to all three questions, backed by the actual code:
+
+1. Where is average_miles_per_month stored?
+
+It's per-vehicle in the vehicles table — not a global setting. Every vehicle record has its own average_miles_per_month column. When a user adds a vehicle, they manually enter "Estimated Monthly Miles" which is saved directly to that vehicle row:
+
+// app/add-vehicle.tsx, line 80
+average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth) : null,
+It's then used in the vehicles list to calculate a live estimated odometer:
+
+// app/(tabs)/vehicles.tsx, lines 58-63
+function getEstimatedMileage(v: Vehicle): number | null {
+  if (!v.mileage || !v.average_miles_per_month || !v.updated_at) return null;
+  const daysSince = differenceInDays(new Date(), parseISO(v.updated_at));
+  if (daysSince < 7) return null;
+  return Math.round(v.mileage + (daysSince / 30.44) * v.average_miles_per_month);
+}
+It's also read from the vehicle when logging a service to compute the next mileage-based due date (app/log-service/[vehicleId].tsx, line 201).
+
+2. How do users enter year, make, and model?
+
+All free-text TextInput fields — no dropdowns, no pickers, no autocomplete. The Add Vehicle screen has:
+
+Year — numeric TextInput, validated to be between 1900 and current year + 2
+Make — plain text input (e.g. "Toyota")
+Model — plain text input (e.g. "Camry")
+Trim — plain text input (e.g. "XSE"), optional
+The only picker-style UI is Vehicle Type (Car, Truck, SUV, etc.), which is a grid of tappable chips from a hardcoded VEHICLE_TYPES array (lines 24–35). Year/make/model are completely freeform strings — no VIN lookup, no NHTSA/VPIC API, no dropdown.
+
+3. Are service intervals pulled from Supabase tables or hardcoded?
+
+Split picture — two separate contexts:
+
+In vehicle maintenance tasks (vehicle/[id].tsx): Intervals ARE stored per-task in the vehicle_maintenance_tasks table. Each task has two optional interval columns:
+
+interval — a time-based interval in days (integer), used to calculate next_due_date when a task is marked complete (line 79–83)
+mileage_interval — a miles-based interval, displayed in the UI and used in log-service to project the next service mileage (line 393–394)
+These are set when tasks are created/added to a vehicle and stored in Supabase. The maintenance_templates and manufacturer_schedules tables exist in the schema (per the original spec, line 9–10 of attached assets) but there is no code that queries them — they're unused by the current frontend.
+
+In the Settings Service Prediction table: The intervals are fully hardcoded in settings.tsx:
+
+// app/(tabs)/settings.tsx, lines 45-50
+const SERVICES = [
+  { name: "Oil Change",       interval: 5000,  low: 45,  high: 75  },
+  { name: "Tire Rotation",    interval: 7500,  low: 20,  high: 40  },
+  { name: "Air Filter",       interval: 15000, low: 15,  high: 40  },
+  { name: "Brake Inspection", interval: 20000, low: 20,  high: 60  },
+  { name: "Spark Plugs",      interval: 30000, low: 50,  high: 120 },
+];
+These are generic industry-standard values with no connection to Supabase, the user's actual vehicles, or their specific tasks. The prediction is purely illustrative — it does not reflect the user's real task intervals stored in the database.
