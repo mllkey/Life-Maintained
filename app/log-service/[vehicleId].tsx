@@ -114,8 +114,8 @@ export default function LogServiceScreen() {
     let bestMatch: any = null;
     let bestScore = 0;
 
-    for (const task of tasks) {
-      const taskNorm = norm(task.task ?? "");
+    for (const vtask of tasks) {
+      const taskNorm = norm(vtask.task ?? "");
       let score = 0;
 
       const serviceWords = serviceNorm.split(" ").filter(w => w.length >= 3);
@@ -135,7 +135,7 @@ export default function LogServiceScreen() {
 
       if (score > bestScore) {
         bestScore = score;
-        bestMatch = task;
+        bestMatch = vtask;
       }
     }
 
@@ -158,7 +158,7 @@ export default function LogServiceScreen() {
   }
 
   function calculateNextDue(
-    task: any,
+    mTask: any,
     serviceDateStr: string,
     serviceMileage: number | null,
     avgMilesPerMonth: number | null,
@@ -167,14 +167,14 @@ export default function LogServiceScreen() {
     let mileageDate: Date | null = null;
     let timeDate: Date | null = null;
 
-    if (task.mileage_interval && serviceMileage != null && avgMilesPerMonth && avgMilesPerMonth > 0) {
-      const months = task.mileage_interval / avgMilesPerMonth;
+    if (mTask.mileage_interval && serviceMileage != null && avgMilesPerMonth && avgMilesPerMonth > 0) {
+      const months = mTask.mileage_interval / avgMilesPerMonth;
       mileageDate = new Date(serviceDate);
       mileageDate.setDate(mileageDate.getDate() + Math.round(months * 30.44));
     }
 
-    if (task.interval) {
-      timeDate = parseIntervalToDate(task.interval, serviceDate);
+    if (mTask.interval) {
+      timeDate = parseIntervalToDate(mTask.interval, serviceDate);
     }
 
     if (mileageDate && timeDate) return (mileageDate < timeDate ? mileageDate : timeDate).toISOString();
