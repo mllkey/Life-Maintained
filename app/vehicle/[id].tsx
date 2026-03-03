@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -190,6 +190,31 @@ export default function VehicleDetailScreen() {
   const dueSoon = tasks?.filter(t => getStatus(t.next_due_date) === "due_soon") ?? [];
   const good = tasks?.filter(t => getStatus(t.next_due_date) === "good") ?? [];
 
+  const groupedHistory = useMemo(() => {
+    if (!logs || logs.length === 0) return [];
+    const map = new Map<string, any[]>();
+    for (const log of logs) {
+      const key = (log.service_name ?? "Other Service").trim();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(log);
+    }
+    const groups = Array.from(map.entries()).map(([name, entries]) => {
+      const sorted = [...entries].sort((a, b) => {
+        if (!a.service_date) return 1;
+        if (!b.service_date) return -1;
+        return b.service_date.localeCompare(a.service_date);
+      });
+      const hasCost = sorted.some(e => e.cost != null);
+      const totalCost = hasCost ? sorted.reduce((sum, e) => sum + (e.cost ?? 0), 0) : null;
+      return { name, entries: sorted, totalCost, count: sorted.length };
+    });
+    return groups.sort((a, b) => {
+      const aDate = a.entries[0]?.service_date ?? "";
+      const bDate = b.entries[0]?.service_date ?? "";
+      return bDate.localeCompare(aDate);
+    });
+  }, [logs]);
+
   return (
     <View style={[styles.container, { backgroundColor: Colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
@@ -286,45 +311,33 @@ export default function VehicleDetailScreen() {
               )}
             </View>
           ) : (
-            <View style={styles.tasksContainer}>
-              {(logs?.length ?? 0) > 0 && (
-                <Pressable
-                  style={({ pressed }) => [styles.exportBtn, { opacity: pressed ? 0.8 : 1 }]}
-                  onPress={handleExport}
-                  disabled={isExporting}
-                >
-                  {isExporting ? (
-                    <ActivityIndicator size="small" color={Colors.textInverse} />
-                  ) : (
-                    <>
-                      <Ionicons name="share-outline" size={16} color={Colors.textInverse} />
-                      <Text style={styles.exportBtnText}>Export History</Text>
-                    </>
-                  )}
-                </Pressable>
-              )}
-              {logs?.length === 0 ? (
+            <View style={styles.historyContainer}>
+              {groupedHistory.length === 0 ? (
                 <View style={styles.emptyTasks}>
                   <Ionicons name="document-outline" size={36} color={Colors.textTertiary} />
                   <Text style={styles.emptyTasksText}>No service records yet</Text>
+                  <Text style={styles.emptyTasksSubtext}>Tap the + button to log your first service</Text>
                 </View>
               ) : (
-                logs?.map(log => (
-                  <View key={log.id} style={styles.logCard}>
-                    <View style={styles.logTop}>
-                      <Text style={styles.logTask}>{log.service_name ?? "Service"}</Text>
-                      {log.cost != null && (
-                        <Text style={styles.logCost}>${log.cost.toFixed(2)}</Text>
-                      )}
-                    </View>
-                    <View style={styles.logMeta}>
-                      {log.service_date && <Text style={styles.logDate}>{format(parseISO(log.service_date), "MMM d, yyyy")}</Text>}
-                      {log.mileage != null && <Text style={styles.logMileage}>{log.mileage.toLocaleString()} mi</Text>}
-                      {log.provider_name && <Text style={styles.logProvider}>{log.provider_name}</Text>}
-                    </View>
-                    {log.notes && <Text style={styles.logNotes}>{log.notes}</Text>}
-                  </View>
-                ))
+                <>
+                  {groupedHistory.map(group => (
+                    <ServiceHistoryGroup key={group.name} group={group} />
+                  ))}
+                  <Pressable
+                    style={({ pressed }) => [styles.exportBtn, { opacity: pressed ? 0.8 : 1 }]}
+                    onPress={handleExport}
+                    disabled={isExporting}
+                  >
+                    {isExporting ? (
+                      <ActivityIndicator size="small" color={Colors.textInverse} />
+                    ) : (
+                      <>
+                        <Ionicons name="share-outline" size={16} color={Colors.textInverse} />
+                        <Text style={styles.exportBtnText}>Export History</Text>
+                      </>
+                    )}
+                  </Pressable>
+                </>
               )}
             </View>
           )}
@@ -382,6 +395,80 @@ function TaskGroup({ title, color, tasks, onComplete, vehicle }: {
           </View>
         );
       })}
+    </View>
+  );
+}
+
+function ServiceHistoryGroup({ group }: { group: { name: string; entries: any[]; totalCost: number | null; count: number } }) {
+  const subtitle = [
+    group.count === 1 ? "1 service" : `${group.count} services`,
+    group.totalCost != null ? `$${group.totalCost.toFixed(2)} total` : null,
+  ].filter(Boolean).join("  ·  ");
+
+  return (
+    <View style={styles.historyGroup}>
+      <View style={styles.historyGroupHeader}>
+        <View style={styles.historyGroupHeaderLeft}>
+          <Text style={styles.historyGroupName}>{group.name}</Text>
+          <Text style={styles.historyGroupMeta}>{subtitle}</Text>
+        </View>
+      </View>
+      <View style={styles.historyGroupCards}>
+        {group.entries.map((log, idx) => (
+          <ServiceLogCard key={log.id} log={log} isLast={idx === group.entries.length - 1} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function ServiceLogCard({ log, isLast }: { log: any; isLast: boolean }) {
+  const formattedDate = log.service_date
+    ? format(parseISO(log.service_date), "MMMM d, yyyy")
+    : null;
+  const formattedMileage = log.mileage != null
+    ? `${log.mileage.toLocaleString()} miles`
+    : null;
+
+  return (
+    <View style={[styles.serviceCard, !isLast && styles.serviceCardBorder]}>
+      <View style={styles.serviceCardTop}>
+        <Text style={styles.serviceCardName} numberOfLines={2}>{log.service_name ?? "Service"}</Text>
+        <View style={styles.serviceCardTopRight}>
+          {log.receipt_url && (
+            <Ionicons name="receipt-outline" size={14} color={Colors.textTertiary} style={{ marginRight: 6 }} />
+          )}
+          {log.cost != null && (
+            <Text style={styles.serviceCardCost}>${log.cost.toFixed(2)}</Text>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.serviceCardMetaRow}>
+        {formattedDate && (
+          <View style={styles.serviceCardMetaPill}>
+            <Ionicons name="calendar-outline" size={11} color={Colors.textTertiary} />
+            <Text style={styles.serviceCardMetaText}>{formattedDate}</Text>
+          </View>
+        )}
+        {formattedMileage && (
+          <View style={styles.serviceCardMetaPill}>
+            <Ionicons name="speedometer-outline" size={11} color={Colors.textTertiary} />
+            <Text style={styles.serviceCardMetaText}>{formattedMileage}</Text>
+          </View>
+        )}
+      </View>
+
+      {log.provider_name && (
+        <View style={styles.serviceCardProviderRow}>
+          <Ionicons name="storefront-outline" size={12} color={Colors.textSecondary} />
+          <Text style={styles.serviceCardProvider}>{log.provider_name}</Text>
+        </View>
+      )}
+
+      {log.notes ? (
+        <Text style={styles.serviceCardNotes} numberOfLines={3}>{log.notes}</Text>
+      ) : null}
     </View>
   );
 }
@@ -445,13 +532,32 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   exportBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  logCard: { backgroundColor: Colors.card, borderRadius: 12, padding: 14, gap: 8, borderWidth: 1, borderColor: Colors.border },
-  logTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  logTask: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text, flex: 1 },
-  logCost: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.accent },
-  logMeta: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
-  logDate: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  logMileage: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  logProvider: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  logNotes: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, fontStyle: "italic" },
+  emptyTasksSubtext: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
+  historyContainer: { gap: 20 },
+  historyGroup: { gap: 0 },
+  historyGroupHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    marginBottom: 2,
+  },
+  historyGroupHeaderLeft: { gap: 2 },
+  historyGroupName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  historyGroupMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  historyGroupCards: { backgroundColor: Colors.card, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, overflow: "hidden" },
+  serviceCard: { paddingHorizontal: 16, paddingVertical: 14, gap: 7 },
+  serviceCardBorder: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  serviceCardTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8 },
+  serviceCardTopRight: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
+  serviceCardName: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, flex: 1, lineHeight: 22 },
+  serviceCardCost: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.vehicle },
+  serviceCardMetaRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  serviceCardMetaPill: { flexDirection: "row", alignItems: "center", gap: 4 },
+  serviceCardMetaText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  serviceCardProviderRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 1 },
+  serviceCardProvider: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  serviceCardNotes: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, lineHeight: 18, marginTop: 2, fontStyle: "italic" },
 });
