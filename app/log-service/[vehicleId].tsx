@@ -21,6 +21,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import ReceiptScanButton from "@/components/ReceiptScanButton";
 import { ReceiptScanResult } from "@/lib/receiptScanner";
 
+type ScannedItem = { name: string; cost: number | null; details: string | null };
+
 export default function LogServiceScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
   const insets = useSafeAreaInsets();
@@ -33,10 +35,15 @@ export default function LogServiceScreen() {
   const [cost, setCost] = useState("");
   const [provider, setProvider] = useState("");
   const [notes, setNotes] = useState("");
-  const [scannedItems, setScannedItems] = useState<Array<{ name: string; cost: number | null; details: string | null }>>([]);
+  const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
+  const [editingField, setEditingField] = useState<{ index: number; field: "name" | "cost" } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [ocrApplied, setOcrApplied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const itemsTotal = scannedItems.length > 0
+    ? scannedItems.reduce((sum, item) => sum + (item.cost ?? 0), 0)
+    : null;
 
   function formatDate(text: string) {
     const digits = text.replace(/\D/g, "");
@@ -65,17 +72,34 @@ export default function LogServiceScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
+  function updateItem(index: number, patch: Partial<ScannedItem>) {
+    setScannedItems(prev => prev.map((item, i) => i === index ? { ...item, ...patch } : item));
+  }
+
+  function deleteItem(index: number) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setEditingField(null);
+    setScannedItems(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function addItem() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const newIndex = scannedItems.length;
+    setScannedItems(prev => [...prev, { name: "", cost: null, details: null }]);
+    setEditingField({ index: newIndex, field: "name" });
+  }
+
   async function handleSave() {
     if (!user || !vehicleId) return;
     setIsLoading(true);
     setError(null);
 
     try {
-      if (scannedItems.length > 1) {
+      if (scannedItems.length > 0) {
         const rows = scannedItems.map(item => ({
           user_id: user!.id,
           vehicle_id: vehicleId,
-          service_name: item.name,
+          service_name: item.name || "Service",
           service_date: date || new Date().toISOString().split("T")[0],
           mileage: mileage ? parseInt(mileage) : null,
           cost: item.cost,
@@ -176,29 +200,83 @@ export default function LogServiceScreen() {
             <ReceiptScanButton onScanComplete={handleScanComplete} />
           </View>
 
-          {scannedItems.length > 1 && (
+          {scannedItems.length > 0 && (
             <View style={styles.fieldGroup}>
               <Text style={styles.groupLabel}>Services Found ({scannedItems.length})</Text>
+
               {scannedItems.map((item, index) => (
                 <View key={index} style={styles.itemRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.itemName}>{item.name}</Text>
-                    {item.details && (
-                      <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 }}>{item.details}</Text>
+                  <View style={styles.itemLeft}>
+                    {editingField?.index === index && editingField?.field === "name" ? (
+                      <TextInput
+                        autoFocus
+                        style={styles.itemEditInput}
+                        value={item.name}
+                        onChangeText={text => updateItem(index, { name: text })}
+                        onBlur={() => setEditingField(null)}
+                        returnKeyType="done"
+                        onSubmitEditing={() => setEditingField(null)}
+                        placeholderTextColor={Colors.textTertiary}
+                        placeholder="Service name"
+                      />
+                    ) : (
+                      <Pressable onPress={() => { Haptics.selectionAsync(); setEditingField({ index, field: "name" }); }}>
+                        <Text style={styles.itemName}>{item.name || "Tap to name"}</Text>
+                        {item.details && (
+                          <Text style={styles.itemDetails}>{item.details}</Text>
+                        )}
+                      </Pressable>
                     )}
                   </View>
-                  {item.cost != null && (
-                    <Text style={styles.itemCost}>${item.cost.toFixed(2)}</Text>
-                  )}
+
+                  <View style={styles.itemRight}>
+                    {editingField?.index === index && editingField?.field === "cost" ? (
+                      <TextInput
+                        autoFocus
+                        style={styles.itemCostInput}
+                        value={item.cost != null ? String(item.cost) : ""}
+                        onChangeText={text => updateItem(index, { cost: text ? parseFloat(text) : null })}
+                        onBlur={() => setEditingField(null)}
+                        onSubmitEditing={() => setEditingField(null)}
+                        keyboardType="decimal-pad"
+                        returnKeyType="done"
+                        placeholder="0.00"
+                        placeholderTextColor={Colors.textTertiary}
+                      />
+                    ) : (
+                      <Pressable onPress={() => { Haptics.selectionAsync(); setEditingField({ index, field: "cost" }); }}>
+                        <Text style={[styles.itemCost, item.cost == null && styles.itemCostEmpty]}>
+                          {item.cost != null ? `$${item.cost.toFixed(2)}` : "$ —"}
+                        </Text>
+                      </Pressable>
+                    )}
+
+                    <Pressable
+                      onPress={() => deleteItem(index)}
+                      style={styles.itemDeleteBtn}
+                      hitSlop={8}
+                    >
+                      <Ionicons name="close-circle" size={18} color={Colors.textTertiary} />
+                    </Pressable>
+                  </View>
                 </View>
               ))}
+
+              <Pressable
+                style={({ pressed }) => [styles.addItemBtn, { opacity: pressed ? 0.7 : 1 }]}
+                onPress={addItem}
+              >
+                <Ionicons name="add-circle-outline" size={16} color={Colors.accent} />
+                <Text style={styles.addItemText}>Add Item</Text>
+              </Pressable>
+
               <Text style={styles.itemHint}>
-                Each service will be saved as a separate entry in your service history.
+                Tap any name or cost to edit. Each item saves as a separate log entry.
               </Text>
             </View>
           )}
 
-          {scannedItems.length <= 1 && (
+          {scannedItems.length === 0 && (
             <View style={styles.fieldGroup}>
               <Text style={styles.groupLabel}>Service Type</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickPicks}>
@@ -249,12 +327,15 @@ export default function LogServiceScreen() {
               </Field>
             </View>
             <View style={styles.row}>
-              <Field label="Cost ($)" style={{ flex: 1 }}>
+              <Field label={scannedItems.length > 0 ? "Total Cost" : "Cost ($)"} style={{ flex: 1 }}>
                 <TextInput
-                  style={styles.input}
-                  value={cost}
-                  onChangeText={setCost}
-                  placeholder="89.99"
+                  style={[styles.input, scannedItems.length > 0 && styles.inputDerived]}
+                  value={scannedItems.length > 0
+                    ? (itemsTotal != null ? itemsTotal.toFixed(2) : "")
+                    : cost}
+                  onChangeText={scannedItems.length > 0 ? undefined : setCost}
+                  editable={scannedItems.length === 0}
+                  placeholder="0.00"
                   placeholderTextColor={Colors.textTertiary}
                   keyboardType="decimal-pad"
                 />
@@ -272,7 +353,7 @@ export default function LogServiceScreen() {
             </View>
           </View>
 
-          {scannedItems.length <= 1 && (
+          {scannedItems.length === 0 && (
             <View style={styles.fieldGroup}>
               <Text style={styles.groupLabel}>Notes</Text>
               <TextInput
@@ -340,20 +421,64 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: Colors.text,
   },
+  inputDerived: {
+    color: Colors.textSecondary,
+    backgroundColor: Colors.background,
+  },
   textArea: { height: 80, paddingTop: 12 },
   ocrSuccess: { flexDirection: "row", alignItems: "center", gap: 6 },
   ocrSuccessText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good },
   itemRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: Colors.card,
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.border,
+    gap: 8,
   },
-  itemName: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text, flex: 1 },
+  itemLeft: { flex: 1 },
+  itemRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  itemName: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text },
+  itemDetails: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 },
   itemCost: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.accent },
+  itemCostEmpty: { color: Colors.textTertiary, fontFamily: "Inter_400Regular" },
+  itemEditInput: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.text,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.accent,
+    paddingVertical: 2,
+    minWidth: 80,
+  },
+  itemCostInput: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.accent,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.accent,
+    paddingVertical: 2,
+    textAlign: "right",
+    minWidth: 54,
+  },
+  itemDeleteBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addItemBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.accentMuted,
+    borderStyle: "dashed",
+    justifyContent: "center",
+  },
+  addItemText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
   itemHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
 });
