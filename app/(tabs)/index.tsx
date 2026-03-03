@@ -192,6 +192,16 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
+  const { data: familyMembers } = useQuery({
+    queryKey: ["family_members_count", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data } = await supabase.from("family_members").select("id").eq("user_id", user.id);
+      return data ?? [];
+    },
+    enabled: !!user,
+  });
+
   function refetch() {
     refetchCounts();
     refetchDash();
@@ -257,7 +267,7 @@ export default function DashboardScreen() {
               <SpendingCard spending={spending ?? {}} />
             </View>
 
-            {screenings.length > 0 && (
+            {screenings.length > 0 && (familyMembers?.length ?? 0) > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Health Screenings</Text>

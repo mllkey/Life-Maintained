@@ -228,8 +228,8 @@ export default function HealthScreen() {
                   </>
                 ) : (
                   <>
-                    <Text style={styles.overviewDash}>—</Text>
-                    <Text style={styles.overviewLabel}>Est. Cost</Text>
+                    <Text style={styles.overviewNumber}>$0</Text>
+                    <Text style={styles.overviewLabel}>Est./year</Text>
                   </>
                 )}
               </View>
@@ -497,12 +497,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.card,
     borderRadius: 16,
-    padding: 12,
+    padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
     gap: 4,
   },
-  overviewCardTall: { minHeight: 100, justifyContent: "center" },
+  overviewCardTall: { minHeight: 120, justifyContent: "center" },
   overviewIconWrap: {
     width: 32,
     height: 32,

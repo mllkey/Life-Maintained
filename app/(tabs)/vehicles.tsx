@@ -211,9 +211,31 @@ export default function VehiclesScreen() {
                       <Text style={styles.estimatedText}>~{estimatedMileage.toLocaleString()} mi est.</Text>
                     </View>
                   )}
-                  <View style={styles.scheduleBadge}>
-                    <Text style={styles.scheduleText}>{scheduleLabel}</Text>
+                </View>
+
+                <View style={styles.badgesRow}>
+                  <View style={[
+                    styles.scheduleBadge,
+                    scheduleLabel === "Manufacturer"
+                      ? styles.scheduleBadgeManufacturer
+                      : styles.scheduleBadgeStandard,
+                  ]}>
+                    <View style={[
+                      styles.scheduleDot,
+                      { backgroundColor: scheduleLabel === "Manufacturer" ? Colors.blue : Colors.vehicle },
+                    ]} />
+                    <Text style={[
+                      styles.scheduleText,
+                      { color: scheduleLabel === "Manufacturer" ? Colors.blue : Colors.vehicle },
+                    ]}>
+                      {scheduleLabel}
+                    </Text>
                   </View>
+                  {pendingCount > 0 && (
+                    <View style={styles.taskCountBadge}>
+                      <Text style={styles.taskCountText}>{pendingCount} task{pendingCount !== 1 ? "s" : ""}</Text>
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.cardActions}>
@@ -348,16 +370,35 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   estimatedText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
+  badgesRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   scheduleBadge: {
-    marginLeft: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderWidth: 1,
+  },
+  scheduleBadgeManufacturer: {
+    backgroundColor: Colors.blueMuted,
+    borderColor: Colors.blue + "44",
+  },
+  scheduleBadgeStandard: {
+    backgroundColor: Colors.vehicleMuted,
+    borderColor: Colors.vehicle + "44",
+  },
+  scheduleDot: { width: 5, height: 5, borderRadius: 2.5 },
+  scheduleText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  taskCountBadge: {
     backgroundColor: Colors.surface,
-    borderRadius: 7,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  scheduleText: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
+  taskCountText: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
 
   cardActions: { flexDirection: "row", gap: 8 },
   actionBtn: {
