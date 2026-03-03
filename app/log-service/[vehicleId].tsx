@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -89,6 +90,141 @@ export default function LogServiceScreen() {
     setEditingField({ index: newIndex, field: "name" });
   }
 
+  // ── Maintenance task auto-update helpers ──────────────────────────────────
+
+  const CATEGORY_GROUPS: string[][] = [
+    ["oil", "lube", "motor oil", "synthetic"],
+    ["tire", "tyre", "rotation", "alignment"],
+    ["brake", "rotor", "pad", "caliper"],
+    ["air filter", "cabin filter"],
+    ["transmission", "trans", "gearbox"],
+    ["battery"],
+    ["spark plug", "ignition"],
+    ["coolant", "antifreeze", "radiator"],
+    ["wiper", "blade"],
+    ["inspection", "check"],
+    ["fluid"],
+    ["belt", "timing"],
+  ];
+
+  function fuzzyMatchTask(serviceName: string, tasks: any[]): any | null {
+    const norm = (s: string) =>
+      s.toLowerCase().replace(/[&,.()\-\/+]/g, " ").replace(/\s+/g, " ").trim();
+    const serviceNorm = norm(serviceName);
+    let bestMatch: any = null;
+    let bestScore = 0;
+
+    for (const task of tasks) {
+      const taskNorm = norm(task.task ?? "");
+      let score = 0;
+
+      const serviceWords = serviceNorm.split(" ").filter(w => w.length >= 3);
+      const taskWords = taskNorm.split(" ").filter(w => w.length >= 3);
+
+      for (const sw of serviceWords) {
+        if (taskWords.some(tw => tw === sw || tw.includes(sw) || sw.includes(tw))) {
+          score += 2;
+        }
+      }
+
+      for (const group of CATEGORY_GROUPS) {
+        const svcHas = group.some(kw => serviceNorm.includes(kw));
+        const taskHas = group.some(kw => taskNorm.includes(kw));
+        if (svcHas && taskHas) score += 3;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = task;
+      }
+    }
+
+    return bestScore >= 3 ? bestMatch : null;
+  }
+
+  function parseIntervalToDate(interval: string, from: Date): Date | null {
+    const result = new Date(from);
+    const match = interval.toLowerCase().match(/(\d+)\s*(day|week|month|year)/);
+    if (!match) return null;
+    const num = parseInt(match[1]);
+    switch (match[2]) {
+      case "day":   result.setDate(result.getDate() + num); break;
+      case "week":  result.setDate(result.getDate() + num * 7); break;
+      case "month": result.setMonth(result.getMonth() + num); break;
+      case "year":  result.setFullYear(result.getFullYear() + num); break;
+      default: return null;
+    }
+    return result;
+  }
+
+  function calculateNextDue(
+    task: any,
+    serviceDateStr: string,
+    serviceMileage: number | null,
+    avgMilesPerMonth: number | null,
+  ): string | null {
+    const serviceDate = new Date(serviceDateStr + "T12:00:00");
+    let mileageDate: Date | null = null;
+    let timeDate: Date | null = null;
+
+    if (task.mileage_interval && serviceMileage != null && avgMilesPerMonth && avgMilesPerMonth > 0) {
+      const months = task.mileage_interval / avgMilesPerMonth;
+      mileageDate = new Date(serviceDate);
+      mileageDate.setDate(mileageDate.getDate() + Math.round(months * 30.44));
+    }
+
+    if (task.interval) {
+      timeDate = parseIntervalToDate(task.interval, serviceDate);
+    }
+
+    if (mileageDate && timeDate) return (mileageDate < timeDate ? mileageDate : timeDate).toISOString();
+    return (mileageDate ?? timeDate)?.toISOString() ?? null;
+  }
+
+  async function findAndUpdateMatchingTask(
+    serviceName: string,
+    serviceDate: string,
+    serviceMileage: number | null,
+  ): Promise<{ taskName: string; nextDue: string | null } | null> {
+    try {
+      const { data: tasks } = await supabase
+        .from("vehicle_maintenance_tasks")
+        .select("*")
+        .eq("vehicle_id", vehicleId);
+      if (!tasks || tasks.length === 0) return null;
+
+      const matched = fuzzyMatchTask(serviceName, tasks);
+      if (!matched) return null;
+
+      const { data: vehicle } = await supabase
+        .from("vehicles")
+        .select("average_miles_per_month")
+        .eq("id", vehicleId)
+        .single();
+
+      const nextDue = calculateNextDue(
+        matched,
+        serviceDate,
+        serviceMileage,
+        vehicle?.average_miles_per_month ?? null,
+      );
+
+      await supabase.from("vehicle_maintenance_tasks").update({
+        last_completed_at: new Date(serviceDate + "T12:00:00").toISOString(),
+        last_service_mileage: serviceMileage,
+        is_completed: false,
+        next_due_date: nextDue,
+        updated_at: new Date().toISOString(),
+      }).eq("id", matched.id);
+
+      return { taskName: matched.task, nextDue };
+    } catch {
+      return null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   async function handleSave() {
     if (!user || !vehicleId) return;
     setIsLoading(true);
@@ -147,9 +283,34 @@ export default function LogServiceScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["maintenance_logs", vehicleId] });
       queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["vehicle_tasks", vehicleId] });
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      router.back();
+
+      // Try to auto-update matching maintenance tasks
+      const serviceNames = scannedItems.length > 0
+        ? scannedItems.map(i => i.name).filter(Boolean)
+        : [task.trim()].filter(Boolean);
+      const serviceMileage = mileage ? parseInt(mileage) : null;
+
+      const updatedTasks: { taskName: string; nextDue: string | null }[] = [];
+      for (const name of serviceNames) {
+        const result = await findAndUpdateMatchingTask(name, date, serviceMileage);
+        if (result) updatedTasks.push(result);
+      }
+
+      if (updatedTasks.length > 0) {
+        const fmt = (iso: string | null) => iso
+          ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : null;
+        const lines = updatedTasks.map(t => {
+          const due = fmt(t.nextDue);
+          return due ? `• ${t.taskName}\n  Next due: ${due}` : `• ${t.taskName}`;
+        }).join("\n\n");
+        Alert.alert("Maintenance Updated", lines, [{ text: "OK", onPress: () => router.back() }]);
+      } else {
+        router.back();
+      }
     } catch (err: any) {
       setError(err.message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
