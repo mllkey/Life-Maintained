@@ -217,16 +217,28 @@ export default function VehicleDetailScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: Colors.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.text} />
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={6}>
+          <Ionicons name="chevron-back" size={24} color={Colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>{vehicleName}</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle} numberOfLines={1}>{vehicleName}</Text>
+          {vehicle?.trim && (
+            <Text style={styles.headerTrim} numberOfLines={1}>{vehicle.trim}</Text>
+          )}
+          {vehicle?.mileage != null && (
+            <View style={styles.headerMileageRow}>
+              <Ionicons name="speedometer-outline" size={11} color={Colors.textTertiary} />
+              <Text style={styles.headerMileage}>{vehicle.mileage.toLocaleString()} mi</Text>
+            </View>
+          )}
+        </View>
         <Pressable
-          style={styles.logBtn}
+          style={({ pressed }) => [styles.logBtn, { opacity: pressed ? 0.8 : 1 }]}
           onPress={() => router.push(`/log-service/${id}` as any)}
         >
-          <Ionicons name="add" size={20} color={Colors.vehicle} />
+          <Ionicons name="construct-outline" size={14} color={Colors.vehicle} />
+          <Text style={styles.logBtnText}>Log Service</Text>
         </Pressable>
       </View>
 
@@ -479,14 +491,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    gap: 8,
   },
-  backBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
-  headerTitle: { flex: 1, fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
-  logBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center", backgroundColor: Colors.vehicleMuted, borderRadius: 10 },
+  backBtn: { width: 40, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  headerCenter: { flex: 1, alignItems: "center", gap: 1 },
+  headerTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
+  headerTrim: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  headerMileageRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 1 },
+  headerMileage: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  logBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: Colors.vehicleMuted,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 36,
+    flexShrink: 0,
+  },
+  logBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.vehicle },
   scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 16 },
   vehicleCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 12, borderWidth: 1, borderColor: Colors.border },
   vehicleCardLeft: { flexDirection: "row", alignItems: "center", gap: 12 },

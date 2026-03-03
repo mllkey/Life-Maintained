@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import { parseISO, isBefore, addDays } from "date-fns";
+import { parseISO, isBefore, addDays, differenceInDays } from "date-fns";
 
 type Vehicle = {
   id: string;
@@ -31,14 +31,35 @@ type Vehicle = {
   nickname: string | null;
   is_seasonal: boolean | null;
   vehicle_category: string | null;
+  updated_at: string | null;
+  average_miles_per_month: number | null;
 };
 
-function getTaskStatus(date: string | null) {
+function getTaskStatus(date: string | null): "overdue" | "due_soon" | "good" {
   if (!date) return "good";
   const d = parseISO(date);
   if (isBefore(d, new Date())) return "overdue";
   if (isBefore(d, addDays(new Date(), 30))) return "due_soon";
   return "good";
+}
+
+function getVehicleIcon(type: string | null): string {
+  switch (type) {
+    case "motorcycle": case "superbike": return "bicycle-outline";
+    case "truck": return "car-sport-outline";
+    case "rv": return "bus-outline";
+    case "boat": return "boat-outline";
+    case "atv": return "trail-sign-outline";
+    case "electric": return "flash-outline";
+    default: return "car-outline";
+  }
+}
+
+function getEstimatedMileage(v: Vehicle): number | null {
+  if (!v.mileage || !v.average_miles_per_month || !v.updated_at) return null;
+  const daysSince = differenceInDays(new Date(), parseISO(v.updated_at));
+  if (daysSince < 7) return null;
+  return Math.round(v.mileage + (daysSince / 30.44) * v.average_miles_per_month);
 }
 
 export default function VehiclesScreen() {
@@ -50,40 +71,47 @@ export default function VehiclesScreen() {
     queryKey: ["vehicles", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase.from("vehicles").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-      return data ?? [];
+      const { data } = await supabase
+        .from("vehicles")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      return (data ?? []) as Vehicle[];
     },
     enabled: !!user,
   });
 
-  const { data: taskStatuses } = useQuery({
-    queryKey: ["vehicle_task_statuses", user?.id],
+  const { data: taskData } = useQuery({
+    queryKey: ["vehicle_task_data", user?.id, vehicles?.map(v => v.id).join(",")],
     queryFn: async () => {
       if (!user || !vehicles?.length) return {};
       const ids = vehicles.map(v => v.id);
-      const { data } = await supabase.from("vehicle_maintenance_tasks").select("vehicle_id, next_due_date").in("vehicle_id", ids);
-      const map: Record<string, "overdue" | "due_soon" | "good"> = {};
+      const { data } = await supabase
+        .from("vehicle_maintenance_tasks")
+        .select("vehicle_id, next_due_date, mileage_interval")
+        .in("vehicle_id", ids);
+
+      const map: Record<string, {
+        worstStatus: "overdue" | "due_soon" | "good";
+        pendingCount: number;
+        hasMileageInterval: boolean;
+      }> = {};
+
       for (const t of data ?? []) {
-        const s = getTaskStatus(t.next_due_date);
-        const current = map[t.vehicle_id] ?? "good";
-        if (s === "overdue" || (s === "due_soon" && current === "good")) {
-          map[t.vehicle_id] = s;
+        if (!map[t.vehicle_id]) {
+          map[t.vehicle_id] = { worstStatus: "good", pendingCount: 0, hasMileageInterval: false };
         }
+        const s = getTaskStatus(t.next_due_date);
+        if (s !== "good") map[t.vehicle_id].pendingCount++;
+        if (s === "overdue" || (s === "due_soon" && map[t.vehicle_id].worstStatus === "good")) {
+          map[t.vehicle_id].worstStatus = s;
+        }
+        if (t.mileage_interval) map[t.vehicle_id].hasMileageInterval = true;
       }
       return map;
     },
     enabled: !!(user && vehicles?.length),
   });
-
-  function getVehicleIcon(type: string | null) {
-    switch (type) {
-      case "motorcycle": case "superbike": return "bicycle-outline";
-      case "truck": return "car-sport-outline";
-      case "rv": return "bus-outline";
-      case "boat": return "boat-outline";
-      default: return "car-outline";
-    }
-  }
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -101,7 +129,6 @@ export default function VehiclesScreen() {
       </View>
 
       <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.accent} />}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0) }]}
@@ -112,46 +139,89 @@ export default function VehiclesScreen() {
           <EmptyVehicles />
         ) : (
           vehicles?.map(v => {
-            const status = taskStatuses?.[v.id] ?? "good";
-            const statusColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
+            const td = taskData?.[v.id];
+            const worstStatus = td?.worstStatus ?? "good";
+            const pendingCount = td?.pendingCount ?? 0;
+            const scheduleLabel = td?.hasMileageInterval ? "Manufacturer" : "Standard";
+            const estimatedMileage = getEstimatedMileage(v);
+            const icon = getVehicleIcon(v.vehicle_type);
+            const title = `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim();
+            const displayName = v.nickname ?? title;
+
             return (
               <Pressable
                 key={v.id}
                 style={({ pressed }) => [styles.vehicleCard, { opacity: pressed ? 0.88 : 1 }]}
-                onPress={() => router.push(`/vehicle/${v.id}` as any)}
+                onPress={() => { Haptics.selectionAsync(); router.push(`/vehicle/${v.id}` as any); }}
               >
-                <View style={styles.vehicleCardTop}>
-                  <View style={[styles.vehicleIcon, { backgroundColor: Colors.vehicleMuted }]}>
-                    <Ionicons name={getVehicleIcon(v.vehicle_type) as any} size={26} color={Colors.vehicle} />
+                <View style={styles.cardTop}>
+                  <View style={[styles.iconWrap, { backgroundColor: Colors.vehicleMuted }]}>
+                    <Ionicons name={icon as any} size={26} color={Colors.vehicle} />
                   </View>
                   <View style={styles.vehicleInfo}>
-                    <Text style={styles.vehicleName} numberOfLines={1}>
-                      {v.nickname ?? `${v.year} ${v.make} ${v.model}`}
-                    </Text>
+                    <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
                     {v.nickname && (
-                      <Text style={styles.vehicleSubname}>{`${v.year} ${v.make} ${v.model}`}</Text>
+                      <Text style={styles.vehicleSubtitle} numberOfLines={1}>{title}</Text>
+                    )}
+                    {v.trim && !v.nickname && (
+                      <Text style={styles.vehicleTrim} numberOfLines={1}>{v.trim}</Text>
+                    )}
+                    {v.trim && v.nickname && (
+                      <Text style={styles.vehicleTrim} numberOfLines={1}>{title} · {v.trim}</Text>
                     )}
                   </View>
-                  <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                  <View style={styles.badgesCol}>
+                    {pendingCount > 0 && (
+                      <View style={[
+                        styles.tasksBadge,
+                        { backgroundColor: worstStatus === "overdue" ? Colors.overdueMuted : Colors.dueSoonMuted },
+                      ]}>
+                        <View style={[
+                          styles.tasksBadgeDot,
+                          { backgroundColor: worstStatus === "overdue" ? Colors.overdue : Colors.dueSoon },
+                        ]} />
+                        <Text style={[
+                          styles.tasksBadgeText,
+                          { color: worstStatus === "overdue" ? Colors.overdue : Colors.dueSoon },
+                        ]}>
+                          {pendingCount}
+                        </Text>
+                      </View>
+                    )}
+                    {pendingCount === 0 && (
+                      <View style={[styles.tasksBadge, { backgroundColor: Colors.goodMuted }]}>
+                        <Ionicons name="checkmark" size={10} color={Colors.good} />
+                      </View>
+                    )}
+                  </View>
                 </View>
 
-                <View style={styles.vehicleStats}>
-                  {v.mileage != null && (
-                    <StatPill icon="speedometer-outline" label={`${v.mileage.toLocaleString()} mi`} />
+                <View style={styles.mileageRow}>
+                  <View style={styles.mileagePill}>
+                    <Ionicons name="speedometer-outline" size={13} color={Colors.textSecondary} />
+                    {v.mileage != null ? (
+                      <Text style={styles.mileageText}>{v.mileage.toLocaleString()} mi</Text>
+                    ) : (
+                      <Text style={styles.mileageTextDim}>No mileage</Text>
+                    )}
+                  </View>
+                  {estimatedMileage != null && (
+                    <View style={styles.estimatedPill}>
+                      <Ionicons name="trending-up-outline" size={13} color={Colors.accent} />
+                      <Text style={styles.estimatedText}>~{estimatedMileage.toLocaleString()} mi est.</Text>
+                    </View>
                   )}
-                  {v.vehicle_type && (
-                    <StatPill icon="pricetag-outline" label={v.vehicle_type} />
-                  )}
-                  {v.is_seasonal && (
-                    <StatPill icon="sunny-outline" label="Seasonal" />
-                  )}
+                  <View style={styles.scheduleBadge}>
+                    <Text style={styles.scheduleText}>{scheduleLabel}</Text>
+                  </View>
                 </View>
 
-                <View style={styles.vehicleActions}>
+                <View style={styles.cardActions}>
                   <Pressable
                     style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.8 : 1 }]}
                     onPress={(e) => {
                       e.stopPropagation();
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       router.push(`/update-mileage/${v.id}` as any);
                     }}
                   >
@@ -162,10 +232,11 @@ export default function VehiclesScreen() {
                     style={({ pressed }) => [styles.actionBtnAccent, { opacity: pressed ? 0.8 : 1 }]}
                     onPress={(e) => {
                       e.stopPropagation();
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       router.push(`/log-service/${v.id}` as any);
                     }}
                   >
-                    <Ionicons name="construct-outline" size={14} color={Colors.textInverse} />
+                    <Ionicons name="construct-outline" size={14} color={Colors.vehicle} />
                     <Text style={styles.actionBtnAccentText}>Log Service</Text>
                   </Pressable>
                 </View>
@@ -178,30 +249,23 @@ export default function VehiclesScreen() {
   );
 }
 
-function StatPill({ icon, label }: { icon: any; label: string }) {
-  return (
-    <View style={styles.statPill}>
-      <Ionicons name={icon} size={12} color={Colors.textTertiary} />
-      <Text style={styles.statPillText}>{label}</Text>
-    </View>
-  );
-}
-
 function EmptyVehicles() {
   return (
-    <View style={styles.empty}>
-      <View style={styles.emptyIcon}>
-        <Ionicons name="car-outline" size={40} color={Colors.vehicle} />
+    <View style={styles.emptyWrap}>
+      <View style={styles.emptyCard}>
+        <View style={styles.emptyIconWrap}>
+          <Ionicons name="car-outline" size={36} color={Colors.vehicle} />
+        </View>
+        <Text style={styles.emptyTitle}>No vehicles yet</Text>
+        <Text style={styles.emptyText}>Add your car, truck, or motorcycle to start tracking service intervals and costs.</Text>
+        <Pressable
+          style={({ pressed }) => [styles.emptyBtn, { opacity: pressed ? 0.85 : 1 }]}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-vehicle"); }}
+        >
+          <Ionicons name="add" size={20} color={Colors.textInverse} />
+          <Text style={styles.emptyBtnText}>Add Vehicle</Text>
+        </Pressable>
       </View>
-      <Text style={styles.emptyTitle}>No vehicles yet</Text>
-      <Text style={styles.emptyText}>Add your car, truck, motorcycle, or any other vehicle to start tracking maintenance.</Text>
-      <Pressable
-        style={({ pressed }) => [styles.emptyButton, { opacity: pressed ? 0.85 : 1 }]}
-        onPress={() => router.push("/add-vehicle")}
-      >
-        <Ionicons name="add" size={18} color={Colors.textInverse} />
-        <Text style={styles.emptyButtonText}>Add Vehicle</Text>
-      </Pressable>
     </View>
   );
 }
@@ -220,37 +284,143 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 11,
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.vehicle,
     alignItems: "center",
     justifyContent: "center",
   },
   content: { paddingHorizontal: 16, paddingTop: 8, gap: 12 },
+
   vehicleCard: {
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
-    gap: 12,
+    gap: 14,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  vehicleCardTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  vehicleIcon: { width: 52, height: 52, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  vehicleInfo: { flex: 1 },
-  vehicleName: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  vehicleSubname: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  statusDot: { width: 10, height: 10, borderRadius: 5 },
-  vehicleStats: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  statPill: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: Colors.surface, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
-  statPillText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  vehicleActions: { flexDirection: "row", gap: 8 },
-  actionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, backgroundColor: Colors.surface, borderRadius: 10, paddingVertical: 9, borderWidth: 1, borderColor: Colors.border },
+
+  cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  iconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  vehicleInfo: { flex: 1, gap: 2 },
+  vehicleTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 22 },
+  vehicleSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  vehicleTrim: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  badgesCol: { alignItems: "flex-end", gap: 5, flexShrink: 0 },
+  tasksBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    minWidth: 28,
+    justifyContent: "center",
+  },
+  tasksBadgeDot: { width: 6, height: 6, borderRadius: 3 },
+  tasksBadgeText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+
+  mileageRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  mileagePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: Colors.surface,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  mileageText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.text },
+  mileageTextDim: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  estimatedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: Colors.accentLight,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  estimatedText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
+  scheduleBadge: {
+    marginLeft: "auto",
+    backgroundColor: Colors.surface,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  scheduleText: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
+
+  cardActions: { flexDirection: "row", gap: 8 },
+  actionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: Colors.surface,
+    borderRadius: 11,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    minHeight: 44,
+  },
   actionBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  actionBtnAccent: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, backgroundColor: Colors.accent, borderRadius: 10, paddingVertical: 9 },
-  actionBtnAccentText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textInverse },
-  empty: { alignItems: "center", paddingVertical: 60, paddingHorizontal: 32, gap: 12 },
-  emptyIcon: { width: 80, height: 80, borderRadius: 24, backgroundColor: Colors.vehicleMuted, alignItems: "center", justifyContent: "center" },
+  actionBtnAccent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: Colors.vehicleMuted,
+    borderRadius: 11,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: Colors.vehicle + "40",
+    minHeight: 44,
+  },
+  actionBtnAccentText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.vehicle },
+
+  emptyWrap: { flex: 1, paddingTop: 24 },
+  emptyCard: {
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: Colors.vehicle + "55",
+    borderRadius: 20,
+    backgroundColor: Colors.card,
+    marginHorizontal: 4,
+    padding: 40,
+    alignItems: "center",
+    gap: 12,
+  },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: Colors.vehicleMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   emptyTitle: { fontSize: 20, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 22 },
-  emptyButton: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.vehicle, borderRadius: 14, paddingHorizontal: 20, paddingVertical: 12, marginTop: 8 },
-  emptyButtonText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 21 },
+  emptyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.vehicle,
+    borderRadius: 14,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
+    marginTop: 8,
+    minHeight: 44,
+  },
+  emptyBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 });
