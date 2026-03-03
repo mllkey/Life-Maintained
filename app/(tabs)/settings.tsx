@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,9 @@ import {
   Pressable,
   Alert,
   Platform,
+  PanResponder,
+  TextInput,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -16,12 +19,59 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
+import { parseISO, differenceInDays, format, addDays } from "date-fns";
+
+const SETTINGS_KEY = "app_settings_v2";
+
+type AppSettings = {
+  pushEnabled: boolean;
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  annualMileage: number;
+  budgetThreshold: string;
+};
+
+const DEFAULT_SETTINGS: AppSettings = {
+  pushEnabled: false,
+  emailEnabled: true,
+  smsEnabled: false,
+  annualMileage: 12000,
+  budgetThreshold: "",
+};
+
+const SERVICES = [
+  { name: "Oil Change", interval: 5000, low: 45, high: 75 },
+  { name: "Tire Rotation", interval: 7500, low: 20, high: 40 },
+  { name: "Air Filter", interval: 15000, low: 15, high: 40 },
+  { name: "Brake Inspection", interval: 20000, low: 20, high: 60 },
+  { name: "Spark Plugs", interval: 30000, low: 50, high: 120 },
+];
+
+async function loadSettings(): Promise<AppSettings> {
+  try {
+    const raw = await AsyncStorage.getItem(SETTINGS_KEY);
+    return raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : DEFAULT_SETTINGS;
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+async function persistSettings(s: AppSettings) {
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
   const queryClient = useQueryClient();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
+
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const savedRef = useRef<AppSettings>(DEFAULT_SETTINGS);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -32,6 +82,89 @@ export default function SettingsScreen() {
     },
     enabled: !!user,
   });
+
+  const { data: budgetTier } = useQuery({
+    queryKey: ["budget_tier", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data } = await supabase
+        .from("budget_notification_tiers")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  useEffect(() => {
+    loadSettings().then(s => {
+      setSettings(s);
+      savedRef.current = s;
+      setIsLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (budgetTier?.threshold_amount != null && isLoaded) {
+      const threshold = String(budgetTier.threshold_amount);
+      setSettings(prev => {
+        const next = { ...prev, budgetThreshold: threshold };
+        savedRef.current = { ...savedRef.current, budgetThreshold: threshold };
+        return next;
+      });
+    }
+  }, [budgetTier, isLoaded]);
+
+  const hasChanges = isLoaded && JSON.stringify(settings) !== JSON.stringify(savedRef.current);
+
+  function updateSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
+    setSettings(prev => ({ ...prev, [key]: value }));
+  }
+
+  async function togglePush(next: boolean) {
+    if (next) {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Required", "Please enable notifications in your device settings.");
+        return;
+      }
+    }
+    updateSetting("pushEnabled", next);
+    Haptics.selectionAsync();
+  }
+
+  async function handleSave() {
+    if (!user || !hasChanges) return;
+    setIsSaving(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      await persistSettings(settings);
+
+      const threshold = parseFloat(settings.budgetThreshold);
+      if (!isNaN(threshold) && threshold > 0) {
+        const payload = {
+          user_id: user.id,
+          threshold_amount: threshold,
+          updated_at: new Date().toISOString(),
+        };
+        if (budgetTier) {
+          await supabase.from("budget_notification_tiers").update(payload).eq("user_id", user.id);
+        } else {
+          await supabase.from("budget_notification_tiers").insert({ ...payload, created_at: new Date().toISOString() });
+        }
+        queryClient.invalidateQueries({ queryKey: ["budget_tier"] });
+      }
+
+      savedRef.current = { ...settings };
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert("Error saving settings", e.message);
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   async function handleSignOut() {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -51,38 +184,28 @@ export default function SettingsScreen() {
   async function handleDeleteAccount() {
     Alert.alert(
       "Delete Account",
-      "This will permanently delete your account and all data including vehicles, properties, health records, and service history. This cannot be undone.",
+      "This will permanently delete your account and all data. This cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Delete Forever",
           style: "destructive",
           onPress: () => {
-            Alert.alert(
-              "Are you absolutely sure?",
-              "Type DELETE in the next step to confirm.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Yes, Delete My Account",
-                  style: "destructive",
-                  onPress: async () => {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                    if (!user) return;
-                    const { error } = await supabase.rpc("delete_user_account", { user_id: user.id }).maybeSingle();
-                    if (error) {
-                      await supabase.auth.signOut();
-                      queryClient.clear();
-                      router.replace("/(auth)");
-                    } else {
-                      await supabase.auth.signOut();
-                      queryClient.clear();
-                      router.replace("/(auth)");
-                    }
-                  },
+            Alert.alert("Are you absolutely sure?", "All vehicles, properties, health records, and history will be deleted.", [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Yes, Delete My Account",
+                style: "destructive",
+                onPress: async () => {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                  if (!user) return;
+                  await supabase.rpc("delete_user_account", { user_id: user.id }).maybeSingle();
+                  await supabase.auth.signOut();
+                  queryClient.clear();
+                  router.replace("/(auth)");
                 },
-              ]
-            );
+              },
+            ]);
           },
         },
       ]
@@ -90,80 +213,18 @@ export default function SettingsScreen() {
   }
 
   const isPremium = profile?.subscription_tier === "premium";
+  const trialDaysLeft = profile?.trial_end_date
+    ? differenceInDays(parseISO(profile.trial_end_date), new Date())
+    : null;
+  const isInTrial = trialDaysLeft !== null && trialDaysLeft > 0;
 
-  const sections = [
-    {
-      title: "Account",
-      items: [
-        {
-          icon: "person-circle-outline",
-          label: "Health Profile",
-          sublabel: "Date of birth, sex at birth",
-          color: Colors.health,
-          onPress: () => router.push("/health-profile" as any),
-        },
-        {
-          icon: "notifications-outline",
-          label: "Notifications",
-          sublabel: "Push, quiet hours, advance warnings",
-          color: Colors.blue,
-          onPress: () => router.push("/notifications-settings" as any),
-        },
-      ],
-    },
-    {
-      title: "Subscription",
-      items: [
-        {
-          icon: "star-outline",
-          label: isPremium ? "Premium Plan" : "Upgrade to Premium",
-          sublabel: isPremium ? "Unlimited tracking — manage subscription" : "Unlimited vehicles, properties & health items",
-          color: Colors.vehicle,
-          onPress: () => router.push("/subscription" as any),
-        },
-      ],
-    },
-    {
-      title: "Legal",
-      items: [
-        {
-          icon: "document-text-outline",
-          label: "Terms of Service",
-          sublabel: null,
-          color: Colors.textTertiary,
-          onPress: () => router.push("/terms-of-service" as any),
-        },
-        {
-          icon: "shield-outline",
-          label: "Privacy Policy",
-          sublabel: null,
-          color: Colors.textTertiary,
-          onPress: () => router.push("/privacy-policy" as any),
-        },
-      ],
-    },
-    {
-      title: "Account Actions",
-      items: [
-        {
-          icon: "log-out-outline",
-          label: "Sign Out",
-          sublabel: null,
-          color: Colors.overdue,
-          onPress: handleSignOut,
-          destructive: true,
-        },
-        {
-          icon: "trash-outline",
-          label: "Delete Account",
-          sublabel: "Permanently delete all data",
-          color: Colors.overdue,
-          onPress: handleDeleteAccount,
-          destructive: true,
-        },
-      ],
-    },
-  ];
+  if (!isLoaded) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator color={Colors.accent} />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -172,131 +233,671 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0) }]}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + 120 + (Platform.OS === "web" ? 34 : 0) },
+        ]}
       >
-        <View style={styles.userCard}>
-          <View style={styles.userAvatar}>
-            <Ionicons name="person" size={28} color={Colors.accent} />
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={styles.userEmail}>{user?.email}</Text>
-            <Text style={styles.userTier}>{isPremium ? "Premium Plan" : "Free Plan"}</Text>
-          </View>
-          <View style={[styles.tierBadge, isPremium ? styles.tierBadgePremium : styles.tierBadgeFree]}>
-            {isPremium && <Ionicons name="star" size={12} color={Colors.vehicle} />}
-            <Text style={[styles.tierBadgeText, isPremium ? { color: Colors.vehicle } : { color: Colors.textTertiary }]}>
-              {isPremium ? "Premium" : "Free"}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.emailNote}>
-          <Ionicons name="mail-outline" size={16} color={Colors.blue} />
-          <Text style={styles.emailNoteText}>
-            Maintenance reminders and account emails are sent from{" "}
-            <Text style={styles.emailNoteEmail}>noreply@lifemaintained.app</Text>
-            {". "}Add it to your contacts so they don't go to spam.
-          </Text>
-        </View>
-
-        {sections.map(section => (
-          <View key={section.title} style={styles.section}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            <View style={styles.sectionItems}>
-              {section.items.map((item, i) => (
-                <Pressable
-                  key={item.label}
-                  style={({ pressed }) => [
-                    styles.settingItem,
-                    i === 0 && styles.settingItemFirst,
-                    { opacity: pressed ? 0.8 : 1 },
-                  ]}
-                  onPress={() => { Haptics.selectionAsync(); item.onPress(); }}
-                >
-                  <View style={[styles.settingIcon, { backgroundColor: item.color + "18" }]}>
-                    <Ionicons name={item.icon as any} size={18} color={item.color} />
-                  </View>
-                  <View style={styles.settingContent}>
-                    <Text style={[styles.settingLabel, (item as any).destructive && { color: Colors.overdue }]}>
-                      {item.label}
-                    </Text>
-                    {item.sublabel && <Text style={styles.settingSubLabel}>{item.sublabel}</Text>}
-                  </View>
-                  {!(item as any).destructive && (
-                    <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
-                  )}
-                </Pressable>
-              ))}
+        <View style={styles.maxWidth}>
+          {isInTrial && (
+            <View style={[styles.banner, { backgroundColor: Colors.dueSoonMuted, borderColor: Colors.dueSoon + "44" }]}>
+              <View style={[styles.bannerIconWrap, { backgroundColor: Colors.dueSoon + "30" }]}>
+                <Ionicons name="time-outline" size={20} color={Colors.dueSoon} />
+              </View>
+              <View style={styles.bannerText}>
+                <Text style={[styles.bannerTitle, { color: Colors.dueSoon }]}>
+                  {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} left in trial
+                </Text>
+                <Text style={styles.bannerSub}>
+                  Expires {format(parseISO(profile!.trial_end_date), "MMMM d, yyyy")}
+                </Text>
+              </View>
+              <Pressable
+                style={({ pressed }) => [styles.bannerBtn, { opacity: pressed ? 0.8 : 1 }]}
+                onPress={() => router.push("/subscription" as any)}
+              >
+                <Text style={styles.bannerBtnText}>Upgrade</Text>
+              </Pressable>
             </View>
-          </View>
-        ))}
+          )}
 
-        <Text style={styles.version}>LifeMaintained v1.0.0</Text>
+          {!isInTrial && !isPremium && (
+            <Pressable
+              style={({ pressed }) => [styles.upgradeCard, { opacity: pressed ? 0.95 : 1 }]}
+              onPress={() => router.push("/subscription" as any)}
+            >
+              <View style={styles.upgradeCardLeft}>
+                <View style={[styles.upgradeIcon, { backgroundColor: Colors.vehicleMuted }]}>
+                  <Ionicons name="star" size={22} color={Colors.vehicle} />
+                </View>
+                <View style={styles.upgradeCardText}>
+                  <Text style={styles.upgradeCardTitle}>Upgrade to Premium</Text>
+                  <Text style={styles.upgradeCardSub}>Unlimited vehicles, receipts, exports & more</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={Colors.vehicle} />
+            </Pressable>
+          )}
+
+          {isPremium && !isInTrial && (
+            <View style={[styles.banner, { backgroundColor: Colors.goodMuted, borderColor: Colors.good + "44" }]}>
+              <View style={[styles.bannerIconWrap, { backgroundColor: Colors.good + "30" }]}>
+                <Ionicons name="star" size={20} color={Colors.good} />
+              </View>
+              <View style={styles.bannerText}>
+                <Text style={[styles.bannerTitle, { color: Colors.good }]}>Premium Active</Text>
+                <Text style={styles.bannerSub}>Unlimited access to all features</Text>
+              </View>
+              <Pressable
+                style={({ pressed }) => [styles.bannerBtn, { backgroundColor: Colors.good + "22", opacity: pressed ? 0.8 : 1 }]}
+                onPress={() => router.push("/subscription" as any)}
+              >
+                <Text style={[styles.bannerBtnText, { color: Colors.good }]}>Manage</Text>
+              </Pressable>
+            </View>
+          )}
+
+          <SectionCard
+            icon="person-circle-outline"
+            iconColor={Colors.blue}
+            title="Profile"
+            subtitle={user?.email ?? ""}
+          >
+            <View style={styles.profileEmailRow}>
+              <Ionicons name="mail-outline" size={16} color={Colors.textTertiary} />
+              <Text style={styles.profileEmail} numberOfLines={1}>{user?.email}</Text>
+              <View style={[styles.tierPill, isPremium ? styles.tierPillPremium : styles.tierPillFree]}>
+                {isPremium && <Ionicons name="star" size={10} color={Colors.vehicle} />}
+                <Text style={[styles.tierPillText, { color: isPremium ? Colors.vehicle : Colors.textTertiary }]}>
+                  {isPremium ? "Premium" : "Free"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.profileActions}>
+              <Pressable
+                style={({ pressed }) => [styles.profileActionBtn, { opacity: pressed ? 0.8 : 1 }]}
+                onPress={handleSignOut}
+              >
+                <Ionicons name="log-out-outline" size={16} color={Colors.textSecondary} />
+                <Text style={styles.profileActionText}>Sign Out</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.profileActionBtn, styles.profileActionBtnDestructive, { opacity: pressed ? 0.8 : 1 }]}
+                onPress={handleDeleteAccount}
+              >
+                <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
+                <Text style={[styles.profileActionText, { color: Colors.overdue }]}>Delete Account</Text>
+              </Pressable>
+            </View>
+          </SectionCard>
+
+          <SectionCard
+            icon="notifications-outline"
+            iconColor={Colors.accent}
+            title="Notification Channels"
+            subtitle="Choose how you receive alerts"
+          >
+            <ToggleRow
+              icon="phone-portrait-outline"
+              iconColor={Colors.accent}
+              label="Push Notifications"
+              sublabel="In-app alerts and banners"
+              value={settings.pushEnabled}
+              onToggle={() => togglePush(!settings.pushEnabled)}
+              accentColor={Colors.accent}
+            />
+            <View style={styles.rowDivider} />
+            <ToggleRow
+              icon="mail-outline"
+              iconColor={Colors.blue}
+              label="Email"
+              sublabel="Sent to your registered email"
+              value={settings.emailEnabled}
+              onToggle={() => { Haptics.selectionAsync(); updateSetting("emailEnabled", !settings.emailEnabled); }}
+              accentColor={Colors.blue}
+            />
+            <View style={styles.rowDivider} />
+            <ToggleRow
+              icon="chatbubble-outline"
+              iconColor={Colors.home}
+              label="SMS"
+              sublabel="Text message reminders"
+              value={settings.smsEnabled}
+              onToggle={() => { Haptics.selectionAsync(); updateSetting("smsEnabled", !settings.smsEnabled); }}
+              accentColor={Colors.home}
+            />
+          </SectionCard>
+
+          <SectionCard
+            icon="wallet-outline"
+            iconColor={Colors.good}
+            title="Budget Notifications"
+            subtitle="Get alerted when costs exceed your threshold"
+          >
+            <View style={styles.budgetContent}>
+              <Text style={styles.budgetHint}>
+                We'll notify you when upcoming maintenance costs in a given month exceed this amount.
+              </Text>
+              <View style={styles.budgetInputRow}>
+                <View style={styles.budgetInputWrap}>
+                  <Text style={styles.budgetCurrency}>$</Text>
+                  <TextInput
+                    style={styles.budgetInput}
+                    value={settings.budgetThreshold}
+                    onChangeText={v => updateSetting("budgetThreshold", v)}
+                    placeholder="500"
+                    placeholderTextColor={Colors.textTertiary}
+                    keyboardType="decimal-pad"
+                    returnKeyType="done"
+                  />
+                </View>
+                <Text style={styles.budgetLabel}>monthly threshold</Text>
+              </View>
+              {budgetTier?.threshold_amount != null && (
+                <Text style={styles.budgetSaved}>
+                  Current: ${Number(budgetTier.threshold_amount).toLocaleString()}/mo
+                </Text>
+              )}
+            </View>
+          </SectionCard>
+
+          <SectionCard
+            icon="car-outline"
+            iconColor={Colors.vehicle}
+            title="Service Prediction"
+            subtitle="Predict upcoming services based on your driving"
+          >
+            <View style={styles.mileageContent}>
+              <View style={styles.mileageHeader}>
+                <Text style={styles.mileageLabel}>Annual Mileage</Text>
+                <Text style={styles.mileageValue}>{settings.annualMileage.toLocaleString()} mi/yr</Text>
+              </View>
+              <MileageSlider
+                value={settings.annualMileage}
+                min={2000}
+                max={30000}
+                step={1000}
+                onChange={v => updateSetting("annualMileage", v)}
+              />
+              <View style={styles.mileageScale}>
+                <Text style={styles.mileageScaleText}>2,000</Text>
+                <Text style={styles.mileageScaleText}>16,000</Text>
+                <Text style={styles.mileageScaleText}>30,000</Text>
+              </View>
+            </View>
+
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableCol, { flex: 2 }]}>Service</Text>
+              <Text style={[styles.tableCol, styles.tableColRight]}>Miles</Text>
+              <Text style={[styles.tableCol, styles.tableColRight]}>Next Due</Text>
+              <Text style={[styles.tableCol, styles.tableColRight]}>Est. Cost</Text>
+            </View>
+
+            {SERVICES.map((svc, idx) => {
+              const monthsUntil = (svc.interval / settings.annualMileage) * 12;
+              const nextDate = addDays(new Date(), Math.round(monthsUntil * 30.44));
+              const isNear = monthsUntil < 3;
+              const isMid = monthsUntil < 6;
+              const rowColor = isNear ? Colors.overdue : isMid ? Colors.dueSoon : Colors.good;
+              const dateLabel = monthsUntil < 1
+                ? "This month"
+                : monthsUntil < 12
+                  ? format(nextDate, "MMM yyyy")
+                  : format(nextDate, "yyyy");
+              const avgCost = Math.round((svc.low + svc.high) / 2);
+
+              return (
+                <View key={svc.name} style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}>
+                  <View style={{ flex: 2, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <View style={[styles.tableDot, { backgroundColor: rowColor }]} />
+                    <Text style={styles.tableCellMain} numberOfLines={1}>{svc.name}</Text>
+                  </View>
+                  <Text style={[styles.tableCell, styles.tableCellRight]}>
+                    {svc.interval >= 1000 ? `${svc.interval / 1000}k` : svc.interval}
+                  </Text>
+                  <Text style={[styles.tableCell, styles.tableCellRight, { color: rowColor }]}>
+                    {dateLabel}
+                  </Text>
+                  <Text style={[styles.tableCell, styles.tableCellRight]}>
+                    ${avgCost}
+                  </Text>
+                </View>
+              );
+            })}
+
+            <View style={styles.tableNote}>
+              <Ionicons name="information-circle-outline" size={13} color={Colors.textTertiary} />
+              <Text style={styles.tableNoteText}>
+                Estimates assume services are due from current mileage at standard manufacturer intervals.
+              </Text>
+            </View>
+          </SectionCard>
+
+          <View style={styles.legalRow}>
+            <Pressable
+              style={({ pressed }) => [styles.legalBtn, { opacity: pressed ? 0.7 : 1 }]}
+              onPress={() => router.push("/terms-of-service" as any)}
+            >
+              <Text style={styles.legalBtnText}>Terms of Service</Text>
+            </Pressable>
+            <Text style={styles.legalDot}>·</Text>
+            <Pressable
+              style={({ pressed }) => [styles.legalBtn, { opacity: pressed ? 0.7 : 1 }]}
+              onPress={() => router.push("/privacy-policy" as any)}
+            >
+              <Text style={styles.legalBtnText}>Privacy Policy</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.version}>LifeMaintained v1.0.0</Text>
+        </View>
       </ScrollView>
+
+      {hasChanges && (
+        <View style={[styles.saveBar, { paddingBottom: insets.bottom + 8 + (Platform.OS === "web" ? 34 : 0) }]}>
+          <View style={styles.saveBarInner}>
+            <Text style={styles.saveBarHint}>You have unsaved changes</Text>
+            <Pressable
+              style={({ pressed }) => [styles.saveBtn, { opacity: pressed ? 0.9 : 1 }]}
+              onPress={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color={Colors.textInverse} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
+                  <Text style={styles.saveBtnText}>Save Changes</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function SectionCard({ icon, iconColor, title, subtitle, children }: {
+  icon: any;
+  iconColor: string;
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.sectionCard}>
+      <View style={styles.sectionCardHeader}>
+        <View style={[styles.sectionCardIcon, { backgroundColor: iconColor + "22" }]}>
+          <Ionicons name={icon} size={18} color={iconColor} />
+        </View>
+        <View style={styles.sectionCardHeaderText}>
+          <Text style={styles.sectionCardTitle}>{title}</Text>
+          <Text style={styles.sectionCardSubtitle} numberOfLines={1}>{subtitle}</Text>
+        </View>
+      </View>
+      <View style={styles.sectionCardBody}>{children}</View>
+    </View>
+  );
+}
+
+function ToggleRow({ icon, iconColor, label, sublabel, value, onToggle, accentColor }: {
+  icon: any;
+  iconColor: string;
+  label: string;
+  sublabel: string;
+  value: boolean;
+  onToggle: () => void;
+  accentColor: string;
+}) {
+  return (
+    <Pressable style={styles.toggleRow} onPress={onToggle} hitSlop={4}>
+      <View style={[styles.toggleRowIcon, { backgroundColor: iconColor + "18" }]}>
+        <Ionicons name={icon} size={16} color={iconColor} />
+      </View>
+      <View style={styles.toggleRowInfo}>
+        <Text style={styles.toggleRowLabel}>{label}</Text>
+        <Text style={styles.toggleRowSub}>{sublabel}</Text>
+      </View>
+      <Pressable onPress={onToggle} style={styles.toggleHitArea} hitSlop={8}>
+        <View style={[styles.toggle, value && [styles.toggleOn, { backgroundColor: accentColor }]]}>
+          <View style={[styles.toggleThumb, value && styles.toggleThumbOn]} />
+        </View>
+      </Pressable>
+    </Pressable>
+  );
+}
+
+function MileageSlider({ value, min, max, step, onChange }: {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  const [trackWidth, setTrackWidth] = useState(1);
+  const trackWidthRef = useRef(1);
+  const startPctRef = useRef(0);
+  const valueRef = useRef(value);
+
+  useEffect(() => { valueRef.current = value; }, [value]);
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      startPctRef.current = (valueRef.current - min) / (max - min);
+    },
+    onPanResponderMove: (_, gs) => {
+      const tw = trackWidthRef.current;
+      if (!tw) return;
+      const newPct = Math.max(0, Math.min(1, startPctRef.current + gs.dx / tw));
+      const rawVal = min + newPct * (max - min);
+      const stepped = Math.round(rawVal / step) * step;
+      if (stepped !== valueRef.current) {
+        Haptics.selectionAsync();
+        onChange(stepped);
+      }
+    },
+    onPanResponderRelease: () => {},
+  }), [min, max, step, onChange]);
+
+  const pct = (value - min) / (max - min);
+  const fillPct = `${Math.max(0, Math.min(100, pct * 100))}%`;
+
+  return (
+    <View
+      style={styles.sliderTrack}
+      onLayout={e => {
+        const w = e.nativeEvent.layout.width;
+        setTrackWidth(w);
+        trackWidthRef.current = w;
+      }}
+      {...panResponder.panHandlers}
+    >
+      <View style={styles.sliderRail} />
+      <View style={[styles.sliderFill, { width: fillPct }]} />
+      <View style={[styles.sliderThumb, { left: (pct * (trackWidth - 24)) }]} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: 20, paddingBottom: 12 },
+  header: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    backgroundColor: Colors.background,
+  },
   title: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  content: { paddingHorizontal: 16, paddingTop: 8, gap: 20 },
-  userCard: {
+  content: { paddingHorizontal: 16, paddingTop: 8, gap: 16 },
+  maxWidth: {
+    maxWidth: 768,
+    alignSelf: "center",
+    width: "100%",
+    gap: 16,
+  },
+
+  banner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: Colors.card,
     borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+  },
+  bannerIconWrap: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  bannerText: { flex: 1 },
+  bannerTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  bannerSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 1 },
+  bannerBtn: {
+    backgroundColor: Colors.dueSoon + "22",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    minHeight: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bannerBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.dueSoon },
+
+  upgradeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.vehicleMuted,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: Colors.vehicle + "44",
+    gap: 12,
+  },
+  upgradeCardLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12 },
+  upgradeIcon: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  upgradeCardText: { flex: 1 },
+  upgradeCardTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.vehicle },
+  upgradeCardSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 1 },
+
+  sectionCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: "hidden",
+  },
+  sectionCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  sectionCardIcon: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  sectionCardHeaderText: { flex: 1 },
+  sectionCardTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  sectionCardSubtitle: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 1 },
+  sectionCardBody: { padding: 16, gap: 0 },
+
+  profileEmailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  profileEmail: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  tierPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  tierPillPremium: { backgroundColor: Colors.vehicleMuted },
+  tierPillFree: { backgroundColor: Colors.surface },
+  tierPillText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  profileActions: { flexDirection: "row", gap: 10 },
+  profileActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    paddingVertical: 12,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  userAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: Colors.accentLight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Colors.accentMuted,
-  },
-  userInfo: { flex: 1 },
-  userEmail: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
-  userTier: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  tierBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, flexDirection: "row", alignItems: "center", gap: 4 },
-  tierBadgePremium: { backgroundColor: Colors.vehicleMuted },
-  tierBadgeFree: { backgroundColor: Colors.surface },
-  tierBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  emailNote: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    backgroundColor: Colors.blueMuted,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: Colors.blue + "33",
-  },
-  emailNoteText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 20 },
-  emailNoteEmail: { fontFamily: "Inter_500Medium", color: Colors.blue },
-  section: { gap: 8 },
-  sectionTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.8, paddingHorizontal: 4 },
-  sectionItems: { backgroundColor: Colors.card, borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: Colors.border },
-  settingItem: {
+  profileActionBtnDestructive: { borderColor: Colors.overdueMuted, backgroundColor: Colors.overdueMuted },
+  profileActionText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+
+  rowDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: -16, marginVertical: 0 },
+
+  toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    padding: 14,
+    minHeight: 56,
+    paddingVertical: 8,
+  },
+  toggleRowIcon: { width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  toggleRowInfo: { flex: 1 },
+  toggleRowLabel: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
+  toggleRowSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 1 },
+  toggleHitArea: { padding: 5 },
+  toggle: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.border,
+    justifyContent: "center",
+    paddingHorizontal: 2,
+  },
+  toggleOn: {},
+  toggleThumb: { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.text, alignSelf: "flex-start" },
+  toggleThumbOn: { alignSelf: "flex-end" },
+
+  budgetContent: { gap: 10 },
+  budgetHint: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 19 },
+  budgetInputRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  budgetInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    flex: 1,
+    maxWidth: 160,
+    height: 46,
+  },
+  budgetCurrency: { fontSize: 18, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  budgetInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 18,
+    fontFamily: "Inter_400Regular",
+    color: Colors.text,
+    paddingLeft: 4,
+    minHeight: 44,
+  },
+  budgetLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  budgetSaved: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good },
+
+  mileageContent: { gap: 12, marginBottom: 16 },
+  mileageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  mileageLabel: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text },
+  mileageValue: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.vehicle },
+  sliderTrack: {
+    height: 44,
+    justifyContent: "center",
+    position: "relative",
+  },
+  sliderRail: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: Colors.border,
+    borderRadius: 2,
+  },
+  sliderFill: {
+    position: "absolute",
+    left: 0,
+    height: 4,
+    backgroundColor: Colors.vehicle,
+    borderRadius: 2,
+  },
+  sliderThumb: {
+    position: "absolute",
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.vehicle,
+    top: 10,
+    shadowColor: Colors.vehicle,
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  mileageScale: { flexDirection: "row", justifyContent: "space-between" },
+  mileageScaleText: { fontSize: 10, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+
+  tableHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.surface,
+  },
+  tableCol: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.6, flex: 1 },
+  tableColRight: { textAlign: "right" },
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 11,
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
-  settingItemFirst: { borderTopWidth: 0 },
-  settingIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  settingContent: { flex: 1 },
-  settingLabel: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
-  settingSubLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  version: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", paddingVertical: 8 },
+  tableRowAlt: { backgroundColor: Colors.surface + "80" },
+  tableDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  tableCellMain: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.text, flex: 1 },
+  tableCell: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  tableCellRight: { textAlign: "right" },
+  tableNote: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 12,
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    alignItems: "flex-start",
+  },
+  tableNoteText: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, lineHeight: 16 },
+
+  legalRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  legalBtn: { paddingVertical: 8, paddingHorizontal: 4, minHeight: 44, justifyContent: "center" },
+  legalBtnText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  legalDot: { fontSize: 13, color: Colors.textTertiary },
+  version: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
+
+  saveBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.card,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+  },
+  saveBarInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    maxWidth: 768,
+    alignSelf: "center",
+    width: "100%",
+  },
+  saveBarHint: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  saveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: Colors.accent,
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    minHeight: 44,
+  },
+  saveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 });
