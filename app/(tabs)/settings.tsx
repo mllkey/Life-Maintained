@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,6 @@ import {
   Pressable,
   Alert,
   Platform,
-  PanResponder,
   TextInput,
   ActivityIndicator,
 } from "react-native";
@@ -29,7 +28,6 @@ type AppSettings = {
   pushEnabled: boolean;
   emailEnabled: boolean;
   smsEnabled: boolean;
-  annualMileage: number;
   budgetThreshold: string;
 };
 
@@ -37,17 +35,64 @@ const DEFAULT_SETTINGS: AppSettings = {
   pushEnabled: false,
   emailEnabled: true,
   smsEnabled: false,
-  annualMileage: 12000,
   budgetThreshold: "",
 };
 
-const SERVICES = [
-  { name: "Oil Change", interval: 5000, low: 45, high: 75 },
-  { name: "Tire Rotation", interval: 7500, low: 20, high: 40 },
-  { name: "Air Filter", interval: 15000, low: 15, high: 40 },
-  { name: "Brake Inspection", interval: 20000, low: 20, high: 60 },
-  { name: "Spark Plugs", interval: 30000, low: 50, high: 120 },
-];
+type PredVehicle = {
+  id: string;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  nickname: string | null;
+  mileage: number | null;
+  average_miles_per_month: number | null;
+};
+
+type PredTask = {
+  id: string;
+  task: string;
+  interval: number | null;
+  mileage_interval: number | null;
+  next_due_date: string | null;
+  last_service_mileage: number | null;
+  estimated_cost: number | null;
+};
+
+function getDaysUntil(t: PredTask, v: PredVehicle | null): number | null {
+  if (t.next_due_date) {
+    return differenceInDays(parseISO(t.next_due_date), new Date());
+  }
+  if (t.mileage_interval != null && v?.mileage != null && v.average_miles_per_month) {
+    const milesLeft = t.mileage_interval - (v.mileage - (t.last_service_mileage ?? 0));
+    return Math.round(milesLeft / (v.average_miles_per_month / 30.44));
+  }
+  return null;
+}
+
+function formatDaysUntil(days: number | null, nextDueDate: string | null): string {
+  if (days === null) return "—";
+  if (days < 0) return `${Math.abs(days)}d overdue`;
+  if (days === 0) return "Today";
+  if (nextDueDate) return format(parseISO(nextDueDate), "MMM d");
+  return format(addDays(new Date(), days), "MMM d");
+}
+
+function formatInterval(t: PredTask): string {
+  if (t.mileage_interval != null) {
+    return t.mileage_interval >= 1000
+      ? `${t.mileage_interval / 1000}k mi`
+      : `${t.mileage_interval} mi`;
+  }
+  if (t.interval != null) return `${t.interval}d`;
+  return "—";
+}
+
+function rowColor(days: number | null): string {
+  if (days === null) return Colors.textTertiary;
+  if (days < 0) return Colors.overdue;
+  if (days < 30) return Colors.dueSoon;
+  return Colors.good;
+}
 
 async function loadSettings(): Promise<AppSettings> {
   try {
@@ -95,6 +140,44 @@ export default function SettingsScreen() {
       return data;
     },
     enabled: !!user,
+  });
+
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+
+  const { data: predVehicles } = useQuery({
+    queryKey: ["settings_pred_vehicles", user?.id],
+    queryFn: async () => {
+      if (!user) return [] as PredVehicle[];
+      const { data } = await supabase
+        .from("vehicles")
+        .select("id, year, make, model, nickname, mileage, average_miles_per_month")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+      return (data ?? []) as PredVehicle[];
+    },
+    enabled: !!user,
+  });
+
+  useEffect(() => {
+    if (predVehicles && predVehicles.length > 0 && !selectedVehicleId) {
+      setSelectedVehicleId(predVehicles[0].id);
+    }
+  }, [predVehicles, selectedVehicleId]);
+
+  const selectedVehicle = predVehicles?.find(pv => pv.id === selectedVehicleId) ?? null;
+
+  const { data: predTasks, isLoading: predTasksLoading } = useQuery({
+    queryKey: ["settings_pred_tasks", selectedVehicleId],
+    queryFn: async () => {
+      if (!selectedVehicleId) return [] as PredTask[];
+      const { data } = await supabase
+        .from("vehicle_maintenance_tasks")
+        .select("id, task, interval, mileage_interval, next_due_date, last_service_mileage, estimated_cost")
+        .eq("vehicle_id", selectedVehicleId)
+        .order("next_due_date", { ascending: true, nullsFirst: false });
+      return (data ?? []) as PredTask[];
+    },
+    enabled: !!selectedVehicleId,
   });
 
   useEffect(() => {
@@ -407,72 +490,105 @@ export default function SettingsScreen() {
             icon="car-outline"
             iconColor={Colors.vehicle}
             title="Service Prediction"
-            subtitle="Predict upcoming services based on your driving"
+            subtitle={selectedVehicle
+              ? (selectedVehicle.nickname ?? `${selectedVehicle.year ?? ""} ${selectedVehicle.make ?? ""} ${selectedVehicle.model ?? ""}`.trim())
+              : "Predict upcoming services by vehicle"}
           >
-            <View style={styles.mileageContent}>
-              <View style={styles.mileageHeader}>
-                <Text style={styles.mileageLabel}>Annual Mileage</Text>
-                <Text style={styles.mileageValue}>{settings.annualMileage.toLocaleString()} mi/yr</Text>
+            {(predVehicles?.length ?? 0) === 0 ? (
+              <View style={styles.predEmpty}>
+                <Ionicons name="car-outline" size={28} color={Colors.textTertiary} />
+                <Text style={styles.predEmptyText}>Add a vehicle to see service predictions.</Text>
               </View>
-              <MileageSlider
-                value={settings.annualMileage}
-                min={2000}
-                max={30000}
-                step={1000}
-                onChange={v => updateSetting("annualMileage", v)}
-              />
-              <View style={styles.mileageScale}>
-                <Text style={styles.mileageScaleText}>2,000</Text>
-                <Text style={styles.mileageScaleText}>16,000</Text>
-                <Text style={styles.mileageScaleText}>30,000</Text>
-              </View>
-            </View>
+            ) : (
+              <>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.chipScroll}
+                  style={styles.chipScrollWrap}
+                >
+                  {(predVehicles ?? []).map(pv => {
+                    const chipLabel = pv.nickname ?? `${pv.year ?? ""} ${pv.make ?? ""} ${pv.model ?? ""}`.trim();
+                    const isSelected = pv.id === selectedVehicleId;
+                    return (
+                      <Pressable
+                        key={pv.id}
+                        style={({ pressed }) => [
+                          styles.vehicleChip,
+                          isSelected && styles.vehicleChipSelected,
+                          { opacity: pressed ? 0.8 : 1 },
+                        ]}
+                        onPress={() => { Haptics.selectionAsync(); setSelectedVehicleId(pv.id); }}
+                      >
+                        <Ionicons
+                          name="car-outline"
+                          size={13}
+                          color={isSelected ? Colors.vehicle : Colors.textTertiary}
+                        />
+                        <Text style={[styles.vehicleChipText, isSelected && styles.vehicleChipTextSelected]}>
+                          {chipLabel}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
 
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableCol, { flex: 2 }]}>Service</Text>
-              <Text style={[styles.tableCol, styles.tableColRight]}>Miles</Text>
-              <Text style={[styles.tableCol, styles.tableColRight]}>Next Due</Text>
-              <Text style={[styles.tableCol, styles.tableColRight]}>Est. Cost</Text>
-            </View>
-
-            {SERVICES.map((svc, idx) => {
-              const monthsUntil = (svc.interval / settings.annualMileage) * 12;
-              const nextDate = addDays(new Date(), Math.round(monthsUntil * 30.44));
-              const isNear = monthsUntil < 3;
-              const isMid = monthsUntil < 6;
-              const rowColor = isNear ? Colors.overdue : isMid ? Colors.dueSoon : Colors.good;
-              const dateLabel = monthsUntil < 1
-                ? "This month"
-                : monthsUntil < 12
-                  ? format(nextDate, "MMM yyyy")
-                  : format(nextDate, "yyyy");
-              const avgCost = Math.round((svc.low + svc.high) / 2);
-
-              return (
-                <View key={svc.name} style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}>
-                  <View style={{ flex: 2, flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <View style={[styles.tableDot, { backgroundColor: rowColor }]} />
-                    <Text style={styles.tableCellMain} numberOfLines={1}>{svc.name}</Text>
+                {selectedVehicle?.average_miles_per_month && (
+                  <View style={styles.vehicleMeta}>
+                    <Ionicons name="speedometer-outline" size={13} color={Colors.textTertiary} />
+                    <Text style={styles.vehicleMetaText}>
+                      {selectedVehicle.mileage != null ? `${selectedVehicle.mileage.toLocaleString()} mi current · ` : ""}
+                      {selectedVehicle.average_miles_per_month.toLocaleString()} mi/mo avg
+                    </Text>
                   </View>
-                  <Text style={[styles.tableCell, styles.tableCellRight]}>
-                    {svc.interval >= 1000 ? `${svc.interval / 1000}k` : svc.interval}
-                  </Text>
-                  <Text style={[styles.tableCell, styles.tableCellRight, { color: rowColor }]}>
-                    {dateLabel}
-                  </Text>
-                  <Text style={[styles.tableCell, styles.tableCellRight]}>
-                    ${avgCost}
-                  </Text>
-                </View>
-              );
-            })}
+                )}
 
-            <View style={styles.tableNote}>
-              <Ionicons name="information-circle-outline" size={13} color={Colors.textTertiary} />
-              <Text style={styles.tableNoteText}>
-                Estimates assume services are due from current mileage at standard manufacturer intervals.
-              </Text>
-            </View>
+                {predTasksLoading ? (
+                  <ActivityIndicator color={Colors.accent} style={{ paddingVertical: 20 }} />
+                ) : !predTasks || predTasks.length === 0 ? (
+                  <View style={styles.predEmpty}>
+                    <Ionicons name="construct-outline" size={26} color={Colors.textTertiary} />
+                    <Text style={styles.predEmptyText}>No maintenance tasks found for this vehicle.</Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={styles.tableHeader}>
+                      <Text style={[styles.tableCol, { flex: 2 }]}>Service</Text>
+                      <Text style={[styles.tableCol, styles.tableColRight]}>Interval</Text>
+                      <Text style={[styles.tableCol, styles.tableColRight]}>Next Due</Text>
+                      <Text style={[styles.tableCol, styles.tableColRight]}>Est. Cost</Text>
+                    </View>
+
+                    {predTasks.map((pt, idx) => {
+                      const daysLeft = getDaysUntil(pt, selectedVehicle);
+                      const color = rowColor(daysLeft);
+                      const dateLabel = formatDaysUntil(daysLeft, pt.next_due_date);
+                      const intervalLabel = formatInterval(pt);
+                      const costLabel = pt.estimated_cost != null ? `$${pt.estimated_cost}` : "—";
+
+                      return (
+                        <View key={pt.id} style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}>
+                          <View style={{ flex: 2, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <View style={[styles.tableDot, { backgroundColor: color }]} />
+                            <Text style={styles.tableCellMain} numberOfLines={1}>{pt.task}</Text>
+                          </View>
+                          <Text style={[styles.tableCell, styles.tableCellRight]}>{intervalLabel}</Text>
+                          <Text style={[styles.tableCell, styles.tableCellRight, { color }]}>{dateLabel}</Text>
+                          <Text style={[styles.tableCell, styles.tableCellRight]}>{costLabel}</Text>
+                        </View>
+                      );
+                    })}
+
+                    <View style={styles.tableNote}>
+                      <Ionicons name="information-circle-outline" size={13} color={Colors.textTertiary} />
+                      <Text style={styles.tableNoteText}>
+                        Dates are calculated from your vehicle's current mileage and average monthly driving distance.
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </>
+            )}
           </SectionCard>
 
           <View style={styles.legalRow}>
@@ -570,59 +686,6 @@ function ToggleRow({ icon, iconColor, label, sublabel, value, onToggle, accentCo
   );
 }
 
-function MileageSlider({ value, min, max, step, onChange }: {
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-}) {
-  const [trackWidth, setTrackWidth] = useState(1);
-  const trackWidthRef = useRef(1);
-  const startPctRef = useRef(0);
-  const valueRef = useRef(value);
-
-  useEffect(() => { valueRef.current = value; }, [value]);
-
-  const panResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => {
-      startPctRef.current = (valueRef.current - min) / (max - min);
-    },
-    onPanResponderMove: (_, gs) => {
-      const tw = trackWidthRef.current;
-      if (!tw) return;
-      const newPct = Math.max(0, Math.min(1, startPctRef.current + gs.dx / tw));
-      const rawVal = min + newPct * (max - min);
-      const stepped = Math.round(rawVal / step) * step;
-      if (stepped !== valueRef.current) {
-        Haptics.selectionAsync();
-        onChange(stepped);
-      }
-    },
-    onPanResponderRelease: () => {},
-  }), [min, max, step, onChange]);
-
-  const pct = (value - min) / (max - min);
-  const fillPct = `${Math.max(0, Math.min(100, pct * 100))}%`;
-
-  return (
-    <View
-      style={styles.sliderTrack}
-      onLayout={e => {
-        const w = e.nativeEvent.layout.width;
-        setTrackWidth(w);
-        trackWidthRef.current = w;
-      }}
-      {...panResponder.panHandlers}
-    >
-      <View style={styles.sliderRail} />
-      <View style={[styles.sliderFill, { width: fillPct }]} />
-      <View style={[styles.sliderThumb, { left: (pct * (trackWidth - 24)) }]} />
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   header: {
@@ -784,45 +847,46 @@ const styles = StyleSheet.create({
   budgetLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
   budgetSaved: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good },
 
-  mileageContent: { gap: 12, marginBottom: 16 },
-  mileageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  mileageLabel: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text },
-  mileageValue: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.vehicle },
-  sliderTrack: {
-    height: 44,
-    justifyContent: "center",
-    position: "relative",
+  chipScrollWrap: { marginHorizontal: -16, marginBottom: 12 },
+  chipScroll: { paddingHorizontal: 16, gap: 8 },
+  vehicleChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    minHeight: 36,
   },
-  sliderRail: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 4,
-    backgroundColor: Colors.border,
-    borderRadius: 2,
+  vehicleChipSelected: {
+    backgroundColor: Colors.vehicleMuted,
+    borderColor: Colors.vehicle + "66",
   },
-  sliderFill: {
-    position: "absolute",
-    left: 0,
-    height: 4,
-    backgroundColor: Colors.vehicle,
-    borderRadius: 2,
+  vehicleChipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
+  vehicleChipTextSelected: { color: Colors.vehicle, fontFamily: "Inter_600SemiBold" },
+  vehicleMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
-  sliderThumb: {
-    position: "absolute",
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.vehicle,
-    top: 10,
-    shadowColor: Colors.vehicle,
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+  vehicleMetaText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  predEmpty: {
+    alignItems: "center",
+    paddingVertical: 28,
+    gap: 10,
   },
-  mileageScale: { flexDirection: "row", justifyContent: "space-between" },
-  mileageScaleText: { fontSize: 10, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  predEmptyText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 18,
+  },
 
   tableHeader: {
     flexDirection: "row",
