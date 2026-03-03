@@ -17,7 +17,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import { parseISO, isBefore, addDays, differenceInDays } from "date-fns";
+import { parseISO, isBefore, addDays } from "date-fns";
 
 type Property = {
   id: string;
@@ -36,15 +36,25 @@ function getStatus(date: string | null) {
   return "good";
 }
 
-const PROPERTY_ICONS: Record<string, string> = {
-  house: "home-outline",
-  condo: "business-outline",
-  apartment: "business-outline",
-  townhouse: "home-outline",
-  commercial: "storefront-outline",
-  vacation: "sunny-outline",
-  other: "home-outline",
-};
+function getPropertyIcon(type: string | null): string {
+  switch (type) {
+    case "condo": case "apartment": return "business-outline";
+    case "commercial": return "storefront-outline";
+    case "vacation": return "sunny-outline";
+    case "townhouse": return "home-outline";
+    default: return "home-outline";
+  }
+}
+
+function getPropertyLabel(p: Property): string {
+  if (p.nickname) return p.nickname;
+  const typeLabel: Record<string, string> = {
+    house: "House", condo: "Condo", apartment: "Apartment",
+    townhouse: "Townhouse", commercial: "Commercial Building",
+    vacation: "Vacation Home", other: "Property",
+  };
+  return typeLabel[p.property_type ?? "other"] ?? "Property";
+}
 
 export default function HomeTabScreen() {
   const insets = useSafeAreaInsets();
@@ -55,18 +65,26 @@ export default function HomeTabScreen() {
     queryKey: ["properties", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase.from("properties").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+      const { data } = await supabase
+        .from("properties")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
       return (data ?? []) as Property[];
     },
     enabled: !!user,
   });
 
   const { data: taskCounts } = useQuery({
-    queryKey: ["property_task_counts", user?.id],
+    queryKey: ["property_task_counts", user?.id, properties?.map(p => p.id).join(",")],
     queryFn: async () => {
       if (!user || !properties?.length) return {};
       const ids = properties.map(p => p.id);
-      const { data } = await supabase.from("property_maintenance_tasks").select("property_id, next_due_date").in("property_id", ids);
+      const { data } = await supabase
+        .from("property_maintenance_tasks")
+        .select("property_id, next_due_date")
+        .in("property_id", ids);
+
       const map: Record<string, { overdue: number; due_soon: number; total: number }> = {};
       for (const t of data ?? []) {
         if (!map[t.property_id]) map[t.property_id] = { overdue: 0, due_soon: 0, total: 0 };
@@ -96,7 +114,6 @@ export default function HomeTabScreen() {
       </View>
 
       <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.accent} />}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0) }]}
@@ -108,78 +125,97 @@ export default function HomeTabScreen() {
         ) : (
           properties?.map(p => {
             const counts = taskCounts?.[p.id];
-            const worstStatus =
-              (counts?.overdue ?? 0) > 0 ? "overdue" :
-              (counts?.due_soon ?? 0) > 0 ? "due_soon" : "good";
-            const statusColor = worstStatus === "overdue" ? Colors.overdue : worstStatus === "due_soon" ? Colors.dueSoon : Colors.good;
-            const icon = PROPERTY_ICONS[p.property_type ?? "other"] ?? "home-outline";
+            const overdue = counts?.overdue ?? 0;
+            const dueSoon = counts?.due_soon ?? 0;
+            const total = counts?.total ?? 0;
+            const isMyHome = p.property_type === "house";
+            const icon = getPropertyIcon(p.property_type);
+            const label = getPropertyLabel(p);
 
             return (
               <Pressable
                 key={p.id}
                 style={({ pressed }) => [styles.propertyCard, { opacity: pressed ? 0.88 : 1 }]}
-                onPress={() => router.push(`/property/${p.id}` as any)}
+                onPress={() => { Haptics.selectionAsync(); router.push(`/property/${p.id}` as any); }}
               >
-                <View style={styles.propertyCardTop}>
-                  <View style={[styles.propertyIcon, { backgroundColor: Colors.homeMuted }]}>
+                <View style={styles.cardTop}>
+                  <View style={[styles.iconWrap, { backgroundColor: Colors.homeMuted }]}>
                     <Ionicons name={icon as any} size={26} color={Colors.home} />
                   </View>
-                  <View style={styles.propertyInfo}>
-                    <Text style={styles.propertyName} numberOfLines={1}>
-                      {p.nickname ?? p.address ?? "Property"}
-                    </Text>
-                    {p.nickname && p.address && (
-                      <Text style={styles.propertyAddress} numberOfLines={1}>{p.address}</Text>
+
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>{label}</Text>
+                    {p.address && (
+                      <Text style={styles.cardAddress} numberOfLines={1}>{p.address}</Text>
                     )}
                   </View>
-                  <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-                </View>
 
-                <View style={styles.propertyMeta}>
-                  {p.property_type && (
-                    <MetaPill icon="pricetag-outline" label={p.property_type} />
-                  )}
-                  {p.year_built && (
-                    <MetaPill icon="calendar-outline" label={`Built ${p.year_built}`} />
-                  )}
-                  {p.square_footage && (
-                    <MetaPill icon="resize-outline" label={`${p.square_footage.toLocaleString()} sqft`} />
+                  {isMyHome && (
+                    <View style={styles.myHomeBadge}>
+                      <Ionicons name="home" size={10} color={Colors.home} />
+                      <Text style={styles.myHomeBadgeText}>My Home</Text>
+                    </View>
                   )}
                 </View>
 
-                {counts && (
-                  <View style={styles.taskSummary}>
-                    {(counts.overdue > 0 || counts.due_soon > 0) ? (
-                      <>
-                        {counts.overdue > 0 && (
-                          <View style={[styles.taskBadge, { backgroundColor: Colors.overdueMuted }]}>
-                            <Text style={[styles.taskBadgeText, { color: Colors.overdue }]}>{counts.overdue} overdue</Text>
-                          </View>
-                        )}
-                        {counts.due_soon > 0 && (
-                          <View style={[styles.taskBadge, { backgroundColor: Colors.dueSoonMuted }]}>
-                            <Text style={[styles.taskBadgeText, { color: Colors.dueSoon }]}>{counts.due_soon} due soon</Text>
-                          </View>
-                        )}
-                      </>
-                    ) : (
-                      <View style={[styles.taskBadge, { backgroundColor: Colors.goodMuted }]}>
-                        <Text style={[styles.taskBadgeText, { color: Colors.good }]}>{counts.total} tasks — all good</Text>
+                {(p.year_built || p.square_footage) && (
+                  <View style={styles.metaRow}>
+                    {p.year_built && (
+                      <View style={styles.metaPill}>
+                        <Ionicons name="calendar-outline" size={11} color={Colors.textTertiary} />
+                        <Text style={styles.metaPillText}>Built {p.year_built}</Text>
                       </View>
                     )}
-                    <View style={{ flex: 1 }} />
-                    <Pressable
-                      style={({ pressed }) => [styles.addTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        router.push(`/add-property-task/${p.id}` as any);
-                      }}
-                    >
-                      <Ionicons name="add" size={14} color={Colors.home} />
-                      <Text style={styles.addTaskBtnText}>Add Task</Text>
-                    </Pressable>
+                    {p.square_footage && (
+                      <View style={styles.metaPill}>
+                        <Ionicons name="resize-outline" size={11} color={Colors.textTertiary} />
+                        <Text style={styles.metaPillText}>{p.square_footage.toLocaleString()} sqft</Text>
+                      </View>
+                    )}
                   </View>
                 )}
+
+                <View style={styles.statusRow}>
+                  {overdue > 0 && (
+                    <View style={[styles.statusBadge, { backgroundColor: Colors.overdueMuted }]}>
+                      <View style={[styles.statusDot, { backgroundColor: Colors.overdue }]} />
+                      <Text style={[styles.statusBadgeText, { color: Colors.overdue }]}>
+                        {overdue} overdue
+                      </Text>
+                    </View>
+                  )}
+                  {dueSoon > 0 && (
+                    <View style={[styles.statusBadge, { backgroundColor: Colors.dueSoonMuted }]}>
+                      <View style={[styles.statusDot, { backgroundColor: Colors.dueSoon }]} />
+                      <Text style={[styles.statusBadgeText, { color: Colors.dueSoon }]}>
+                        {dueSoon} upcoming
+                      </Text>
+                    </View>
+                  )}
+                  {overdue === 0 && dueSoon === 0 && total > 0 && (
+                    <View style={[styles.statusBadge, { backgroundColor: Colors.goodMuted }]}>
+                      <Ionicons name="checkmark-circle" size={11} color={Colors.good} />
+                      <Text style={[styles.statusBadgeText, { color: Colors.good }]}>All caught up</Text>
+                    </View>
+                  )}
+                  {total === 0 && (
+                    <View style={[styles.statusBadge, { backgroundColor: Colors.surface }]}>
+                      <Text style={[styles.statusBadgeText, { color: Colors.textTertiary }]}>No tasks yet</Text>
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }} />
+                  <Pressable
+                    style={({ pressed }) => [styles.addTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push(`/add-property-task/${p.id}` as any);
+                    }}
+                  >
+                    <Ionicons name="add" size={14} color={Colors.home} />
+                    <Text style={styles.addTaskBtnText}>Add Task</Text>
+                  </Pressable>
+                </View>
               </Pressable>
             );
           })
@@ -189,30 +225,23 @@ export default function HomeTabScreen() {
   );
 }
 
-function MetaPill({ icon, label }: { icon: any; label: string }) {
-  return (
-    <View style={styles.metaPill}>
-      <Ionicons name={icon} size={12} color={Colors.textTertiary} />
-      <Text style={styles.metaPillText}>{label}</Text>
-    </View>
-  );
-}
-
 function EmptyProperties() {
   return (
-    <View style={styles.empty}>
-      <View style={styles.emptyIcon}>
-        <Ionicons name="home-outline" size={40} color={Colors.home} />
+    <View style={styles.emptyWrap}>
+      <View style={styles.emptyCard}>
+        <View style={styles.emptyIconWrap}>
+          <Ionicons name="home-outline" size={36} color={Colors.home} />
+        </View>
+        <Text style={styles.emptyTitle}>No properties yet</Text>
+        <Text style={styles.emptyText}>Add your home or other properties to track HVAC, roof, appliances, and more.</Text>
+        <Pressable
+          style={({ pressed }) => [styles.emptyBtn, { opacity: pressed ? 0.85 : 1 }]}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-property"); }}
+        >
+          <Ionicons name="add" size={20} color={Colors.textInverse} />
+          <Text style={styles.emptyBtnText}>Add Property</Text>
+        </Pressable>
       </View>
-      <Text style={styles.emptyTitle}>No properties yet</Text>
-      <Text style={styles.emptyText}>Add your home or other properties to track HVAC, roof, appliances, and more.</Text>
-      <Pressable
-        style={({ pressed }) => [styles.emptyButton, { opacity: pressed ? 0.85 : 1 }]}
-        onPress={() => router.push("/add-property")}
-      >
-        <Ionicons name="add" size={18} color={Colors.textInverse} />
-        <Text style={styles.emptyButtonText}>Add Property</Text>
-      </Pressable>
     </View>
   );
 }
@@ -224,29 +253,118 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingBottom: 12,
+    backgroundColor: Colors.background,
   },
   title: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  addButton: { width: 38, height: 38, borderRadius: 11, backgroundColor: Colors.home, alignItems: "center", justifyContent: "center" },
+  addButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: Colors.home,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   content: { paddingHorizontal: 16, paddingTop: 8, gap: 12 },
-  propertyCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 12, borderWidth: 1, borderColor: Colors.border },
-  propertyCardTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  propertyIcon: { width: 52, height: 52, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  propertyInfo: { flex: 1 },
-  propertyName: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  propertyAddress: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  statusDot: { width: 10, height: 10, borderRadius: 5 },
-  propertyMeta: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  metaPill: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: Colors.surface, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
-  metaPillText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textTransform: "capitalize" },
-  taskSummary: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
-  taskBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  taskBadgeText: { fontSize: 12, fontFamily: "Inter_500Medium" },
-  addTaskBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: Colors.homeMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+
+  propertyCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  iconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  cardInfo: { flex: 1, gap: 2 },
+  cardTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 22 },
+  cardAddress: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  myHomeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.homeMuted,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexShrink: 0,
+  },
+  myHomeBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.home },
+
+  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  metaPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.surface,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  metaPillText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 9,
+  },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusBadgeText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  addTaskBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.homeMuted,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 30,
+  },
   addTaskBtnText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.home },
-  empty: { alignItems: "center", paddingVertical: 60, paddingHorizontal: 32, gap: 12 },
-  emptyIcon: { width: 80, height: 80, borderRadius: 24, backgroundColor: Colors.homeMuted, alignItems: "center", justifyContent: "center" },
+
+  emptyWrap: { paddingTop: 24 },
+  emptyCard: {
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: Colors.home + "55",
+    borderRadius: 20,
+    backgroundColor: Colors.card,
+    marginHorizontal: 4,
+    padding: 40,
+    alignItems: "center",
+    gap: 12,
+  },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: Colors.homeMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   emptyTitle: { fontSize: 20, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 22 },
-  emptyButton: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.home, borderRadius: 14, paddingHorizontal: 20, paddingVertical: 12, marginTop: 8 },
-  emptyButtonText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 21 },
+  emptyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.home,
+    borderRadius: 14,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
+    marginTop: 8,
+    minHeight: 44,
+  },
+  emptyBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 });
