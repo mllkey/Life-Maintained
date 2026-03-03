@@ -20,7 +20,7 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 
 const MEMBER_TYPES = ["person", "pet"];
-const RELATIONSHIPS = ["Spouse / Partner", "Child", "Parent", "Sibling", "Other"];
+const RELATIONSHIPS = ["Myself", "Spouse / Partner", "Child", "Parent", "Sibling", "Other"];
 const PET_TYPES = ["Dog", "Cat", "Bird", "Fish", "Rabbit", "Other"];
 
 export default function AddFamilyMemberScreen() {
@@ -113,7 +113,22 @@ export default function AddFamilyMemberScreen() {
               <Text style={styles.sectionTitle}>Relationship</Text>
               <View style={styles.grid}>
                 {RELATIONSHIPS.map(r => (
-                  <Pressable key={r} style={[styles.chip, relationship === r && styles.chipSelected]} onPress={() => { Haptics.selectionAsync(); setRelationship(r); }}>
+                  <Pressable
+                    key={r}
+                    style={[styles.chip, relationship === r && styles.chipSelected, r === "Myself" && styles.chipMyself, r === "Myself" && relationship === r && styles.chipMyselfSelected]}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setRelationship(r);
+                      if (r === "Myself" && !name.trim() && user?.email) {
+                        const emailName = user.email.split("@")[0];
+                        const formatted = emailName.charAt(0).toUpperCase() + emailName.slice(1);
+                        setName(formatted);
+                      }
+                    }}
+                  >
+                    {r === "Myself" && (
+                      <Ionicons name="person-circle-outline" size={14} color={relationship === r ? Colors.health : Colors.textSecondary} />
+                    )}
                     <Text style={[styles.chipText, relationship === r && styles.chipTextSelected]}>{r}</Text>
                   </Pressable>
                 ))}
@@ -166,6 +181,8 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
   chipSelected: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
+  chipMyself: { flexDirection: "row", alignItems: "center", gap: 5, borderStyle: "dashed" },
+  chipMyselfSelected: { borderStyle: "solid" },
   chipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
   chipTextSelected: { color: Colors.health },
   inputWrapper: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14, height: 52 },
