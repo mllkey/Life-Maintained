@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useFocusEffect } from "expo-router";
 import {
   View,
   Text,
@@ -153,6 +154,22 @@ export default function AddPropertyScreen() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    setStreet("");
+    setUnit("");
+    setCity("");
+    setStateCode("");
+    setZip("");
+    setNickname("");
+    setPropertyType("house");
+    setYearBuilt("");
+    setSqft("");
+    setError(null);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }, []));
 
   const onStreetChange = useCallback((text: string) => {
     setStreet(text);
