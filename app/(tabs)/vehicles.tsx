@@ -45,13 +45,11 @@ function getTaskStatus(date: string | null): "overdue" | "due_soon" | "good" {
 
 function getVehicleIcon(type: string | null): string {
   switch (type) {
-    case "motorcycle": case "superbike": return "bicycle-outline";
-    case "truck": return "car-sport-outline";
-    case "rv": return "bus-outline";
-    case "boat": return "boat-outline";
-    case "atv": return "trail-sign-outline";
-    case "electric": return "flash-outline";
-    default: return "car-outline";
+    case "motorcycle": return "bicycle-outline";
+    case "rv":         return "bus-outline";
+    case "boat":       return "boat-outline";
+    case "atv":        return "trail-sign-outline";
+    default:           return "car-outline";
   }
 }
 

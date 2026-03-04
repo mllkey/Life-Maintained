@@ -39,28 +39,7 @@ const MAKES_BY_TYPE: Record<string, string[]> = {
     "Land Rover", "Jaguar", "Mini", "Alfa Romeo", "Genesis", "Rivian",
     "Lucid", "Scout",
   ],
-  truck: [
-    "Toyota", "Ford", "Chevrolet", "Honda", "Nissan", "Jeep", "RAM", "GMC",
-    "Subaru", "Hyundai", "Kia", "Volkswagen", "BMW", "Mercedes-Benz", "Audi",
-    "Mazda", "Dodge", "Chrysler", "Buick", "Cadillac", "Volvo", "Tesla",
-    "Lexus", "Acura", "Infiniti", "Lincoln", "Mitsubishi", "Porsche",
-    "Land Rover", "Jaguar", "Mini", "Alfa Romeo", "Genesis", "Rivian",
-    "Lucid", "Scout",
-  ],
-  suv: [
-    "Toyota", "Ford", "Chevrolet", "Honda", "Nissan", "Jeep", "RAM", "GMC",
-    "Subaru", "Hyundai", "Kia", "Volkswagen", "BMW", "Mercedes-Benz", "Audi",
-    "Mazda", "Dodge", "Chrysler", "Buick", "Cadillac", "Volvo", "Tesla",
-    "Lexus", "Acura", "Infiniti", "Lincoln", "Mitsubishi", "Porsche",
-    "Land Rover", "Jaguar", "Mini", "Alfa Romeo", "Genesis", "Rivian",
-    "Lucid", "Scout",
-  ],
   motorcycle: [
-    "Harley-Davidson", "Honda", "Kawasaki", "Yamaha", "Suzuki", "Ducati",
-    "BMW", "KTM", "Triumph", "Royal Enfield", "Indian", "Can-Am",
-    "Zero Motorcycles", "Aprilia", "Moto Guzzi", "Husqvarna",
-  ],
-  superbike: [
     "Harley-Davidson", "Honda", "Kawasaki", "Yamaha", "Suzuki", "Ducati",
     "BMW", "KTM", "Triumph", "Royal Enfield", "Indian", "Can-Am",
     "Zero Motorcycles", "Aprilia", "Moto Guzzi", "Husqvarna",
@@ -79,29 +58,20 @@ const MAKES_BY_TYPE: Record<string, string[]> = {
     "Polaris", "Can-Am", "Yamaha", "Honda", "Kawasaki", "Suzuki",
     "Arctic Cat", "Textron", "CFMoto", "Kubota",
   ],
-  electric: [
-    "Tesla", "Rivian", "Lucid", "Scout", "Ford", "Chevrolet", "BMW",
-    "Mercedes-Benz", "Volkswagen", "Hyundai", "Kia", "Nissan", "Audi",
-    "Porsche", "Toyota", "Honda", "Volvo", "Genesis",
-  ],
   other: [],
 };
 
 const ALL_MAKES = [...new Set(Object.values(MAKES_BY_TYPE).flat())];
 
-const MILEAGE_TRACKED_TYPES = new Set(["car", "truck", "suv", "motorcycle", "superbike", "rv", "electric"]);
+const MILEAGE_TRACKED_TYPES = new Set(["car", "motorcycle", "rv"]);
 
 const VEHICLE_TYPES: { value: string; label: string; icon: string }[] = [
-  { value: "car",        label: "Car",      icon: "car" },
-  { value: "truck",      label: "Truck",    icon: "truck" },
-  { value: "suv",        label: "SUV",      icon: "car-estate" },
-  { value: "motorcycle", label: "Moto",     icon: "motorbike" },
-  { value: "superbike",  label: "Sport",    icon: "car-sports" },
-  { value: "rv",         label: "RV",       icon: "rv-truck" },
-  { value: "boat",       label: "Boat",     icon: "sail-boat" },
-  { value: "atv",        label: "ATV",      icon: "atv" },
-  { value: "electric",   label: "Electric", icon: "ev-station" },
-  { value: "other",      label: "Other",    icon: "wrench" },
+  { value: "car",        label: "Car / Truck / SUV", icon: "car" },
+  { value: "motorcycle", label: "Motorcycle",         icon: "motorbike" },
+  { value: "rv",         label: "RV / Camper",        icon: "rv-truck" },
+  { value: "boat",       label: "Boat",               icon: "sail-boat" },
+  { value: "atv",        label: "ATV / Off-road",     icon: "atv" },
+  { value: "other",      label: "Other",              icon: "wrench" },
 ];
 
 type MfrTask = {
@@ -120,11 +90,11 @@ function normalizeMake(raw: string): string {
 
 function mapNhtsaVehicleType(nhtsaType: string): string {
   const t = nhtsaType.toLowerCase();
-  if (t.includes("motorcycle")) return "motorcycle";
-  if (t.includes("truck")) return "truck";
-  if (t.includes("mpv") || t.includes("multipurpose")) return "suv";
-  if (t.includes("passenger car") || t.includes("passenger vehicle")) return "car";
-  if (t.includes("low speed")) return "car";
+  if (t.includes("motorcycle") || t.includes("moped") || t.includes("scooter")) return "motorcycle";
+  if (t.includes("rv") || t.includes("recreational") || t.includes("motor home") || t.includes("motorhome") || t.includes("camper") || t.includes("trailer")) return "rv";
+  if (t.includes("atv") || t.includes("off-road") || t.includes("offroad") || t.includes("quad") || t.includes("utv") || t.includes("snowmobile")) return "atv";
+  if (t.includes("boat") || t.includes("marine") || t.includes("vessel") || t.includes("watercraft") || t.includes("yacht")) return "boat";
+  if (t.includes("truck") || t.includes("mpv") || t.includes("multipurpose") || t.includes("passenger car") || t.includes("passenger vehicle") || t.includes("low speed")) return "car";
   return "other";
 }
 
