@@ -23,6 +23,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_ITEM_HEIGHT = 52;
+const MODEL_ITEM_HEIGHT = 52;
 
 const YEARS: number[] = Array.from(
   { length: CURRENT_YEAR + 2 - 1980 },
@@ -41,16 +42,16 @@ const MAKES = [
 const MILEAGE_TRACKED_TYPES = new Set(["car", "truck", "suv", "motorcycle", "superbike", "rv", "electric"]);
 
 const VEHICLE_TYPES = [
-  { value: "car", label: "Car" },
-  { value: "truck", label: "Truck" },
-  { value: "suv", label: "SUV" },
-  { value: "motorcycle", label: "Motorcycle" },
-  { value: "superbike", label: "Superbike" },
-  { value: "rv", label: "RV / Camper" },
-  { value: "boat", label: "Boat" },
-  { value: "atv", label: "ATV / Off-road" },
-  { value: "electric", label: "Electric Vehicle" },
-  { value: "other", label: "Other" },
+  { value: "car",        label: "Car",      emoji: "🚗" },
+  { value: "truck",      label: "Truck",    emoji: "🛻" },
+  { value: "suv",        label: "SUV",      emoji: "🚙" },
+  { value: "motorcycle", label: "Moto",     emoji: "🏍️" },
+  { value: "superbike",  label: "Sport",    emoji: "🏎️" },
+  { value: "rv",         label: "RV",       emoji: "🚐" },
+  { value: "boat",       label: "Boat",     emoji: "⛵" },
+  { value: "atv",        label: "ATV",      emoji: "🏕️" },
+  { value: "electric",   label: "Electric", emoji: "⚡" },
+  { value: "other",      label: "Other",    emoji: "🔧" },
 ];
 
 type MfrTask = {
@@ -61,11 +62,26 @@ type MfrTask = {
   priority: string;
 };
 
+function normalizeMake(raw: string): string {
+  const upper = raw.toUpperCase();
+  const found = MAKES.find(m => m.toUpperCase() === upper);
+  return found ?? raw.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+}
+
+function mapNhtsaVehicleType(nhtsaType: string): string {
+  const t = nhtsaType.toLowerCase();
+  if (t.includes("motorcycle")) return "motorcycle";
+  if (t.includes("truck")) return "truck";
+  if (t.includes("mpv") || t.includes("multipurpose")) return "suv";
+  if (t.includes("passenger car") || t.includes("passenger vehicle")) return "car";
+  if (t.includes("low speed")) return "car";
+  return "other";
+}
+
 export default function AddVehicleScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const modelInputRef = useRef<TextInput>(null);
 
   const [year, setYear] = useState("");
   const [make, setMake] = useState("");
@@ -79,9 +95,19 @@ export default function AddVehicleScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [vin, setVin] = useState("");
+  const [isVinLoading, setIsVinLoading] = useState(false);
+  const [vinError, setVinError] = useState<string | null>(null);
+  const [vinSuccess, setVinSuccess] = useState<string | null>(null);
+
   const [yearPickerVisible, setYearPickerVisible] = useState(false);
   const [makePickerVisible, setMakePickerVisible] = useState(false);
   const [makeSearch, setMakeSearch] = useState("");
+  const [modelPickerVisible, setModelPickerVisible] = useState(false);
+  const [modelSearch, setModelSearch] = useState("");
+
+  const [nhtsaModels, setNhtsaModels] = useState<string[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
 
   const [hasManufacturerSchedule, setHasManufacturerSchedule] = useState(false);
   const [manufacturerTasks, setManufacturerTasks] = useState<MfrTask[]>([]);
@@ -97,15 +123,26 @@ export default function AddVehicleScreen() {
     makeSearch.trim().length > 0 &&
     !MAKES.some(m => m.toLowerCase() === makeSearch.toLowerCase().trim());
 
+  const filteredModels = useMemo(() => {
+    const q = modelSearch.toLowerCase().trim();
+    if (!q) return nhtsaModels;
+    return nhtsaModels.filter(m => m.toLowerCase().includes(q));
+  }, [modelSearch, nhtsaModels]);
+
+  const showCustomModel =
+    modelSearch.trim().length > 0 &&
+    !nhtsaModels.some(m => m.toLowerCase() === modelSearch.toLowerCase().trim());
+
   useEffect(() => {
     const yearNum = parseInt(year);
     if (!year || !make.trim() || isNaN(yearNum)) {
       setHasManufacturerSchedule(false);
       setManufacturerTasks([]);
+      setNhtsaModels([]);
       return;
     }
 
-    let cancelled = false;
+    let schedCancelled = false;
     setIsCheckingSchedule(true);
 
     supabase
@@ -116,7 +153,7 @@ export default function AddVehicleScreen() {
       .or(`year_to.is.null,year_to.gte.${yearNum}`)
       .maybeSingle()
       .then(({ data }) => {
-        if (cancelled) return;
+        if (schedCancelled) return;
         setIsCheckingSchedule(false);
         if (data) {
           setHasManufacturerSchedule(true);
@@ -127,8 +164,72 @@ export default function AddVehicleScreen() {
         }
       });
 
-    return () => { cancelled = true; };
+    let modelCancelled = false;
+    setIsLoadingModels(true);
+    setNhtsaModels([]);
+
+    const encodedMake = encodeURIComponent(make.trim());
+    fetch(
+      `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodedMake}/modelyear/${yearNum}?format=json`
+    )
+      .then(r => r.json())
+      .then(json => {
+        if (modelCancelled) return;
+        const results: string[] = (json.Results ?? [])
+          .map((r: { Model_Name?: string }) => r.Model_Name ?? "")
+          .filter((n: string) => n.length > 0)
+          .sort();
+        setNhtsaModels(results);
+        setIsLoadingModels(false);
+      })
+      .catch(() => {
+        if (!modelCancelled) {
+          setNhtsaModels([]);
+          setIsLoadingModels(false);
+        }
+      });
+
+    return () => {
+      schedCancelled = true;
+      modelCancelled = true;
+    };
   }, [year, make]);
+
+  async function handleVinLookup() {
+    const cleanVin = vin.trim().toUpperCase();
+    if (cleanVin.length !== 17) {
+      setVinError("VIN must be exactly 17 characters");
+      setVinSuccess(null);
+      return;
+    }
+    setIsVinLoading(true);
+    setVinError(null);
+    setVinSuccess(null);
+    try {
+      const res = await fetch(
+        `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${cleanVin}?format=json`
+      );
+      const json = await res.json();
+      const result = json.Results?.[0];
+      if (!result || !String(result.ErrorCode ?? "").startsWith("0") || !result.Make) {
+        setVinError("Invalid VIN — please check and try again");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+      if (result.ModelYear) setYear(result.ModelYear);
+      if (result.Make) setMake(normalizeMake(result.Make));
+      if (result.Model) setModel(result.Model);
+      if (result.Trim) setTrim(result.Trim);
+      if (result.VehicleType) setVehicleType(mapNhtsaVehicleType(result.VehicleType));
+      setVinSuccess("Vehicle details filled from VIN");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      setVinError("Could not reach lookup service — check your connection");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsVinLoading(false);
+    }
+  }
 
   function selectYear(yr: number) {
     setYear(String(yr));
@@ -140,8 +241,15 @@ export default function AddVehicleScreen() {
     setMake(selectedMake);
     setMakePickerVisible(false);
     setMakeSearch("");
+    setModel("");
     Haptics.selectionAsync();
-    setTimeout(() => modelInputRef.current?.focus(), 300);
+  }
+
+  function selectModel(selectedModel: string) {
+    setModel(selectedModel);
+    setModelPickerVisible(false);
+    setModelSearch("");
+    Haptics.selectionAsync();
   }
 
   async function handleSave() {
@@ -235,35 +343,97 @@ export default function AddVehicleScreen() {
           showsVerticalScrollIndicator={false}
         >
           {error && (
-            <View style={styles.errorBox}>
+            <View style={styles.alertBox}>
               <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.alertText}>{error}</Text>
             </View>
           )}
 
-          <FieldGroup label="Vehicle Type">
-            <View style={styles.typeGrid}>
-              {VEHICLE_TYPES.map(t => (
-                <Pressable
-                  key={t.value}
-                  style={[styles.typeOption, vehicleType === t.value && styles.typeOptionSelected]}
-                  onPress={() => { Haptics.selectionAsync(); setVehicleType(t.value); }}
-                >
-                  <Text style={[styles.typeOptionText, vehicleType === t.value && styles.typeOptionTextSelected]}>
-                    {t.label}
-                  </Text>
-                </Pressable>
-              ))}
+          {/* ── VIN Lookup ────────────────────────────────────── */}
+          <FieldGroup label="VIN Lookup (Optional)">
+            <View style={styles.vinRow}>
+              <TextInput
+                style={styles.vinInput}
+                value={vin}
+                onChangeText={v => {
+                  setVin(v.toUpperCase());
+                  setVinError(null);
+                  setVinSuccess(null);
+                }}
+                placeholder="17-character VIN"
+                placeholderTextColor={Colors.textTertiary}
+                autoCapitalize="characters"
+                maxLength={17}
+                returnKeyType="go"
+                onSubmitEditing={handleVinLookup}
+              />
+              <Pressable
+                style={({ pressed }) => [
+                  styles.vinBtn,
+                  vin.trim().length === 17 && styles.vinBtnActive,
+                  { opacity: pressed ? 0.8 : 1 },
+                ]}
+                onPress={handleVinLookup}
+                disabled={isVinLoading}
+              >
+                {isVinLoading
+                  ? <ActivityIndicator size="small" color={Colors.textInverse} />
+                  : <Text style={[styles.vinBtnText, vin.trim().length === 17 && styles.vinBtnTextActive]}>
+                      Look Up
+                    </Text>}
+              </Pressable>
             </View>
+
+            {vinError && (
+              <View style={styles.alertBox}>
+                <Ionicons name="alert-circle-outline" size={14} color={Colors.overdue} />
+                <Text style={styles.alertText}>{vinError}</Text>
+              </View>
+            )}
+            {vinSuccess && (
+              <View style={styles.successBox}>
+                <Ionicons name="checkmark-circle" size={14} color={Colors.good} />
+                <Text style={styles.successText}>{vinSuccess}</Text>
+              </View>
+            )}
+            <Text style={styles.vinHint}>
+              Skip this and fill in the details below manually
+            </Text>
           </FieldGroup>
 
+          {/* ── Vehicle Type ──────────────────────────────────── */}
+          <FieldGroup label="Vehicle Type">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.typeScroll}
+            >
+              {VEHICLE_TYPES.map(t => {
+                const isSelected = vehicleType === t.value;
+                return (
+                  <Pressable
+                    key={t.value}
+                    style={[styles.typeCard, isSelected && styles.typeCardSelected]}
+                    onPress={() => { Haptics.selectionAsync(); setVehicleType(t.value); }}
+                  >
+                    <Text style={styles.typeCardEmoji}>{t.emoji}</Text>
+                    <Text style={[styles.typeCardLabel, isSelected && styles.typeCardLabelSelected]}>
+                      {t.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </FieldGroup>
+
+          {/* ── Basic Info ────────────────────────────────────── */}
           <FieldGroup label="Basic Info">
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <PickerField
                   label="Year *"
                   value={year}
-                  placeholder="Select year"
+                  placeholder="Year"
                   onPress={() => setYearPickerVisible(true)}
                 />
               </View>
@@ -298,19 +468,14 @@ export default function AddVehicleScreen() {
               </View>
             )}
 
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Model *</Text>
-              <TextInput
-                ref={modelInputRef}
-                style={styles.fieldInput}
-                value={model}
-                onChangeText={setModel}
-                placeholder="Camry, F-150, Civic…"
-                placeholderTextColor={Colors.textTertiary}
-                autoCapitalize="words"
-                returnKeyType="next"
-              />
-            </View>
+            <ModelPickerField
+              label="Model *"
+              value={model}
+              isLoadingModels={isLoadingModels}
+              hasModels={nhtsaModels.length > 0}
+              yearAndMakeSet={!!year && !!make}
+              onPress={() => { setModelSearch(""); setModelPickerVisible(true); }}
+            />
 
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Trim</Text>
@@ -339,6 +504,7 @@ export default function AddVehicleScreen() {
             </View>
           </FieldGroup>
 
+          {/* ── Mileage ───────────────────────────────────────── */}
           <FieldGroup label="Mileage">
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Current Mileage</Text>
@@ -369,6 +535,7 @@ export default function AddVehicleScreen() {
             )}
           </FieldGroup>
 
+          {/* ── Options ───────────────────────────────────────── */}
           <FieldGroup label="Options">
             <Pressable
               style={styles.toggleRow}
@@ -404,9 +571,24 @@ export default function AddVehicleScreen() {
         onClose={() => { setMakePickerVisible(false); setMakeSearch(""); }}
         insets={insets}
       />
+
+      <ModelPickerModal
+        visible={modelPickerVisible}
+        search={modelSearch}
+        onSearchChange={setModelSearch}
+        filteredModels={filteredModels}
+        showCustomModel={showCustomModel}
+        isLoadingModels={isLoadingModels}
+        yearAndMakeSet={!!year && !!make}
+        onSelect={selectModel}
+        onClose={() => { setModelPickerVisible(false); setModelSearch(""); }}
+        insets={insets}
+      />
     </KeyboardAvoidingView>
   );
 }
+
+// ─── Sub-components ────────────────────────────────────────────────────────
 
 function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
   visible: boolean;
@@ -435,9 +617,7 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
               offset: YEAR_ITEM_HEIGHT * index,
               index,
             })}
-            initialScrollIndex={selectedYear
-              ? Math.max(0, YEARS.indexOf(selectedYear))
-              : 0}
+            initialScrollIndex={selectedYear ? Math.max(0, YEARS.indexOf(selectedYear)) : 0}
             showsVerticalScrollIndicator={false}
             style={{ maxHeight: 340 }}
             renderItem={({ item: yr }) => {
@@ -445,18 +625,16 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
               return (
                 <Pressable
                   style={({ pressed }) => [
-                    styles.yearRow,
-                    isSelected && styles.yearRowSelected,
+                    styles.listRow,
+                    isSelected && styles.listRowSelected,
                     { opacity: pressed ? 0.7 : 1 },
                   ]}
                   onPress={() => onSelect(yr)}
                 >
-                  <Text style={[styles.yearRowText, isSelected && styles.yearRowTextSelected]}>
+                  <Text style={[styles.listRowText, isSelected && styles.listRowTextSelected]}>
                     {yr}
                   </Text>
-                  {isSelected && (
-                    <Ionicons name="checkmark" size={18} color={Colors.vehicle} />
-                  )}
+                  {isSelected && <Ionicons name="checkmark" size={18} color={Colors.vehicle} />}
                 </Pressable>
               );
             }}
@@ -478,11 +656,10 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
   insets: { bottom: number };
 }) {
   const searchRef = useRef<TextInput>(null);
-
   useEffect(() => {
     if (visible) {
-      const timer = setTimeout(() => searchRef.current?.focus(), 250);
-      return () => clearTimeout(timer);
+      const t = setTimeout(() => searchRef.current?.focus(), 250);
+      return () => clearTimeout(t);
     }
   }, [visible]);
 
@@ -498,7 +675,6 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
               <Text style={styles.modalCancelText}>Cancel</Text>
             </Pressable>
           </View>
-
           <View style={styles.searchWrap}>
             <Ionicons name="search-outline" size={16} color={Colors.textTertiary} />
             <TextInput
@@ -513,7 +689,6 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
               clearButtonMode="while-editing"
             />
           </View>
-
           <FlatList
             data={filteredMakes}
             keyExtractor={m => m}
@@ -522,31 +697,151 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
             style={{ maxHeight: 320 }}
             renderItem={({ item: mk }) => (
               <Pressable
-                style={({ pressed }) => [styles.makeRow, { opacity: pressed ? 0.7 : 1 }]}
+                style={({ pressed }) => [styles.listRow, { opacity: pressed ? 0.7 : 1 }]}
                 onPress={() => onSelect(mk)}
               >
-                <Text style={styles.makeRowText}>{mk}</Text>
+                <Text style={styles.listRowText}>{mk}</Text>
                 <Ionicons name="chevron-forward" size={14} color={Colors.textTertiary} />
               </Pressable>
             )}
             ListFooterComponent={showCustomMake ? (
               <Pressable
-                style={({ pressed }) => [styles.makeRow, styles.makeRowCustom, { opacity: pressed ? 0.7 : 1 }]}
+                style={({ pressed }) => [styles.listRow, styles.listRowCustom, { opacity: pressed ? 0.7 : 1 }]}
                 onPress={() => onSelect(search.trim())}
               >
-                <View style={styles.makeRowCustomContent}>
+                <View style={styles.listRowCustomContent}>
                   <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
-                  <Text style={styles.makeRowCustomText}>Use "{search.trim()}"</Text>
+                  <Text style={styles.listRowCustomText}>Use "{search.trim()}"</Text>
                 </View>
-                <Text style={styles.makeRowCustomSub}>Custom make</Text>
+                <Text style={styles.listRowCustomSub}>Custom make</Text>
               </Pressable>
             ) : null}
             ListEmptyComponent={
-              <View style={styles.makeEmpty}>
-                <Text style={styles.makeEmptyText}>No matches — type your make above</Text>
+              <View style={styles.listEmpty}>
+                <Text style={styles.listEmptyText}>No matches — type your make above</Text>
               </View>
             }
           />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function ModelPickerModal({ visible, search, onSearchChange, filteredModels, showCustomModel, isLoadingModels, yearAndMakeSet, onSelect, onClose, insets }: {
+  visible: boolean;
+  search: string;
+  onSearchChange: (s: string) => void;
+  filteredModels: string[];
+  showCustomModel: boolean;
+  isLoadingModels: boolean;
+  yearAndMakeSet: boolean;
+  onSelect: (m: string) => void;
+  onClose: () => void;
+  insets: { bottom: number };
+}) {
+  const searchRef = useRef<TextInput>(null);
+  useEffect(() => {
+    if (visible) {
+      const t = setTimeout(() => searchRef.current?.focus(), 250);
+      return () => clearTimeout(t);
+    }
+  }, [visible]);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 8 }]}>
+          <View style={styles.modalHandle} />
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Model</Text>
+            <Pressable onPress={onClose} style={styles.modalCancelBtn} hitSlop={8}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+          <View style={styles.searchWrap}>
+            <Ionicons name="search-outline" size={16} color={Colors.textTertiary} />
+            <TextInput
+              ref={searchRef}
+              style={styles.searchInput}
+              value={search}
+              onChangeText={onSearchChange}
+              placeholder="Search or type a custom model…"
+              placeholderTextColor={Colors.textTertiary}
+              autoCapitalize="words"
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+            />
+          </View>
+
+          {isLoadingModels ? (
+            <View style={styles.listEmpty}>
+              <ActivityIndicator color={Colors.accent} />
+              <Text style={[styles.listEmptyText, { marginTop: 8 }]}>Loading models…</Text>
+            </View>
+          ) : !yearAndMakeSet ? (
+            <View style={styles.listEmpty}>
+              <Ionicons name="information-circle-outline" size={28} color={Colors.textTertiary} />
+              <Text style={[styles.listEmptyText, { marginTop: 8 }]}>
+                Select a year and make first to see available models
+              </Text>
+              {search.trim().length > 0 && (
+                <Pressable
+                  style={({ pressed }) => [styles.listRow, styles.listRowCustom, { marginTop: 12, opacity: pressed ? 0.7 : 1 }]}
+                  onPress={() => onSelect(search.trim())}
+                >
+                  <View style={styles.listRowCustomContent}>
+                    <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
+                    <Text style={styles.listRowCustomText}>Use "{search.trim()}"</Text>
+                  </View>
+                </Pressable>
+              )}
+            </View>
+          ) : (
+            <FlatList
+              data={filteredModels}
+              keyExtractor={m => m}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 320 }}
+              getItemLayout={(_, index) => ({
+                length: MODEL_ITEM_HEIGHT,
+                offset: MODEL_ITEM_HEIGHT * index,
+                index,
+              })}
+              renderItem={({ item: mdl }) => (
+                <Pressable
+                  style={({ pressed }) => [styles.listRow, { opacity: pressed ? 0.7 : 1 }]}
+                  onPress={() => onSelect(mdl)}
+                >
+                  <Text style={styles.listRowText}>{mdl}</Text>
+                  <Ionicons name="chevron-forward" size={14} color={Colors.textTertiary} />
+                </Pressable>
+              )}
+              ListFooterComponent={showCustomModel ? (
+                <Pressable
+                  style={({ pressed }) => [styles.listRow, styles.listRowCustom, { opacity: pressed ? 0.7 : 1 }]}
+                  onPress={() => onSelect(search.trim())}
+                >
+                  <View style={styles.listRowCustomContent}>
+                    <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
+                    <Text style={styles.listRowCustomText}>Use "{search.trim()}"</Text>
+                  </View>
+                  <Text style={styles.listRowCustomSub}>Custom model</Text>
+                </Pressable>
+              ) : null}
+              ListEmptyComponent={
+                <View style={styles.listEmpty}>
+                  <Text style={styles.listEmptyText}>
+                    {filteredModels.length === 0 && !search
+                      ? "No models found — type a custom model above"
+                      : "No matches — type your model above"}
+                  </Text>
+                </View>
+              }
+            />
+          )}
         </View>
       </View>
     </Modal>
@@ -584,6 +879,42 @@ function PickerField({ label, value, placeholder, onPress }: {
   );
 }
 
+function ModelPickerField({ label, value, isLoadingModels, hasModels, yearAndMakeSet, onPress }: {
+  label: string;
+  value: string;
+  isLoadingModels: boolean;
+  hasModels: boolean;
+  yearAndMakeSet: boolean;
+  onPress: () => void;
+}) {
+  const hint = !yearAndMakeSet
+    ? "Select year & make first"
+    : isLoadingModels
+    ? "Loading models…"
+    : hasModels
+    ? "Select or type model"
+    : "Type a custom model";
+
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Pressable
+        style={({ pressed }) => [styles.pickerBtn, { opacity: pressed ? 0.85 : 1 }]}
+        onPress={onPress}
+      >
+        <Text style={[styles.pickerBtnText, !value && styles.pickerBtnPlaceholder]} numberOfLines={1}>
+          {value || hint}
+        </Text>
+        {isLoadingModels && yearAndMakeSet
+          ? <ActivityIndicator size="small" color={Colors.textTertiary} />
+          : <Ionicons name="chevron-down" size={16} color={Colors.textTertiary} />}
+      </Pressable>
+    </View>
+  );
+}
+
+// ─── Styles ────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
@@ -610,7 +941,8 @@ const styles = StyleSheet.create({
   saveBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 
   scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 20 },
-  errorBox: {
+
+  alertBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -618,7 +950,74 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
   },
-  errorText: { flex: 1, fontSize: 13, color: Colors.overdue, fontFamily: "Inter_400Regular" },
+  alertText: { flex: 1, fontSize: 13, color: Colors.overdue, fontFamily: "Inter_400Regular" },
+  successBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.goodMuted,
+    borderRadius: 10,
+    padding: 12,
+  },
+  successText: { flex: 1, fontSize: 13, color: Colors.good, fontFamily: "Inter_500Medium" },
+
+  vinRow: { flexDirection: "row", gap: 10, alignItems: "center" },
+  vinInput: {
+    flex: 1,
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    color: Colors.text,
+    minHeight: 48,
+    letterSpacing: 1.5,
+  },
+  vinBtn: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 16,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  vinBtnActive: {
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
+  },
+  vinBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary },
+  vinBtnTextActive: { color: Colors.textInverse },
+  vinHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 },
+
+  typeScroll: { paddingRight: 4, gap: 10, flexDirection: "row" },
+  typeCard: {
+    width: 72,
+    height: 80,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  typeCardSelected: {
+    backgroundColor: Colors.vehicleMuted,
+    borderColor: Colors.vehicle,
+  },
+  typeCardEmoji: { fontSize: 24 },
+  typeCardLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+    textAlign: "center",
+  },
+  typeCardLabelSelected: { color: Colors.vehicle, fontFamily: "Inter_600SemiBold" },
 
   fieldGroup: { gap: 10 },
   fieldGroupLabel: {
@@ -661,14 +1060,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pickerBtnText: { flex: 1, fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
-  pickerBtnPlaceholder: { color: Colors.textTertiary },
+  pickerBtnPlaceholder: { color: Colors.textTertiary, fontSize: 14 },
 
-  scheduleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
-  },
+  scheduleRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
   scheduleBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -683,22 +1077,6 @@ const styles = StyleSheet.create({
   scheduleBadgeText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.good },
   scheduleTaskCount: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   schedulePending: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-
-  typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  typeOption: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 44,
-    borderRadius: 10,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  typeOptionSelected: { backgroundColor: Colors.vehicleMuted, borderColor: Colors.vehicle },
-  typeOptionText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  typeOptionTextSelected: { color: Colors.vehicle },
 
   toggleRow: {
     flexDirection: "row",
@@ -735,7 +1113,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 12,
-    maxHeight: "75%",
+    maxHeight: "80%",
   },
   modalHandle: {
     width: 40,
@@ -755,27 +1133,8 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   modalTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  modalCancelBtn: {
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-  },
+  modalCancelBtn: { minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
   modalCancelText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.accent },
-
-  yearRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    minHeight: YEAR_ITEM_HEIGHT,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  yearRowSelected: { backgroundColor: Colors.vehicleMuted },
-  yearRowText: { fontSize: 17, fontFamily: "Inter_400Regular", color: Colors.text },
-  yearRowTextSelected: { fontFamily: "Inter_600SemiBold", color: Colors.vehicle },
 
   searchWrap: {
     flexDirection: "row",
@@ -798,7 +1157,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
 
-  makeRow: {
+  listRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -808,15 +1167,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  makeRowText: { fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
-  makeRowCustom: {
-    backgroundColor: Colors.accentLight,
-    borderBottomWidth: 0,
-    marginTop: 4,
-  },
-  makeRowCustomContent: { flexDirection: "row", alignItems: "center", gap: 8 },
-  makeRowCustomText: { fontSize: 16, fontFamily: "Inter_500Medium", color: Colors.accent },
-  makeRowCustomSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.accent },
-  makeEmpty: { paddingVertical: 32, alignItems: "center" },
-  makeEmptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  listRowSelected: { backgroundColor: Colors.vehicleMuted },
+  listRowText: { fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
+  listRowTextSelected: { fontFamily: "Inter_600SemiBold", color: Colors.vehicle },
+  listRowCustom: { backgroundColor: Colors.accentLight, borderBottomWidth: 0, marginTop: 4 },
+  listRowCustomContent: { flexDirection: "row", alignItems: "center", gap: 8 },
+  listRowCustomText: { fontSize: 16, fontFamily: "Inter_500Medium", color: Colors.accent },
+  listRowCustomSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.accent },
+  listEmpty: { paddingVertical: 32, alignItems: "center", paddingHorizontal: 24 },
+  listEmptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
 });
