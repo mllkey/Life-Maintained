@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -41,17 +41,17 @@ const MAKES = [
 
 const MILEAGE_TRACKED_TYPES = new Set(["car", "truck", "suv", "motorcycle", "superbike", "rv", "electric"]);
 
-const VEHICLE_TYPES = [
-  { value: "car",        label: "Car",      emoji: "🚗" },
-  { value: "truck",      label: "Truck",    emoji: "🛻" },
-  { value: "suv",        label: "SUV",      emoji: "🚙" },
-  { value: "motorcycle", label: "Moto",     emoji: "🏍️" },
-  { value: "superbike",  label: "Sport",    emoji: "🏎️" },
-  { value: "rv",         label: "RV",       emoji: "🚐" },
-  { value: "boat",       label: "Boat",     emoji: "⛵" },
-  { value: "atv",        label: "ATV",      emoji: "🏕️" },
-  { value: "electric",   label: "Electric", emoji: "⚡" },
-  { value: "other",      label: "Other",    emoji: "🔧" },
+const VEHICLE_TYPES: { value: string; label: string; icon: string }[] = [
+  { value: "car",        label: "Car",      icon: "car" },
+  { value: "truck",      label: "Truck",    icon: "truck" },
+  { value: "suv",        label: "SUV",      icon: "car-estate" },
+  { value: "motorcycle", label: "Moto",     icon: "motorbike" },
+  { value: "superbike",  label: "Sport",    icon: "car-sports" },
+  { value: "rv",         label: "RV",       icon: "rv-truck" },
+  { value: "boat",       label: "Boat",     icon: "sail-boat" },
+  { value: "atv",        label: "ATV",      icon: "atv" },
+  { value: "electric",   label: "Electric", icon: "ev-station" },
+  { value: "other",      label: "Other",    icon: "wrench" },
 ];
 
 type MfrTask = {
@@ -416,7 +416,11 @@ export default function AddVehicleScreen() {
                     style={[styles.typeCard, isSelected && styles.typeCardSelected]}
                     onPress={() => { Haptics.selectionAsync(); setVehicleType(t.value); }}
                   >
-                    <Text style={styles.typeCardEmoji}>{t.emoji}</Text>
+                    <MaterialCommunityIcons
+                      name={t.icon as any}
+                      size={26}
+                      color={isSelected ? Colors.accent : Colors.textSecondary}
+                    />
                     <Text style={[styles.typeCardLabel, isSelected && styles.typeCardLabelSelected]}>
                       {t.label}
                     </Text>
@@ -997,27 +1001,26 @@ const styles = StyleSheet.create({
   typeScroll: { paddingRight: 4, gap: 10, flexDirection: "row" },
   typeCard: {
     width: 72,
-    height: 80,
+    height: 82,
     borderRadius: 14,
     backgroundColor: Colors.card,
     borderWidth: 1.5,
     borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 7,
   },
   typeCardSelected: {
-    backgroundColor: Colors.vehicleMuted,
-    borderColor: Colors.vehicle,
+    backgroundColor: Colors.accentLight,
+    borderColor: Colors.accent,
   },
-  typeCardEmoji: { fontSize: 24 },
   typeCardLabel: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
     color: Colors.textSecondary,
     textAlign: "center",
   },
-  typeCardLabelSelected: { color: Colors.vehicle, fontFamily: "Inter_600SemiBold" },
+  typeCardLabelSelected: { color: Colors.accent, fontFamily: "Inter_600SemiBold" },
 
   fieldGroup: { gap: 10 },
   fieldGroupLabel: {
