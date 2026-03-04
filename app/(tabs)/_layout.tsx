@@ -21,7 +21,7 @@ function NativeTabLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="home-tab">
         <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>Home</Label>
+        <Label>Properties</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="health">
         <Icon sf={{ default: "heart", selected: "heart.fill" }} />
@@ -94,7 +94,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="home-tab"
         options={{
-          title: "Home",
+          title: "Properties",
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="house.fill" tintColor={color} size={22} />

@@ -145,7 +145,7 @@ export default function PropertyDetailScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: Colors.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={6}>
           <Ionicons name="chevron-back" size={24} color={Colors.text} />
         </Pressable>

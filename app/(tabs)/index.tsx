@@ -221,7 +221,7 @@ export default function DashboardScreen() {
     >
       <LinearGradient
         colors={["rgba(0,201,167,0.10)", "transparent"]}
-        style={[styles.headerGradient, { paddingTop: insets.top + webTopPad }]}
+        style={[styles.headerGradient, { paddingTop: insets.top + webTopPad + 16 }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
       >
