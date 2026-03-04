@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,8 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
+
+const PLACES_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? "";
 
 const US_STATES = [
   { abbr: "AL", name: "Alabama" }, { abbr: "AK", name: "Alaska" },
@@ -67,6 +69,68 @@ const TYPE_LABELS: Record<string, string> = {
   vacation: "Vacation Home", other: "Property",
 };
 
+type PlaceSuggestion = {
+  placeId: string;
+  description: string;
+  mainText: string;
+  secondaryText: string;
+};
+
+type ParsedAddress = {
+  street: string;
+  unit: string;
+  city: string;
+  stateCode: string;
+  zip: string;
+};
+
+async function fetchSuggestions(query: string): Promise<PlaceSuggestion[]> {
+  if (!PLACES_API_KEY || query.length < 2) return [];
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&components=country:us&types=address&key=${PLACES_API_KEY}`;
+    const resp = await fetch(url);
+    const json = await resp.json();
+    if (json.status !== "OK" && json.status !== "ZERO_RESULTS") return [];
+    return (json.predictions ?? []).slice(0, 5).map((p: {
+      place_id: string;
+      description: string;
+      structured_formatting: { main_text: string; secondary_text: string };
+    }) => ({
+      placeId: p.place_id,
+      description: p.description,
+      mainText: p.structured_formatting?.main_text ?? p.description,
+      secondaryText: p.structured_formatting?.secondary_text ?? "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchPlaceDetails(placeId: string): Promise<ParsedAddress | null> {
+  if (!PLACES_API_KEY) return null;
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=address_components&key=${PLACES_API_KEY}`;
+    const resp = await fetch(url);
+    const json = await resp.json();
+    if (json.status !== "OK") return null;
+    const components: { types: string[]; long_name: string; short_name: string }[] = json.result?.address_components ?? [];
+    const get = (type: string, useShort = false) => {
+      const c = components.find(c => c.types.includes(type));
+      return c ? (useShort ? c.short_name : c.long_name) : "";
+    };
+    const streetNumber = get("street_number");
+    const route = get("route");
+    const street = [streetNumber, route].filter(Boolean).join(" ");
+    const unit = get("subpremise");
+    const city = get("locality") || get("sublocality_level_1") || get("postal_town");
+    const stateCode = get("administrative_area_level_1", true);
+    const zip = get("postal_code");
+    return { street, unit, city, stateCode, zip };
+  } catch {
+    return null;
+  }
+}
+
 export default function AddPropertyScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -84,6 +148,49 @@ export default function AddPropertyScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statePickerVisible, setStatePickerVisible] = useState(false);
+
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onStreetChange = useCallback((text: string) => {
+    setStreet(text);
+    setShowSuggestions(false);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!PLACES_API_KEY || text.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      setIsFetchingSuggestions(true);
+      const results = await fetchSuggestions(text);
+      setSuggestions(results);
+      setShowSuggestions(results.length > 0);
+      setIsFetchingSuggestions(false);
+    }, 300);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  async function onSelectSuggestion(suggestion: PlaceSuggestion) {
+    Haptics.selectionAsync();
+    setStreet(suggestion.mainText);
+    setShowSuggestions(false);
+    setSuggestions([]);
+    const parsed = await fetchPlaceDetails(suggestion.placeId);
+    if (parsed) {
+      if (parsed.street) setStreet(parsed.street);
+      if (parsed.unit) setUnit(parsed.unit);
+      if (parsed.city) setCity(parsed.city);
+      if (parsed.stateCode) setStateCode(parsed.stateCode);
+      if (parsed.zip) setZip(parsed.zip);
+    }
+  }
 
   async function handleSave() {
     if (!user) return;
@@ -123,7 +230,10 @@ export default function AddPropertyScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
           <Pressable onPress={() => router.back()} style={styles.closeBtn}>
@@ -182,17 +292,48 @@ export default function AddPropertyScreen() {
           </FieldGroup>
 
           <FieldGroup label="Address">
-            <Field label="Street Address *">
+            <View style={{ gap: 5 }}>
+              <Text style={styles.fieldLabel}>Street Address *</Text>
               <TextInput
                 style={styles.input}
                 value={street}
-                onChangeText={setStreet}
+                onChangeText={onStreetChange}
+                onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
                 placeholder="1025 Potomac Ct"
                 placeholderTextColor={Colors.textTertiary}
                 autoCapitalize="words"
                 returnKeyType="next"
               />
-            </Field>
+              {isFetchingSuggestions && (
+                <View style={styles.suggestionsCard}>
+                  <ActivityIndicator size="small" color={Colors.accent} style={{ padding: 12 }} />
+                </View>
+              )}
+              {showSuggestions && suggestions.length > 0 && (
+                <View style={styles.suggestionsCard}>
+                  {suggestions.map((s, idx) => (
+                    <Pressable
+                      key={s.placeId}
+                      style={({ pressed }) => [
+                        styles.suggestionRow,
+                        idx < suggestions.length - 1 && styles.suggestionRowBorder,
+                        { opacity: pressed ? 0.7 : 1 },
+                      ]}
+                      onPress={() => onSelectSuggestion(s)}
+                    >
+                      <Ionicons name="location-outline" size={16} color={Colors.textTertiary} style={{ marginTop: 2 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.suggestionMain} numberOfLines={1}>{s.mainText}</Text>
+                        {!!s.secondaryText && (
+                          <Text style={styles.suggestionSub} numberOfLines={1}>{s.secondaryText}</Text>
+                        )}
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+
             <Field label="Unit / Apt (optional)">
               <TextInput
                 style={styles.input}
@@ -204,6 +345,7 @@ export default function AddPropertyScreen() {
                 returnKeyType="next"
               />
             </Field>
+
             <View style={styles.row}>
               <Field label="City" style={{ flex: 2 }}>
                 <TextInput
@@ -228,6 +370,7 @@ export default function AddPropertyScreen() {
                 </Pressable>
               </Field>
             </View>
+
             <Field label="ZIP Code">
               <TextInput
                 style={styles.input}
@@ -421,6 +564,38 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
 
+  suggestionsCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: "hidden",
+    zIndex: 100,
+  },
+  suggestionRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 44,
+  },
+  suggestionRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  suggestionMain: {
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+    color: Colors.text,
+  },
+  suggestionSub: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textTertiary,
+    marginTop: 1,
+  },
+
   typeRow: { gap: 8, paddingVertical: 2 },
   typeCard: {
     alignItems: "center",
@@ -486,6 +661,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     gap: 12,
+    minHeight: 44,
   },
   stateAbbr: {
     fontSize: 15,
