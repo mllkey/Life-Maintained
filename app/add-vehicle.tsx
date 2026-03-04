@@ -187,35 +187,77 @@ export default function AddVehicleScreen() {
       });
 
     let modelCancelled = false;
-    setIsLoadingModels(true);
-    setNhtsaModels([]);
 
-    const encodedMake = encodeURIComponent(make.trim());
-    fetch(
-      `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodedMake}/modelyear/${yearNum}?format=json`
-    )
-      .then(r => r.json())
-      .then(json => {
-        if (modelCancelled) return;
-        const results: string[] = (json.Results ?? [])
-          .map((r: { Model_Name?: string }) => r.Model_Name ?? "")
-          .filter((n: string) => n.length > 0)
-          .sort();
-        setNhtsaModels(results);
-        setIsLoadingModels(false);
-      })
-      .catch(() => {
-        if (!modelCancelled) {
-          setNhtsaModels([]);
-          setIsLoadingModels(false);
+    if (vehicleType === "other") {
+      setNhtsaModels([]);
+      setIsLoadingModels(false);
+    } else {
+      setIsLoadingModels(true);
+      setNhtsaModels([]);
+
+      const encodedMake = encodeURIComponent(make.trim());
+      const nhtsaBase = `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodedMake}/modelyear/${yearNum}`;
+
+      function extractNames(nhtsaJson: { Results?: { Model_Name?: string }[] }): string[] {
+        return (nhtsaJson.Results ?? [])
+          .map((item: { Model_Name?: string }) => item.Model_Name ?? "")
+          .filter((nm: string) => nm.length > 0);
+      }
+
+      async function loadModels(): Promise<void> {
+        try {
+          let names: string[] = [];
+
+          if (vehicleType === "car") {
+            const [passengerResp, truckResp] = await Promise.all([
+              fetch(`${nhtsaBase}?format=json&vehicleType=Passenger%20Car`),
+              fetch(`${nhtsaBase}?format=json&vehicleType=Truck`),
+            ]);
+            const [passengerJson, truckJson] = await Promise.all([
+              passengerResp.json(),
+              truckResp.json(),
+            ]);
+            names = [...new Set([...extractNames(passengerJson), ...extractNames(truckJson)])];
+          } else if (vehicleType === "rv") {
+            const [incompleteResp, busResp] = await Promise.all([
+              fetch(`${nhtsaBase}?format=json&vehicleType=Incomplete%20Vehicle`),
+              fetch(`${nhtsaBase}?format=json&vehicleType=Bus`),
+            ]);
+            const [incompleteJson, busJson] = await Promise.all([
+              incompleteResp.json(),
+              busResp.json(),
+            ]);
+            names = [...new Set([...extractNames(incompleteJson), ...extractNames(busJson)])];
+          } else if (vehicleType === "motorcycle") {
+            const motoResp = await fetch(`${nhtsaBase}?format=json&vehicleType=Motorcycle`);
+            const motoJson = await motoResp.json();
+            names = extractNames(motoJson);
+          } else {
+            const allResp = await fetch(`${nhtsaBase}?format=json`);
+            const allJson = await allResp.json();
+            names = extractNames(allJson);
+          }
+
+          if (!modelCancelled) {
+            setNhtsaModels(names.sort());
+            setIsLoadingModels(false);
+          }
+        } catch {
+          if (!modelCancelled) {
+            setNhtsaModels([]);
+            setIsLoadingModels(false);
+          }
         }
-      });
+      }
+
+      loadModels();
+    }
 
     return () => {
       schedCancelled = true;
       modelCancelled = true;
     };
-  }, [year, make]);
+  }, [year, make, vehicleType]);
 
   async function handleVinLookup() {
     const cleanVin = vin.trim().toUpperCase();
