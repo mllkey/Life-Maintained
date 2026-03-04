@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ScrollView,
   FlatList,
+  SectionList,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -62,6 +63,46 @@ const MAKES_BY_TYPE: Record<string, string[]> = {
 };
 
 const ALL_MAKES = [...new Set(Object.values(MAKES_BY_TYPE).flat())];
+
+type MakeSection = { title: string; data: string[] };
+
+const CAR_MAKE_SECTIONS: MakeSection[] = [
+  { title: "Most Popular", data: ["Toyota", "Ford", "Chevrolet", "Honda", "Nissan", "Jeep", "RAM", "GMC", "Subaru", "Hyundai", "Kia"] },
+  { title: "A", data: ["Acura", "Alfa Romeo", "Audi"] },
+  { title: "B", data: ["BMW", "Buick"] },
+  { title: "C", data: ["Cadillac", "Chrysler"] },
+  { title: "D", data: ["Dodge"] },
+  { title: "G", data: ["Genesis"] },
+  { title: "I", data: ["Infiniti"] },
+  { title: "J", data: ["Jaguar"] },
+  { title: "L", data: ["Land Rover", "Lexus", "Lincoln", "Lucid"] },
+  { title: "M", data: ["Mazda", "Mercedes-Benz", "Mini", "Mitsubishi"] },
+  { title: "P", data: ["Porsche"] },
+  { title: "R", data: ["Rivian"] },
+  { title: "S", data: ["Scout"] },
+  { title: "T", data: ["Tesla"] },
+  { title: "V", data: ["Volkswagen", "Volvo"] },
+];
+
+const MOTO_MAKE_SECTIONS: MakeSection[] = [
+  { title: "Most Popular", data: ["Harley-Davidson", "Honda", "Kawasaki", "Yamaha", "Suzuki"] },
+  { title: "A", data: ["Aprilia"] },
+  { title: "B", data: ["BMW"] },
+  { title: "C", data: ["Can-Am"] },
+  { title: "D", data: ["Ducati"] },
+  { title: "H", data: ["Husqvarna"] },
+  { title: "I", data: ["Indian"] },
+  { title: "K", data: ["KTM"] },
+  { title: "M", data: ["Moto Guzzi"] },
+  { title: "R", data: ["Royal Enfield"] },
+  { title: "T", data: ["Triumph"] },
+  { title: "Z", data: ["Zero Motorcycles"] },
+];
+
+const MAKE_SECTIONS_BY_TYPE: Record<string, MakeSection[]> = {
+  car: CAR_MAKE_SECTIONS,
+  motorcycle: MOTO_MAKE_SECTIONS,
+};
 
 const MILEAGE_TRACKED_TYPES = new Set(["car", "motorcycle", "rv"]);
 
@@ -655,6 +696,7 @@ export default function AddVehicleScreen() {
         onSearchChange={setMakeSearch}
         filteredMakes={filteredMakes}
         showCustomMake={showCustomMake}
+        vehicleType={vehicleType}
         onSelect={selectMake}
         onClose={() => { setMakePickerVisible(false); setMakeSearch(""); }}
         insets={insets}
@@ -733,12 +775,33 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
   );
 }
 
-function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showCustomMake, onSelect, onClose, insets }: {
+function MakeSectionHeader({ title }: { title: string }) {
+  return (
+    <View style={styles.makeSectionHeader}>
+      <Text style={styles.makeSectionHeaderText}>{title.toUpperCase()}</Text>
+    </View>
+  );
+}
+
+function MakeRow({ mk, onSelect }: { mk: string; onSelect: (m: string) => void }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.listRow, { opacity: pressed ? 0.7 : 1 }]}
+      onPress={() => onSelect(mk)}
+    >
+      <Text style={styles.listRowText}>{mk}</Text>
+      <Ionicons name="chevron-forward" size={14} color={Colors.textTertiary} />
+    </Pressable>
+  );
+}
+
+function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showCustomMake, vehicleType, onSelect, onClose, insets }: {
   visible: boolean;
   search: string;
   onSearchChange: (s: string) => void;
   filteredMakes: string[];
   showCustomMake: boolean;
+  vehicleType: string;
   onSelect: (m: string) => void;
   onClose: () => void;
   insets: { bottom: number };
@@ -750,6 +813,29 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
       return () => clearTimeout(t);
     }
   }, [visible]);
+
+  const sections = MAKE_SECTIONS_BY_TYPE[vehicleType];
+  const isSearching = search.trim().length > 0;
+  const useSections = !!sections && !isSearching;
+
+  const customFooter = showCustomMake ? (
+    <Pressable
+      style={({ pressed }) => [styles.listRow, styles.listRowCustom, { opacity: pressed ? 0.7 : 1 }]}
+      onPress={() => onSelect(search.trim())}
+    >
+      <View style={styles.listRowCustomContent}>
+        <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
+        <Text style={styles.listRowCustomText}>Use "{search.trim()}"</Text>
+      </View>
+      <Text style={styles.listRowCustomSub}>Custom make</Text>
+    </Pressable>
+  ) : null;
+
+  const emptyComponent = (
+    <View style={styles.listEmpty}>
+      <Text style={styles.listEmptyText}>No matches — type your make above</Text>
+    </View>
+  );
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -770,46 +856,44 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
               style={styles.searchInput}
               value={search}
               onChangeText={onSearchChange}
-              placeholder="Search or type a custom make…"
+              placeholder="Search makes…"
               placeholderTextColor={Colors.textTertiary}
               autoCapitalize="words"
               returnKeyType="search"
               clearButtonMode="while-editing"
             />
           </View>
-          <FlatList
-            data={filteredMakes}
-            keyExtractor={m => m}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 320 }}
-            renderItem={({ item: mk }) => (
-              <Pressable
-                style={({ pressed }) => [styles.listRow, { opacity: pressed ? 0.7 : 1 }]}
-                onPress={() => onSelect(mk)}
-              >
-                <Text style={styles.listRowText}>{mk}</Text>
-                <Ionicons name="chevron-forward" size={14} color={Colors.textTertiary} />
-              </Pressable>
-            )}
-            ListFooterComponent={showCustomMake ? (
-              <Pressable
-                style={({ pressed }) => [styles.listRow, styles.listRowCustom, { opacity: pressed ? 0.7 : 1 }]}
-                onPress={() => onSelect(search.trim())}
-              >
-                <View style={styles.listRowCustomContent}>
-                  <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
-                  <Text style={styles.listRowCustomText}>Use "{search.trim()}"</Text>
-                </View>
-                <Text style={styles.listRowCustomSub}>Custom make</Text>
-              </Pressable>
-            ) : null}
-            ListEmptyComponent={
-              <View style={styles.listEmpty}>
-                <Text style={styles.listEmptyText}>No matches — type your make above</Text>
-              </View>
-            }
-          />
+
+          {useSections ? (
+            <SectionList
+              sections={sections}
+              keyExtractor={(mk) => mk}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 380 }}
+              stickySectionHeadersEnabled={false}
+              renderSectionHeader={({ section }) => (
+                <MakeSectionHeader title={section.title} />
+              )}
+              renderItem={({ item: mk }) => (
+                <MakeRow mk={mk} onSelect={onSelect} />
+              )}
+              ListFooterComponent={customFooter}
+            />
+          ) : (
+            <FlatList
+              data={filteredMakes}
+              keyExtractor={(mk) => mk}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 380 }}
+              renderItem={({ item: mk }) => (
+                <MakeRow mk={mk} onSelect={onSelect} />
+              )}
+              ListFooterComponent={customFooter}
+              ListEmptyComponent={emptyComponent}
+            />
+          )}
         </View>
       </View>
     </Modal>
@@ -1242,6 +1326,18 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingVertical: 10,
     minHeight: 44,
+  },
+
+  makeSectionHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 4,
+  },
+  makeSectionHeaderText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textTertiary,
+    letterSpacing: 0.8,
   },
 
   listRow: {
