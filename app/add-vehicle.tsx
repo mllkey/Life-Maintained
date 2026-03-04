@@ -30,14 +30,64 @@ const YEARS: number[] = Array.from(
   (_, i) => CURRENT_YEAR + 1 - i
 );
 
-const MAKES = [
-  "Toyota", "Ford", "Chevrolet", "Honda", "Nissan", "Jeep", "RAM", "GMC",
-  "Subaru", "Hyundai", "Kia", "Volkswagen", "BMW", "Mercedes-Benz", "Audi",
-  "Mazda", "Dodge", "Chrysler", "Buick", "Cadillac", "Volvo", "Tesla",
-  "Lexus", "Acura", "Infiniti", "Lincoln", "Mitsubishi", "Porsche",
-  "Land Rover", "Jaguar", "Mini", "Alfa Romeo", "Genesis", "Rivian",
-  "Lucid", "Scout", "Kawasaki", "Harley-Davidson", "Honda Powersports", "Yamaha",
-];
+const MAKES_BY_TYPE: Record<string, string[]> = {
+  car: [
+    "Toyota", "Ford", "Chevrolet", "Honda", "Nissan", "Jeep", "RAM", "GMC",
+    "Subaru", "Hyundai", "Kia", "Volkswagen", "BMW", "Mercedes-Benz", "Audi",
+    "Mazda", "Dodge", "Chrysler", "Buick", "Cadillac", "Volvo", "Tesla",
+    "Lexus", "Acura", "Infiniti", "Lincoln", "Mitsubishi", "Porsche",
+    "Land Rover", "Jaguar", "Mini", "Alfa Romeo", "Genesis", "Rivian",
+    "Lucid", "Scout",
+  ],
+  truck: [
+    "Toyota", "Ford", "Chevrolet", "Honda", "Nissan", "Jeep", "RAM", "GMC",
+    "Subaru", "Hyundai", "Kia", "Volkswagen", "BMW", "Mercedes-Benz", "Audi",
+    "Mazda", "Dodge", "Chrysler", "Buick", "Cadillac", "Volvo", "Tesla",
+    "Lexus", "Acura", "Infiniti", "Lincoln", "Mitsubishi", "Porsche",
+    "Land Rover", "Jaguar", "Mini", "Alfa Romeo", "Genesis", "Rivian",
+    "Lucid", "Scout",
+  ],
+  suv: [
+    "Toyota", "Ford", "Chevrolet", "Honda", "Nissan", "Jeep", "RAM", "GMC",
+    "Subaru", "Hyundai", "Kia", "Volkswagen", "BMW", "Mercedes-Benz", "Audi",
+    "Mazda", "Dodge", "Chrysler", "Buick", "Cadillac", "Volvo", "Tesla",
+    "Lexus", "Acura", "Infiniti", "Lincoln", "Mitsubishi", "Porsche",
+    "Land Rover", "Jaguar", "Mini", "Alfa Romeo", "Genesis", "Rivian",
+    "Lucid", "Scout",
+  ],
+  motorcycle: [
+    "Harley-Davidson", "Honda", "Kawasaki", "Yamaha", "Suzuki", "Ducati",
+    "BMW", "KTM", "Triumph", "Royal Enfield", "Indian", "Can-Am",
+    "Zero Motorcycles", "Aprilia", "Moto Guzzi", "Husqvarna",
+  ],
+  superbike: [
+    "Harley-Davidson", "Honda", "Kawasaki", "Yamaha", "Suzuki", "Ducati",
+    "BMW", "KTM", "Triumph", "Royal Enfield", "Indian", "Can-Am",
+    "Zero Motorcycles", "Aprilia", "Moto Guzzi", "Husqvarna",
+  ],
+  rv: [
+    "Winnebago", "Airstream", "Thor Industries", "Forest River", "Coachmen",
+    "Keystone", "Grand Design", "Jayco", "Heartland", "Tiffin", "Newmar",
+    "Fleetwood",
+  ],
+  boat: [
+    "Sea Ray", "Bayliner", "Boston Whaler", "Malibu", "MasterCraft",
+    "Grady-White", "Lund", "Tracker", "Yamaha", "Mercury", "Chaparral",
+    "Cobalt", "Ranger", "Crestliner",
+  ],
+  atv: [
+    "Polaris", "Can-Am", "Yamaha", "Honda", "Kawasaki", "Suzuki",
+    "Arctic Cat", "Textron", "CFMoto", "Kubota",
+  ],
+  electric: [
+    "Tesla", "Rivian", "Lucid", "Scout", "Ford", "Chevrolet", "BMW",
+    "Mercedes-Benz", "Volkswagen", "Hyundai", "Kia", "Nissan", "Audi",
+    "Porsche", "Toyota", "Honda", "Volvo", "Genesis",
+  ],
+  other: [],
+};
+
+const ALL_MAKES = [...new Set(Object.values(MAKES_BY_TYPE).flat())];
 
 const MILEAGE_TRACKED_TYPES = new Set(["car", "truck", "suv", "motorcycle", "superbike", "rv", "electric"]);
 
@@ -64,7 +114,7 @@ type MfrTask = {
 
 function normalizeMake(raw: string): string {
   const upper = raw.toUpperCase();
-  const found = MAKES.find(m => m.toUpperCase() === upper);
+  const found = ALL_MAKES.find(m => m.toUpperCase() === upper);
   return found ?? raw.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
 }
 
@@ -113,15 +163,17 @@ export default function AddVehicleScreen() {
   const [manufacturerTasks, setManufacturerTasks] = useState<MfrTask[]>([]);
   const [isCheckingSchedule, setIsCheckingSchedule] = useState(false);
 
+  const availableMakes = MAKES_BY_TYPE[vehicleType] ?? [];
+
   const filteredMakes = useMemo(() => {
     const q = makeSearch.toLowerCase().trim();
-    if (!q) return MAKES;
-    return MAKES.filter(m => m.toLowerCase().includes(q));
-  }, [makeSearch]);
+    if (!q) return availableMakes;
+    return availableMakes.filter(m => m.toLowerCase().includes(q));
+  }, [makeSearch, availableMakes]);
 
   const showCustomMake =
     makeSearch.trim().length > 0 &&
-    !MAKES.some(m => m.toLowerCase() === makeSearch.toLowerCase().trim());
+    !availableMakes.some(m => m.toLowerCase() === makeSearch.toLowerCase().trim());
 
   const filteredModels = useMemo(() => {
     const q = modelSearch.toLowerCase().trim();
@@ -414,7 +466,12 @@ export default function AddVehicleScreen() {
                   <Pressable
                     key={t.value}
                     style={[styles.typeCard, isSelected && styles.typeCardSelected]}
-                    onPress={() => { Haptics.selectionAsync(); setVehicleType(t.value); }}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setVehicleType(t.value);
+                      setMake("");
+                      setModel("");
+                    }}
                   >
                     <MaterialCommunityIcons
                       name={t.icon as any}
@@ -442,12 +499,27 @@ export default function AddVehicleScreen() {
                 />
               </View>
               <View style={{ flex: 2 }}>
-                <PickerField
-                  label="Make *"
-                  value={make}
-                  placeholder="Select make"
-                  onPress={() => { setMakeSearch(""); setMakePickerVisible(true); }}
-                />
+                {vehicleType === "other" ? (
+                  <View style={styles.field}>
+                    <Text style={styles.fieldLabel}>Make *</Text>
+                    <TextInput
+                      style={styles.fieldInput}
+                      value={make}
+                      onChangeText={setMake}
+                      placeholder="Enter make…"
+                      placeholderTextColor={Colors.textTertiary}
+                      autoCapitalize="words"
+                      returnKeyType="next"
+                    />
+                  </View>
+                ) : (
+                  <PickerField
+                    label="Make *"
+                    value={make}
+                    placeholder="Select make"
+                    onPress={() => { setMakeSearch(""); setMakePickerVisible(true); }}
+                  />
+                )}
               </View>
             </View>
 
