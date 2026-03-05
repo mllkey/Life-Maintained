@@ -155,6 +155,10 @@ export default function AddPropertyScreen() {
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [isLookingUpProperty, setIsLookingUpProperty] = useState(false);
+  const [propertyAutoFilled, setPropertyAutoFilled] = useState(false);
+  const [propertyRateLimited, setPropertyRateLimited] = useState(false);
+
   useFocusEffect(useCallback(() => {
     setStreet("");
     setUnit("");
@@ -168,6 +172,9 @@ export default function AddPropertyScreen() {
     setError(null);
     setSuggestions([]);
     setShowSuggestions(false);
+    setIsLookingUpProperty(false);
+    setPropertyAutoFilled(false);
+    setPropertyRateLimited(false);
     if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []));
 
@@ -200,13 +207,46 @@ export default function AddPropertyScreen() {
     setStreet(suggestion.mainText);
     setShowSuggestions(false);
     setSuggestions([]);
+    setPropertyAutoFilled(false);
+    setPropertyRateLimited(false);
+
     const parsed = await fetchPlaceDetails(suggestion.placeId);
-    if (parsed) {
-      if (parsed.street) setStreet(parsed.street);
-      if (parsed.unit) setUnit(parsed.unit);
-      if (parsed.city) setCity(parsed.city);
-      if (parsed.stateCode) setStateCode(parsed.stateCode);
-      if (parsed.zip) setZip(parsed.zip);
+    if (!parsed) return;
+
+    const resolvedStreet = parsed.street || suggestion.mainText;
+    const resolvedCity = parsed.city || "";
+    const resolvedState = parsed.stateCode || "";
+    const resolvedZip = parsed.zip || "";
+
+    if (parsed.street) setStreet(parsed.street);
+    if (parsed.unit) setUnit(parsed.unit);
+    if (parsed.city) setCity(parsed.city);
+    if (parsed.stateCode) setStateCode(parsed.stateCode);
+    if (parsed.zip) setZip(parsed.zip);
+
+    if (resolvedStreet) {
+      setIsLookingUpProperty(true);
+      try {
+        const { data } = await supabase.functions.invoke("property-lookup", {
+          body: {
+            address: resolvedStreet,
+            city: resolvedCity,
+            state: resolvedState,
+            zip: resolvedZip,
+          },
+        });
+        if (data?.rateLimited) {
+          setPropertyRateLimited(true);
+        } else if (data?.yearBuilt || data?.squareFootage) {
+          if (data.yearBuilt) setYearBuilt(String(data.yearBuilt));
+          if (data.squareFootage) setSqft(String(data.squareFootage));
+          setPropertyAutoFilled(true);
+        }
+      } catch {
+        // silent fail
+      } finally {
+        setIsLookingUpProperty(false);
+      }
     }
   }
 
@@ -417,29 +457,50 @@ export default function AddPropertyScreen() {
             </Field>
             <View style={styles.row}>
               <Field label="Year Built" style={{ flex: 1 }}>
-                <TextInput
-                  style={styles.input}
-                  value={yearBuilt}
-                  onChangeText={setYearBuilt}
-                  placeholder="1985"
-                  placeholderTextColor={Colors.textTertiary}
-                  keyboardType="numeric"
-                  maxLength={4}
-                  returnKeyType="next"
-                />
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={[styles.input, styles.inputFlex]}
+                    value={yearBuilt}
+                    onChangeText={(t) => { setYearBuilt(t); setPropertyAutoFilled(false); }}
+                    placeholder="1985"
+                    placeholderTextColor={Colors.textTertiary}
+                    keyboardType="numeric"
+                    maxLength={4}
+                    returnKeyType="next"
+                  />
+                  {isLookingUpProperty && (
+                    <ActivityIndicator size="small" color={Colors.accent} style={styles.inputAdornment} />
+                  )}
+                  {!isLookingUpProperty && propertyAutoFilled && !!yearBuilt && (
+                    <Ionicons name="checkmark-circle" size={18} color="#34C759" style={styles.inputAdornment} />
+                  )}
+                </View>
               </Field>
               <Field label="Sq Footage" style={{ flex: 1 }}>
-                <TextInput
-                  style={styles.input}
-                  value={sqft}
-                  onChangeText={setSqft}
-                  placeholder="2400"
-                  placeholderTextColor={Colors.textTertiary}
-                  keyboardType="numeric"
-                  returnKeyType="done"
-                />
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={[styles.input, styles.inputFlex]}
+                    value={sqft}
+                    onChangeText={(t) => { setSqft(t); setPropertyAutoFilled(false); }}
+                    placeholder="2400"
+                    placeholderTextColor={Colors.textTertiary}
+                    keyboardType="numeric"
+                    returnKeyType="done"
+                  />
+                  {isLookingUpProperty && (
+                    <ActivityIndicator size="small" color={Colors.accent} style={styles.inputAdornment} />
+                  )}
+                  {!isLookingUpProperty && propertyAutoFilled && !!sqft && (
+                    <Ionicons name="checkmark-circle" size={18} color="#34C759" style={styles.inputAdornment} />
+                  )}
+                </View>
               </Field>
             </View>
+            {propertyRateLimited && (
+              <Text style={styles.rateLimitedText}>
+                Property details unavailable right now — please enter manually
+              </Text>
+            )}
           </FieldGroup>
         </ScrollView>
       </View>
@@ -570,6 +631,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_400Regular",
     color: Colors.text,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  inputFlex: {
+    flex: 1,
+  },
+  inputAdornment: {
+    position: "absolute",
+    right: 12,
+  },
+  rateLimitedText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textTertiary,
+    marginTop: 4,
   },
   statePicker: {
     flexDirection: "row",
