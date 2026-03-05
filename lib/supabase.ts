@@ -97,6 +97,7 @@ export type Database = {
           year_built: number | null;
           square_footage: number | null;
           nickname: string | null;
+          is_primary_residence: boolean | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -104,14 +105,19 @@ export type Database = {
       property_maintenance_tasks: {
         Row: {
           id: string;
+          user_id: string;
           property_id: string;
           task: string;
-          interval: string | null;
+          description: string | null;
           category: string | null;
+          interval: string | null;
           estimated_cost: number | null;
-          next_due_date: string | null;
+          is_completed: boolean | null;
           last_completed_at: string | null;
-          priority: string | null;
+          next_due_date: string | null;
+          notes: string | null;
+          service_type: string | null;
+          service_notes: string | null;
           created_at: string | null;
           updated_at: string | null;
         };

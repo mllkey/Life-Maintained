@@ -26,6 +26,7 @@ type Property = {
   year_built: number | null;
   square_footage: number | null;
   nickname: string | null;
+  is_primary_residence: boolean | null;
 };
 
 function getStatus(date: string | null) {
@@ -101,7 +102,7 @@ export default function HomeTabScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
-        <Text style={styles.title}>Home</Text>
+        <Text style={styles.title}>Properties</Text>
         <Pressable
           style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.8 : 1 }]}
           onPress={() => {
@@ -128,7 +129,7 @@ export default function HomeTabScreen() {
             const overdue = counts?.overdue ?? 0;
             const dueSoon = counts?.due_soon ?? 0;
             const total = counts?.total ?? 0;
-            const isMyHome = p.property_type === "house";
+            const isMyHome = !!p.is_primary_residence;
             const icon = getPropertyIcon(p.property_type);
             const label = getPropertyLabel(p);
 
