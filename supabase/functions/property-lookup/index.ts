@@ -88,7 +88,7 @@ serve(async (req: Request) => {
     }
 
     const yearBuilt: number | null = property.yearBuilt ?? null;
-    const squareFootage: number | null = property.squareFeet ?? null;
+    const squareFootage: number | null = property.squareFootage ?? null;
     console.log("[property-lookup] Found — yearBuilt:", yearBuilt, "squareFeet:", squareFootage);
 
     return new Response(JSON.stringify({ yearBuilt, squareFootage }), {
