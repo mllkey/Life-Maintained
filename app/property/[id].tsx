@@ -143,6 +143,43 @@ export default function PropertyDetailScreen() {
     return null;
   }, [tasks, property]);
 
+  const groupedHistory = useMemo(() => {
+    if (!logs || logs.length === 0) return [];
+    const map = new Map<string, any[]>();
+    for (const log of logs) {
+      const key = (log.service_name ?? "Service").trim();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(log);
+    }
+    return Array.from(map.entries()).map(([name, entries]) => {
+      const sorted = [...entries].sort((a, b) => {
+        if (!a.service_date) return 1;
+        if (!b.service_date) return -1;
+        return b.service_date.localeCompare(a.service_date);
+      });
+      const last = sorted[0];
+      const hasCost = sorted.some(e => e.cost != null);
+      const totalCost = hasCost ? sorted.reduce((s, e) => s + (e.cost ?? 0), 0) : null;
+      return {
+        name,
+        entries: sorted,
+        lastDate: last?.service_date ?? null,
+        lastCost: last?.cost ?? null,
+        lastProvider: last?.provider_name ?? null,
+        totalCost,
+        count: sorted.length,
+      };
+    }).sort((a, b) => (b.lastDate ?? "").localeCompare(a.lastDate ?? ""));
+  }, [logs]);
+
+  const historyStats = useMemo(() => {
+    if (!logs || logs.length === 0) return { totalSpent: 0, visitCount: 0 };
+    return {
+      totalSpent: logs.reduce((s: number, l: any) => s + (l.cost ?? 0), 0),
+      visitCount: logs.length,
+    };
+  }, [logs]);
+
   const overdueTasks = tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "overdue") ?? [];
   const dueSoonTasks = tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "due_soon") ?? [];
   const goodTasks = tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "good") ?? [];
@@ -283,28 +320,73 @@ export default function PropertyDetailScreen() {
             </View>
           ) : (
             <View style={styles.tasksArea}>
-              {(logs?.length ?? 0) === 0 ? (
+              {groupedHistory.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Ionicons name="document-outline" size={32} color={Colors.textTertiary} />
                   <Text style={styles.emptyStateTitle}>No service records yet</Text>
                   <Text style={styles.emptyStateText}>Service history will appear here after tasks are logged.</Text>
                 </View>
               ) : (
-                logs?.map(log => (
-                  <View key={log.id} style={styles.logCard}>
-                    <View style={styles.logTop}>
-                      <Text style={styles.logTask}>{log.service_name ?? "Service"}</Text>
-                      {log.cost != null && <Text style={styles.logCost}>${log.cost.toFixed(2)}</Text>}
+                <>
+                  <View style={styles.historySummaryBar}>
+                    <View style={styles.historySummaryStat}>
+                      <Text style={styles.historySummaryValue}>
+                        ${historyStats.totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                      <Text style={styles.historySummaryLabel}>total spent</Text>
                     </View>
-                    <View style={styles.logMeta}>
-                      {log.service_date && (
-                        <Text style={styles.logDate}>{format(parseISO(log.service_date), "MMM d, yyyy")}</Text>
-                      )}
-                      {log.provider_name && <Text style={styles.logProvider}>{log.provider_name}</Text>}
+                    <View style={styles.historySummaryDivider} />
+                    <View style={styles.historySummaryStat}>
+                      <Text style={styles.historySummaryValue}>{historyStats.visitCount}</Text>
+                      <Text style={styles.historySummaryLabel}>
+                        {historyStats.visitCount === 1 ? "service visit" : "service visits"}
+                      </Text>
                     </View>
-                    {log.notes && <Text style={styles.logNotes}>{log.notes}</Text>}
                   </View>
-                ))
+
+                  <View style={styles.historyGroupList}>
+                    {groupedHistory.map(group => (
+                      <Pressable
+                        key={group.name}
+                        style={({ pressed }) => [styles.historyGroupCard, { opacity: pressed ? 0.8 : 1 }]}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          router.push(`/property-task-history/${id}?task=${encodeURIComponent(group.name)}` as any);
+                        }}
+                      >
+                        <View style={styles.historyGroupCardLeft}>
+                          <Text style={styles.historyGroupCardName}>{group.name}</Text>
+                          {group.lastDate && (
+                            <Text style={styles.historyGroupCardMeta}>
+                              Last done: {format(parseISO(group.lastDate), "MMM d, yyyy")}
+                            </Text>
+                          )}
+                          {group.lastProvider && (
+                            <Text style={styles.historyGroupCardProvider} numberOfLines={1}>
+                              {group.lastProvider}
+                            </Text>
+                          )}
+                          <View style={styles.historyGroupCardFooter}>
+                            <Text style={styles.historyGroupCardCount}>
+                              {group.count === 1 ? "1 service" : `${group.count} services`}
+                            </Text>
+                            {group.totalCost != null && (
+                              <Text style={styles.historyGroupCardTotal}>
+                                ${group.totalCost.toFixed(2)} total
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                        <View style={styles.historyGroupCardRight}>
+                          {group.lastCost != null && (
+                            <Text style={styles.historyGroupCardCost}>${group.lastCost.toFixed(2)}</Text>
+                          )}
+                          <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+                        </View>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
               )}
             </View>
           )}
@@ -489,12 +571,40 @@ const styles = StyleSheet.create({
   },
   emptyAddBtnText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textInverse },
 
-  logCard: { backgroundColor: Colors.card, borderRadius: 12, padding: 14, gap: 8, borderWidth: 1, borderColor: Colors.border },
-  logTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  logTask: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text, flex: 1 },
-  logCost: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.home },
-  logMeta: { flexDirection: "row", gap: 10 },
-  logDate: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  logProvider: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  logNotes: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontStyle: "italic" },
+  historySummaryBar: {
+    flexDirection: "row",
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "space-around",
+  },
+  historySummaryStat: { alignItems: "center", gap: 3 },
+  historySummaryValue: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
+  historySummaryLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  historySummaryDivider: { width: 1, height: 36, backgroundColor: Colors.border },
+
+  historyGroupList: { gap: 10 },
+  historyGroupCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    minHeight: 44,
+    gap: 12,
+  },
+  historyGroupCardLeft: { flex: 1, gap: 3 },
+  historyGroupCardName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 21 },
+  historyGroupCardMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  historyGroupCardProvider: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  historyGroupCardFooter: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  historyGroupCardCount: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  historyGroupCardTotal: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.home },
+  historyGroupCardRight: { alignItems: "flex-end", gap: 6, flexShrink: 0 },
+  historyGroupCardCost: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.home },
 });
