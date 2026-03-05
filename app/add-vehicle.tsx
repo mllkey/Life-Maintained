@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { SaveToast } from "@/components/SaveToast";
 import {
   View,
   Text,
@@ -155,6 +156,7 @@ export default function AddVehicleScreen() {
   const [isSeasonal, setIsSeasonal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
 
   const [vin, setVin] = useState("");
   const [isVinLoading, setIsVinLoading] = useState(false);
@@ -416,18 +418,19 @@ export default function AddVehicleScreen() {
     }
 
     setIsLoading(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     queryClient.invalidateQueries({ queryKey: ["vehicles"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
-    router.back();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setShowToast(true);
+    setTimeout(() => router.dismiss(), 900);
   }
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <Pressable onPress={() => router.back()} style={styles.closeBtn} hitSlop={8}>
+          <Pressable onPress={() => router.dismiss()} style={styles.closeBtn} hitSlop={8}>
             <Ionicons name="close" size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.title}>Add Vehicle</Text>
@@ -714,6 +717,7 @@ export default function AddVehicleScreen() {
         onClose={() => { setModelPickerVisible(false); setModelSearch(""); }}
         insets={insets}
       />
+      <SaveToast visible={showToast} message="Vehicle saved!" />
     </KeyboardAvoidingView>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useFocusEffect } from "expo-router";
+import { SaveToast } from "@/components/SaveToast";
 import {
   View,
   Text,
@@ -158,6 +159,7 @@ export default function AddPropertyScreen() {
   const [isLookingUpProperty, setIsLookingUpProperty] = useState(false);
   const [propertyAutoFilled, setPropertyAutoFilled] = useState(false);
   const [propertyRateLimited, setPropertyRateLimited] = useState(false);
+  const [showToast, setShowToast] = useState(false);
 
   useFocusEffect(useCallback(() => {
     setStreet("");
@@ -175,6 +177,7 @@ export default function AddPropertyScreen() {
     setIsLookingUpProperty(false);
     setPropertyAutoFilled(false);
     setPropertyRateLimited(false);
+    setShowToast(false);
     if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []));
 
@@ -280,10 +283,11 @@ export default function AddPropertyScreen() {
       setError(err.message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["properties"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      router.back();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowToast(true);
+      setTimeout(() => router.dismiss(), 900);
     }
   }
 
@@ -294,7 +298,7 @@ export default function AddPropertyScreen() {
     >
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <Pressable onPress={() => router.back()} style={styles.closeBtn}>
+          <Pressable onPress={() => router.dismiss()} style={styles.closeBtn}>
             <Ionicons name="close" size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.title}>Add Property</Text>
@@ -512,6 +516,7 @@ export default function AddPropertyScreen() {
         onClose={() => setStatePickerVisible(false)}
         insets={insets}
       />
+      <SaveToast visible={showToast} message="Property saved!" />
     </KeyboardAvoidingView>
   );
 }

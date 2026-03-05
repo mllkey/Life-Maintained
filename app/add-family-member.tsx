@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { SaveToast } from "@/components/SaveToast";
 import {
   View,
   Text,
@@ -35,6 +36,7 @@ export default function AddFamilyMemberScreen() {
   const [dob, setDob] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
 
   function formatDob(text: string) {
     const digits = text.replace(/\D/g, "");
@@ -69,9 +71,10 @@ export default function AddFamilyMemberScreen() {
     setIsLoading(false);
     if (err) { setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
     else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["family_members"] });
-      router.back();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowToast(true);
+      setTimeout(() => router.dismiss(), 900);
     }
   }
 
@@ -79,7 +82,7 @@ export default function AddFamilyMemberScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <Pressable onPress={() => router.back()} style={styles.closeBtn}>
+          <Pressable onPress={() => router.dismiss()} style={styles.closeBtn}>
             <Ionicons name="close" size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.title}>Add Family Member</Text>
@@ -156,6 +159,7 @@ export default function AddFamilyMemberScreen() {
           </View>
         </ScrollView>
       </View>
+      <SaveToast visible={showToast} message="Member saved!" />
     </KeyboardAvoidingView>
   );
 }
