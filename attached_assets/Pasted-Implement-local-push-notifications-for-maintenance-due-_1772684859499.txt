@@ -1,0 +1,29 @@
+Implement local push notifications for maintenance due dates using expo-notifications. Follow these requirements exactly:Permissions:
+
+Request notification permissions on app launch using expo-notifications requestPermissionsAsync()
+If denied, show a one-time dismissible in-app banner (not an alert) explaining notifications are used for maintenance reminders, with an 'Enable in Settings' button that opens Linking.openSettings()
+Store permission denial in AsyncStorage so the banner only shows once, never repeatedly nag the user
+Scheduling logic:
+
+Schedule local notifications for every task in vehicle_maintenance_tasks and property_maintenance_tasks where next_due_date is not null
+Four notification triggers per task: 30 days before, 7 days before, on the due date, and 7 days after (overdue)
+Notification body format: '🔧 [Task Name] on [Vehicle Year/Make/Model or Property Nickname] is due [in 30 days / in 7 days / today / 7 days overdue]'
+iOS limits scheduled local notifications to 64 total — prioritize in this order: overdue first, then due within 7 days, then due within 30 days, then furthest out. Silently drop lowest priority notifications if limit is reached
+Before scheduling, call cancelAllScheduledNotificationsAsync() to clear stale notifications and avoid duplicates
+Reschedule on every app foreground event (AppState change to 'active') and after every successful service log save
+Preferences:
+
+Check user_notification_preferences.push_enabled before scheduling — if false, cancel all scheduled notifications and skip scheduling entirely
+Respect user_notification_preferences.notification_time if set — schedule notifications to fire at the user's preferred time of day, defaulting to 9:00 AM local time
+iOS app badge:
+
+Set the app icon badge count to the number of overdue tasks across all assets using expo-notifications setBadgeCountAsync()
+Clear badge when user opens the app
+Push token:
+
+Get the Expo push token using getExpoPushTokenAsync() and upsert it to profiles.push_token — handle the case where the device has no push token (simulator, permission denied) by catching the error silently and continuing
+Never block app functionality if push token retrieval fails
+Error handling:
+
+Wrap all notification scheduling in try/catch — a notification scheduling failure must never crash the app or block any user action
+If scheduling fails, log the error silently and continue"

@@ -21,6 +21,7 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import ReceiptScanButton from "@/components/ReceiptScanButton";
 import { ReceiptScanResult } from "@/lib/receiptScanner";
+import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { parseISO, format } from "date-fns";
 
 type PricingInsight = {
@@ -403,6 +404,10 @@ export default function LogServiceScreen() {
       queryClient.invalidateQueries({ queryKey: ["vehicle_tasks", vehicleId] });
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+
+      if (user?.id) {
+        scheduleMaintenanceNotifications(user.id);
+      }
 
       // Try to auto-update matching maintenance tasks
       const serviceNames = scannedItems.length > 0
