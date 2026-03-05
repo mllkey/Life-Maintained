@@ -6,9 +6,9 @@ import {
   StyleSheet,
   Pressable,
   RefreshControl,
-  ActivityIndicator,
   Platform,
 } from "react-native";
+import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -132,7 +132,7 @@ export default function VehiclesScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0) }]}
       >
         {isLoading ? (
-          <ActivityIndicator color={Colors.accent} style={{ marginTop: 40 }} />
+          <VehicleListSkeleton />
         ) : vehicles?.length === 0 ? (
           <EmptyVehicles />
         ) : (
@@ -266,6 +266,42 @@ export default function VehiclesScreen() {
         )}
       </ScrollView>
     </View>
+  );
+}
+
+function VehicleCardSkeleton({ anim }: { anim: ReturnType<typeof usePulse> }) {
+  return (
+    <View style={[styles.vehicleCard, { gap: 14 }]}>
+      <Row gap={12} align="flex-start">
+        <S anim={anim} w={54} h={54} r={15} />
+        <Col flex={1} gap={5}>
+          <S anim={anim} w="60%" h={17} r={6} />
+          <S anim={anim} w="40%" h={13} r={5} />
+        </Col>
+        <S anim={anim} w={28} h={24} r={8} />
+      </Row>
+      <Row gap={8}>
+        <S anim={anim} w={90} h={28} r={8} />
+      </Row>
+      <Row gap={8}>
+        <S anim={anim} w={80} h={24} r={8} />
+        <S anim={anim} w={64} h={24} r={8} />
+      </Row>
+      <Row gap={8}>
+        <S anim={anim} flex={1} h={44} r={11} />
+        <S anim={anim} flex={1} h={44} r={11} />
+      </Row>
+    </View>
+  );
+}
+
+function VehicleListSkeleton() {
+  const anim = usePulse();
+  return (
+    <>
+      <VehicleCardSkeleton anim={anim} />
+      <VehicleCardSkeleton anim={anim} />
+    </>
   );
 }
 

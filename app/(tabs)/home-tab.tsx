@@ -6,9 +6,9 @@ import {
   StyleSheet,
   Pressable,
   RefreshControl,
-  ActivityIndicator,
   Platform,
 } from "react-native";
+import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -129,7 +129,7 @@ export default function HomeTabScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0) }]}
       >
         {isLoading ? (
-          <ActivityIndicator color={Colors.accent} style={{ marginTop: 40 }} />
+          <PropertyListSkeleton />
         ) : properties?.length === 0 ? (
           <EmptyProperties />
         ) : (
@@ -232,6 +232,40 @@ export default function HomeTabScreen() {
         )}
       </ScrollView>
     </View>
+  );
+}
+
+function PropertyCardSkeleton({ anim }: { anim: ReturnType<typeof usePulse> }) {
+  return (
+    <View style={[styles.propertyCard, { gap: 12 }]}>
+      <Row gap={12} align="flex-start">
+        <S anim={anim} w={54} h={54} r={15} />
+        <Col flex={1} gap={5}>
+          <S anim={anim} w="55%" h={17} r={6} />
+          <S anim={anim} w="75%" h={13} r={5} />
+        </Col>
+        <S anim={anim} w={60} h={24} r={8} />
+      </Row>
+      <Row gap={6}>
+        <S anim={anim} w={80} h={24} r={8} />
+        <S anim={anim} w={80} h={24} r={8} />
+      </Row>
+      <Row gap={6}>
+        <S anim={anim} w={88} h={28} r={9} />
+        <View style={{ flex: 1 }} />
+        <S anim={anim} w={72} h={30} r={8} />
+      </Row>
+    </View>
+  );
+}
+
+function PropertyListSkeleton() {
+  const anim = usePulse();
+  return (
+    <>
+      <PropertyCardSkeleton anim={anim} />
+      <PropertyCardSkeleton anim={anim} />
+    </>
   );
 }
 

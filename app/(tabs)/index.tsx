@@ -6,9 +6,9 @@ import {
   StyleSheet,
   Pressable,
   RefreshControl,
-  ActivityIndicator,
   Platform,
 } from "react-native";
+import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -255,7 +255,7 @@ export default function DashboardScreen() {
 
       <View style={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0) }]}>
         {isLoading ? (
-          <ActivityIndicator color={Colors.accent} style={{ marginTop: 60 }} size="large" />
+          <DashboardSkeleton />
         ) : isNewUser ? (
           <WelcomeView />
         ) : (
@@ -304,6 +304,56 @@ export default function DashboardScreen() {
         )}
       </View>
     </ScrollView>
+  );
+}
+
+function DashboardSkeleton() {
+  const anim = usePulse();
+  return (
+    <View style={{ gap: 20 }}>
+      <Row gap={10} align="flex-start">
+        {[0, 1, 2].map(i => (
+          <View key={i} style={[styles.catCard, { gap: 8 }]}>
+            <S anim={anim} w={44} h={44} r={13} />
+            <S anim={anim} w={36} h={22} r={6} />
+            <S anim={anim} w="65%" h={11} r={5} />
+          </View>
+        ))}
+      </Row>
+
+      <Row gap={10} align="flex-start">
+        <View style={[styles.panelCard, { flex: 5, gap: 10 }]}>
+          <Row gap={8}>
+            <S anim={anim} w={70} h={13} r={5} />
+            <S anim={anim} w={28} h={22} r={7} ml={4} />
+          </Row>
+          {[0, 1, 2, 3, 4].map(i => (
+            <Row key={i} gap={8}>
+              <S anim={anim} w={7} h={7} r={3.5} />
+              <Col flex={1} gap={4}>
+                <S anim={anim} w="70%" h={12} r={5} />
+                <S anim={anim} w="45%" h={10} r={4} />
+              </Col>
+              <S anim={anim} w={30} h={12} r={5} />
+            </Row>
+          ))}
+        </View>
+
+        <View style={[styles.panelCard, { flex: 3, gap: 6 }]}>
+          <S anim={anim} w={55} h={13} r={5} />
+          <S anim={anim} w={64} h={22} r={6} mt={2} />
+          <S anim={anim} w={44} h={11} r={4} />
+          <Row gap={4} align="flex-end" mt={8}>
+            {[48, 20, 36, 28, 44, 16].map((barH, i) => (
+              <View key={i} style={{ flex: 1, alignItems: "center", gap: 4 }}>
+                <S anim={anim} w="100%" h={barH} r={3} />
+                <S anim={anim} w={8} h={8} r={4} />
+              </View>
+            ))}
+          </Row>
+        </View>
+      </Row>
+    </View>
   );
 }
 
