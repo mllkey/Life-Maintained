@@ -1,0 +1,438 @@
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Image,
+  Dimensions,
+  Platform,
+} from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
+import { Colors } from "@/constants/colors";
+import { supabase } from "@/lib/supabase";
+import * as Haptics from "expo-haptics";
+import { parseISO, format } from "date-fns";
+
+const { width: SW, height: SH } = Dimensions.get("window");
+
+export default function VehicleTaskHistoryScreen() {
+  const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
+  const { task } = useLocalSearchParams<{ task: string }>();
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const webTopPad = Platform.OS === "web" ? 67 : 0;
+
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+
+  const { data: logs, isLoading } = useQuery({
+    queryKey: ["vehicle_task_logs", vehicleId, task],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("maintenance_logs")
+        .select("*")
+        .eq("vehicle_id", vehicleId!)
+        .eq("service_name", task!)
+        .order("service_date", { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!(vehicleId && task),
+  });
+
+  async function handleDelete(logId: string) {
+    Alert.alert(
+      "Delete Record",
+      "This service record will be permanently deleted.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            await supabase.from("maintenance_logs").delete().eq("id", logId);
+            queryClient.invalidateQueries({ queryKey: ["vehicle_task_logs", vehicleId, task] });
+            queryClient.invalidateQueries({ queryKey: ["maintenance_logs", vehicleId] });
+          },
+        },
+      ]
+    );
+  }
+
+  const totalSpent = logs?.reduce((s, l) => s + (l.cost ?? 0), 0) ?? 0;
+  const visitCount = logs?.length ?? 0;
+  const milesLogged = logs?.filter(l => l.mileage != null).length ?? 0;
+  const taskName = task ?? "Service History";
+
+  return (
+    <View style={[styles.container, { backgroundColor: Colors.background }]}>
+      <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
+          <Ionicons name="chevron-back" size={24} color={Colors.text} />
+        </Pressable>
+        <Text style={styles.headerTitle} numberOfLines={2}>{taskName}</Text>
+        <View style={styles.backBtn} />
+      </View>
+
+      {isLoading ? (
+        <ActivityIndicator color={Colors.accent} style={{ marginTop: 60 }} />
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 0) + 40 },
+          ]}
+        >
+          {visitCount === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="document-outline" size={40} color={Colors.textTertiary} />
+              <Text style={styles.emptyTitle}>No records yet</Text>
+              <Text style={styles.emptyText}>No service history logged for this task.</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.summaryBar}>
+                <View style={styles.summaryStat}>
+                  <Text style={styles.summaryValue}>
+                    ${totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Text>
+                  <Text style={styles.summaryLabel}>total spent</Text>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryStat}>
+                  <Text style={styles.summaryValue}>{visitCount}</Text>
+                  <Text style={styles.summaryLabel}>{visitCount === 1 ? "service visit" : "service visits"}</Text>
+                </View>
+                {milesLogged > 0 && (
+                  <>
+                    <View style={styles.summaryDivider} />
+                    <View style={styles.summaryStat}>
+                      <Text style={styles.summaryValue}>{milesLogged}</Text>
+                      <Text style={styles.summaryLabel}>with mileage</Text>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              <View style={styles.logList}>
+                {logs!.map((log, idx) => {
+                  const isExpanded = expandedId === log.id;
+                  const isLast = idx === logs!.length - 1;
+                  const formattedDate = log.service_date
+                    ? format(parseISO(log.service_date), "MMMM d, yyyy")
+                    : null;
+                  const formattedMileage = log.mileage != null
+                    ? `${log.mileage.toLocaleString()} mi`
+                    : null;
+
+                  return (
+                    <View key={log.id} style={styles.logCard}>
+                      <Pressable
+                        style={({ pressed }) => [styles.logCardMain, { opacity: pressed ? 0.85 : 1 }]}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          setExpandedId(isExpanded ? null : log.id);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${formattedDate ?? "Service"}${log.cost != null ? ", $" + log.cost.toFixed(2) : ""}`}
+                      >
+                        <View style={styles.logCardLeft}>
+                          {formattedDate && (
+                            <Text style={styles.logDate}>{formattedDate}</Text>
+                          )}
+                          <View style={styles.logMetaRow}>
+                            {log.provider_name && (
+                              <Text style={styles.logProvider} numberOfLines={1}>{log.provider_name}</Text>
+                            )}
+                            {formattedMileage && (
+                              <View style={styles.mileagePill}>
+                                <Ionicons name="speedometer-outline" size={11} color={Colors.textTertiary} />
+                                <Text style={styles.mileageText}>{formattedMileage}</Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        <View style={styles.logCardRight}>
+                          {log.cost != null && (
+                            <Text style={styles.logCost}>${log.cost.toFixed(2)}</Text>
+                          )}
+                          <Ionicons
+                            name={isExpanded ? "chevron-up" : "chevron-down"}
+                            size={16}
+                            color={Colors.textTertiary}
+                          />
+                        </View>
+                      </Pressable>
+
+                      {isExpanded && (
+                        <View style={styles.expandedSection}>
+                          {log.provider_contact ? (
+                            <View style={styles.expandedRow}>
+                              <Ionicons name="call-outline" size={14} color={Colors.textSecondary} />
+                              <Text style={styles.expandedText}>{log.provider_contact}</Text>
+                            </View>
+                          ) : null}
+
+                          {formattedMileage && !log.provider_name ? null : (
+                            formattedMileage && (
+                              <View style={styles.expandedRow}>
+                                <Ionicons name="speedometer-outline" size={14} color={Colors.textSecondary} />
+                                <Text style={styles.expandedText}>{formattedMileage} at time of service</Text>
+                              </View>
+                            )
+                          )}
+
+                          {log.notes ? (
+                            <View style={styles.expandedRow}>
+                              <Ionicons name="document-text-outline" size={14} color={Colors.textSecondary} />
+                              <Text style={styles.expandedNotes}>{log.notes}</Text>
+                            </View>
+                          ) : null}
+
+                          {log.receipt_url ? (
+                            <Pressable
+                              style={({ pressed }) => [styles.receiptThumb, { opacity: pressed ? 0.85 : 1 }]}
+                              onPress={() => setReceiptUrl(log.receipt_url)}
+                              accessibilityLabel="View receipt image"
+                            >
+                              <Image
+                                source={{ uri: log.receipt_url }}
+                                style={styles.receiptImage}
+                                resizeMode="cover"
+                              />
+                              <View style={styles.receiptOverlay}>
+                                <Ionicons name="expand-outline" size={16} color="#fff" />
+                                <Text style={styles.receiptOverlayText}>View Receipt</Text>
+                              </View>
+                            </Pressable>
+                          ) : null}
+
+                          {!log.provider_contact && !log.notes && !log.receipt_url && (
+                            <Text style={styles.expandedEmpty}>No additional details recorded.</Text>
+                          )}
+
+                          <View style={styles.expandedActions}>
+                            <Pressable
+                              style={({ pressed }) => [styles.editBtn, { opacity: pressed ? 0.7 : 1 }]}
+                              onPress={() => {
+                                Haptics.selectionAsync();
+                                router.push(`/log-service/${vehicleId}?editId=${log.id}` as any);
+                              }}
+                            >
+                              <Ionicons name="pencil-outline" size={13} color={Colors.vehicle} />
+                              <Text style={styles.editBtnText}>Edit</Text>
+                            </Pressable>
+                            <Pressable
+                              style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.7 : 1 }]}
+                              onPress={() => handleDelete(log.id)}
+                            >
+                              <Ionicons name="trash-outline" size={13} color={Colors.overdue} />
+                              <Text style={styles.deleteBtnText}>Delete</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      )}
+
+                      {!isLast && <View style={styles.logDivider} />}
+                    </View>
+                  );
+                })}
+              </View>
+            </>
+          )}
+        </ScrollView>
+      )}
+
+      <Modal
+        visible={!!receiptUrl}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReceiptUrl(null)}
+        statusBarTranslucent
+      >
+        <View style={styles.receiptModal}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.receiptScrollContent}
+            maximumZoomScale={4}
+            minimumZoomScale={1}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            centerContent
+          >
+            {receiptUrl && (
+              <Image
+                source={{ uri: receiptUrl }}
+                style={{ width: SW, height: SH * 0.82 }}
+                resizeMode="contain"
+              />
+            )}
+          </ScrollView>
+          <Pressable
+            style={[styles.receiptCloseBtn, { top: insets.top + 12 }]}
+            onPress={() => setReceiptUrl(null)}
+            hitSlop={12}
+          >
+            <View style={styles.receiptCloseBtnInner}>
+              <Ionicons name="close" size={20} color="#fff" />
+            </View>
+          </Pressable>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    gap: 8,
+  },
+  backBtn: { width: 40, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  headerTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.text,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+
+  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 16 },
+
+  emptyState: { alignItems: "center", paddingTop: 60, gap: 10 },
+  emptyTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 20 },
+
+  summaryBar: {
+    flexDirection: "row",
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "space-around",
+  },
+  summaryStat: { alignItems: "center", gap: 3 },
+  summaryValue: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
+  summaryLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  summaryDivider: { width: 1, height: 36, backgroundColor: Colors.border },
+
+  logList: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: "hidden",
+  },
+  logCard: { backgroundColor: Colors.card },
+  logCardMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 64,
+    gap: 12,
+  },
+  logCardLeft: { flex: 1, gap: 4 },
+  logDate: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 21 },
+  logMetaRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  logProvider: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flexShrink: 1 },
+  mileagePill: { flexDirection: "row", alignItems: "center", gap: 3 },
+  mileageText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  logCardRight: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
+  logCost: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.vehicle },
+  logDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 16 },
+
+  expandedSection: {
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    paddingTop: 4,
+    gap: 10,
+  },
+  expandedRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  expandedText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 },
+  expandedNotes: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1, lineHeight: 20, fontStyle: "italic" },
+  expandedEmpty: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontStyle: "italic" },
+
+  receiptThumb: {
+    borderRadius: 12,
+    overflow: "hidden",
+    height: 140,
+    backgroundColor: Colors.surface,
+  },
+  receiptImage: { width: "100%", height: "100%" },
+  receiptOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  receiptOverlayText: { fontSize: 13, fontFamily: "Inter_500Medium", color: "#fff" },
+
+  expandedActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    paddingTop: 4,
+  },
+  editBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 9,
+    backgroundColor: Colors.vehicleMuted,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  editBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.vehicle },
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 9,
+    backgroundColor: Colors.overdueMuted,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  deleteBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue },
+
+  receiptModal: { flex: 1, backgroundColor: "rgba(0,0,0,0.96)" },
+  receiptScrollContent: { flex: 1, alignItems: "center", justifyContent: "center" },
+  receiptCloseBtn: { position: "absolute", right: 16 },
+  receiptCloseBtnInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

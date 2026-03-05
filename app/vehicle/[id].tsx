@@ -206,13 +206,31 @@ export default function VehicleDetailScreen() {
       });
       const hasCost = sorted.some(e => e.cost != null);
       const totalCost = hasCost ? sorted.reduce((sum, e) => sum + (e.cost ?? 0), 0) : null;
-      return { name, entries: sorted, totalCost, count: sorted.length };
+      const lastEntry = sorted[0];
+      return {
+        name,
+        entries: sorted,
+        totalCost,
+        count: sorted.length,
+        lastDate: lastEntry?.service_date ?? null,
+        lastCost: lastEntry?.cost ?? null,
+        lastProvider: lastEntry?.provider_name ?? null,
+      };
     });
     return groups.sort((a, b) => {
       const aDate = a.entries[0]?.service_date ?? "";
       const bDate = b.entries[0]?.service_date ?? "";
       return bDate.localeCompare(aDate);
     });
+  }, [logs]);
+
+  const historyStats = useMemo(() => {
+    if (!logs || logs.length === 0) return { totalSpent: 0, visitCount: 0, totalMiles: 0 };
+    return {
+      totalSpent: logs.reduce((s, l) => s + (l.cost ?? 0), 0),
+      visitCount: logs.length,
+      totalMiles: logs.filter(l => l.mileage != null).reduce((s, l) => s + (l.mileage ?? 0), 0),
+    };
   }, [logs]);
 
   return (
@@ -328,13 +346,76 @@ export default function VehicleDetailScreen() {
                 <View style={styles.emptyTasks}>
                   <Ionicons name="document-outline" size={36} color={Colors.textTertiary} />
                   <Text style={styles.emptyTasksText}>No service records yet</Text>
-                  <Text style={styles.emptyTasksSubtext}>Tap the + button to log your first service</Text>
+                  <Text style={styles.emptyTasksSubtext}>Tap Log Service to add your first record</Text>
                 </View>
               ) : (
                 <>
-                  {groupedHistory.map(group => (
-                    <ServiceHistoryGroup key={group.name} group={group} />
-                  ))}
+                  <View style={styles.historySummaryBar}>
+                    <View style={styles.historySummaryStat}>
+                      <Text style={styles.historySummaryValue}>
+                        ${historyStats.totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                      <Text style={styles.historySummaryLabel}>total spent</Text>
+                    </View>
+                    <View style={styles.historySummaryDivider} />
+                    <View style={styles.historySummaryStat}>
+                      <Text style={styles.historySummaryValue}>{historyStats.visitCount}</Text>
+                      <Text style={styles.historySummaryLabel}>{historyStats.visitCount === 1 ? "service visit" : "service visits"}</Text>
+                    </View>
+                    {historyStats.totalMiles > 0 && (
+                      <>
+                        <View style={styles.historySummaryDivider} />
+                        <View style={styles.historySummaryStat}>
+                          <Text style={styles.historySummaryValue}>{historyStats.totalMiles.toLocaleString()}</Text>
+                          <Text style={styles.historySummaryLabel}>miles tracked</Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
+
+                  <View style={styles.historyGroupList}>
+                    {groupedHistory.map(group => (
+                      <Pressable
+                        key={group.name}
+                        style={({ pressed }) => [styles.historyGroupCard, { opacity: pressed ? 0.8 : 1 }]}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          router.push(`/vehicle-task-history/${id}?task=${encodeURIComponent(group.name)}` as any);
+                        }}
+                      >
+                        <View style={styles.historyGroupCardLeft}>
+                          <Text style={styles.historyGroupCardName}>{group.name}</Text>
+                          {group.lastDate && (
+                            <Text style={styles.historyGroupCardMeta}>
+                              Last done: {format(parseISO(group.lastDate), "MMM d, yyyy")}
+                            </Text>
+                          )}
+                          {group.lastProvider && (
+                            <Text style={styles.historyGroupCardProvider} numberOfLines={1}>
+                              {group.lastProvider}
+                            </Text>
+                          )}
+                          <View style={styles.historyGroupCardFooter}>
+                            <Text style={styles.historyGroupCardCount}>
+                              {group.count === 1 ? "1 service" : `${group.count} services`}
+                            </Text>
+                            {group.totalCost != null && (
+                              <Text style={styles.historyGroupCardTotal}>
+                                ${group.totalCost.toFixed(2)} total
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                        <View style={styles.historyGroupCardRight}>
+                          {group.lastCost != null && (
+                            <Text style={styles.historyGroupCardCost}>${group.lastCost.toFixed(2)}</Text>
+                          )}
+                          <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+                        </View>
+                      </Pressable>
+                    ))}
+                  </View>
+
                   <Pressable
                     style={({ pressed }) => [styles.exportBtn, { opacity: pressed ? 0.8 : 1 }]}
                     onPress={handleExport}
@@ -411,79 +492,6 @@ function TaskGroup({ title, color, tasks, onComplete, vehicle }: {
   );
 }
 
-function ServiceHistoryGroup({ group }: { group: { name: string; entries: any[]; totalCost: number | null; count: number } }) {
-  const subtitle = [
-    group.count === 1 ? "1 service" : `${group.count} services`,
-    group.totalCost != null ? `$${group.totalCost.toFixed(2)} total` : null,
-  ].filter(Boolean).join("  ·  ");
-
-  return (
-    <View style={styles.historyGroup}>
-      <View style={styles.historyGroupHeader}>
-        <View style={styles.historyGroupHeaderLeft}>
-          <Text style={styles.historyGroupName}>{group.name}</Text>
-          <Text style={styles.historyGroupMeta}>{subtitle}</Text>
-        </View>
-      </View>
-      <View style={styles.historyGroupCards}>
-        {group.entries.map((log, idx) => (
-          <ServiceLogCard key={log.id} log={log} isLast={idx === group.entries.length - 1} />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function ServiceLogCard({ log, isLast }: { log: any; isLast: boolean }) {
-  const formattedDate = log.service_date
-    ? format(parseISO(log.service_date), "MMMM d, yyyy")
-    : null;
-  const formattedMileage = log.mileage != null
-    ? `${log.mileage.toLocaleString()} miles`
-    : null;
-
-  return (
-    <View style={[styles.serviceCard, !isLast && styles.serviceCardBorder]}>
-      <View style={styles.serviceCardTop}>
-        <Text style={styles.serviceCardName} numberOfLines={2}>{log.service_name ?? "Service"}</Text>
-        <View style={styles.serviceCardTopRight}>
-          {log.receipt_url && (
-            <Ionicons name="receipt-outline" size={14} color={Colors.textTertiary} style={{ marginRight: 6 }} />
-          )}
-          {log.cost != null && (
-            <Text style={styles.serviceCardCost}>${log.cost.toFixed(2)}</Text>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.serviceCardMetaRow}>
-        {formattedDate && (
-          <View style={styles.serviceCardMetaPill}>
-            <Ionicons name="calendar-outline" size={11} color={Colors.textTertiary} />
-            <Text style={styles.serviceCardMetaText}>{formattedDate}</Text>
-          </View>
-        )}
-        {formattedMileage && (
-          <View style={styles.serviceCardMetaPill}>
-            <Ionicons name="speedometer-outline" size={11} color={Colors.textTertiary} />
-            <Text style={styles.serviceCardMetaText}>{formattedMileage}</Text>
-          </View>
-        )}
-      </View>
-
-      {log.provider_name && (
-        <View style={styles.serviceCardProviderRow}>
-          <Ionicons name="storefront-outline" size={12} color={Colors.textSecondary} />
-          <Text style={styles.serviceCardProvider}>{log.provider_name}</Text>
-        </View>
-      )}
-
-      {log.notes ? (
-        <Text style={styles.serviceCardNotes} numberOfLines={3}>{log.notes}</Text>
-      ) : null}
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -562,31 +570,42 @@ const styles = StyleSheet.create({
   },
   exportBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
   emptyTasksSubtext: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
-  historyContainer: { gap: 20 },
-  historyGroup: { gap: 0 },
-  historyGroupHeader: {
+  historyContainer: { gap: 16 },
+
+  historySummaryBar: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    marginBottom: 2,
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "space-around",
   },
-  historyGroupHeaderLeft: { gap: 2 },
-  historyGroupName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  historyGroupMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  historyGroupCards: { backgroundColor: Colors.card, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, overflow: "hidden" },
-  serviceCard: { paddingHorizontal: 16, paddingVertical: 14, gap: 7 },
-  serviceCardBorder: { borderBottomWidth: 1, borderBottomColor: Colors.border },
-  serviceCardTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8 },
-  serviceCardTopRight: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
-  serviceCardName: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, flex: 1, lineHeight: 22 },
-  serviceCardCost: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.vehicle },
-  serviceCardMetaRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  serviceCardMetaPill: { flexDirection: "row", alignItems: "center", gap: 4 },
-  serviceCardMetaText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  serviceCardProviderRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 1 },
-  serviceCardProvider: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  serviceCardNotes: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, lineHeight: 18, marginTop: 2, fontStyle: "italic" },
+  historySummaryStat: { alignItems: "center", gap: 3 },
+  historySummaryValue: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text },
+  historySummaryLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  historySummaryDivider: { width: 1, height: 36, backgroundColor: Colors.border },
+
+  historyGroupList: { gap: 10 },
+  historyGroupCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    minHeight: 44,
+    gap: 12,
+  },
+  historyGroupCardLeft: { flex: 1, gap: 3 },
+  historyGroupCardName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 21 },
+  historyGroupCardMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  historyGroupCardProvider: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  historyGroupCardFooter: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  historyGroupCardCount: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  historyGroupCardTotal: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.vehicle },
+  historyGroupCardRight: { alignItems: "flex-end", gap: 6, flexShrink: 0 },
+  historyGroupCardCost: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.vehicle },
 });
