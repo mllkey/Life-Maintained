@@ -23,7 +23,6 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 
-const PLACES_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? "";
 
 const US_STATES = [
   { abbr: "AL", name: "Alabama" }, { abbr: "AK", name: "Alaska" },
@@ -86,37 +85,27 @@ type ParsedAddress = {
 };
 
 async function fetchSuggestions(query: string): Promise<PlaceSuggestion[]> {
-  if (!PLACES_API_KEY || query.length < 2) return [];
+  if (query.length < 2) return [];
   try {
-    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&components=country:us&types=address&key=${PLACES_API_KEY}`;
-    const resp = await fetch(url);
-    const json = await resp.json();
-    if (json.status !== "OK" && json.status !== "ZERO_RESULTS") return [];
-    return (json.predictions ?? []).slice(0, 5).map((p: {
-      place_id: string;
-      description: string;
-      structured_formatting: { main_text: string; secondary_text: string };
-    }) => ({
-      placeId: p.place_id,
-      description: p.description,
-      mainText: p.structured_formatting?.main_text ?? p.description,
-      secondaryText: p.structured_formatting?.secondary_text ?? "",
-    }));
+    const { data, error } = await supabase.functions.invoke("places-autocomplete", {
+      body: { input: query },
+    });
+    if (error || !data?.suggestions) return [];
+    return data.suggestions;
   } catch {
     return [];
   }
 }
 
 async function fetchPlaceDetails(placeId: string): Promise<ParsedAddress | null> {
-  if (!PLACES_API_KEY) return null;
   try {
-    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=address_components&key=${PLACES_API_KEY}`;
-    const resp = await fetch(url);
-    const json = await resp.json();
-    if (json.status !== "OK") return null;
-    const components: { types: string[]; long_name: string; short_name: string }[] = json.result?.address_components ?? [];
+    const { data, error } = await supabase.functions.invoke("places-details", {
+      body: { placeId },
+    });
+    if (error || !data?.addressComponents) return null;
+    const components: { types: string[]; long_name: string; short_name: string }[] = data.addressComponents;
     const get = (type: string, useShort = false) => {
-      const c = components.find(c => c.types.includes(type));
+      const c = components.find((comp) => comp.types.includes(type));
       return c ? (useShort ? c.short_name : c.long_name) : "";
     };
     const streetNumber = get("street_number");
@@ -175,7 +164,7 @@ export default function AddPropertyScreen() {
     setStreet(text);
     setShowSuggestions(false);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!PLACES_API_KEY || text.length < 2) {
+    if (text.length < 2) {
       setSuggestions([]);
       return;
     }
