@@ -29,11 +29,20 @@ type Property = {
   is_primary_residence: boolean | null;
 };
 
-function getStatus(date: string | null) {
-  if (!date) return "good";
-  const d = parseISO(date);
-  if (isBefore(d, new Date())) return "overdue";
-  if (isBefore(d, addDays(new Date(), 30))) return "due_soon";
+function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): "overdue" | "due_soon" | "good" {
+  const now = new Date();
+  const soon = addDays(now, 30);
+
+  if (nextDueDate) {
+    const due = parseISO(nextDueDate);
+    if (isBefore(due, now)) return "overdue";
+    if (isBefore(due, soon)) return "due_soon";
+  }
+
+  // A task with no completion record is never "all caught up",
+  // treat as upcoming at minimum.
+  if (!lastCompletedAt) return "due_soon";
+
   return "good";
 }
 
@@ -83,14 +92,14 @@ export default function HomeTabScreen() {
       const ids = properties.map(p => p.id);
       const { data } = await supabase
         .from("property_maintenance_tasks")
-        .select("property_id, next_due_date")
+        .select("property_id, next_due_date, last_completed_at")
         .in("property_id", ids);
 
       const map: Record<string, { overdue: number; due_soon: number; total: number }> = {};
       for (const t of data ?? []) {
         if (!map[t.property_id]) map[t.property_id] = { overdue: 0, due_soon: 0, total: 0 };
         map[t.property_id].total++;
-        const s = getStatus(t.next_due_date);
+        const s = getStatus(t.next_due_date, t.last_completed_at);
         if (s === "overdue") map[t.property_id].overdue++;
         else if (s === "due_soon") map[t.property_id].due_soon++;
       }
