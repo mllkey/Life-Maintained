@@ -21,11 +21,13 @@ serve(async (req: Request) => {
   }
 
   if (!GOOGLE_PLACES_API_KEY) {
-    return new Response(JSON.stringify({ error: "GOOGLE_PLACES_API_KEY secret is not configured" }), {
+    console.error("[places-autocomplete] GOOGLE_PLACES_API_KEY secret is NOT set");
+    return new Response(JSON.stringify({ suggestions: [], error: "GOOGLE_PLACES_API_KEY secret is not configured" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+  console.log("[places-autocomplete] GOOGLE_PLACES_API_KEY is present, length:", GOOGLE_PLACES_API_KEY.length);
 
   let input: string;
   try {
@@ -33,46 +35,68 @@ serve(async (req: Request) => {
     input = body.input;
     if (!input || typeof input !== "string") throw new Error("Missing input");
   } catch {
-    return new Response(JSON.stringify({ error: "Invalid request body — expected { input: string }" }), {
+    return new Response(JSON.stringify({ suggestions: [], error: "Invalid request body — expected { input: string }" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
   try {
-    const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
-    url.searchParams.set("input", input);
-    url.searchParams.set("types", "address");
-    url.searchParams.set("components", "country:us");
-    url.searchParams.set("key", GOOGLE_PLACES_API_KEY);
+    console.log("[places-autocomplete] Calling Places API (New) for input:", input);
 
-    const res = await fetch(url.toString());
+    const res = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+      },
+      body: JSON.stringify({
+        input,
+        includedRegionCodes: ["us"],
+        includedPrimaryTypes: ["geocode", "street_address"],
+      }),
+    });
+
     const json = await res.json();
+    console.log("[places-autocomplete] API HTTP status:", res.status, "suggestions count:", json.suggestions?.length ?? 0);
 
-    if (json.status !== "OK" && json.status !== "ZERO_RESULTS") {
-      return new Response(JSON.stringify({ suggestions: [], error: json.status }), {
+    if (!res.ok) {
+      const errMsg = json.error?.message ?? JSON.stringify(json);
+      console.error("[places-autocomplete] Places API (New) error:", res.status, errMsg);
+      return new Response(JSON.stringify({ suggestions: [], error: `Places API error ${res.status}: ${errMsg}` }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const suggestions = (json.predictions ?? []).slice(0, 5).map((p: {
-      place_id: string;
-      description: string;
-      structured_formatting?: { main_text: string; secondary_text: string };
-    }) => ({
-      placeId: p.place_id,
-      description: p.description,
-      mainText: p.structured_formatting?.main_text ?? p.description,
-      secondaryText: p.structured_formatting?.secondary_text ?? "",
-    }));
+    const suggestions = (json.suggestions ?? []).slice(0, 5).map((s: {
+      placePrediction?: {
+        placeId: string;
+        text?: { text: string };
+        structuredFormat?: {
+          mainText?: { text: string };
+          secondaryText?: { text: string };
+        };
+      };
+    }) => {
+      const p = s.placePrediction;
+      if (!p) return null;
+      return {
+        placeId: p.placeId,
+        description: p.text?.text ?? "",
+        mainText: p.structuredFormat?.mainText?.text ?? p.text?.text ?? "",
+        secondaryText: p.structuredFormat?.secondaryText?.text ?? "",
+      };
+    }).filter(Boolean);
+
+    console.log("[places-autocomplete] Returning", suggestions.length, "suggestions");
 
     return new Response(JSON.stringify({ suggestions }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("places-autocomplete error:", err);
+    console.error("[places-autocomplete] Unexpected error:", err);
     return new Response(JSON.stringify({ suggestions: [], error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
