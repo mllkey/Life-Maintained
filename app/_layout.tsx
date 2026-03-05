@@ -43,6 +43,7 @@ function RootLayoutNav() {
       <Stack.Screen name="add-property-task/[propertyId]" options={{ headerShown: false, presentation: "modal" }} />
       <Stack.Screen name="property-task-history/[propertyId]" options={{ headerShown: false }} />
       <Stack.Screen name="vehicle-task-history/[vehicleId]" options={{ headerShown: false }} />
+      <Stack.Screen name="family-member/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="add-appointment" options={{ headerShown: false, presentation: "modal" }} />
       <Stack.Screen name="add-medication" options={{ headerShown: false, presentation: "modal" }} />
       <Stack.Screen name="add-family-member" options={{ headerShown: false, presentation: "modal" }} />

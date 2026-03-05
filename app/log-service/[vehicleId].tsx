@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,14 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import ReceiptScanButton from "@/components/ReceiptScanButton";
 import { ReceiptScanResult } from "@/lib/receiptScanner";
+import { parseISO, format } from "date-fns";
+
+type PricingInsight = {
+  cost: number | null;
+  provider: string | null;
+  assetName: string;
+  date: string | null;
+};
 
 type ScannedItem = { name: string; cost: number | null; details: string | null };
 
@@ -41,10 +49,87 @@ export default function LogServiceScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [ocrApplied, setOcrApplied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pricingInsight, setPricingInsight] = useState<PricingInsight | null>(null);
+  const insightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const itemsTotal = scannedItems.length > 0
     ? scannedItems.reduce((sum, item) => sum + (item.cost ?? 0), 0)
     : null;
+
+  useEffect(() => {
+    if (insightTimerRef.current) clearTimeout(insightTimerRef.current);
+    const trimmed = task.trim();
+    if (!trimmed || trimmed.length < 3 || !user) {
+      setPricingInsight(null);
+      return;
+    }
+    insightTimerRef.current = setTimeout(async () => {
+      try {
+        const { data: otherLogs } = await supabase
+          .from("maintenance_logs")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("service_date", { ascending: false })
+          .limit(100);
+
+        const relevantLogs = (otherLogs ?? []).filter(
+          l => l.vehicle_id !== vehicleId
+        );
+        if (relevantLogs.length === 0) { setPricingInsight(null); return; }
+
+        const norm = (s: string) =>
+          s.toLowerCase().replace(/[&,.()\-\/+]/g, " ").replace(/\s+/g, " ").trim();
+        const serviceNorm = norm(trimmed);
+
+        let bestLog: any = null;
+        let bestScore = 0;
+        for (const log of relevantLogs) {
+          const logNorm = norm(log.service_name ?? "");
+          let score = 0;
+          const sWords = serviceNorm.split(" ").filter(w => w.length >= 3);
+          const lWords = logNorm.split(" ").filter(w => w.length >= 3);
+          for (const sw of sWords) {
+            if (lWords.some(lw => lw === sw || lw.includes(sw) || sw.includes(lw))) score += 2;
+          }
+          for (const group of CATEGORY_GROUPS) {
+            const svcHas = group.some(kw => serviceNorm.includes(kw));
+            const logHas = group.some(kw => logNorm.includes(kw));
+            if (svcHas && logHas) score += 3;
+          }
+          if (score >= 3 && score > bestScore) { bestScore = score; bestLog = log; }
+        }
+
+        if (!bestLog) { setPricingInsight(null); return; }
+
+        let assetName = "another asset";
+        if (bestLog.vehicle_id) {
+          const { data: veh } = await supabase
+            .from("vehicles")
+            .select("year, make, model, nickname")
+            .eq("id", bestLog.vehicle_id)
+            .single();
+          if (veh) assetName = veh.nickname ?? `${veh.year} ${veh.make} ${veh.model}`;
+        } else if (bestLog.property_id) {
+          const { data: prop } = await supabase
+            .from("properties")
+            .select("name")
+            .eq("id", bestLog.property_id)
+            .single();
+          if (prop) assetName = prop.name;
+        }
+
+        setPricingInsight({
+          cost: bestLog.cost,
+          provider: bestLog.provider_name,
+          assetName,
+          date: bestLog.service_date,
+        });
+      } catch {
+        setPricingInsight(null);
+      }
+    }, 700);
+    return () => { if (insightTimerRef.current) clearTimeout(insightTimerRef.current); };
+  }, [task, user?.id, vehicleId]);
 
   function formatDate(text: string) {
     const digits = text.replace(/\D/g, "");
@@ -514,6 +599,10 @@ export default function LogServiceScreen() {
             </View>
           </View>
 
+          {pricingInsight && scannedItems.length === 0 && (
+            <PricingInsightBanner insight={pricingInsight} />
+          )}
+
           {scannedItems.length === 0 && (
             <View style={styles.fieldGroup}>
               <Text style={styles.groupLabel}>Notes</Text>
@@ -543,6 +632,50 @@ function Field({ label, children, style }: { label: string; children: React.Reac
     </View>
   );
 }
+
+function PricingInsightBanner({ insight }: { insight: PricingInsight }) {
+  const dateStr = insight.date
+    ? format(parseISO(insight.date), "MMM yyyy")
+    : null;
+
+  const parts: string[] = [];
+  if (insight.cost != null) parts.push(`$${insight.cost.toFixed(2)}`);
+  if (insight.provider) parts.push(`at ${insight.provider}`);
+  parts.push(`on your ${insight.assetName}`);
+  if (dateStr) parts.push(`(${dateStr})`);
+
+  const label = insight.cost != null
+    ? `You paid ${parts.join(" ")}`
+    : `Previously logged ${parts.join(" ")}`;
+
+  return (
+    <View style={insightStyles.banner}>
+      <Ionicons name="information-circle-outline" size={14} color={Colors.accent} style={{ flexShrink: 0, marginTop: 1 }} />
+      <Text style={insightStyles.text} numberOfLines={2}>{label}</Text>
+    </View>
+  );
+}
+
+const insightStyles = StyleSheet.create({
+  banner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    backgroundColor: Colors.accentMuted,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: Colors.accent + "33",
+  },
+  text: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    lineHeight: 17,
+  },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

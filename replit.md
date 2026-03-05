@@ -32,15 +32,18 @@ A native iOS / cross-platform mobile app built with Expo React Native that track
 - `supabase/functions/scan-receipt/index.ts` — Deno Edge Function: calls Anthropic claude-3-5-haiku-20241022 vision API to extract date/cost/provider/serviceType from receipt image; requires `ANTHROPIC_API_KEY` Supabase secret
 - `components/ReceiptScanButton.tsx` — Self-contained receipt scan button (camera or gallery); calls receiptScanner and fires onScanComplete callback
 
-## Modal Screens
+## Screens
 
 - `app/add-vehicle.tsx` — Add a vehicle (avg miles/month conditionally required by type)
-- `app/vehicle/[id].tsx` — Vehicle detail: tasks, service history, Export PDF/CSV button
-- `app/log-service/[vehicleId].tsx` — Log service with receipt OCR (Scan Receipt → auto-fills date/cost/service)
+- `app/vehicle/[id].tsx` — Vehicle detail: tasks tab + service history tab (summary bar, grouped tappable cards)
+- `app/vehicle-task-history/[vehicleId].tsx` — Vehicle service type drill-down: expandable log rows, receipt modal, Edit/Delete
+- `app/log-service/[vehicleId].tsx` — Log service with receipt OCR + cross-asset pricing insight banner
 - `app/update-mileage/[vehicleId].tsx` — Quick mileage update
-- `app/add-property.tsx` — Add a property
-- `app/property/[id].tsx` — Property detail with tasks and service history; auto-calculates next due date on complete
+- `app/add-property.tsx` — Add a property (builds default tasks on save)
 - `app/add-property-task/[propertyId].tsx` — Add maintenance task with templates
+- `app/property/[id].tsx` — Property detail: tasks tab + service history tab (same grouped design as vehicle)
+- `app/property-task-history/[propertyId].tsx` — Property service type drill-down: expandable log rows, receipt modal, Delete
+- `app/family-member/[id].tsx` — Family member/pet detail: appointments grouped by type with status + Medications tab
 - `app/add-appointment.tsx` — Add health appointment with interval/family member
 - `app/add-medication.tsx` — Add medication with daily reminder time
 - `app/add-family-member.tsx` — Add family member or pet

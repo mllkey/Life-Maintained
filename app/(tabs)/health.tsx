@@ -405,7 +405,7 @@ function MemberCard({ member, apptCount, onAddAppt }: { member: any; apptCount: 
   return (
     <Pressable
       style={({ pressed }) => [styles.memberCard, { opacity: pressed ? 0.88 : 1 }]}
-      onPress={onAddAppt}
+      onPress={() => { Haptics.selectionAsync(); router.push(`/family-member/${member.id}` as any); }}
     >
       <View style={styles.memberCardTop}>
         <View style={[styles.memberIconWrap, { backgroundColor: Colors.healthMuted }]}>
