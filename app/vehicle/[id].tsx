@@ -175,6 +175,32 @@ export default function VehicleDetailScreen() {
     }
   }
 
+  async function handleDeleteVehicle() {
+    if (!vehicle) return;
+    const name = vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
+    Alert.alert(
+      "Delete this vehicle?",
+      `This will permanently delete all maintenance tasks and service history for ${name}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            await supabase.from("vehicle_maintenance_tasks").delete().eq("vehicle_id", id!);
+            await supabase.from("maintenance_logs").delete().eq("vehicle_id", id!);
+            await supabase.from("vehicle_mileage_history").delete().eq("vehicle_id", id!);
+            await supabase.from("vehicles").delete().eq("id", id!);
+            queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+            queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+            router.back();
+          },
+        },
+      ]
+    );
+  }
+
   function handleExport() {
     Alert.alert("Export Service History", "Choose a format for resale documentation", [
       { text: "PDF", onPress: () => exportHistory("pdf") },
@@ -225,11 +251,15 @@ export default function VehicleDetailScreen() {
   }, [logs]);
 
   const historyStats = useMemo(() => {
-    if (!logs || logs.length === 0) return { totalSpent: 0, visitCount: 0, totalMiles: 0 };
+    if (!logs || logs.length === 0) return { totalSpent: 0, visitCount: 0, milesDriven: null };
+    const withMileage = logs.filter(l => l.mileage != null).map(l => l.mileage as number);
+    const milesDriven = withMileage.length >= 2
+      ? Math.max(...withMileage) - Math.min(...withMileage)
+      : null;
     return {
       totalSpent: logs.reduce((s, l) => s + (l.cost ?? 0), 0),
       visitCount: logs.length,
-      totalMiles: logs.filter(l => l.mileage != null).reduce((s, l) => s + (l.mileage ?? 0), 0),
+      milesDriven,
     };
   }, [logs]);
 
@@ -251,13 +281,22 @@ export default function VehicleDetailScreen() {
             </View>
           )}
         </View>
-        <Pressable
-          style={({ pressed }) => [styles.logBtn, { opacity: pressed ? 0.8 : 1 }]}
-          onPress={() => router.push(`/log-service/${id}` as any)}
-        >
-          <Ionicons name="construct-outline" size={14} color={Colors.vehicle} />
-          <Text style={styles.logBtnText}>Log Service</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            style={({ pressed }) => [styles.deleteVehicleBtn, { opacity: pressed ? 0.7 : 1 }]}
+            onPress={handleDeleteVehicle}
+            hitSlop={4}
+          >
+            <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.logBtn, { opacity: pressed ? 0.8 : 1 }]}
+            onPress={() => router.push(`/log-service/${id}` as any)}
+          >
+            <Ionicons name="construct-outline" size={14} color={Colors.vehicle} />
+            <Text style={styles.logBtnText}>Log Service</Text>
+          </Pressable>
+        </View>
       </View>
 
       {isLoading ? (
@@ -362,12 +401,12 @@ export default function VehicleDetailScreen() {
                       <Text style={styles.historySummaryValue}>{historyStats.visitCount}</Text>
                       <Text style={styles.historySummaryLabel}>{historyStats.visitCount === 1 ? "service visit" : "service visits"}</Text>
                     </View>
-                    {historyStats.totalMiles > 0 && (
+                    {historyStats.milesDriven != null && (
                       <>
                         <View style={styles.historySummaryDivider} />
                         <View style={styles.historySummaryStat}>
-                          <Text style={styles.historySummaryValue}>{historyStats.totalMiles.toLocaleString()}</Text>
-                          <Text style={styles.historySummaryLabel}>miles tracked</Text>
+                          <Text style={styles.historySummaryValue}>{historyStats.milesDriven.toLocaleString()}</Text>
+                          <Text style={[styles.historySummaryLabel, { textAlign: "center" }]}>miles driven{"\n"}(logged period)</Text>
                         </View>
                       </>
                     )}
@@ -511,6 +550,15 @@ const styles = StyleSheet.create({
   headerTrim: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
   headerMileageRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 1 },
   headerMileage: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
+  deleteVehicleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: Colors.overdueMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   logBtn: {
     flexDirection: "row",
     alignItems: "center",

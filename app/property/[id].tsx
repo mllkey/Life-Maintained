@@ -118,6 +118,7 @@ export default function PropertyDetailScreen() {
             setIsDeleting(true);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             await supabase.from("property_maintenance_tasks").delete().eq("property_id", id!);
+            await supabase.from("maintenance_logs").delete().eq("property_id", id!);
             await supabase.from("properties").delete().eq("id", id!);
             queryClient.invalidateQueries({ queryKey: ["properties"] });
             queryClient.invalidateQueries({ queryKey: ["dashboard"] });

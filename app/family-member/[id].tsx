@@ -103,6 +103,32 @@ export default function FamilyMemberDetailScreen() {
     });
   }, [appointments]);
 
+  async function handleDeleteMember() {
+    if (!member) return;
+    Alert.alert(
+      `Remove ${member.name}?`,
+      `This will delete all their appointments and medications.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            await supabase.from("health_appointments").delete().eq("family_member_id", id!);
+            await supabase.from("medications").delete().eq("family_member_id", id!);
+            await supabase.from("family_members").delete().eq("id", id!);
+            queryClient.invalidateQueries({ queryKey: ["family_members"] });
+            queryClient.invalidateQueries({ queryKey: ["health_appointments"] });
+            queryClient.invalidateQueries({ queryKey: ["medications"] });
+            queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+            router.back();
+          },
+        },
+      ]
+    );
+  }
+
   async function handleDeleteAppointment(apptId: string) {
     Alert.alert(
       "Delete Appointment",
@@ -150,12 +176,21 @@ export default function FamilyMemberDetailScreen() {
           <Ionicons name="chevron-back" size={24} color={Colors.text} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>{memberName}</Text>
-        <Pressable
-          style={({ pressed }) => [styles.addApptBtn, { opacity: pressed ? 0.8 : 1 }]}
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-appointment"); }}
-        >
-          <Ionicons name="add" size={20} color={Colors.textInverse} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            style={({ pressed }) => [styles.deleteMemberBtn, { opacity: pressed ? 0.7 : 1 }]}
+            onPress={handleDeleteMember}
+            hitSlop={4}
+          >
+            <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.addApptBtn, { opacity: pressed ? 0.8 : 1 }]}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-appointment"); }}
+          >
+            <Ionicons name="add" size={20} color={Colors.textInverse} />
+          </Pressable>
+        </View>
       </View>
 
       {isLoading ? (
@@ -380,6 +415,15 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: Colors.text,
     textAlign: "center",
+  },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
+  deleteMemberBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: Colors.overdueMuted,
+    alignItems: "center",
+    justifyContent: "center",
   },
   addApptBtn: {
     width: 36,
