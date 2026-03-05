@@ -16,23 +16,26 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
-import { parseISO, isBefore, addDays, differenceInDays, format } from "date-fns";
+import { parseISO, isBefore, addDays, format } from "date-fns";
 
-function getStatus(date: string | null): "overdue" | "due_soon" | "good" {
-  if (!date) return "good";
-  const d = parseISO(date);
-  if (isBefore(d, new Date())) return "overdue";
-  if (isBefore(d, addDays(new Date(), 30))) return "due_soon";
+function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): "overdue" | "due_soon" | "good" {
+  const now = new Date();
+  const soon = addDays(now, 30);
+
+  if (nextDueDate) {
+    const due = parseISO(nextDueDate);
+    if (isBefore(due, now)) return "overdue";
+    if (isBefore(due, soon)) return "due_soon";
+  }
+
+  // A task with no completion record is never "all caught up"
+  if (!lastCompletedAt) return "due_soon";
+
   return "good";
 }
 
-function formatDaysLabel(date: string | null, status: "overdue" | "due_soon" | "good"): string {
-  if (!date) return "No due date";
-  const days = differenceInDays(parseISO(date), new Date());
-  if (days < 0) return `${Math.abs(days)}d overdue`;
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  if (days < 30) return `In ${days}d`;
+function formatDueLabel(date: string | null): string {
+  if (!date) return "No date";
   return format(parseISO(date), "MMM d");
 }
 
@@ -82,6 +85,8 @@ export default function PropertyDetailScreen() {
     const months: Record<string, number> = {
       "Monthly": 1, "Quarterly": 3, "Bi-Annually": 6, "Annually": 12,
       "Every 2 Years": 24, "Every 5 Years": 60, "As Needed": 12,
+      "3_months": 3, "6_months": 6, "12_months": 12,
+      "24_months": 24, "36_months": 36, "60_months": 60,
     };
     let nextDate: string | null = null;
     if (taskInterval) {
@@ -138,9 +143,9 @@ export default function PropertyDetailScreen() {
     return null;
   }, [tasks, property]);
 
-  const overdueTasks = tasks?.filter(t => getStatus(t.next_due_date) === "overdue") ?? [];
-  const dueSoonTasks = tasks?.filter(t => getStatus(t.next_due_date) === "due_soon") ?? [];
-  const goodTasks = tasks?.filter(t => getStatus(t.next_due_date) === "good") ?? [];
+  const overdueTasks = tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "overdue") ?? [];
+  const dueSoonTasks = tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "due_soon") ?? [];
+  const goodTasks = tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "good") ?? [];
   const allTasks = [...overdueTasks, ...dueSoonTasks, ...goodTasks];
 
   return (
@@ -246,38 +251,28 @@ export default function PropertyDetailScreen() {
                 </View>
               ) : (
                 <>
-                  {(overdueTasks.length > 0 || dueSoonTasks.length > 0) && (
-                    <View style={styles.sectionHeader}>
-                      {overdueTasks.length > 0 && (
-                        <View style={[styles.sectionBadge, { backgroundColor: Colors.overdueMuted }]}>
-                          <Text style={[styles.sectionBadgeText, { color: Colors.overdue }]}>
-                            {overdueTasks.length} overdue
-                          </Text>
-                        </View>
-                      )}
-                      {dueSoonTasks.length > 0 && (
-                        <View style={[styles.sectionBadge, { backgroundColor: Colors.dueSoonMuted }]}>
-                          <Text style={[styles.sectionBadgeText, { color: Colors.dueSoon }]}>
-                            {dueSoonTasks.length} due soon
-                          </Text>
-                        </View>
-                      )}
-                      {overdueTasks.length === 0 && dueSoonTasks.length === 0 && (
-                        <View style={[styles.sectionBadge, { backgroundColor: Colors.goodMuted }]}>
-                          <Ionicons name="checkmark-circle" size={12} color={Colors.good} />
-                          <Text style={[styles.sectionBadgeText, { color: Colors.good }]}>All caught up</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                  {overdueTasks.length === 0 && dueSoonTasks.length === 0 && allTasks.length > 0 && (
-                    <View style={styles.sectionHeader}>
+                  <View style={styles.sectionHeader}>
+                    {overdueTasks.length > 0 && (
+                      <View style={[styles.sectionBadge, { backgroundColor: Colors.overdueMuted }]}>
+                        <Text style={[styles.sectionBadgeText, { color: Colors.overdue }]}>
+                          {overdueTasks.length} overdue
+                        </Text>
+                      </View>
+                    )}
+                    {dueSoonTasks.length > 0 && (
+                      <View style={[styles.sectionBadge, { backgroundColor: Colors.dueSoonMuted }]}>
+                        <Text style={[styles.sectionBadgeText, { color: Colors.dueSoon }]}>
+                          {dueSoonTasks.length} upcoming
+                        </Text>
+                      </View>
+                    )}
+                    {overdueTasks.length === 0 && dueSoonTasks.length === 0 && goodTasks.length > 0 && (
                       <View style={[styles.sectionBadge, { backgroundColor: Colors.goodMuted }]}>
                         <Ionicons name="checkmark-circle" size={12} color={Colors.good} />
                         <Text style={[styles.sectionBadgeText, { color: Colors.good }]}>All caught up</Text>
                       </View>
-                    </View>
-                  )}
+                    )}
+                  </View>
                   <View style={styles.taskGrid}>
                     {allTasks.map(task => (
                       <TaskGridCell key={task.id} task={task} onComplete={markComplete} />
@@ -320,10 +315,11 @@ export default function PropertyDetailScreen() {
 }
 
 function TaskGridCell({ task, onComplete }: { task: any; onComplete: (id: string, interval: string | null) => void }) {
-  const status = getStatus(task.next_due_date);
+  const status = getStatus(task.next_due_date, task.last_completed_at);
   const statusColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
   const statusBg = status === "overdue" ? Colors.overdueMuted : status === "due_soon" ? Colors.dueSoonMuted : Colors.goodMuted;
-  const dueLabel = formatDaysLabel(task.next_due_date, status);
+  const dueLabel = formatDueLabel(task.next_due_date);
+  const isCompleted = !!task.last_completed_at;
 
   return (
     <View style={[styles.gridCell, { borderTopColor: statusColor }]}>
@@ -345,7 +341,11 @@ function TaskGridCell({ task, onComplete }: { task: any; onComplete: (id: string
           onPress={() => onComplete(task.id, task.interval)}
           hitSlop={4}
         >
-          <Ionicons name="checkmark" size={16} color={statusColor} />
+          <Ionicons
+            name={isCompleted ? "checkmark" : "ellipse-outline"}
+            size={isCompleted ? 16 : 14}
+            color={statusColor}
+          />
         </Pressable>
       </View>
       {task.category && (
