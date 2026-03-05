@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
   saveBtn: { backgroundColor: Colors.health, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7 },
   saveBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 20 },
+  scroll: { paddingHorizontal: 16, paddingTop: 24, gap: 20 },
   errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: 10, padding: 12 },
   errorText: { flex: 1, fontSize: 13, color: Colors.overdue, fontFamily: "Inter_400Regular" },
   section: { gap: 8 },

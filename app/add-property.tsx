@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 
-  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 20 },
+  scroll: { paddingHorizontal: 16, paddingTop: 24, gap: 20 },
   errorBox: {
     flexDirection: "row",
     alignItems: "center",
