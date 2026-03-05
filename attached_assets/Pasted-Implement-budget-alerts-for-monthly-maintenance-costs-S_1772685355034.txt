@@ -1,0 +1,28 @@
+Implement budget alerts for monthly maintenance costs:
+Settings integration:
+
+The budget threshold input in Settings must save to user_notification_preferences.budget_threshold in Supabase immediately on blur (not just on the Save button) using a debounced upsert with 500ms delay — this prevents the user losing their threshold if they navigate away without pressing Save
+Show a subtle green checkmark next to the field for 500ms after a successful save to confirm it was saved
+Input should be numeric only, formatted as currency, minimum value $1, maximum $9,999
+
+Monthly cost calculation:
+
+On app launch and on every foreground event, calculate total estimated costs due in the current calendar month by summing estimated_cost from vehicle_maintenance_tasks and property_maintenance_tasks where next_due_date is between the first and last day of the current month and estimated_cost is not null
+Store the result in React state at the app level so it's accessible to both the Dashboard and the notification system
+
+In-app banner:
+
+If monthly estimated costs exceed the user's budget_threshold, show a dismissible amber warning banner at the top of the Dashboard: 'Heads up — $X estimated in maintenance this month (your alert is set to $Y)'
+Store dismissal state in AsyncStorage keyed by year+month (e.g. 'budget_dismissed_2026_03') so it reappears each new month but stays dismissed for the rest of the current month after the user dismisses it
+Never show the banner if budget_threshold is null or 0
+
+Push notification:
+
+On the first day of each month, if estimated costs exceed the threshold, schedule a local push notification: 'LifeMaintained: $X in maintenance estimated this month — tap to review'
+Use a unique notification identifier keyed by year+month to prevent duplicate notifications
+Only send if user_notification_preferences.push_enabled is true
+
+Error handling:
+
+If the cost calculation query fails, fail silently — never show an error to the user for this feature
+If the notification scheduling fails, catch and continue — never block app functionality

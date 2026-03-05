@@ -20,6 +20,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { differenceInDays, parseISO, isBefore, addDays, format, subMonths, startOfMonth } from "date-fns";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
+import { useBudgetAlert } from "@/context/BudgetAlertContext";
 
 const SCREENING_NOTIF_KEY = "screening_notif_optins";
 
@@ -84,13 +85,28 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [screeningOptIns, setScreeningOptIns] = useState<Record<string, boolean>>({});
+  const [budgetDismissed, setBudgetDismissed] = useState(false);
   const webTopPad = Platform.OS === "web" ? 67 : 0;
+  const { monthlyCost, budgetThreshold } = useBudgetAlert();
 
   useEffect(() => {
     AsyncStorage.getItem(SCREENING_NOTIF_KEY).then(raw => {
       if (raw) setScreeningOptIns(JSON.parse(raw));
     });
+    const now = new Date();
+    const dismissKey = `budget_dismissed_${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}`;
+    AsyncStorage.getItem(dismissKey).then(val => {
+      if (val === "true") setBudgetDismissed(true);
+    });
   }, []);
+
+  async function dismissBudgetBanner() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setBudgetDismissed(true);
+    const now = new Date();
+    const dismissKey = `budget_dismissed_${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}`;
+    await AsyncStorage.setItem(dismissKey, "true");
+  }
 
   async function toggleScreeningOptIn(title: string) {
     Haptics.selectionAsync();
@@ -260,6 +276,14 @@ export default function DashboardScreen() {
           <WelcomeView />
         ) : (
           <>
+            {!budgetDismissed && !!budgetThreshold && budgetThreshold > 0 && monthlyCost > budgetThreshold && (
+              <Pressable onPress={dismissBudgetBanner} style={styles.budgetBanner} accessibilityRole="button" accessibilityLabel="Dismiss budget alert">
+                <Ionicons name="warning-outline" size={15} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
+                <Text style={styles.budgetBannerText} numberOfLines={3}>
+                  {"Heads up \u2014 $"}{monthlyCost.toFixed(0)}{" estimated in maintenance this month (your alert is set to $"}{budgetThreshold.toFixed(0)}{")"}</Text>
+                <Ionicons name="close" size={14} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
+              </Pressable>
+            )}
             <CategoryCardsRow counts={counts ?? { vehicles: 0, properties: 0, health: 0 }} />
 
             <View style={styles.twoCol}>
@@ -521,6 +545,24 @@ const styles = StyleSheet.create({
   badgeDot: { width: 6, height: 6, borderRadius: 3 },
   badgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   content: { paddingHorizontal: 16, paddingTop: 4, gap: 20 },
+  budgetBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "rgba(255, 214, 10, 0.10)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 214, 10, 0.30)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  budgetBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.dueSoon,
+    lineHeight: 18,
+  },
 
   catRow: { flexDirection: "row", gap: 10 },
   catCard: {

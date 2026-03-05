@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -53,9 +53,9 @@ export default function NotificationsSettingsScreen() {
 
   const [prefs, setPrefs] = useState<NotifPrefs>(DEFAULT_PREFS);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSavingBudget, setIsSavingBudget] = useState(false);
   const [budgetAmount, setBudgetAmount] = useState("");
   const [budgetSaved, setBudgetSaved] = useState(false);
+  const budgetDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: vehicles } = useQuery({
     queryKey: ["vehicles", user?.id],
@@ -77,13 +77,12 @@ export default function NotificationsSettingsScreen() {
     enabled: !!user,
   });
 
-  const { data: budgetTier } = useQuery({
-    queryKey: ["budget_tier", user?.id],
+  const { data: budgetPref } = useQuery({
+    queryKey: ["budget_threshold", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase
-        .from("budget_notification_tiers")
-        .select("*")
+      const { data } = await (supabase.from("user_notification_preferences") as any)
+        .select("budget_threshold")
         .eq("user_id", user.id)
         .maybeSingle();
       return data;
@@ -96,10 +95,10 @@ export default function NotificationsSettingsScreen() {
   }, []);
 
   useEffect(() => {
-    if (budgetTier?.threshold_amount != null) {
-      setBudgetAmount(String(budgetTier.threshold_amount));
+    if (budgetPref?.budget_threshold != null) {
+      setBudgetAmount(String(budgetPref.budget_threshold));
     }
-  }, [budgetTier]);
+  }, [budgetPref]);
 
   async function updatePref<K extends keyof NotifPrefs>(key: K, value: NotifPrefs[K]) {
     const next = { ...prefs, [key]: value };
@@ -141,31 +140,23 @@ export default function NotificationsSettingsScreen() {
     updatePref("mutedProperties", muted);
   }
 
-  async function saveBudget() {
-    if (!user || !budgetAmount) return;
-    const amount = parseFloat(budgetAmount);
-    if (isNaN(amount) || amount <= 0) {
-      Alert.alert("Invalid Amount", "Please enter a valid dollar amount.");
-      return;
-    }
-    setIsSavingBudget(true);
-    const payload = {
-      user_id: user.id,
-      threshold_amount: amount,
-      updated_at: new Date().toISOString(),
-    };
-    const { error } = budgetTier
-      ? await supabase.from("budget_notification_tiers").update(payload).eq("user_id", user.id)
-      : await supabase.from("budget_notification_tiers").insert({ ...payload, created_at: new Date().toISOString() });
-    setIsSavingBudget(false);
-    if (error) {
-      Alert.alert("Error", error.message);
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setBudgetSaved(true);
-      setTimeout(() => setBudgetSaved(false), 2000);
-      queryClient.invalidateQueries({ queryKey: ["budget_tier"] });
-    }
+  function handleBudgetBlur() {
+    if (budgetDebounceRef.current) clearTimeout(budgetDebounceRef.current);
+    budgetDebounceRef.current = setTimeout(async () => {
+      if (!user || !budgetAmount) return;
+      const amount = parseFloat(budgetAmount);
+      if (isNaN(amount) || amount < 1 || amount > 9999) return;
+      const { error } = await (supabase.from("user_notification_preferences") as any).upsert(
+        { user_id: user.id, budget_threshold: amount, updated_at: new Date().toISOString() },
+        { onConflict: "user_id" }
+      );
+      if (!error) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setBudgetSaved(true);
+        queryClient.invalidateQueries({ queryKey: ["budget_threshold"] });
+        setTimeout(() => setBudgetSaved(false), 500);
+      }
+    }, 500);
   }
 
   if (isLoading) {
@@ -258,33 +249,21 @@ export default function NotificationsSettingsScreen() {
               <TextInput
                 style={styles.budgetInput}
                 value={budgetAmount}
-                onChangeText={setBudgetAmount}
+                onChangeText={(v) => setBudgetAmount(v.replace(/[^0-9]/g, "").slice(0, 4))}
+                onBlur={handleBudgetBlur}
                 placeholder="500"
                 placeholderTextColor={Colors.textTertiary}
-                keyboardType="decimal-pad"
+                keyboardType="number-pad"
+                maxLength={4}
               />
             </View>
-            <Pressable
-              style={({ pressed }) => [
-                styles.budgetSaveBtn,
-                budgetSaved && styles.budgetSaveBtnSuccess,
-                { opacity: pressed ? 0.8 : 1 },
-              ]}
-              onPress={saveBudget}
-              disabled={isSavingBudget}
-            >
-              {isSavingBudget ? (
-                <ActivityIndicator size="small" color={Colors.textInverse} />
-              ) : (
-                <Text style={styles.budgetSaveBtnText}>{budgetSaved ? "Saved!" : "Save"}</Text>
-              )}
-            </Pressable>
+            {budgetSaved ? (
+              <Ionicons name="checkmark-circle" size={24} color={Colors.good} style={{ marginRight: 6 }} />
+            ) : (
+              <View style={{ width: 30 }} />
+            )}
           </View>
-          {budgetTier?.threshold_amount && !budgetSaved && (
-            <Text style={styles.budgetCurrentText}>
-              Current threshold: ${budgetTier.threshold_amount.toLocaleString()}
-            </Text>
-          )}
+          <Text style={styles.budgetHint}>1–$9,999 · Saved automatically when you leave the field</Text>
         </Section>
 
         {vehicles && vehicles.length > 0 && (
@@ -422,8 +401,5 @@ const styles = StyleSheet.create({
   },
   budgetCurrency: { fontSize: 16, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
   budgetInput: { flex: 1, paddingVertical: 10, fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text, paddingLeft: 4 },
-  budgetSaveBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 11 },
-  budgetSaveBtnSuccess: { backgroundColor: Colors.good },
-  budgetSaveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  budgetCurrentText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, paddingHorizontal: 14, paddingBottom: 10 },
+  budgetHint: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, paddingHorizontal: 14, paddingBottom: 10 },
 });

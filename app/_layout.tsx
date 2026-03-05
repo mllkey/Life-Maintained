@@ -12,6 +12,7 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import { Colors } from "@/constants/colors";
 import NotifPermissionBanner from "@/components/NotifPermissionBanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
+import { BudgetAlertProvider } from "@/context/BudgetAlertContext";
 import * as Notifications from "expo-notifications";
 import { ActivityIndicator } from "react-native";
 
@@ -70,6 +71,7 @@ function RootLayoutNav() {
   const showBanner = !!session && onboardingCompleted === true;
 
   return (
+    <BudgetAlertProvider userId={session?.user?.id ?? null}>
     <View style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.background } }}>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
@@ -96,6 +98,7 @@ function RootLayoutNav() {
       </Stack>
       {showBanner && <NotifPermissionBanner />}
     </View>
+    </BudgetAlertProvider>
   );
 }
 
