@@ -42,7 +42,7 @@ export default function ReceiptScanButton({ onScanComplete }: Props) {
       if (result.error) {
         Alert.alert("Scan Issue", "We couldn't read all fields automatically. You can fill in the remaining fields manually.");
       }
-      onScanComplete(result);
+      onScanComplete({ ...result, localUri: manipulated.uri });
     } catch (err) {
       console.error("Receipt scan error:", err);
       Alert.alert("Scan Failed", "Something went wrong scanning the receipt. Please enter the details manually.");

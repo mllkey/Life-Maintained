@@ -49,6 +49,8 @@ export default function LogServiceScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [ocrApplied, setOcrApplied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [receiptLocalUri, setReceiptLocalUri] = useState<string | null>(null);
+  const [receiptWarning, setReceiptWarning] = useState(false);
   const [pricingInsight, setPricingInsight] = useState<PricingInsight | null>(null);
   const insightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -142,6 +144,7 @@ export default function LogServiceScreen() {
     if (result.date) setDate(result.date);
     if (result.mileage != null) setMileage(String(result.mileage));
     if (result.provider) setProvider(result.provider);
+    if (result.localUri) setReceiptLocalUri(result.localUri);
 
     if (result.items && result.items.length > 1) {
       setScannedItems(result.items);
@@ -155,7 +158,25 @@ export default function LogServiceScreen() {
     }
 
     setOcrApplied(true);
+    setReceiptWarning(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+
+  async function uploadReceiptImage(localUri: string, userId: string, assetId: string): Promise<string | null> {
+    try {
+      const timestamp = Date.now();
+      const path = `${userId}/vehicle/${assetId}/${timestamp}.jpg`;
+      const response = await fetch(localUri);
+      const blob = await response.blob();
+      const { data, error: uploadErr } = await supabase.storage
+        .from("receipts")
+        .upload(path, blob, { contentType: "image/jpeg", upsert: false });
+      if (uploadErr) throw uploadErr;
+      return data.path;
+    } catch (err) {
+      console.error("Receipt upload failed:", err);
+      return null;
+    }
   }
 
   function updateItem(index: number, patch: Partial<ScannedItem>) {
@@ -314,8 +335,17 @@ export default function LogServiceScreen() {
     if (!user || !vehicleId) return;
     setIsLoading(true);
     setError(null);
+    setReceiptWarning(false);
 
     try {
+      let storedReceiptPath: string | null = null;
+      if (receiptLocalUri) {
+        storedReceiptPath = await uploadReceiptImage(receiptLocalUri, user.id, vehicleId);
+        if (!storedReceiptPath) {
+          setReceiptWarning(true);
+        }
+      }
+
       if (scannedItems.length > 0) {
         const rows = scannedItems.map(item => ({
           user_id: user!.id,
@@ -326,6 +356,7 @@ export default function LogServiceScreen() {
           cost: item.cost,
           provider_name: provider.trim() || null,
           notes: item.details || null,
+          receipt_url: storedReceiptPath,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }));
@@ -346,6 +377,7 @@ export default function LogServiceScreen() {
           cost: cost ? parseFloat(cost) : null,
           provider_name: provider.trim() || null,
           notes: notes.trim() || null,
+          receipt_url: storedReceiptPath,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
@@ -392,7 +424,12 @@ export default function LogServiceScreen() {
           const due = fmt(t.nextDue);
           return due ? `• ${t.taskName}\n  Next due: ${due}` : `• ${t.taskName}`;
         }).join("\n\n");
-        Alert.alert("Maintenance Updated", lines, [{ text: "OK", onPress: () => router.back() }]);
+        const warnSuffix = storedReceiptPath === null && receiptLocalUri
+          ? "\n\nNote: Receipt saved but photo could not be uploaded."
+          : "";
+        Alert.alert("Maintenance Updated", lines + warnSuffix, [{ text: "OK", onPress: () => router.back() }]);
+      } else if (storedReceiptPath === null && receiptLocalUri) {
+        Alert.alert("Saved", "Receipt saved but photo could not be uploaded.", [{ text: "OK", onPress: () => router.back() }]);
       } else {
         router.back();
       }

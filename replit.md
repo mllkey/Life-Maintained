@@ -68,6 +68,10 @@ A native iOS / cross-platform mobile app built with Expo React Native that track
 - `family_members` — Family members and pets
 - `budget_notification_tiers` — Per-user budget alert thresholds
 
+## Supabase Storage
+
+- `receipts` bucket — Private bucket for receipt photos. RLS enforced: users can only read/write/delete files under their own `user_id` path prefix. Policies: `receipts_insert_own`, `receipts_select_own`, `receipts_delete_own`. File path: `{user_id}/vehicle/{vehicle_id}/{timestamp}.jpg` or `{user_id}/property/{property_id}/{timestamp}.jpg`. Provisioned via `scripts/setup-receipts-bucket.ts`.
+
 ## Features
 
 - **Auth**: Login, signup, email verify, forgot password
@@ -80,6 +84,7 @@ A native iOS / cross-platform mobile app built with Expo React Native that track
 - **Notifications**: Push permissions, advance warning days (7/14/30), quiet hours, per-vehicle/property mute, budget alerts via budget_notification_tiers table
 - **Export**: PDF (expo-print) and CSV (expo-file-system) export of vehicle service history for resale
 - **Receipt OCR**: ReceiptScanButton (camera or gallery) → Supabase Edge Function `scan-receipt` → auto-fills date, cost, provider, service type in the log form
+- **Receipt Storage**: Scanned receipt photos uploaded to Supabase Storage `receipts` bucket (private, RLS-protected). Path: `{user_id}/vehicle/{vehicle_id}/{timestamp}.jpg`. Stored path saved to `maintenance_logs.receipt_url`. History screens generate 1-hour signed URLs on tap to show receipt in full-screen pinch-to-zoom modal. Upload failure shows warning but never blocks save.
 - **Settings**: Health profile, notifications, subscription management, Terms of Service, Privacy Policy, account deletion, email branding note
 
 ## Design Tokens

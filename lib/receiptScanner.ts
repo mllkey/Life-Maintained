@@ -10,6 +10,7 @@ export interface ReceiptScanResult {
   items: Array<{ name: string; cost: number | null; details: string | null }>;
   rawText: string;
   error?: string;
+  localUri?: string;
 }
 
 export async function scanReceipt(base64Image: string): Promise<ReceiptScanResult> {

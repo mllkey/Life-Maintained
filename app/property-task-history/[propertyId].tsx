@@ -10,6 +10,7 @@ import {
   Modal,
   Image,
   Dimensions,
+  Platform,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,7 +20,6 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { parseISO, format } from "date-fns";
-import { Platform } from "react-native";
 
 const { width: SW, height: SH } = Dimensions.get("window");
 
@@ -32,6 +32,7 @@ export default function PropertyTaskHistoryScreen() {
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [receiptGeneratingId, setReceiptGeneratingId] = useState<string | null>(null);
 
   const { data: logs, isLoading } = useQuery({
     queryKey: ["property_task_logs", propertyId, task],
@@ -65,6 +66,22 @@ export default function PropertyTaskHistoryScreen() {
         },
       ]
     );
+  }
+
+  async function openReceipt(storagePath: string, logId: string) {
+    Haptics.selectionAsync();
+    setReceiptGeneratingId(logId);
+    try {
+      const { data, error } = await supabase.storage
+        .from("receipts")
+        .createSignedUrl(storagePath, 3600);
+      if (error || !data?.signedUrl) throw error ?? new Error("No signed URL");
+      setReceiptUrl(data.signedUrl);
+    } catch {
+      Alert.alert("Error", "Could not load receipt image. Please try again.");
+    } finally {
+      setReceiptGeneratingId(null);
+    }
   }
 
   const totalSpent = logs?.reduce((s, l) => s + (l.cost ?? 0), 0) ?? 0;
@@ -117,6 +134,7 @@ export default function PropertyTaskHistoryScreen() {
                   const formattedDate = log.service_date
                     ? format(parseISO(log.service_date), "MMMM d, yyyy")
                     : null;
+                  const isGenerating = receiptGeneratingId === log.id;
 
                   return (
                     <View key={log.id} style={[styles.logCard, isLast && styles.logCardLast]}>
@@ -141,6 +159,19 @@ export default function PropertyTaskHistoryScreen() {
                           {log.cost != null && (
                             <Text style={styles.logCost}>${log.cost.toFixed(2)}</Text>
                           )}
+                          {log.receipt_url ? (
+                            <Pressable
+                              onPress={() => openReceipt(log.receipt_url, log.id)}
+                              hitSlop={10}
+                              accessibilityLabel="View receipt"
+                              style={styles.receiptIconBtn}
+                            >
+                              {isGenerating
+                                ? <ActivityIndicator size="small" color={Colors.accent} />
+                                : <Ionicons name="receipt-outline" size={18} color={Colors.accent} />
+                              }
+                            </Pressable>
+                          ) : null}
                           <Ionicons
                             name={isExpanded ? "chevron-up" : "chevron-down"}
                             size={16}
@@ -168,17 +199,18 @@ export default function PropertyTaskHistoryScreen() {
                           {log.receipt_url ? (
                             <Pressable
                               style={({ pressed }) => [styles.receiptThumb, { opacity: pressed ? 0.85 : 1 }]}
-                              onPress={() => setReceiptUrl(log.receipt_url)}
+                              onPress={() => openReceipt(log.receipt_url, log.id)}
                               accessibilityLabel="View receipt image"
                             >
-                              <Image
-                                source={{ uri: log.receipt_url }}
-                                style={styles.receiptImage}
-                                resizeMode="cover"
-                              />
-                              <View style={styles.receiptOverlay}>
-                                <Ionicons name="expand-outline" size={16} color="#fff" />
-                                <Text style={styles.receiptOverlayText}>View Receipt</Text>
+                              <View style={styles.receiptThumbInner}>
+                                {isGenerating ? (
+                                  <ActivityIndicator color={Colors.accent} />
+                                ) : (
+                                  <>
+                                    <Ionicons name="receipt-outline" size={28} color={Colors.accent} />
+                                    <Text style={styles.receiptThumbLabel}>Tap to view receipt</Text>
+                                  </>
+                                )}
                               </View>
                             </Pressable>
                           ) : null}
@@ -314,6 +346,7 @@ const styles = StyleSheet.create({
   logProvider: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   logCardRight: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   logCost: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.home },
+  receiptIconBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   logDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 16 },
 
   expandedSection: {
@@ -330,23 +363,23 @@ const styles = StyleSheet.create({
   receiptThumb: {
     borderRadius: 12,
     overflow: "hidden",
-    height: 140,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.accentMuted,
+    borderWidth: 1,
+    borderColor: Colors.accent + "33",
   },
-  receiptImage: { width: "100%", height: "100%" },
-  receiptOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    paddingVertical: 7,
-    paddingHorizontal: 12,
+  receiptThumbInner: {
+    height: 80,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 16,
   },
-  receiptOverlayText: { fontSize: 13, fontFamily: "Inter_500Medium", color: "#fff" },
+  receiptThumbLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.accent,
+  },
 
   expandedActions: {
     flexDirection: "row",
@@ -371,9 +404,9 @@ const styles = StyleSheet.create({
   receiptScrollContent: { flex: 1, alignItems: "center", justifyContent: "center" },
   receiptCloseBtn: { position: "absolute", right: 16 },
   receiptCloseBtnInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
