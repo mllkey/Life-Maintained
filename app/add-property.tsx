@@ -316,7 +316,7 @@ export default function AddPropertyScreen() {
                 value={street}
                 onChangeText={onStreetChange}
                 onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
-                placeholder="1025 Potomac Ct"
+                placeholder="123 Main St"
                 placeholderTextColor={Colors.textTertiary}
                 autoCapitalize="words"
                 returnKeyType="next"
@@ -369,7 +369,7 @@ export default function AddPropertyScreen() {
                   style={styles.input}
                   value={city}
                   onChangeText={setCity}
-                  placeholder="Springfield"
+                  placeholder="Chicago"
                   placeholderTextColor={Colors.textTertiary}
                   autoCapitalize="words"
                   returnKeyType="next"
@@ -393,7 +393,7 @@ export default function AddPropertyScreen() {
                 style={styles.input}
                 value={zip}
                 onChangeText={setZip}
-                placeholder="62701"
+                placeholder="60601"
                 placeholderTextColor={Colors.textTertiary}
                 keyboardType="numeric"
                 maxLength={10}
