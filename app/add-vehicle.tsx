@@ -29,6 +29,11 @@ const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_ITEM_HEIGHT = 52;
 const MODEL_ITEM_HEIGHT = 52;
 
+const modelCache = new Map<string, string[]>();
+function modelCacheKey(make: string, year: string, vType: string): string {
+  return `${make.trim().toLowerCase()}:${year}:${vType}`;
+}
+
 const YEARS: number[] = Array.from(
   { length: CURRENT_YEAR + 2 - 1980 },
   (_, i) => CURRENT_YEAR + 1 - i
@@ -238,8 +243,15 @@ export default function AddVehicleScreen() {
       setNhtsaModels([]);
       setIsLoadingModels(false);
     } else {
-      setIsLoadingModels(true);
-      setNhtsaModels([]);
+      const cacheKey = modelCacheKey(make, year, vehicleType);
+      const cached = modelCache.get(cacheKey);
+      if (cached) {
+        setNhtsaModels(cached);
+        setIsLoadingModels(false);
+      } else {
+        setIsLoadingModels(true);
+        setNhtsaModels([]);
+      }
 
       const encodedMake = encodeURIComponent(make.trim());
       const nhtsaBase = `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodedMake}/modelyear/${yearNum}`;
@@ -285,7 +297,9 @@ export default function AddVehicleScreen() {
           }
 
           if (!modelCancelled) {
-            setNhtsaModels(names.sort());
+            const sorted = names.sort();
+            modelCache.set(cacheKey, sorted);
+            setNhtsaModels(sorted);
             setIsLoadingModels(false);
           }
         } catch {
@@ -296,7 +310,7 @@ export default function AddVehicleScreen() {
         }
       }
 
-      loadModels();
+      if (!cached) loadModels();
     }
 
     return () => {
