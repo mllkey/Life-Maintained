@@ -231,9 +231,11 @@ export default function DashboardScreen() {
   const upcomingItems = dashboardItems?.slice(0, 6) ?? [];
 
   return (
+    <View style={{ flex: 1, backgroundColor: Colors.background }}>
     <ScrollView
-      style={{ flex: 1, backgroundColor: Colors.background }}
+      style={{ flex: 1 }}
       showsVerticalScrollIndicator={false}
+      contentInsetAdjustmentBehavior="never"
       refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.accent} />}
     >
       <LinearGradient
@@ -330,6 +332,7 @@ export default function DashboardScreen() {
         )}
       </View>
     </ScrollView>
+    </View>
   );
 }
 
