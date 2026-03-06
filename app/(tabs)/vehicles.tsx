@@ -7,6 +7,7 @@ import {
   Pressable,
   RefreshControl,
   Platform,
+  Alert,
 } from "react-native";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,6 +19,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays, differenceInDays } from "date-fns";
+import { vehicleLimit } from "@/lib/subscription";
 
 type Vehicle = {
   id: string;
@@ -62,7 +64,7 @@ function getEstimatedMileage(v: Vehicle): number | null {
 
 export default function VehiclesScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
   const { data: vehicles, isLoading, refetch } = useQuery({
@@ -136,7 +138,8 @@ export default function VehiclesScreen() {
         ) : vehicles?.length === 0 ? (
           <EmptyVehicles />
         ) : (
-          vehicles?.map(v => {
+          vehicles?.map((v, idx) => {
+            const isLocked = idx >= vehicleLimit(profile);
             const td = taskData?.[v.id];
             const worstStatus = td?.worstStatus ?? "good";
             const pendingCount = td?.pendingCount ?? 0;
@@ -149,8 +152,22 @@ export default function VehiclesScreen() {
             return (
               <Pressable
                 key={v.id}
-                style={({ pressed }) => [styles.vehicleCard, { opacity: pressed ? 0.88 : 1 }]}
-                onPress={() => { Haptics.selectionAsync(); router.push(`/vehicle/${v.id}` as any); }}
+                style={({ pressed }) => [styles.vehicleCard, { opacity: pressed ? 0.88 : isLocked ? 0.55 : 1 }]}
+                onPress={() => {
+                  if (isLocked) {
+                    Alert.alert(
+                      "Vehicle Locked",
+                      "This vehicle is locked on your current plan. Upgrade to access all your vehicles.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Upgrade Now", onPress: () => router.push("/subscription" as any) },
+                      ]
+                    );
+                    return;
+                  }
+                  Haptics.selectionAsync();
+                  router.push(`/vehicle/${v.id}` as any);
+                }}
               >
                 <View style={styles.cardTop}>
                   <View style={[styles.iconWrap, { backgroundColor: Colors.vehicleMuted }]}>
@@ -236,30 +253,38 @@ export default function VehiclesScreen() {
                   )}
                 </View>
 
-                <View style={styles.cardActions}>
-                  <Pressable
-                    style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.8 : 1 }]}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push(`/update-mileage/${v.id}` as any);
-                    }}
-                  >
-                    <Ionicons name="speedometer-outline" size={14} color={Colors.textSecondary} />
-                    <Text style={styles.actionBtnText}>Update Mileage</Text>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [styles.actionBtnAccent, { opacity: pressed ? 0.8 : 1 }]}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push(`/log-service/${v.id}` as any);
-                    }}
-                  >
-                    <Ionicons name="construct-outline" size={14} color={Colors.vehicle} />
-                    <Text style={styles.actionBtnAccentText}>Log Service</Text>
-                  </Pressable>
-                </View>
+                {!isLocked && (
+                  <View style={styles.cardActions}>
+                    <Pressable
+                      style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.8 : 1 }]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push(`/update-mileage/${v.id}` as any);
+                      }}
+                    >
+                      <Ionicons name="speedometer-outline" size={14} color={Colors.textSecondary} />
+                      <Text style={styles.actionBtnText}>Update Mileage</Text>
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [styles.actionBtnAccent, { opacity: pressed ? 0.8 : 1 }]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push(`/log-service/${v.id}` as any);
+                      }}
+                    >
+                      <Ionicons name="construct-outline" size={14} color={Colors.vehicle} />
+                      <Text style={styles.actionBtnAccentText}>Log Service</Text>
+                    </Pressable>
+                  </View>
+                )}
+                {isLocked && (
+                  <View style={styles.lockedRow}>
+                    <Ionicons name="lock-closed" size={12} color={Colors.textTertiary} />
+                    <Text style={styles.lockedText}>Locked — upgrade to access</Text>
+                  </View>
+                )}
               </Pressable>
             );
           })
@@ -463,6 +488,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   actionBtnAccentText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.vehicle },
+  lockedRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingTop: 4, paddingBottom: 2 },
+  lockedText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontStyle: "italic" },
 
   emptyWrap: { flex: 1, paddingTop: 24 },
   emptyCard: {

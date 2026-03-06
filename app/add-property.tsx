@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useFocusEffect } from "expo-router";
 import { SaveToast } from "@/components/SaveToast";
+import Paywall from "@/components/Paywall";
+import { propertyLimit } from "@/lib/subscription";
 import {
   View,
   Text,
@@ -135,7 +137,7 @@ async function fetchPlaceDetails(placeId: string): Promise<ParsedAddress | null>
 
 export default function AddPropertyScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const queryClient = useQueryClient();
 
   const [street, setStreet] = useState("");
@@ -150,6 +152,7 @@ export default function AddPropertyScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statePickerVisible, setStatePickerVisible] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -335,6 +338,16 @@ export default function AddPropertyScreen() {
       setError("Street address is required");
       return;
     }
+    try {
+      const { count } = await supabase
+        .from("properties")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      if ((count ?? 0) >= propertyLimit(profile)) {
+        setShowPaywall(true);
+        return;
+      }
+    } catch {}
     setIsLoading(true);
     setError(null);
 
@@ -602,6 +615,15 @@ export default function AddPropertyScreen() {
         insets={insets}
       />
       <SaveToast visible={showToast} message="Property saved!" />
+      {showPaywall && (
+        <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
+          <Paywall
+            canDismiss
+            subtitle="Upgrade to add more properties"
+            onDismiss={() => setShowPaywall(false)}
+          />
+        </Modal>
+      )}
     </KeyboardAvoidingView>
   );
 }

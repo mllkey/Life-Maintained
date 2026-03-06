@@ -1,0 +1,76 @@
+"Add upgrade nudges throughout LifeMaintained to enforce tier limits and guide users toward subscribing. The Paywall component exists at components/Paywall.tsx, the tier helper functions are in lib/subscription.ts, and the ScanPackModal is at components/ScanPackModal.tsx.
+Tier limits to enforce:
+
+Free tier: 1 vehicle, 1 property, 1 family member, 0 receipt scans, no export, no cost analytics
+Personal: 3 vehicles, 2 properties, unlimited family members, 15 scans/month, export enabled
+Pro: 6 vehicles, 5 properties, unlimited family members, 30 scans/month, export + cost analytics
+Business: unlimited everything, 100 scans/month
+
+Critical rule: Never delete user data. Users who downgrade from trial to free keep all their vehicles, properties, and family members — they just cannot add new ones or access locked features. All existing data remains visible.
+1. Vehicle limit enforcement in app/add-vehicle.tsx:
+
+Before saving, query count of existing vehicles for this user
+If count >= vehicleLimit(profile): abort save, show <Paywall> modal with canDismiss={true} and subtitle 'Upgrade to add more vehicles'
+Use vehicleLimit(profile) from lib/subscription.ts — never hardcode the number
+
+2. Property limit enforcement in app/add-property.tsx:
+
+Same pattern using propertyLimit(profile)
+Subtitle: 'Upgrade to add more properties'
+
+3. Family member limit enforcement in app/add-family-member.tsx:
+
+Free tier only: max 1 family member
+Personal and above: unlimited
+Subtitle: 'Upgrade to add unlimited family members'
+
+4. Receipt scanning enforcement in app/log-service/[vehicleId].tsx:
+
+When user taps the scan button:
+
+If isFreeTier(profile): show <Paywall> with subtitle 'Upgrade to scan receipts with AI'
+If scansRemaining(profile) <= 0: show <ScanPackModal> instead
+If scansRemaining(profile) <= 5: show a subtle badge on the scan button displaying 'X scans left this month' — only when 5 or fewer remain to avoid cluttering the UI on fresh months
+Otherwise: proceed normally
+
+
+
+5. Export enforcement:
+
+In any screen with an export button (vehicle detail, property detail, service history screens): check hasPersonalOrAbove(profile) before proceeding
+If free tier: show <Paywall> with subtitle 'Upgrade to export your service history'
+Export is available on Personal and above
+
+6. Cost analytics enforcement:
+
+Cost analytics and per-category breakdowns are a Pro-tier feature
+In service history screens where cost breakdowns appear: check hasProOrAbove(profile)
+If Personal or free: show a locked state card with a teal 'Upgrade to Pro' button that opens the paywall
+Subtitle: 'Upgrade to Pro to unlock cost analytics'
+
+7. Locked asset visual treatment:
+On the Vehicles list, Properties list, and Health tab — if a user has more assets than their tier allows (carried over from trial):
+
+Show all assets in the list
+Display a lock icon overlay and 0.5 opacity on assets beyond the tier limit (e.g. vehicles 4, 5, 6 for a Personal user)
+Tapping a locked asset shows a bottom sheet: 'This [vehicle/property/person] is locked on your current plan. Upgrade to access all your [vehicles/properties/family members].' with an 'Upgrade Now' button that opens the paywall with canDismiss={true}
+
+8. Settings screen upgrade prompt:
+
+For free tier users: show a teal banner at top of Settings: 'You are on the free plan' with an 'Upgrade' button that opens the paywall
+For trial users: show an amber banner: '[X] days left in your free trial' with an 'Upgrade Now' button
+For Personal/Pro/Business: show a green banner: '[Tier name] · Active until [date]' with a 'Manage' button that opens itms-apps://apps.apple.com/account/subscriptions
+
+9. Push notification enforcement:
+
+Wrap all scheduleNotificationAsync calls with a check for isFreeTier(profile)
+If free tier: cancel all scheduled notifications and skip scheduling entirely
+Wait — push notifications are FREE per the monetization spec. Ignore this item entirely and leave push notification scheduling unchanged for all tiers.
+
+Implementation requirements:
+
+Use hasPersonalOrAbove, hasProOrAbove, hasBusiness, vehicleLimit, propertyLimit, scansRemaining from lib/subscription.ts consistently everywhere — never duplicate subscription check logic inline
+All limit checks must happen before any UI action completes — never let a user start an action and then block them partway through
+Re-check subscription status on every screen focus using useFocusEffect — a user could subscribe from the paywall and return to a screen that still shows locked state
+All paywall presentations must use the existing <Paywall> component — never build inline paywall UI
+Wrap all RevenueCat and subscription checks in try/catch — a failed subscription check must never crash the app or block the UI. Default to allowing the action if the check fails rather than incorrectly blocking a paying user"

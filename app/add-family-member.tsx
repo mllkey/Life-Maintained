@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { SaveToast } from "@/components/SaveToast";
+import Paywall from "@/components/Paywall";
+import { isFreeTier } from "@/lib/subscription";
 import {
   View,
   Text,
@@ -10,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,7 +29,7 @@ const PET_TYPES = ["Dog", "Cat", "Bird", "Fish", "Rabbit", "Other"];
 
 export default function AddFamilyMemberScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const queryClient = useQueryClient();
 
   const [name, setName] = useState("");
@@ -37,6 +40,7 @@ export default function AddFamilyMemberScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   function formatDob(text: string) {
     const digits = text.replace(/\D/g, "");
@@ -48,6 +52,18 @@ export default function AddFamilyMemberScreen() {
   async function handleSave() {
     if (!user) return;
     if (!name.trim()) { setError("Name is required"); return; }
+    try {
+      if (isFreeTier(profile)) {
+        const { count } = await supabase
+          .from("family_members")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id);
+        if ((count ?? 0) >= 1) {
+          setShowPaywall(true);
+          return;
+        }
+      }
+    } catch {}
     setIsLoading(true);
     setError(null);
 
@@ -160,6 +176,15 @@ export default function AddFamilyMemberScreen() {
         </ScrollView>
       </View>
       <SaveToast visible={showToast} message="Member saved!" />
+      {showPaywall && (
+        <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
+          <Paywall
+            canDismiss
+            subtitle="Upgrade to add unlimited family members"
+            onDismiss={() => setShowPaywall(false)}
+          />
+        </Modal>
+      )}
     </KeyboardAvoidingView>
   );
 }

@@ -7,6 +7,7 @@ import {
   Pressable,
   RefreshControl,
   Platform,
+  Alert,
 } from "react-native";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,6 +19,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays } from "date-fns";
+import { propertyLimit } from "@/lib/subscription";
 
 type Property = {
   id: string;
@@ -68,7 +70,7 @@ function getPropertyLabel(p: Property): string {
 
 export default function HomeTabScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
   const { data: properties, isLoading, refetch } = useQuery({
@@ -133,7 +135,8 @@ export default function HomeTabScreen() {
         ) : properties?.length === 0 ? (
           <EmptyProperties />
         ) : (
-          properties?.map(p => {
+          properties?.map((p, idx) => {
+            const isLocked = idx >= propertyLimit(profile);
             const counts = taskCounts?.[p.id];
             const overdue = counts?.overdue ?? 0;
             const dueSoon = counts?.due_soon ?? 0;
@@ -145,8 +148,22 @@ export default function HomeTabScreen() {
             return (
               <Pressable
                 key={p.id}
-                style={({ pressed }) => [styles.propertyCard, { opacity: pressed ? 0.88 : 1 }]}
-                onPress={() => { Haptics.selectionAsync(); router.push(`/property/${p.id}` as any); }}
+                style={({ pressed }) => [styles.propertyCard, { opacity: pressed ? 0.88 : isLocked ? 0.55 : 1 }]}
+                onPress={() => {
+                  if (isLocked) {
+                    Alert.alert(
+                      "Property Locked",
+                      "This property is locked on your current plan. Upgrade to access all your properties.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Upgrade Now", onPress: () => router.push("/subscription" as any) },
+                      ]
+                    );
+                    return;
+                  }
+                  Haptics.selectionAsync();
+                  router.push(`/property/${p.id}` as any);
+                }}
               >
                 <View style={styles.cardTop}>
                   <View style={[styles.iconWrap, { backgroundColor: Colors.homeMuted }]}>
@@ -214,18 +231,26 @@ export default function HomeTabScreen() {
                     </View>
                   )}
                   <View style={{ flex: 1 }} />
-                  <Pressable
-                    style={({ pressed }) => [styles.addTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push(`/add-property-task/${p.id}` as any);
-                    }}
-                  >
-                    <Ionicons name="add" size={14} color={Colors.home} />
-                    <Text style={styles.addTaskBtnText}>Add Task</Text>
-                  </Pressable>
+                  {!isLocked && (
+                    <Pressable
+                      style={({ pressed }) => [styles.addTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push(`/add-property-task/${p.id}` as any);
+                      }}
+                    >
+                      <Ionicons name="add" size={14} color={Colors.home} />
+                      <Text style={styles.addTaskBtnText}>Add Task</Text>
+                    </Pressable>
+                  )}
                 </View>
+                {isLocked && (
+                  <View style={styles.lockedRow}>
+                    <Ionicons name="lock-closed" size={12} color={Colors.textTertiary} />
+                    <Text style={styles.lockedText}>Locked — upgrade to access</Text>
+                  </View>
+                )}
               </Pressable>
             );
           })
@@ -376,6 +401,8 @@ const styles = StyleSheet.create({
     minHeight: 30,
   },
   addTaskBtnText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.home },
+  lockedRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingTop: 4, paddingBottom: 2 },
+  lockedText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontStyle: "italic" },
 
   emptyWrap: { paddingTop: 24 },
   emptyCard: {

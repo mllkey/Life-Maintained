@@ -20,6 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
 import { parseISO, isBefore, addDays, format } from "date-fns";
+import { isFreeTier } from "@/lib/subscription";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -55,7 +56,7 @@ function getStatus(date: string | null) {
 
 export default function HealthScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
   const [schedulingMed, setSchedulingMed] = useState<string | null>(null);
 
@@ -263,14 +264,34 @@ export default function HealthScreen() {
                     onAdd={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-family-member"); }}
                   >
                     <View style={styles.memberGrid}>
-                      {people.map(person => (
-                        <MemberCard
-                          key={person.id}
-                          member={person}
-                          apptCount={apptCountByMember[person.id] ?? 0}
-                          onAddAppt={() => router.push("/add-appointment")}
-                        />
-                      ))}
+                      {people.map((person, personIdx) => {
+                        const memberLimit = isFreeTier(profile) ? 1 : Infinity;
+                        const isLocked = personIdx >= memberLimit;
+                        return (
+                          <View key={person.id} style={{ position: "relative" }}>
+                            <View style={{ opacity: isLocked ? 0.5 : 1 }}>
+                              <MemberCard
+                                member={person}
+                                apptCount={apptCountByMember[person.id] ?? 0}
+                                onAddAppt={() => router.push("/add-appointment")}
+                              />
+                            </View>
+                            {isLocked && (
+                              <Pressable
+                                style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                                onPress={() => Alert.alert(
+                                  "Family Member Locked",
+                                  "This family member is locked on your current plan. Upgrade to access all your family members.",
+                                  [
+                                    { text: "Cancel", style: "cancel" },
+                                    { text: "Upgrade Now", onPress: () => router.push("/subscription" as any) },
+                                  ]
+                                )}
+                              />
+                            )}
+                          </View>
+                        );
+                      })}
                     </View>
                   </SectionBlock>
                 )}
@@ -281,14 +302,35 @@ export default function HealthScreen() {
                     onAdd={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-family-member"); }}
                   >
                     <View style={styles.memberGrid}>
-                      {pets.map(pet => (
-                        <MemberCard
-                          key={pet.id}
-                          member={pet}
-                          apptCount={apptCountByMember[pet.id] ?? 0}
-                          onAddAppt={() => router.push("/add-appointment")}
-                        />
-                      ))}
+                      {pets.map((pet, petIdx) => {
+                        const memberLimit = isFreeTier(profile) ? 1 : Infinity;
+                        const combinedIdx = people.length + petIdx;
+                        const isLocked = combinedIdx >= memberLimit;
+                        return (
+                          <View key={pet.id} style={{ position: "relative" }}>
+                            <View style={{ opacity: isLocked ? 0.5 : 1 }}>
+                              <MemberCard
+                                member={pet}
+                                apptCount={apptCountByMember[pet.id] ?? 0}
+                                onAddAppt={() => router.push("/add-appointment")}
+                              />
+                            </View>
+                            {isLocked && (
+                              <Pressable
+                                style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                                onPress={() => Alert.alert(
+                                  "Family Member Locked",
+                                  "This family member is locked on your current plan. Upgrade to access all your family members.",
+                                  [
+                                    { text: "Cancel", style: "cancel" },
+                                    { text: "Upgrade Now", onPress: () => router.push("/subscription" as any) },
+                                  ]
+                                )}
+                              />
+                            )}
+                          </View>
+                        );
+                      })}
                     </View>
                   </SectionBlock>
                 )}

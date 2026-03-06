@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Modal,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +21,9 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import ReceiptScanButton from "@/components/ReceiptScanButton";
+import Paywall from "@/components/Paywall";
+import ScanPackModal from "@/components/ScanPackModal";
+import { isFreeTier, scansRemaining } from "@/lib/subscription";
 import { ReceiptScanResult } from "@/lib/receiptScanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { parseISO, format } from "date-fns";
@@ -37,9 +41,11 @@ type ScannedItem = { name: string; cost: number | null; details: string | null }
 export default function LogServiceScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const queryClient = useQueryClient();
 
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [showScanPack, setShowScanPack] = useState(false);
   const [task, setTask] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [mileage, setMileage] = useState("");
@@ -355,7 +361,40 @@ export default function LogServiceScreen() {
                 <Text style={styles.ocrSuccessText}>Receipt scanned — fields auto-filled below</Text>
               </View>
             ) : null}
-            <ReceiptScanButton onScanComplete={handleScanComplete} />
+            {isFreeTier(profile) ? (
+              <Pressable
+                style={styles.scanGateBtn}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPaywall(true); }}
+              >
+                <Ionicons name="camera-outline" size={16} color={Colors.accent} />
+                <Text style={styles.scanGateBtnText}>Scan Receipt</Text>
+                <View style={styles.scanLockedBadge}>
+                  <Ionicons name="lock-closed" size={10} color={Colors.textInverse} />
+                  <Text style={styles.scanLockedText}>Upgrade</Text>
+                </View>
+              </Pressable>
+            ) : scansRemaining(profile) <= 0 ? (
+              <Pressable
+                style={styles.scanGateBtn}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowScanPack(true); }}
+              >
+                <Ionicons name="camera-outline" size={16} color={Colors.accent} />
+                <Text style={styles.scanGateBtnText}>Scan Receipt</Text>
+                <View style={[styles.scanLockedBadge, { backgroundColor: Colors.dueSoon }]}>
+                  <Text style={styles.scanLockedText}>0 left</Text>
+                </View>
+              </Pressable>
+            ) : (
+              <View>
+                {scansRemaining(profile) <= 5 && (
+                  <View style={styles.scanBadgeRow}>
+                    <Ionicons name="information-circle-outline" size={13} color={Colors.dueSoon} />
+                    <Text style={styles.scanBadgeText}>{scansRemaining(profile)} scan{scansRemaining(profile) !== 1 ? "s" : ""} left this month</Text>
+                  </View>
+                )}
+                <ReceiptScanButton onScanComplete={handleScanComplete} />
+              </View>
+            )}
           </View>
 
           {scannedItems.length > 0 && (
@@ -532,6 +571,20 @@ export default function LogServiceScreen() {
           )}
         </ScrollView>
       </View>
+      {showPaywall && (
+        <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
+          <Paywall
+            canDismiss
+            subtitle="Upgrade to scan receipts with AI"
+            onDismiss={() => setShowPaywall(false)}
+          />
+        </Modal>
+      )}
+      <ScanPackModal
+        visible={showScanPack}
+        onClose={() => setShowScanPack(false)}
+        onSuccess={() => setShowScanPack(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -634,6 +687,30 @@ const styles = StyleSheet.create({
   textArea: { height: 80, paddingTop: 12 },
   ocrSuccess: { flexDirection: "row", alignItems: "center", gap: 6 },
   ocrSuccessText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good },
+  scanGateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.accentLight,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: Colors.accent + "33",
+  },
+  scanGateBtnText: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.accent },
+  scanLockedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.accent,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  scanLockedText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  scanBadgeRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 6 },
+  scanBadgeText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.dueSoon },
   itemRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -10,6 +10,7 @@ import {
   Alert,
   Share,
   Platform,
+  Modal,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,6 +23,9 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
 import { parseISO, isBefore, addDays, format, differenceInDays } from "date-fns";
+import { useAuth } from "@/context/AuthContext";
+import Paywall from "@/components/Paywall";
+import { hasPersonalOrAbove } from "@/lib/subscription";
 
 function getStatus(date: string | null) {
   if (!date) return "good";
@@ -35,8 +39,10 @@ export default function VehicleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState<"tasks" | "history">("tasks");
   const [isExporting, setIsExporting] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   const { data: vehicle, isLoading: loadingVehicle } = useQuery({
     queryKey: ["vehicle", id],
@@ -202,6 +208,10 @@ export default function VehicleDetailScreen() {
   }
 
   function handleExport() {
+    if (!hasPersonalOrAbove(profile)) {
+      setShowPaywall(true);
+      return;
+    }
     Alert.alert("Export Service History", "Choose a format for resale documentation", [
       { text: "PDF", onPress: () => exportHistory("pdf") },
       { text: "CSV", onPress: () => exportHistory("csv") },
@@ -475,6 +485,15 @@ export default function VehicleDetailScreen() {
           )}
         </ScrollView>
       ) : null}
+      {showPaywall && (
+        <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
+          <Paywall
+            canDismiss
+            subtitle="Upgrade to export your service history"
+            onDismiss={() => setShowPaywall(false)}
+          />
+        </Modal>
+      )}
     </View>
   );
 }

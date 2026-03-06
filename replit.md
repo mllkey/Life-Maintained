@@ -123,3 +123,12 @@ The tab layout uses `isLiquidGlassAvailable()` from `expo-glass-effect` to check
 - OCR endpoint at `POST /api/ocr` accepts `{ image: base64string }`, returns `{ date, cost, service, provider }`
 - Notification preferences stored in AsyncStorage under key `notification_prefs`
 - Health screening opt-ins stored in AsyncStorage under key `screening_notif_optins`
+
+## Subscription Enforcement
+
+Tier limits enforced across the entire app via `lib/subscription.ts` helpers:
+- **Add screens** (`add-vehicle`, `add-property`, `add-family-member`): check tier limit before save; shows `Paywall` modal when limit reached
+- **List screens** (`vehicles`, `home-tab`, `health`): items beyond tier limit show dimmed lock overlay; tapping shows Alert with "Upgrade Now"; action buttons hidden for locked items
+- **Log service** (`log-service/[vehicleId]`): free tier → Paywall; 0 scans → ScanPackModal; ≤5 scans → warning badge on ReceiptScanButton
+- **Export** (`vehicle/[id]`): gated behind `hasPersonalOrAbove`; free/trial-expired users see Paywall modal
+- **Settings subscription banner**: shows correct tier/trial status using `isInTrial`, `isFreeTier`, `trialDaysRemaining`, `hasBusiness`, `hasProOrAbove`; Manage button opens Apple subscriptions on iOS; `TrialBanner` shows only when in trial with ≤7 days remaining

@@ -21,6 +21,14 @@ import { supabase } from "@/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { parseISO, differenceInDays, format, addDays } from "date-fns";
+import {
+  isInTrial,
+  isFreeTier,
+  trialDaysRemaining,
+  hasPersonalOrAbove,
+  hasProOrAbove,
+  hasBusiness,
+} from "@/lib/subscription";
 
 const SETTINGS_KEY = "app_settings_v2";
 
@@ -295,11 +303,14 @@ export default function SettingsScreen() {
     );
   }
 
-  const isPremium = profile?.subscription_tier === "premium";
-  const trialDaysLeft = profile?.trial_end_date
-    ? differenceInDays(parseISO(profile.trial_end_date), new Date())
+  const userIsInTrial = isInTrial(profile);
+  const userIsFreeTier = isFreeTier(profile);
+  const trialDaysLeft = trialDaysRemaining(profile);
+  const isPremium = hasPersonalOrAbove(profile);
+  const tierLabel = hasBusiness(profile) ? "Business" : hasProOrAbove(profile) ? "Pro" : hasPersonalOrAbove(profile) ? "Personal" : "Free";
+  const tierExpiry = profile?.subscription_expires_at
+    ? format(parseISO(profile.subscription_expires_at), "MMMM d, yyyy")
     : null;
-  const isInTrial = trialDaysLeft !== null && trialDaysLeft > 0;
 
   if (!isLoaded) {
     return (
@@ -324,58 +335,63 @@ export default function SettingsScreen() {
         ]}
       >
         <View style={styles.maxWidth}>
-          {isInTrial && (
+          {userIsInTrial && (
             <View style={[styles.banner, { backgroundColor: Colors.dueSoonMuted, borderColor: Colors.dueSoon + "44" }]}>
               <View style={[styles.bannerIconWrap, { backgroundColor: Colors.dueSoon + "30" }]}>
                 <Ionicons name="time-outline" size={20} color={Colors.dueSoon} />
               </View>
               <View style={styles.bannerText}>
                 <Text style={[styles.bannerTitle, { color: Colors.dueSoon }]}>
-                  {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} left in trial
+                  {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} left in your free trial
                 </Text>
-                <Text style={styles.bannerSub}>
-                  Expires {format(parseISO(profile!.trial_end_date), "MMMM d, yyyy")}
-                </Text>
+                <Text style={styles.bannerSub}>Upgrade now to keep full access</Text>
               </View>
               <Pressable
                 style={({ pressed }) => [styles.bannerBtn, { opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => router.push("/subscription" as any)}
               >
-                <Text style={styles.bannerBtnText}>Upgrade</Text>
+                <Text style={styles.bannerBtnText}>Upgrade Now</Text>
               </Pressable>
             </View>
           )}
 
-          {!isInTrial && !isPremium && (
-            <Pressable
-              style={({ pressed }) => [styles.upgradeCard, { opacity: pressed ? 0.95 : 1 }]}
-              onPress={() => router.push("/subscription" as any)}
-            >
-              <View style={styles.upgradeCardLeft}>
-                <View style={[styles.upgradeIcon, { backgroundColor: Colors.vehicleMuted }]}>
-                  <Ionicons name="star" size={22} color={Colors.vehicle} />
-                </View>
-                <View style={styles.upgradeCardText}>
-                  <Text style={styles.upgradeCardTitle}>Upgrade to Premium</Text>
-                  <Text style={styles.upgradeCardSub}>Unlimited vehicles, receipts, exports & more</Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={Colors.vehicle} />
-            </Pressable>
-          )}
-
-          {isPremium && !isInTrial && (
-            <View style={[styles.banner, { backgroundColor: Colors.goodMuted, borderColor: Colors.good + "44" }]}>
-              <View style={[styles.bannerIconWrap, { backgroundColor: Colors.good + "30" }]}>
-                <Ionicons name="star" size={20} color={Colors.good} />
+          {userIsFreeTier && !userIsInTrial && (
+            <View style={[styles.banner, { backgroundColor: Colors.accentLight, borderColor: Colors.accent + "44" }]}>
+              <View style={[styles.bannerIconWrap, { backgroundColor: Colors.accent + "20" }]}>
+                <Ionicons name="star-outline" size={20} color={Colors.accent} />
               </View>
               <View style={styles.bannerText}>
-                <Text style={[styles.bannerTitle, { color: Colors.good }]}>Premium Active</Text>
-                <Text style={styles.bannerSub}>Unlimited access to all features</Text>
+                <Text style={[styles.bannerTitle, { color: Colors.accent }]}>You are on the free plan</Text>
+                <Text style={styles.bannerSub}>Upgrade to unlock vehicles, scans & exports</Text>
+              </View>
+              <Pressable
+                style={({ pressed }) => [styles.bannerBtn, { backgroundColor: Colors.accent, opacity: pressed ? 0.8 : 1 }]}
+                onPress={() => router.push("/subscription" as any)}
+              >
+                <Text style={[styles.bannerBtnText, { color: Colors.textInverse }]}>Upgrade</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {isPremium && !userIsInTrial && (
+            <View style={[styles.banner, { backgroundColor: Colors.goodMuted, borderColor: Colors.good + "44" }]}>
+              <View style={[styles.bannerIconWrap, { backgroundColor: Colors.good + "30" }]}>
+                <Ionicons name="checkmark-circle" size={20} color={Colors.good} />
+              </View>
+              <View style={styles.bannerText}>
+                <Text style={[styles.bannerTitle, { color: Colors.good }]}>{tierLabel} · Active</Text>
+                {tierExpiry && <Text style={styles.bannerSub}>Renews {tierExpiry}</Text>}
               </View>
               <Pressable
                 style={({ pressed }) => [styles.bannerBtn, { backgroundColor: Colors.good + "22", opacity: pressed ? 0.8 : 1 }]}
-                onPress={() => router.push("/subscription" as any)}
+                onPress={() => {
+                  if (Platform.OS === "ios") {
+                    const { Linking } = require("react-native");
+                    Linking.openURL("itms-apps://apps.apple.com/account/subscriptions");
+                  } else {
+                    router.push("/subscription" as any);
+                  }
+                }}
               >
                 <Text style={[styles.bannerBtnText, { color: Colors.good }]}>Manage</Text>
               </Pressable>
@@ -394,7 +410,7 @@ export default function SettingsScreen() {
               <View style={[styles.tierPill, isPremium ? styles.tierPillPremium : styles.tierPillFree]}>
                 {isPremium && <Ionicons name="star" size={10} color={Colors.vehicle} />}
                 <Text style={[styles.tierPillText, { color: isPremium ? Colors.vehicle : Colors.textTertiary }]}>
-                  {isPremium ? "Premium" : "Free"}
+                  {tierLabel}
                 </Text>
               </View>
             </View>

@@ -22,6 +22,8 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
+import Paywall from "@/components/Paywall";
+import { vehicleLimit } from "@/lib/subscription";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_ITEM_HEIGHT = 52;
@@ -142,7 +144,7 @@ function mapNhtsaVehicleType(nhtsaType: string): string {
 
 export default function AddVehicleScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const queryClient = useQueryClient();
 
   const [year, setYear] = useState("");
@@ -157,6 +159,7 @@ export default function AddVehicleScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   const [vin, setVin] = useState("");
   const [isVinLoading, setIsVinLoading] = useState(false);
@@ -374,6 +377,17 @@ export default function AddVehicleScreen() {
       setError("Estimated monthly miles is required for this vehicle type");
       return;
     }
+    try {
+      const { count } = await supabase
+        .from("vehicles")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      if ((count ?? 0) >= vehicleLimit(profile)) {
+        setShowPaywall(true);
+        return;
+      }
+    } catch {}
+
     setIsLoading(true);
     setError(null);
 
@@ -718,6 +732,15 @@ export default function AddVehicleScreen() {
         insets={insets}
       />
       <SaveToast visible={showToast} message="Vehicle saved!" />
+      {showPaywall && (
+        <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
+          <Paywall
+            canDismiss
+            subtitle="Upgrade to add more vehicles"
+            onDismiss={() => setShowPaywall(false)}
+          />
+        </Modal>
+      )}
     </KeyboardAvoidingView>
   );
 }
