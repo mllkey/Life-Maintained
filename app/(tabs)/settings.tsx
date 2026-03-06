@@ -22,9 +22,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { parseISO, differenceInDays, format, addDays } from "date-fns";
 import {
-  isInTrial,
-  isFreeTier,
-  trialDaysRemaining,
   hasPersonalOrAbove,
   hasProOrAbove,
   hasBusiness,
@@ -303,11 +300,15 @@ export default function SettingsScreen() {
     );
   }
 
-  const userIsInTrial = isInTrial(profile);
-  const userIsFreeTier = isFreeTier(profile);
-  const trialDaysLeft = trialDaysRemaining(profile);
+  const userIsInTrial =
+    profile?.subscription_tier === "trial" ||
+    (!!profile?.trial_expires_at && new Date(profile.trial_expires_at) > new Date());
+  const trialDaysLeft = profile?.trial_expires_at
+    ? Math.max(0, Math.ceil((new Date(profile.trial_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 0;
   const isPremium = hasPersonalOrAbove(profile);
-  const tierLabel = hasBusiness(profile) ? "Business" : hasProOrAbove(profile) ? "Pro" : hasPersonalOrAbove(profile) ? "Personal" : "Free";
+  const userIsFreeTier = !userIsInTrial && !isPremium;
+  const tierLabel = userIsInTrial ? "Trial" : hasBusiness(profile) ? "Business" : hasProOrAbove(profile) ? "Pro" : hasPersonalOrAbove(profile) ? "Personal" : "Free";
   const tierExpiry = profile?.subscription_expires_at
     ? format(parseISO(profile.subscription_expires_at), "MMMM d, yyyy")
     : null;
@@ -342,7 +343,7 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.bannerText}>
                 <Text style={[styles.bannerTitle, { color: Colors.dueSoon }]}>
-                  {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} left in your free trial
+                  {"Free Trial \u2014 "}{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining
                 </Text>
                 <Text style={styles.bannerSub}>Upgrade now to keep full access</Text>
               </View>
@@ -407,9 +408,12 @@ export default function SettingsScreen() {
             <View style={styles.profileEmailRow}>
               <Ionicons name="mail-outline" size={16} color={Colors.textTertiary} />
               <Text style={styles.profileEmail} numberOfLines={1}>{user?.email}</Text>
-              <View style={[styles.tierPill, isPremium ? styles.tierPillPremium : styles.tierPillFree]}>
-                {isPremium && <Ionicons name="star" size={10} color={Colors.vehicle} />}
-                <Text style={[styles.tierPillText, { color: isPremium ? Colors.vehicle : Colors.textTertiary }]}>
+              <View style={[
+                styles.tierPill,
+                userIsInTrial ? { backgroundColor: Colors.dueSoon + "22" } : isPremium ? styles.tierPillPremium : styles.tierPillFree,
+              ]}>
+                {isPremium && !userIsInTrial && <Ionicons name="star" size={10} color={Colors.vehicle} />}
+                <Text style={[styles.tierPillText, { color: userIsInTrial ? Colors.dueSoon : isPremium ? Colors.vehicle : Colors.textTertiary }]}>
                   {tierLabel}
                 </Text>
               </View>
