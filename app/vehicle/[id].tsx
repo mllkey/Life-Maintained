@@ -117,11 +117,11 @@ export default function VehicleDetailScreen() {
     const name = vehicleData?.nickname ?? `${vehicleData?.year} ${vehicleData?.make} ${vehicleData?.model}`;
     const rows = logsData.map(log => `
       <tr>
-        <td>${log.service_date ? format(parseISO(log.service_date), "MMM d, yyyy") : "—"}</td>
+        <td>${log.service_date ? format(parseISO(log.service_date), "MMM d, yyyy") : "-"}</td>
         <td>${log.service_name ?? "Service"}</td>
-        <td>${log.mileage != null ? log.mileage.toLocaleString() + " mi" : "—"}</td>
-        <td>${log.cost != null ? "$" + log.cost.toFixed(2) : "—"}</td>
-        <td>${log.provider_name ?? "—"}</td>
+        <td>${log.mileage != null ? log.mileage.toLocaleString() + " mi" : "-"}</td>
+        <td>${log.cost != null ? "$" + log.cost.toFixed(2) : "-"}</td>
+        <td>${log.provider_name ?? "-"}</td>
         <td>${log.notes ?? ""}</td>
       </tr>`).join("");
 
@@ -136,7 +136,7 @@ export default function VehicleDetailScreen() {
       tr:nth-child(even) td { background: #fafafa; }
       .footer { margin-top: 24px; font-size: 12px; color: #999; }
     </style></head><body>
-    <h1>Service History — ${name}</h1>
+    <h1>Service History: ${name}</h1>
     <div class="sub">Exported from LifeMaintained · ${format(new Date(), "MMMM d, yyyy")}</div>
     <table>
       <thead><tr><th>Date</th><th>Service</th><th>Mileage</th><th>Cost</th><th>Provider</th><th>Notes</th></tr></thead>

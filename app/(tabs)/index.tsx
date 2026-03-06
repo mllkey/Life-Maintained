@@ -284,7 +284,7 @@ export default function DashboardScreen() {
               <Pressable onPress={dismissBudgetBanner} style={styles.budgetBanner} accessibilityRole="button" accessibilityLabel="Dismiss budget alert">
                 <Ionicons name="warning-outline" size={15} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
                 <Text style={styles.budgetBannerText} numberOfLines={3}>
-                  {"Heads up \u2014 $"}{monthlyCost.toFixed(0)}{" estimated in maintenance this month (your alert is set to $"}{budgetThreshold.toFixed(0)}{")"}</Text>
+                  {"Heads up: $"}{monthlyCost.toFixed(0)}{" estimated in maintenance this month (your alert is set to $"}{budgetThreshold.toFixed(0)}{")"}</Text>
                 <Ionicons name="close" size={14} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
               </Pressable>
             )}

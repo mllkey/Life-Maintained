@@ -94,7 +94,7 @@ async function fetchSuggestions(query: string): Promise<PlaceSuggestion[]> {
     const { data, error } = await supabase.functions.invoke("places-autocomplete", {
       body: { input: query },
     });
-    console.log("[places] invoke result — data:", JSON.stringify(data), "error:", error);
+    console.log("[places] invoke result - data:", JSON.stringify(data), "error:", error);
     if (error) {
       console.warn("[places] invoke error:", error.message ?? error);
       return [];
@@ -354,7 +354,7 @@ export default function AddPropertyScreen() {
     const streetLine = unit.trim() ? `${street.trim()} ${unit.trim()}` : street.trim();
     const cityStateZip = [city.trim(), [stateCode, zip.trim()].filter(Boolean).join(" ")].filter(Boolean).join(", ");
     const fullAddress = [streetLine, cityStateZip].filter(Boolean).join(", ");
-    const name = nickname.trim() || `${TYPE_LABELS[propertyType] ?? "Property"} — ${street.trim()}`;
+    const name = nickname.trim() || `${TYPE_LABELS[propertyType] ?? "Property"}: ${street.trim()}`;
     const yearBuiltNum = yearBuilt ? parseInt(yearBuilt) : null;
 
     const { data: newProperty, error: err } = await supabase.from("properties").insert({
@@ -600,7 +600,7 @@ export default function AddPropertyScreen() {
             </View>
             {propertyRateLimited && (
               <Text style={styles.rateLimitedText}>
-                Property details unavailable right now — please enter manually
+                Property details unavailable right now. Please enter manually.
               </Text>
             )}
           </FieldGroup>

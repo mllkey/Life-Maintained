@@ -40,7 +40,7 @@ const TIER_CONFIG: Record<TierKey, {
     rcOffering: "default",
     annualPrice: "$49.99/year",
     annualMonthly: "$4.17/mo",
-    monthlyPrice: "$7.99/month",
+    monthlyPrice: "$6.99/month",
     features: [
       "3 vehicles + 2 properties",
       "15 AI receipt scans/month",
@@ -421,7 +421,7 @@ export default function Paywall({
           <View style={styles.trialCallout}>
             <Ionicons name="gift-outline" size={16} color={Colors.accent} />
             <Text style={styles.trialCalloutText}>
-              14-day free trial — full access, no credit card required
+              14-day free trial. Full access, no credit card required.
             </Text>
           </View>
 

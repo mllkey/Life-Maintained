@@ -358,7 +358,7 @@ export default function LogServiceScreen() {
             {ocrApplied ? (
               <View style={styles.ocrSuccess}>
                 <Ionicons name="checkmark-circle" size={14} color={Colors.good} />
-                <Text style={styles.ocrSuccessText}>Receipt scanned — fields auto-filled below</Text>
+                <Text style={styles.ocrSuccessText}>Receipt scanned. Fields auto-filled below.</Text>
               </View>
             ) : null}
             {isFreeTier(profile) ? (
@@ -443,7 +443,7 @@ export default function LogServiceScreen() {
                     ) : (
                       <Pressable onPress={() => { Haptics.selectionAsync(); setEditingField({ index, field: "cost" }); }}>
                         <Text style={[styles.itemCost, item.cost == null && styles.itemCostEmpty]}>
-                          {item.cost != null ? `$${item.cost.toFixed(2)}` : "$ —"}
+                          {item.cost != null ? `$${item.cost.toFixed(2)}` : "$ -"}
                         </Text>
                       </Pressable>
                     )}

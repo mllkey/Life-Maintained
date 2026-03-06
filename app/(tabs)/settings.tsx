@@ -75,7 +75,7 @@ function getDaysUntil(t: PredTask, v: PredVehicle | null): number | null {
 }
 
 function formatDaysUntil(days: number | null, nextDueDate: string | null): string {
-  if (days === null) return "—";
+  if (days === null) return "-";
   if (days < 0) return `${Math.abs(days)}d overdue`;
   if (days === 0) return "Today";
   if (nextDueDate) return format(parseISO(nextDueDate), "MMM d");
@@ -89,7 +89,7 @@ function formatInterval(t: PredTask): string {
       : `${t.mileage_interval} mi`;
   }
   if (t.interval != null) return `${t.interval}d`;
-  return "—";
+  return "-";
 }
 
 function rowColor(days: number | null): string {
@@ -343,7 +343,7 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.bannerText}>
                 <Text style={[styles.bannerTitle, { color: Colors.dueSoon }]}>
-                  {"Free Trial \u2014 "}{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining
+                  {"Free Trial: "}{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining
                 </Text>
                 <Text style={styles.bannerSub}>Upgrade now to keep full access</Text>
               </View>
@@ -584,7 +584,7 @@ export default function SettingsScreen() {
                       const color = rowColor(daysLeft);
                       const dateLabel = formatDaysUntil(daysLeft, pt.next_due_date);
                       const intervalLabel = formatInterval(pt);
-                      const costLabel = pt.estimated_cost != null ? `$${pt.estimated_cost}` : "—";
+                      const costLabel = pt.estimated_cost != null ? `$${pt.estimated_cost}` : "-";
 
                       return (
                         <View key={pt.id} style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}>

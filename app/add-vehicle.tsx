@@ -322,7 +322,7 @@ export default function AddVehicleScreen() {
       const json = await res.json();
       const result = json.Results?.[0];
       if (!result || !String(result.ErrorCode ?? "").startsWith("0") || !result.Make) {
-        setVinError("Invalid VIN — please check and try again");
+        setVinError("Invalid VIN. Please check and try again.");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
@@ -334,7 +334,7 @@ export default function AddVehicleScreen() {
       setVinSuccess("Vehicle details filled from VIN");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
-      setVinError("Could not reach lookup service — check your connection");
+      setVinError("Could not reach lookup service. Check your connection.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setIsVinLoading(false);
@@ -860,7 +860,7 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
 
   const emptyComponent = (
     <View style={styles.listEmpty}>
-      <Text style={styles.listEmptyText}>No matches — type your make above</Text>
+      <Text style={styles.listEmptyText}>No matches. Type your make above.</Text>
     </View>
   );
 
@@ -1034,8 +1034,8 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
                 <View style={styles.listEmpty}>
                   <Text style={styles.listEmptyText}>
                     {filteredModels.length === 0 && !search
-                      ? "No models found — type a custom model above"
-                      : "No matches — type your model above"}
+                      ? "No models found. Type a custom model above."
+                      : "No matches. Type your model above."}
                   </Text>
                 </View>
               }

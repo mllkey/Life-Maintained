@@ -248,7 +248,7 @@ export default function HomeTabScreen() {
                 {isLocked && (
                   <View style={styles.lockedRow}>
                     <Ionicons name="lock-closed" size={12} color={Colors.textTertiary} />
-                    <Text style={styles.lockedText}>Locked — upgrade to access</Text>
+                    <Text style={styles.lockedText}>Locked. Upgrade to access.</Text>
                   </View>
                 )}
               </Pressable>

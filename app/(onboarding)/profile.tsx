@@ -96,7 +96,7 @@ export default function OnboardingProfileScreen() {
             <Text style={styles.step}>Step 2 of 3</Text>
             <Text style={styles.title}>Health profile</Text>
             <Text style={styles.subtitle}>
-              Optional — used to surface age-appropriate health screening recommendations.
+              Optional. Used to surface age-appropriate health screening recommendations.
             </Text>
           </View>
 
