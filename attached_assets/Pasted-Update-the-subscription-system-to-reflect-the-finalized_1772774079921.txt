@@ -1,0 +1,83 @@
+Update the subscription system to reflect the finalized three-tier pricing structure. The single 'premium' tier has been replaced with 'personal', 'pro', and 'business' tiers.
+1. Database update — run in Supabase SQL editor:
+sql-- Update subscription_tier to support three tiers
+ALTER TABLE profiles 
+DROP CONSTRAINT IF EXISTS profiles_subscription_tier_check;
+
+ALTER TABLE profiles 
+ADD CONSTRAINT profiles_subscription_tier_check 
+CHECK (subscription_tier IN ('trial', 'free', 'personal', 'pro', 'business'));
+
+-- Update any existing 'premium' values to 'personal'
+UPDATE profiles SET subscription_tier = 'personal' WHERE subscription_tier = 'premium';
+2. Update lib/subscription.ts to reflect three tiers:
+Replace all references to 'premium' with tier-aware logic:
+typescript// Tier hierarchy — higher index = more access
+const TIER_HIERARCHY = ['free', 'personal', 'pro', 'business'];
+
+// Returns true if user has any active paid access (trial OR any paid tier)
+export function hasActivePremium(profile: Profile): boolean {
+  if (profile.subscription_tier === 'trial' && new Date(profile.trial_expires_at) > new Date()) return true;
+  if (['personal', 'pro', 'business'].includes(profile.subscription_tier) && 
+      profile.subscription_expires_at && new Date(profile.subscription_expires_at) > new Date()) return true;
+  return false;
+}
+
+// Returns true if user has at least Personal tier active
+export function hasPersonalOrAbove(profile: Profile): boolean {
+  return hasActivePremium(profile);
+}
+
+// Returns true if user has Pro tier or above
+export function hasProOrAbove(profile: Profile): boolean {
+  if (profile.subscription_tier === 'trial' && new Date(profile.trial_expires_at) > new Date()) return true;
+  if (['pro', 'business'].includes(profile.subscription_tier) && 
+      profile.subscription_expires_at && new Date(profile.subscription_expires_at) > new Date()) return true;
+  return false;
+}
+
+// Returns true if user has Business tier
+export function hasBusiness(profile: Profile): boolean {
+  if (profile.subscription_tier === 'trial' && new Date(profile.trial_expires_at) > new Date()) return true;
+  if (profile.subscription_tier === 'business' && 
+      profile.subscription_expires_at && new Date(profile.subscription_expires_at) > new Date()) return true;
+  return false;
+}
+
+// Vehicle limit by tier
+export function vehicleLimit(profile: Profile): number {
+  if (hasBusiness(profile)) return Infinity;
+  if (hasProOrAbove(profile)) return 6;
+  if (hasPersonalOrAbove(profile)) return 3;
+  return 1;
+}
+
+// Property limit by tier
+export function propertyLimit(profile: Profile): number {
+  if (hasBusiness(profile)) return Infinity;
+  if (hasProOrAbove(profile)) return 5;
+  if (hasPersonalOrAbove(profile)) return 2;
+  return 1;
+}
+
+// Monthly scan limit by tier
+export function scanLimit(profile: Profile): number {
+  if (hasBusiness(profile)) return 100;
+  if (hasProOrAbove(profile)) return 30;
+  if (hasPersonalOrAbove(profile)) return 15;
+  return 0;
+}
+
+export function scansRemaining(profile: Profile): number {
+  return Math.max(0, scanLimit(profile) - (profile.monthly_scan_count ?? 0));
+}
+3. Update app/_layout.tsx — the RevenueCat CustomerInfoUpdateListener currently sets subscription_tier = 'premium'. Update it to map RevenueCat entitlements to the correct tier:
+
+Active business_access entitlement → subscription_tier = 'business'
+Active pro_access entitlement → subscription_tier = 'pro'
+Active personal_access entitlement → subscription_tier = 'personal'
+No active entitlements → subscription_tier = 'free' (only if trial has also expired)
+Check in order: business first, then pro, then personal — a Business subscriber has all three entitlements active so always use the highest one
+Never downgrade a user whose trial_expires_at is still in the future
+
+4. Update the RevenueCat offering identifiers throughout any existing code — the offerings are now named default (Personal), pro, and business instead of a single default offering.

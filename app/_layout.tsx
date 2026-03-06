@@ -74,12 +74,28 @@ function RootLayoutNav() {
 
         const listener = async (info: any) => {
           try {
-            const hasPremium = info?.entitlements?.active?.["premium_access"] != null;
-            if (hasPremium) {
-              const expiry = info.entitlements.active["premium_access"].expirationDate ?? null;
+            const active = info?.entitlements?.active ?? {};
+            const expiry = (key: string) =>
+              active[key]?.expirationDate ?? null;
+
+            let newTier: string | null = null;
+            let newExpiry: string | null = null;
+
+            if (active["business_access"] != null) {
+              newTier = "business";
+              newExpiry = expiry("business_access");
+            } else if (active["pro_access"] != null) {
+              newTier = "pro";
+              newExpiry = expiry("pro_access");
+            } else if (active["personal_access"] != null) {
+              newTier = "personal";
+              newExpiry = expiry("personal_access");
+            }
+
+            if (newTier) {
               await supabase.from("profiles").update({
-                subscription_tier: "premium",
-                subscription_expires_at: expiry,
+                subscription_tier: newTier,
+                subscription_expires_at: newExpiry,
                 revenuecat_customer_id: info.originalAppUserId ?? null,
               }).eq("user_id", userId);
             } else {
@@ -88,7 +104,9 @@ function RootLayoutNav() {
                 .select("trial_expires_at")
                 .eq("user_id", userId)
                 .single();
-              const stillTrial = prof && (prof as any).trial_expires_at &&
+              const stillTrial =
+                prof &&
+                (prof as any).trial_expires_at &&
                 new Date((prof as any).trial_expires_at) > new Date();
               if (!stillTrial) {
                 await supabase.from("profiles").update({

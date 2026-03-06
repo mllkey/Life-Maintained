@@ -13,27 +13,88 @@ export type Profile = {
   onboarding_completed: boolean | null;
 };
 
+const PAID_TIERS = ["personal", "pro", "business"];
+
 export function hasActivePremium(profile: Profile | null | undefined): boolean {
   if (!profile) return false;
   try {
     if (
-      profile.subscription_tier === "premium" &&
-      profile.subscription_expires_at &&
-      new Date(profile.subscription_expires_at) > new Date()
-    ) {
-      return true;
-    }
-    if (
       profile.subscription_tier === "trial" &&
       profile.trial_expires_at &&
       new Date(profile.trial_expires_at) > new Date()
-    ) {
-      return true;
-    }
+    ) return true;
+    if (
+      PAID_TIERS.includes(profile.subscription_tier ?? "") &&
+      profile.subscription_expires_at &&
+      new Date(profile.subscription_expires_at) > new Date()
+    ) return true;
     return false;
   } catch {
     return false;
   }
+}
+
+export function hasPersonalOrAbove(profile: Profile | null | undefined): boolean {
+  return hasActivePremium(profile);
+}
+
+export function hasProOrAbove(profile: Profile | null | undefined): boolean {
+  if (!profile) return false;
+  try {
+    if (
+      profile.subscription_tier === "trial" &&
+      profile.trial_expires_at &&
+      new Date(profile.trial_expires_at) > new Date()
+    ) return true;
+    if (
+      ["pro", "business"].includes(profile.subscription_tier ?? "") &&
+      profile.subscription_expires_at &&
+      new Date(profile.subscription_expires_at) > new Date()
+    ) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export function hasBusiness(profile: Profile | null | undefined): boolean {
+  if (!profile) return false;
+  try {
+    if (
+      profile.subscription_tier === "trial" &&
+      profile.trial_expires_at &&
+      new Date(profile.trial_expires_at) > new Date()
+    ) return true;
+    if (
+      profile.subscription_tier === "business" &&
+      profile.subscription_expires_at &&
+      new Date(profile.subscription_expires_at) > new Date()
+    ) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export function vehicleLimit(profile: Profile | null | undefined): number {
+  if (hasBusiness(profile)) return Infinity;
+  if (hasProOrAbove(profile)) return 6;
+  if (hasPersonalOrAbove(profile)) return 3;
+  return 1;
+}
+
+export function propertyLimit(profile: Profile | null | undefined): number {
+  if (hasBusiness(profile)) return Infinity;
+  if (hasProOrAbove(profile)) return 5;
+  if (hasPersonalOrAbove(profile)) return 2;
+  return 1;
+}
+
+export function scanLimit(profile: Profile | null | undefined): number {
+  if (hasBusiness(profile)) return 100;
+  if (hasProOrAbove(profile)) return 30;
+  if (hasPersonalOrAbove(profile)) return 15;
+  return 0;
 }
 
 export function isInTrial(profile: Profile | null | undefined): boolean {
@@ -64,9 +125,7 @@ export function trialDaysRemaining(profile: Profile | null | undefined): number 
 }
 
 export function scansRemaining(profile: Profile | null | undefined): number {
-  if (!profile) return 0;
-  if (isFreeTier(profile)) return 0;
-  return Math.max(0, 15 - (profile.monthly_scan_count ?? 0));
+  return Math.max(0, scanLimit(profile) - ((profile?.monthly_scan_count) ?? 0));
 }
 
 export async function incrementScanCount(userId: string): Promise<void> {
