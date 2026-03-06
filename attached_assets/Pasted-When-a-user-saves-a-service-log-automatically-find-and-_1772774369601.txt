@@ -1,0 +1,45 @@
+When a user saves a service log, automatically find and update the matching maintenance task. Currently the two systems are completely disconnected — logging an oil change does nothing to the oil change task in vehicle_maintenance_tasks. Fix this.
+The logic — run this after every successful maintenance_log insert:
+
+Look at the service_name from the new log entry
+Search vehicle_maintenance_tasks for a task belonging to the same vehicle where the task name fuzzy-matches the service name. Use case-insensitive matching and check if either string contains the other (e.g. 'Oil Change' matches 'Valvoline Synthetic Blend Oil Change')
+If a match is found:
+
+Set last_completed_at to the service log's service_date
+Set last_service_mileage to the service log's mileage (if mileage was logged)
+Calculate and set next_due_date based on the task's interval value using this mapping:
+
+weekly → add 7 days
+monthly → add 1 month
+3_months → add 3 months
+6_months → add 6 months
+12_months → add 1 year
+2_years → add 2 years
+3_years → add 3 years
+5_years → add 5 years
+as_needed → do not update next_due_date
+mileage-based intervals (e.g. 5000_miles) → if mileage was logged, set next_due_date by calculating when the vehicle will reach current mileage + interval miles using average_miles_per_month from the vehicles table. If no mileage data available, do not update next_due_date
+
+
+
+
+If no matching task is found, do nothing — the log still saves normally
+
+Where to implement this:
+
+In app/log-service/[vehicleId].tsx after the successful batch insert of maintenance logs
+Run the matching logic for each log entry inserted (a receipt scan may create multiple log entries)
+Wrap in try/catch — a matching failure must never prevent the log from saving or show an error to the user
+
+Also apply this same logic for property maintenance:
+
+When a service log is saved for a property (if property service logging exists), match against property_maintenance_tasks using the same fuzzy matching and interval calculation logic
+
+After updating the task, invalidate the React Query cache for both vehicle_maintenance_tasks and the vehicle detail screen so the Maintenance Tasks tab refreshes immediately and shows the updated next due date without requiring a manual refresh.
+Edge cases to handle:
+
+Multiple log entries from one receipt scan — run matching for each one independently
+Same service logged twice in quick succession — the second log should still update the task correctly, just recalculating from the new date
+Task with as_needed interval — update last_completed_at and last_service_mileage but leave next_due_date unchanged
+No average_miles_per_month on vehicle — skip mileage-based next_due_date calculation silently
+Null or empty service_name — skip matching silently
