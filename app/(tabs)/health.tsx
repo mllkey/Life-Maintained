@@ -268,7 +268,7 @@ export default function HealthScreen() {
                         const memberLimit = isFreeTier(profile) ? 1 : Infinity;
                         const isLocked = personIdx >= memberLimit;
                         return (
-                          <View key={person.id} style={{ position: "relative" }}>
+                          <View key={person.id} style={{ position: "relative", marginHorizontal: 16 }}>
                             <View style={{ opacity: isLocked ? 0.5 : 1 }}>
                               <MemberCard
                                 member={person}
@@ -307,7 +307,7 @@ export default function HealthScreen() {
                         const combinedIdx = people.length + petIdx;
                         const isLocked = combinedIdx >= memberLimit;
                         return (
-                          <View key={pet.id} style={{ position: "relative" }}>
+                          <View key={pet.id} style={{ position: "relative", marginHorizontal: 16 }}>
                             <View style={{ opacity: isLocked ? 0.5 : 1 }}>
                               <MemberCard
                                 member={pet}
@@ -449,23 +449,23 @@ function MemberCard({ member, apptCount, onAddAppt }: { member: any; apptCount: 
       style={({ pressed }) => [styles.memberCard, { opacity: pressed ? 0.88 : 1 }]}
       onPress={() => { Haptics.selectionAsync(); router.push(`/family-member/${member.id}` as any); }}
     >
-      <View style={styles.memberCardTop}>
-        <View style={[styles.memberIconWrap, { backgroundColor: Colors.healthMuted }]}>
-          <Ionicons name={isPet ? "paw-outline" : "person-outline"} size={22} color={Colors.health} />
-        </View>
-        <Pressable
-          style={({ pressed }) => [styles.memberApptBtn, { opacity: pressed ? 0.7 : 1 }]}
-          onPress={onAddAppt}
-          hitSlop={4}
-        >
-          <Ionicons name="add" size={14} color={Colors.health} />
-        </Pressable>
+      <View style={[styles.memberIconWrap, { backgroundColor: Colors.healthMuted }]}>
+        <Ionicons name={isPet ? "paw-outline" : "person-outline"} size={24} color={Colors.health} />
       </View>
-      <Text style={styles.memberName} numberOfLines={1}>{member.name}</Text>
-      <Text style={styles.memberType} numberOfLines={1}>{label}</Text>
-      <Text style={styles.memberApptCount}>
-        {apptCount === 0 ? "No appointments" : `${apptCount} appointment${apptCount !== 1 ? "s" : ""}`}
-      </Text>
+      <View style={styles.memberTextBlock}>
+        <Text style={styles.memberName}>{member.name}</Text>
+        <Text style={styles.memberType} numberOfLines={1}>{label}</Text>
+        <Text style={styles.memberApptCount}>
+          {apptCount === 0 ? "No appointments" : `${apptCount} appointment${apptCount !== 1 ? "s" : ""}`}
+        </Text>
+      </View>
+      <Pressable
+        style={({ pressed }) => [styles.memberApptBtn, { opacity: pressed ? 0.7 : 1 }]}
+        onPress={onAddAppt}
+        hitSlop={4}
+      >
+        <Ionicons name="add" size={16} color={Colors.health} />
+      </Pressable>
     </Pressable>
   );
 }
@@ -581,36 +581,38 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  memberGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  memberGrid: { flexDirection: "column", gap: 10 },
   memberCard: {
-    width: "48%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     backgroundColor: Colors.card,
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 4,
-    minHeight: 130,
   },
-  memberCardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 },
   memberIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
+  memberTextBlock: { flex: 1, gap: 2 },
   memberApptBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 9,
     backgroundColor: Colors.healthMuted,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
-  memberName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  memberType: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textTransform: "capitalize" },
-  memberApptCount: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 },
+  memberName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  memberType: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textTransform: "capitalize" },
+  memberApptCount: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
 
   apptList: { gap: 8 },
   apptCard: {
