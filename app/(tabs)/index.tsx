@@ -21,6 +21,7 @@ import { differenceInDays, parseISO, isBefore, addDays, format, subMonths, start
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { useBudgetAlert } from "@/context/BudgetAlertContext";
+import TrialBanner from "@/components/TrialBanner";
 
 const SCREENING_NOTIF_KEY = "screening_notif_optins";
 
@@ -276,6 +277,7 @@ export default function DashboardScreen() {
           <WelcomeView />
         ) : (
           <>
+            <TrialBanner />
             {!budgetDismissed && !!budgetThreshold && budgetThreshold > 0 && monthlyCost > budgetThreshold && (
               <Pressable onPress={dismissBudgetBanner} style={styles.budgetBanner} accessibilityRole="button" accessibilityLabel="Dismiss budget alert">
                 <Ionicons name="warning-outline" size={15} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />

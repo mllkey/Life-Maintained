@@ -1,0 +1,72 @@
+Build the paywall screen and consumable scan pack purchases for LifeMaintained. The RevenueCat SDK is already initialized in app/_layout.tsx and the subscription tier logic is in lib/subscription.ts. The three offerings in RevenueCat are named default (Personal), pro, and business.
+1. Update app/subscription.tsx to be the full paywall screen:
+Design requirements — dark premium feel matching the app's existing design language:
+
+Full screen modal presentation
+Close button (X) top right, 44pt minimum tap target — only shown when canDismiss prop is true
+Header: 'LifeMaintained Premium' title, subtitle: 'Choose the plan that fits your life'
+Billing toggle at top: Monthly / Annual — Annual selected by default. When Annual is selected, show a teal 'Save 40%' badge on the toggle
+Three tier cards displayed vertically, each showing:
+
+Tier name (Personal / Pro / Business)
+Annual price prominent (e.g. '$49.99/year') with monthly equivalent below in muted text ('$4.17/mo') when annual toggle is selected. Flip to monthly price when monthly toggle selected
+Feature list — 3 items max per card, the most compelling differentiators only:
+
+Personal: '3 vehicles + 2 properties', '15 AI receipt scans/month', 'Export to PDF/CSV'
+Pro: '6 vehicles + 5 properties', '30 AI receipt scans/month', 'Cost analytics & breakdowns'
+Business: 'Unlimited vehicles & properties', '100 AI receipt scans/month', 'Fleet reporting'
+
+
+Teal border and subtle teal background tint when that card is selected
+'Most Popular' badge on Pro card
+
+
+Personal card selected by default
+Trial callout banner above the CTA: '14-day free trial — full access, no credit card required' in teal
+Primary CTA button: 'Start Free Trial' — full width, teal background, white bold text, 52pt height
+Below CTA in muted small text: 'Cancel anytime · Billed through App Store after trial'
+'Restore Purchases' text button at bottom
+Promo code: small 'Have a promo code?' link that expands inline text field + 'Apply' button — validate against Supabase promo_codes table on submit, show inline success or error message
+
+Purchase flow:
+
+When user taps 'Start Free Trial': fetch the correct RevenueCat offering based on selected tier (default for Personal, pro for Pro, business for Business), then call Purchases.purchasePackage() with the annual or monthly package based on the billing toggle
+Show loading spinner on the CTA button during purchase, disable to prevent double-tap
+On success: call refreshProfile() from AuthContext, dismiss paywall, show brief success toast 'Welcome to LifeMaintained Premium!'
+On user cancellation (backs out of Apple payment sheet): return to paywall silently, no error shown
+On error: show Apple's native error message, never override with custom text
+On restore: call Purchases.restorePurchases(), show 'Purchases restored!' on success or 'No active purchases found. Contact support if you believe this is an error.' on failure
+Timeout after 30 seconds if purchase hangs — reset button state and show 'Something went wrong. Please try again.'
+
+2. Add paywall to end of onboarding:
+In the final onboarding screen (the 'You're all set!' or completion screen in app/(onboarding)/), after the completion message present the paywall with canDismiss={false}. Below the CTA add a small 'Maybe later' text link that allows the user to skip and proceed to the free tier. Tapping 'Maybe later' navigates to the main app without starting a trial.
+3. Build components/ScanPackModal.tsx:
+Modal shown when a paid user has exhausted their monthly scans and tries to scan a receipt:
+
+Title: 'Need More Scans?'
+Subtitle: 'You've used all your receipt scans for this month'
+Two purchase option cards:
+
+'10 Additional Receipt Scans' — '$2.99'
+'25 Additional Receipt Scans' — '$4.99' with 'Best Value' badge
+
+
+Purchase via Purchases.purchaseProduct() with product ID scan_pack_10 or scan_pack_25
+On success: call incrementScanCount in reverse (subtract pack size from monthly_scan_count so remaining increases), show 'Scans added!' toast, dismiss modal and immediately proceed with the scan the user originally attempted
+On cancellation: dismiss modal silently
+'Cancel' text button at bottom
+
+4. Build components/TrialBanner.tsx:
+Shown at top of Dashboard during trial period:
+
+Only show from Day 8 of trial onward — never on Days 1-7
+Text: '[X] days left in your free trial' with teal accent
+Tapping opens paywall with canDismiss={true}
+Disappears automatically when hasPersonalOrAbove(profile) returns true and user is no longer in trial
+Smooth dismiss animation when user subscribes mid-session
+
+Error handling:
+
+All RevenueCat calls wrapped in try/catch
+If offerings fail to load from RevenueCat, show 'Unable to load pricing. Please try again.' with a retry button — never show a broken paywall with empty prices
+Never leave CTA button in loading state beyond 30 seconds
