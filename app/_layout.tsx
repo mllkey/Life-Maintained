@@ -2,7 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
-import { AppState, AppStateStatus, View } from "react-native";
+import { AppState, AppStateStatus, Platform, View, ActivityIndicator } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -14,7 +14,7 @@ import NotifPermissionBanner from "@/components/NotifPermissionBanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { BudgetAlertProvider } from "@/context/BudgetAlertContext";
 import * as Notifications from "expo-notifications";
-import { ActivityIndicator } from "react-native";
+import { supabase } from "@/lib/supabase";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -29,9 +29,9 @@ Notifications.setNotificationHandler({
 });
 
 function RootLayoutNav() {
-  const { session, isLoading, onboardingCompleted } = useAuth();
+  const { session, isLoading, onboardingCompleted, refreshProfile } = useAuth();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const userIdRef = useRef<string | null>(null);
+  const rcListenerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!isLoading) {
@@ -41,9 +41,7 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (!session?.user?.id || !onboardingCompleted) return;
-
     const userId = session.user.id;
-    userIdRef.current = userId;
 
     Notifications.setBadgeCountAsync(0).catch(() => {});
     scheduleMaintenanceNotifications(userId);
@@ -60,6 +58,61 @@ function RootLayoutNav() {
     return () => sub.remove();
   }, [session?.user?.id, onboardingCompleted]);
 
+  useEffect(() => {
+    if (!session?.user?.id || Platform.OS === "web") return;
+    const userId = session.user.id;
+
+    (async () => {
+      try {
+        const Purchases = (await import("react-native-purchases")).default;
+        await Purchases.logIn(userId);
+
+        if (rcListenerRef.current) {
+          rcListenerRef.current();
+          rcListenerRef.current = null;
+        }
+
+        const listener = async (info: any) => {
+          try {
+            const hasPremium = info?.entitlements?.active?.["premium_access"] != null;
+            if (hasPremium) {
+              const expiry = info.entitlements.active["premium_access"].expirationDate ?? null;
+              await supabase.from("profiles").update({
+                subscription_tier: "premium",
+                subscription_expires_at: expiry,
+                revenuecat_customer_id: info.originalAppUserId ?? null,
+              }).eq("user_id", userId);
+            } else {
+              const { data: prof } = await supabase
+                .from("profiles")
+                .select("trial_expires_at")
+                .eq("user_id", userId)
+                .single();
+              const stillTrial = prof && (prof as any).trial_expires_at &&
+                new Date((prof as any).trial_expires_at) > new Date();
+              if (!stillTrial) {
+                await supabase.from("profiles").update({
+                  subscription_tier: "free",
+                }).eq("user_id", userId);
+              }
+            }
+            refreshProfile().catch(() => {});
+          } catch {}
+        };
+
+        Purchases.addCustomerInfoUpdateListener(listener);
+        rcListenerRef.current = () => Purchases.removeCustomerInfoUpdateListener(listener);
+      } catch {}
+    })();
+
+    return () => {
+      if (rcListenerRef.current) {
+        rcListenerRef.current();
+        rcListenerRef.current = null;
+      }
+    };
+  }, [session?.user?.id]);
+
   if (isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: "center", alignItems: "center" }}>
@@ -72,32 +125,32 @@ function RootLayoutNav() {
 
   return (
     <BudgetAlertProvider userId={session?.user?.id ?? null}>
-    <View style={{ flex: 1 }}>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.background } }}>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(onboarding)" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="add-vehicle" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="vehicle/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="log-service/[vehicleId]" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="add-property" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="property/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="add-property-task/[propertyId]" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="property-task-history/[propertyId]" options={{ headerShown: false }} />
-        <Stack.Screen name="vehicle-task-history/[vehicleId]" options={{ headerShown: false }} />
-        <Stack.Screen name="family-member/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="add-appointment" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="add-medication" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="add-family-member" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="health-profile" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="update-mileage/[vehicleId]" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="subscription" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="notifications-settings" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="terms-of-service" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="privacy-policy" options={{ headerShown: false, presentation: "modal" }} />
-      </Stack>
-      {showBanner && <NotifPermissionBanner />}
-    </View>
+      <View style={{ flex: 1 }}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.background } }}>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(onboarding)" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="add-vehicle" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="vehicle/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="log-service/[vehicleId]" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="add-property" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="property/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="add-property-task/[propertyId]" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="property-task-history/[propertyId]" options={{ headerShown: false }} />
+          <Stack.Screen name="vehicle-task-history/[vehicleId]" options={{ headerShown: false }} />
+          <Stack.Screen name="family-member/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="add-appointment" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="add-medication" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="add-family-member" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="health-profile" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="update-mileage/[vehicleId]" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="subscription" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="notifications-settings" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="terms-of-service" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="privacy-policy" options={{ headerShown: false, presentation: "modal" }} />
+        </Stack>
+        {showBanner && <NotifPermissionBanner />}
+      </View>
     </BudgetAlertProvider>
   );
 }
@@ -115,6 +168,19 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    (async () => {
+      try {
+        const Purchases = (await import("react-native-purchases")).default;
+        const apiKey = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY;
+        if (apiKey && apiKey !== "YOUR_REVENUECAT_API_KEY_HERE") {
+          Purchases.configure({ apiKey });
+        }
+      } catch {}
+    })();
+  }, []);
 
   if (!fontsLoaded && !fontError) return null;
 

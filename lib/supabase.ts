@@ -19,7 +19,15 @@ export type Database = {
       profiles: {
         Row: {
           id: string;
+          user_id: string;
           subscription_tier: string | null;
+          trial_started_at: string | null;
+          trial_expires_at: string | null;
+          subscription_expires_at: string | null;
+          revenuecat_customer_id: string | null;
+          push_token: string | null;
+          monthly_scan_count: number;
+          scan_count_reset_at: string | null;
           onboarding_completed: boolean | null;
           created_at: string | null;
           updated_at: string | null;

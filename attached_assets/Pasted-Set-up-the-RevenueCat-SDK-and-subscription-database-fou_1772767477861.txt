@@ -1,0 +1,90 @@
+Set up the RevenueCat SDK and subscription database foundation for LifeMaintained. This is the foundation everything else depends on — do not skip any step.
+1. Install dependencies:
+npx expo install react-native-purchases react-native-purchases-ui
+2. Database changes — run these in Supabase SQL editor:
+Add the following columns to the profiles table:
+
+subscription_tier text default 'trial' (values: 'trial', 'free', 'premium')
+trial_started_at timestamptz default now()
+trial_expires_at timestamptz default (now() + interval '14 days')
+subscription_expires_at timestamptz null
+revenuecat_customer_id text null
+push_token text null
+monthly_scan_count integer default 0
+scan_count_reset_at timestamptz default now()
+
+Also create a promo_codes table:
+sqlcreate table promo_codes (
+  id uuid primary key default gen_random_uuid(),
+  code text unique not null,
+  discount_percent integer not null,
+  expires_at timestamptz null,
+  max_uses integer null,
+  use_count integer default 0,
+  created_at timestamptz default now()
+);
+Enable RLS on promo_codes — allow anyone to read (for validation), only service role to write.
+3. Create a lib/subscription.ts file that exports these functions used everywhere in the app:
+typescript// Returns true if user has active premium access (trial OR paid premium)
+export async function hasActivePremium(profile: Profile): boolean
+
+// Returns true if user is in active 14-day trial period
+export async function isInTrial(profile: Profile): boolean
+
+// Returns true if trial has expired and user has not subscribed
+export async function isFreeTier(profile: Profile): boolean
+
+// Returns remaining trial days (0 if expired or premium)
+export function trialDaysRemaining(profile: Profile): number
+
+// Returns remaining scans this month
+export function scansRemaining(profile: Profile): number
+
+// Increments scan count in Supabase — call after every successful receipt scan
+export async function incrementScanCount(userId: string): Promise<void>
+
+// Resets scan count if we're in a new billing month
+export async function checkAndResetScanCount(userId: string, profile: Profile): Promise<void>
+Logic rules for hasActivePremium:
+
+subscription_tier === 'premium' AND subscription_expires_at is in the future → true
+subscription_tier === 'trial' AND trial_expires_at is in the future → true
+All other cases → false
+
+Logic for scansRemaining:
+
+Premium users: 15 minus monthly_scan_count (minimum 0)
+Trial users: 15 minus monthly_scan_count (minimum 0)
+Free tier users: 0
+
+4. Initialize RevenueCat in app/_layout.tsx:
+
+Import Purchases from react-native-purchases
+On app mount, call Purchases.configure({ apiKey: process.env.EXPO_PUBLIC_REVENUECAT_API_KEY })
+After Supabase auth confirms a logged-in user, call Purchases.logIn(user.id) to identify the user to RevenueCat using their Supabase UUID
+Set up a Purchases.addCustomerInfoUpdateListener that syncs subscription status to the profiles table whenever RevenueCat reports a change:
+
+If user has active premium_access entitlement: set subscription_tier = 'premium', update subscription_expires_at
+If entitlement is expired: set subscription_tier = 'free'
+Never downgrade a user who is still in their trial window
+
+
+
+5. Add EXPO_PUBLIC_REVENUECAT_API_KEY to .env with a placeholder value YOUR_REVENUECAT_API_KEY_HERE and add a comment above it: # Get this from app.revenuecat.com after creating your app
+6. Create a Supabase Edge Function revenuecat-webhook at supabase/functions/revenuecat-webhook/index.ts:
+
+Receives POST requests from RevenueCat webhook
+Reads REVENUECAT_WEBHOOK_SECRET from Deno.env.get('REVENUECAT_WEBHOOK_SECRET')
+Verifies the X-RevenueCat-Signature header against the secret
+On event type INITIAL_PURCHASE or RENEWAL or PRODUCT_CHANGE: find the profile by revenuecat_customer_id and set subscription_tier = 'premium', update subscription_expires_at from the event's expiration_at_ms field
+On event type EXPIRATION or CANCELLATION: set subscription_tier = 'free', clear subscription_expires_at
+Return 200 immediately after signature verification, process the database update asynchronously
+Return 401 if signature verification fails
+Wrap everything in try/catch — never return 500, always return 200 to prevent RevenueCat retries on processing errors
+
+7. Update the useProfile hook (or wherever profile data is fetched) to re-fetch profile on app foreground so subscription status is always current.
+Error handling requirements:
+
+RevenueCat initialization failure must never crash the app — catch all errors and default to checking Supabase subscription_tier directly
+If RevenueCat is unreachable, fall back to the subscription_tier value in the profiles table as the source of truth
+All database operations must be wrapped in try/catch and fail silently — subscription status checks must never block the UI"

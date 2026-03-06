@@ -1,11 +1,16 @@
-import { createContext, useContext, useEffect, useState, useMemo, ReactNode, useRef } from "react";
+import { createContext, useContext, useEffect, useState, useMemo, ReactNode, useRef, useCallback } from "react";
+import { AppState, AppStateStatus } from "react-native";
 import { supabase } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
+import type { Profile } from "@/lib/subscription";
+import { checkAndResetScanCount } from "@/lib/subscription";
 
 interface AuthContextValue {
   session: Session | null;
   user: User | null;
   isLoading: boolean;
+  profile: Profile | null;
+  refreshProfile: () => Promise<void>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -15,64 +20,99 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const PROFILE_SELECT =
+  "onboarding_completed, subscription_tier, trial_started_at, trial_expires_at, subscription_expires_at, revenuecat_customer_id, push_token, monthly_scan_count, scan_count_reset_at";
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const mountedRef = useRef(true);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const userIdRef = useRef<string | null>(null);
+
+  const fetchProfile = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(PROFILE_SELECT)
+        .eq("user_id", userId)
+        .single();
+      if (error) throw error;
+      if (!mountedRef.current) return;
+      const p = data as any;
+      const fullProfile: Profile = {
+        user_id: userId,
+        onboarding_completed: p?.onboarding_completed ?? false,
+        subscription_tier: p?.subscription_tier ?? "trial",
+        trial_started_at: p?.trial_started_at ?? null,
+        trial_expires_at: p?.trial_expires_at ?? null,
+        subscription_expires_at: p?.subscription_expires_at ?? null,
+        revenuecat_customer_id: p?.revenuecat_customer_id ?? null,
+        push_token: p?.push_token ?? null,
+        monthly_scan_count: p?.monthly_scan_count ?? 0,
+        scan_count_reset_at: p?.scan_count_reset_at ?? null,
+      };
+      setProfile(fullProfile);
+      setOnboardingCompleted(fullProfile.onboarding_completed === true);
+      checkAndResetScanCount(userId, fullProfile).catch(() => {});
+    } catch {
+      if (mountedRef.current) setOnboardingCompleted(false);
+    }
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
+    if (userIdRef.current) {
+      await fetchProfile(userIdRef.current);
+    }
+  }, [fetchProfile]);
 
   useEffect(() => {
     mountedRef.current = true;
 
-    // onAuthStateChange fires INITIAL_SESSION on subscription, so we don't
-    // need a separate getSession() call. Using a single source of truth
-    // ensures isLoading stays true until the profile check completes.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mountedRef.current) return;
       setSession(session);
 
       if (event === "SIGNED_OUT") {
+        userIdRef.current = null;
+        setProfile(null);
         setOnboardingCompleted(false);
         setIsLoading(false);
         return;
       }
 
-      // Only re-check onboarding (and block navigation) on initial load or a new sign-in.
-      // TOKEN_REFRESHED, USER_UPDATED, etc. just update the session silently.
       if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
         if (session?.user) {
+          userIdRef.current = session.user.id;
           setIsLoading(true);
-          checkOnboarding(session.user.id).finally(() => {
+          fetchProfile(session.user.id).finally(() => {
             if (mountedRef.current) setIsLoading(false);
           });
         } else {
+          userIdRef.current = null;
+          setProfile(null);
           setOnboardingCompleted(false);
           setIsLoading(false);
         }
       }
     });
 
+    const appStateSub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
+      const prev = appStateRef.current;
+      appStateRef.current = nextState;
+      if (nextState === "active" && prev !== "active" && userIdRef.current) {
+        fetchProfile(userIdRef.current).catch(() => {});
+      }
+    });
+
     return () => {
       mountedRef.current = false;
       subscription.unsubscribe();
+      appStateSub.remove();
     };
-  }, []);
-
-  async function checkOnboarding(userId: string) {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("onboarding_completed")
-        .eq("user_id", userId)
-        .single();
-      if (error) throw error;
-      if (mountedRef.current) {
-        setOnboardingCompleted(data?.onboarding_completed === true);
-      }
-    } catch {
-      if (mountedRef.current) setOnboardingCompleted(false);
-    }
-  }
+  }, [fetchProfile]);
 
   async function signUp(email: string, password: string) {
     const { error } = await supabase.auth.signUp({ email, password });
@@ -85,6 +125,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    userIdRef.current = null;
+    setProfile(null);
     await supabase.auth.signOut();
     setOnboardingCompleted(false);
   }
@@ -93,12 +135,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     user: session?.user ?? null,
     isLoading,
+    profile,
+    refreshProfile,
     signUp,
     signIn,
     signOut,
     onboardingCompleted,
     setOnboardingCompleted,
-  }), [session, isLoading, onboardingCompleted]);
+  }), [session, isLoading, profile, refreshProfile, onboardingCompleted]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
