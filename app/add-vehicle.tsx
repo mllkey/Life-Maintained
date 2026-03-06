@@ -51,7 +51,7 @@ const MAKES_BY_TYPE: Record<string, string[]> = {
   motorcycle: [
     "Harley-Davidson", "Honda", "Kawasaki", "Yamaha", "Suzuki", "Ducati",
     "BMW", "KTM", "Triumph", "Royal Enfield", "Indian", "Can-Am",
-    "Zero Motorcycles", "Aprilia", "Moto Guzzi", "Husqvarna",
+    "Zero Motorcycles", "Aprilia", "Moto Guzzi", "Husqvarna", "Benelli",
   ],
   rv: [
     "Winnebago", "Airstream", "Thor Industries", "Forest River", "Coachmen",
@@ -60,13 +60,19 @@ const MAKES_BY_TYPE: Record<string, string[]> = {
   ],
   boat: [
     "Sea Ray", "Bayliner", "Boston Whaler", "Malibu", "MasterCraft",
-    "Grady-White", "Lund", "Tracker", "Yamaha", "Mercury", "Chaparral",
-    "Cobalt", "Ranger", "Crestliner",
+    "Grady-White", "Lund", "Tracker", "Chaparral", "Cobalt", "Ranger",
+    "Crestliner", "Nitro", "Skeeter", "Triton", "Alumacraft",
   ],
   atv: [
-    "Polaris", "Can-Am", "Yamaha", "Honda", "Kawasaki", "Suzuki",
-    "Arctic Cat", "Textron", "CFMoto", "Kubota",
+    "Honda", "Yamaha", "Can-Am", "Polaris", "Kawasaki",
+    "Suzuki", "Arctic Cat", "CFMoto",
   ],
+  utv: [
+    "Polaris", "Can-Am", "Kawasaki", "Yamaha", "Honda",
+    "Arctic Cat", "Textron", "John Deere", "Kubota", "CFMoto",
+  ],
+  pwc: ["Sea-Doo", "Yamaha", "Kawasaki"],
+  snowmobile: ["Ski-Doo", "Polaris", "Arctic Cat", "Yamaha", "Lynx"],
   other: [],
 };
 
@@ -95,7 +101,7 @@ const CAR_MAKE_SECTIONS: MakeSection[] = [
 const MOTO_MAKE_SECTIONS: MakeSection[] = [
   { title: "Most Popular", data: ["Harley-Davidson", "Honda", "Kawasaki", "Yamaha", "Suzuki"] },
   { title: "A", data: ["Aprilia"] },
-  { title: "B", data: ["BMW"] },
+  { title: "B", data: ["Benelli", "BMW"] },
   { title: "C", data: ["Can-Am"] },
   { title: "D", data: ["Ducati"] },
   { title: "H", data: ["Husqvarna"] },
@@ -107,21 +113,125 @@ const MOTO_MAKE_SECTIONS: MakeSection[] = [
   { title: "Z", data: ["Zero Motorcycles"] },
 ];
 
+const ATV_MAKE_SECTIONS: MakeSection[] = [
+  { title: "Most Popular", data: ["Honda", "Yamaha", "Can-Am", "Polaris", "Kawasaki"] },
+  { title: "A", data: ["Arctic Cat"] },
+  { title: "C", data: ["CFMoto"] },
+  { title: "S", data: ["Suzuki"] },
+];
+
+const UTV_MAKE_SECTIONS: MakeSection[] = [
+  { title: "Most Popular", data: ["Polaris", "Can-Am", "Kawasaki", "Yamaha"] },
+  { title: "A", data: ["Arctic Cat"] },
+  { title: "C", data: ["CFMoto"] },
+  { title: "H", data: ["Honda"] },
+  { title: "J", data: ["John Deere"] },
+  { title: "K", data: ["Kubota"] },
+  { title: "T", data: ["Textron"] },
+];
+
+const PWC_MAKE_SECTIONS: MakeSection[] = [
+  { title: "Most Popular", data: ["Sea-Doo", "Yamaha", "Kawasaki"] },
+];
+
+const SNOWMOBILE_MAKE_SECTIONS: MakeSection[] = [
+  { title: "Most Popular", data: ["Ski-Doo", "Polaris", "Arctic Cat"] },
+  { title: "L", data: ["Lynx"] },
+  { title: "Y", data: ["Yamaha"] },
+];
+
 const MAKE_SECTIONS_BY_TYPE: Record<string, MakeSection[]> = {
   car: CAR_MAKE_SECTIONS,
   motorcycle: MOTO_MAKE_SECTIONS,
+  atv: ATV_MAKE_SECTIONS,
+  utv: UTV_MAKE_SECTIONS,
+  pwc: PWC_MAKE_SECTIONS,
+  snowmobile: SNOWMOBILE_MAKE_SECTIONS,
 };
 
-const MILEAGE_TRACKED_TYPES = new Set(["car", "motorcycle", "rv"]);
+const MILEAGE_TRACKED_TYPES = new Set(["car", "motorcycle", "rv", "utv", "snowmobile"]);
 
 const VEHICLE_TYPES: { value: string; label: string; icon: string }[] = [
-  { value: "car",        label: "Car / Truck / SUV", icon: "car" },
-  { value: "motorcycle", label: "Motorcycle",         icon: "motorbike" },
-  { value: "rv",         label: "RV / Camper",        icon: "rv-truck" },
-  { value: "boat",       label: "Boat",               icon: "sail-boat" },
-  { value: "atv",        label: "ATV / Off-road",     icon: "atv" },
-  { value: "other",      label: "Other",              icon: "wrench" },
+  { value: "car",        label: "Car / Truck / SUV",    icon: "car" },
+  { value: "motorcycle", label: "Motorcycle",            icon: "motorbike" },
+  { value: "rv",         label: "RV / Camper",           icon: "rv-truck" },
+  { value: "boat",       label: "Boat",                  icon: "sail-boat" },
+  { value: "atv",        label: "ATV",                   icon: "atv" },
+  { value: "utv",        label: "UTV / Side-by-Side",    icon: "atv" },
+  { value: "pwc",        label: "Personal Watercraft",   icon: "waves" },
+  { value: "snowmobile", label: "Snowmobile",            icon: "snowmobile" },
+  { value: "other",      label: "Other",                 icon: "wrench" },
 ];
+
+const HARDCODED_MODELS: Record<string, Record<string, string[]>> = {
+  pwc: {
+    "Sea-Doo": [
+      "Fish Pro Scout", "Fish Pro Sport", "Fish Pro Trophy",
+      "GTI 90", "GTI 130", "GTI SE 130", "GTI SE 170",
+      "GTX 170", "GTX 230", "GTX Limited 230", "GTX Limited 300",
+      "RXP-X 300", "RXP-X 325",
+      "RXT 230", "RXT-X 300", "RXT-X 325",
+      "Spark", "Spark Trixx",
+      "Wake 170", "Wake Pro 230",
+    ],
+    "Yamaha": [
+      "EX", "EX Deluxe", "EX Sport",
+      "FX Cruiser HO", "FX Cruiser SVHO",
+      "FX HO", "FX SVHO",
+      "GP1800R HO", "GP1800R SVHO",
+      "VX", "VX Cruiser", "VX Cruiser HO", "VX Deluxe", "VX Limited",
+    ],
+    "Kawasaki": [
+      "Jet Ski STX 160", "Jet Ski STX 160LX",
+      "Jet Ski Ultra 160",
+      "Jet Ski Ultra 310LX", "Jet Ski Ultra 310R", "Jet Ski Ultra 310X", "Jet Ski Ultra 310X SE",
+      "Jet Ski SX-R 160",
+    ],
+  },
+  snowmobile: {
+    "Ski-Doo": [
+      "Backcountry 850", "Backcountry X 850", "Backcountry X-RS 850",
+      "Expedition LE 900 ACE", "Expedition SE 900 ACE", "Expedition Sport 900 ACE",
+      "Freeride 154 850", "Freeride 165 850",
+      "Grand Touring LE 900 ACE", "Grand Touring SE 900 ACE",
+      "MXZ Sport 600", "MXZ X 850", "MXZ X-RS 850",
+      "Renegade Enduro 850", "Renegade X 850", "Renegade X-RS 850",
+      "Skandic SWT 600", "Skandic WT 600",
+      "Summit Expert 154 850", "Summit X 154 850", "Summit X Expert 165 850",
+      "Tundra Sport 600",
+    ],
+    "Polaris": [
+      "850 Indy XC 129", "850 Indy XC 137",
+      "Indy Adventure 137", "Indy Trail 550",
+      "Patriot Boost RMK Khaos 163",
+      "Patriot Boost Switchback Assault 146", "Patriot Boost Switchback Pro-S 850",
+      "RMK Khaos Matryx Slash 155",
+      "Switchback 850", "Switchback Assault 850", "Switchback Pro-S 850",
+      "Titan Adventure 155", "Titan XC 155 550",
+      "Trail 550", "Voyageur 550",
+    ],
+    "Arctic Cat": [
+      "Blast M 4000", "Blast XR 6000",
+      "Catalyst 600", "Catalyst 800",
+      "M 8000 Mountain Cat Alpha One 153",
+      "Riot 8000", "Riot X 8000",
+      "Thundercat 9000 ARR",
+      "ZR 200", "ZR 6000 El Tigre", "ZR 8000 RR", "ZR 9000 Thundercat",
+    ],
+    "Yamaha": [
+      "Apex XT-X",
+      "Sidewinder B-TX LE", "Sidewinder L-TX GT", "Sidewinder L-TX LE",
+      "Sidewinder M-TX LE 153", "Sidewinder S-TX GT", "Sidewinder X-TX SE",
+      "Transporter 800",
+    ],
+    "Lynx": [
+      "Boondocker RE 3700 850 E-TEC",
+      "Commander RE 3700 600R E-TEC",
+      "Rave RE 3700 850 E-TEC",
+      "Shredder RE 3700 850 E-TEC",
+    ],
+  },
+};
 
 type MfrTask = {
   task: string;
@@ -141,8 +251,11 @@ function mapNhtsaVehicleType(nhtsaType: string): string {
   const t = nhtsaType.toLowerCase();
   if (t.includes("motorcycle") || t.includes("moped") || t.includes("scooter")) return "motorcycle";
   if (t.includes("rv") || t.includes("recreational") || t.includes("motor home") || t.includes("motorhome") || t.includes("camper") || t.includes("trailer")) return "rv";
-  if (t.includes("atv") || t.includes("off-road") || t.includes("offroad") || t.includes("quad") || t.includes("utv") || t.includes("snowmobile")) return "atv";
-  if (t.includes("boat") || t.includes("marine") || t.includes("vessel") || t.includes("watercraft") || t.includes("yacht")) return "boat";
+  if (t.includes("snowmobile")) return "snowmobile";
+  if (t.includes("watercraft") || t.includes("jet ski") || t.includes("waverunner") || t.includes("personal water")) return "pwc";
+  if (t.includes("utv") || t.includes("side-by-side") || t.includes("side by side")) return "utv";
+  if (t.includes("atv") || t.includes("off-road") || t.includes("offroad") || t.includes("quad")) return "atv";
+  if (t.includes("boat") || t.includes("marine") || t.includes("vessel") || t.includes("yacht")) return "boat";
   if (t.includes("truck") || t.includes("mpv") || t.includes("multipurpose") || t.includes("passenger car") || t.includes("passenger vehicle") || t.includes("low speed")) return "car";
   return "other";
 }
@@ -242,6 +355,11 @@ export default function AddVehicleScreen() {
     if (vehicleType === "other") {
       setNhtsaModels([]);
       setIsLoadingModels(false);
+    } else if (vehicleType === "pwc" || vehicleType === "snowmobile") {
+      const byMake = HARDCODED_MODELS[vehicleType] ?? {};
+      const models = byMake[make.trim()] ?? [];
+      setNhtsaModels(models);
+      setIsLoadingModels(false);
     } else {
       const cacheKey = modelCacheKey(make, year, vehicleType);
       const cached = modelCache.get(cacheKey);
@@ -290,6 +408,10 @@ export default function AddVehicleScreen() {
             const motoResp = await fetch(`${nhtsaBase}?format=json&vehicleType=Motorcycle`);
             const motoJson = await motoResp.json();
             names = extractNames(motoJson);
+          } else if (vehicleType === "atv" || vehicleType === "utv") {
+            const offRoadResp = await fetch(`${nhtsaBase}?format=json&vehicleType=Off%20Road%20Vehicle`);
+            const offRoadJson = await offRoadResp.json();
+            names = extractNames(offRoadJson);
           } else {
             const allResp = await fetch(`${nhtsaBase}?format=json`);
             const allJson = await allResp.json();

@@ -51,6 +51,9 @@ function getVehicleIcon(type: string | null): string {
     case "rv":         return "bus-outline";
     case "boat":       return "boat-outline";
     case "atv":        return "trail-sign-outline";
+    case "utv":        return "trail-sign-outline";
+    case "pwc":        return "water-outline";
+    case "snowmobile": return "snow-outline";
     default:           return "car-outline";
   }
 }
