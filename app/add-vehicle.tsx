@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { SaveToast } from "@/components/SaveToast";
 import {
   View,
@@ -833,14 +833,6 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
   onClose: () => void;
   insets: { bottom: number };
 }) {
-  const searchRef = useRef<TextInput>(null);
-  useEffect(() => {
-    if (visible) {
-      const t = setTimeout(() => searchRef.current?.focus(), 250);
-      return () => clearTimeout(t);
-    }
-  }, [visible]);
-
   const sections = MAKE_SECTIONS_BY_TYPE[vehicleType];
   const isSearching = search.trim().length > 0;
   const useSections = !!sections && !isSearching;
@@ -879,7 +871,6 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
           <View style={styles.searchWrap}>
             <Ionicons name="search-outline" size={16} color={Colors.textTertiary} />
             <TextInput
-              ref={searchRef}
               style={styles.searchInput}
               value={search}
               onChangeText={onSearchChange}
@@ -939,14 +930,6 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
   onClose: () => void;
   insets: { bottom: number };
 }) {
-  const searchRef = useRef<TextInput>(null);
-  useEffect(() => {
-    if (visible) {
-      const t = setTimeout(() => searchRef.current?.focus(), 250);
-      return () => clearTimeout(t);
-    }
-  }, [visible]);
-
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
@@ -962,7 +945,6 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
           <View style={styles.searchWrap}>
             <Ionicons name="search-outline" size={16} color={Colors.textTertiary} />
             <TextInput
-              ref={searchRef}
               style={styles.searchInput}
               value={search}
               onChangeText={onSearchChange}

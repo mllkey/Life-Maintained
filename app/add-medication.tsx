@@ -86,7 +86,7 @@ export default function AddMedicationScreen() {
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Medication Name</Text>
-            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Lisinopril, Vitamin D, etc." placeholderTextColor={Colors.textTertiary} autoCapitalize="words" returnKeyType="next" autoFocus />
+            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Lisinopril, Vitamin D, etc." placeholderTextColor={Colors.textTertiary} autoCapitalize="words" returnKeyType="next" />
           </View>
 
           {familyMembers && familyMembers.length > 0 && (

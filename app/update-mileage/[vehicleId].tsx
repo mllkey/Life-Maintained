@@ -94,7 +94,6 @@ export default function UpdateMileageScreen() {
                 placeholder={vehicle?.mileage != null ? `More than ${vehicle.mileage.toLocaleString()}` : "Enter mileage"}
                 placeholderTextColor={Colors.textTertiary}
                 keyboardType="numeric"
-                autoFocus
                 returnKeyType="done"
                 onSubmitEditing={handleSave}
               />
