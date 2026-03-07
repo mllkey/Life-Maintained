@@ -1,0 +1,46 @@
+CONTEXT: LifeMaintained is a React Native app. When a vehicle is added, maintenance tasks are auto-generated in user_vehicle_maintenance_tasks. We need to display them on the vehicle detail screen.
+
+IMPORTANT SCHEMA NOTES:
+- The vehicles table is called "vehicles" and mileage is in the "mileage" column
+- user_vehicle_maintenance_tasks columns: id, user_id, vehicle_id, template_id, name, description, category, interval_miles, interval_months, last_completed_date, last_completed_miles, next_due_date, next_due_miles, status, priority, is_custom, source, created_at, updated_at
+
+
+
+
+TASK: Add a "Maintenance Schedule" section to the existing vehicle detail screen, BELOW the existing vehicle info. Do NOT create a separate screen.
+
+DATA FETCHING:
+- Query user_vehicle_maintenance_tasks WHERE vehicle_id = current vehicle id AND user_id = current user id
+- Order by: priority DESC (critical first), then next_due_miles ASC (soonest first), then next_due_date ASC
+- Fetch on screen mount and refresh when returning to the screen (use useFocusEffect or equivalent)
+- Add pull-to-refresh that re-fetches the tasks
+
+STATUS RECALCULATION: On every fetch, recalculate status for each task using the vehicle's current mileage (from the "mileage" column on the "vehicles" table):
+- If next_due_miles is not null AND vehicle.mileage >= next_due_miles → 'overdue'
+- If next_due_date is not null AND today >= next_due_date → 'overdue'
+- If next_due_miles is not null AND (next_due_miles - vehicle.mileage) <= 500 → 'due_soon'
+- If next_due_date is not null AND next_due_date is within 30 days from today → 'due_soon'
+- Otherwise → 'upcoming'
+Update the status in the database if it changed.
+
+GROUPING: Display tasks in three collapsible sections:
+1. "Action Needed" — tasks with status 'overdue' or 'due_soon'. Show count in header like "Action Needed (3)". Expanded by default. HIDE this section entirely if zero items.
+2. "Upcoming" — tasks with status 'upcoming'. Expanded by default.
+3. "Completed" — tasks with status 'completed'. Collapsed by default. Show most recent 10 only.
+
+TASK CARD DISPLAY: Each task shows:
+- Task name (bold) from the "name" column
+- Category badge, color-coded: engine=blue, brakes=red, fluids=teal, electrical=yellow, tires=gray, body=green, drivetrain=orange
+- Due info: "Due at XX,XXX miles" (format with commas) and/or "Due by Mar 15, 2026" (friendly date format). Show whichever is not null. If both exist, show both. If neither, show "No schedule set."
+- Priority: critical = small red dot or "!" icon, recommended = no indicator, optional = lighter text
+- Status: color the left border — upcoming=white, due_soon=amber, overdue=red, completed=green with checkmark
+
+EMPTY STATE: If zero tasks exist, show:
+- Message: "No maintenance schedule yet"
+- Button: "Generate Schedule" that calls supabase.functions.invoke('generate-maintenance-schedule') with the vehicle's data, then refreshes
+- Button: "Add Custom Task" — placeholder for now, show "Coming soon" toast on tap
+
+STYLING: Match the existing app design (colors, fonts, spacing, border radius). Cards should have subtle shadows and rounded corners. The section scrolls within the overall vehicle detail scroll view.
+
+LOADING: Use skeleton screens consistent with the rest of the app. Show error state with retry button on failure. Optimistic UI on any updates.
+
