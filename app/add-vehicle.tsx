@@ -163,6 +163,13 @@ const VEHICLE_TYPES: { value: string; label: string; icon: string }[] = [
   { value: "other",      label: "Other",                 icon: "wrench" },
 ];
 
+const FUEL_TYPES: { value: "gas" | "diesel" | "hybrid" | "ev"; label: string }[] = [
+  { value: "gas",     label: "Gas" },
+  { value: "diesel",  label: "Diesel" },
+  { value: "hybrid",  label: "Hybrid" },
+  { value: "ev",      label: "Electric" },
+];
+
 const HARDCODED_MODELS: Record<string, Record<string, string[]>> = {
   pwc: {
     "Sea-Doo": [
@@ -274,6 +281,8 @@ export default function AddVehicleScreen() {
   const [mileage, setMileage] = useState("");
   const [avgMilesPerMonth, setAvgMilesPerMonth] = useState("");
   const [isSeasonal, setIsSeasonal] = useState(false);
+  const [fuelType, setFuelType] = useState<"gas" | "diesel" | "hybrid" | "ev">("gas");
+  const [isAwd, setIsAwd] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -548,6 +557,8 @@ export default function AddVehicleScreen() {
       trim: trim.trim() || null,
       nickname: nickname.trim() || null,
       vehicle_type: vehicleType,
+      fuel_type: fuelType,
+      is_awd: isAwd,
       mileage: mileage ? parseInt(mileage) : null,
       average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth) : null,
       is_seasonal: isSeasonal,
@@ -591,8 +602,8 @@ export default function AddVehicleScreen() {
               make: make.trim(),
               year: yearNum,
               current_mileage: mileage ? parseInt(mileage) : 0,
-              vehicle_type: "gas",
-              is_awd: false,
+              vehicle_type: fuelType,
+              is_awd: isAwd,
             },
           },
         );
@@ -826,6 +837,41 @@ export default function AddVehicleScreen() {
                 returnKeyType="done"
               />
             </View>
+          </FieldGroup>
+
+          {/* ── Powertrain ───────────────────────────────────── */}
+          <FieldGroup label="Powertrain">
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Fuel Type</Text>
+              <View style={styles.segControl}>
+                {FUEL_TYPES.map(ft => {
+                  const isSelected = fuelType === ft.value;
+                  return (
+                    <Pressable
+                      key={ft.value}
+                      style={[styles.segOption, isSelected && styles.segOptionSelected]}
+                      onPress={() => { Haptics.selectionAsync(); setFuelType(ft.value); }}
+                    >
+                      <Text style={[styles.segOptionText, isSelected && styles.segOptionTextSelected]}>
+                        {ft.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+            <Pressable
+              style={styles.toggleRow}
+              onPress={() => { Haptics.selectionAsync(); setIsAwd(!isAwd); }}
+            >
+              <View>
+                <Text style={styles.toggleLabel}>AWD / 4WD</Text>
+                <Text style={styles.toggleSub}>All-wheel or four-wheel drive</Text>
+              </View>
+              <View style={[styles.toggle, isAwd && styles.toggleOn]}>
+                <View style={[styles.toggleThumb, isAwd && styles.toggleThumbOn]} />
+              </View>
+            </Pressable>
           </FieldGroup>
 
           {/* ── Mileage ───────────────────────────────────────── */}
@@ -1465,6 +1511,33 @@ const styles = StyleSheet.create({
   toggleOn: { backgroundColor: Colors.accent },
   toggleThumb: { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.text, alignSelf: "flex-start" },
   toggleThumbOn: { alignSelf: "flex-end" },
+
+  segControl: {
+    flexDirection: "row",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+    overflow: "hidden",
+  },
+  segOption: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segOptionSelected: {
+    backgroundColor: Colors.accentLight,
+  },
+  segOptionText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+  },
+  segOptionTextSelected: {
+    color: Colors.accent,
+    fontFamily: "Inter_600SemiBold",
+  },
 
   modalOverlay: {
     flex: 1,

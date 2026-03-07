@@ -1,0 +1,38 @@
+LifeMaintained is a React Native app. The generate-maintenance-schedule Edge Function accepts vehicle_type ('gas', 'diesel', 'hybrid', 'ev') and is_awd (boolean) to determine which maintenance templates apply. Currently these are hardcoded to 'gas' and false in the vehicle add flow. The vehicles table has an existing vehicle_type column but it stores values like 'car' and 'other' which are vehicle categories, not fuel types. We need new fields for fuel type and AWD.
+IMPORTANT: Do NOT rename or modify the existing vehicle_type column. We are adding NEW columns.
+
+TASK: Add two fields to the vehicle add form for fuel type and AWD, store them on the vehicles table, and pass them to the Edge Function.
+STEP 1 — ADD TWO COLUMNS to the vehicles table if they don't already exist:
+
+fuel_type: text, default 'gas'
+is_awd: boolean, default false
+
+Use a migration with IF NOT EXISTS logic so it's safe to re-run.
+STEP 2 — ADD TWO FORM FIELDS to the vehicle add screen (add-vehicle.tsx or wherever the form lives):
+Field 1: "Fuel Type" — a segmented control or horizontal button group with four options:
+
+Gas (selected by default)
+Diesel
+Hybrid
+Electric
+
+Map selections to values: 'gas', 'diesel', 'hybrid', 'ev'.
+Field 2: "AWD / 4WD" — a simple toggle switch with a label. Default OFF.
+PLACEMENT: Add these fields AFTER the year/make/model fields and BEFORE the mileage field. Group them under a subtle section label like "Powertrain" or "Vehicle Details".
+STEP 3 — SAVE TO DATABASE: When the vehicle is inserted into the vehicles table, include fuel_type and is_awd in the insert payload.
+STEP 4 — PASS TO EDGE FUNCTION: Find the supabase.functions.invoke('generate-maintenance-schedule') call that was added previously. Change the hardcoded values:
+FROM:
+vehicle_type: 'gas',
+is_awd: false,
+TO:
+vehicle_type: newVehicle.fuel_type || 'gas',
+is_awd: newVehicle.is_awd || false,
+STYLING: Match the existing form field styles exactly. The segmented control should feel native to the app's design language — same border radius, colors, and spacing as other form elements.
+DO NOT modify the Edge Function itself. DO NOT modify the Schedule tab, Mark Complete flow, or any existing vehicle detail screen code. Only change the vehicle add form and the insert payload.
+VERIFICATION:
+
+Open the add vehicle form — Fuel Type and AWD fields appear between make/model and mileage
+Select "Diesel" and toggle AWD on, save the vehicle
+Check the vehicles table in Supabase — fuel_type = 'diesel', is_awd = true
+Check user_vehicle_maintenance_tasks — should include diesel-specific templates (DEF Refill, Diesel Fuel Filter) AND AWD templates (Transfer Case Fluid, Differential Fluids) in addition to universal items
+Add another vehicle with defaults (Gas, AWD off) — should get standard gas templates only, no diesel/AWD items
