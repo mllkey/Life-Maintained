@@ -1,0 +1,77 @@
+CONTEXT: LifeMaintained is a React Native maintenance tracker app using Supabase (project ref: fqblqrrgjpwysrsiolcn). We are building the feature that auto-populates a maintenance schedule when a user adds a vehicle. This prompt creates the database tables only. Seed data comes in the next prompt.
+
+IMPORTANT: Do NOT modify any existing tables. Only CREATE new tables.
+
+
+
+
+TASK: Create three new tables via a Supabase migration.
+
+TABLE 1: maintenance_templates
+Holds the universal list of maintenance items that can apply to vehicles.
+
+Columns:
+- id: uuid, primary key, default gen_random_uuid()
+- name: text, not null
+- description: text, nullable
+- category: text, not null — one of: 'engine', 'brakes', 'fluids', 'electrical', 'tires', 'body', 'drivetrain'
+- default_interval_miles: integer, nullable
+- default_interval_months: integer, nullable
+- vehicle_type: text, not null, default 'all' — one of: 'all', 'gas', 'diesel', 'ev', 'hybrid', 'awd_4wd'
+- priority: text, not null, default 'recommended' — one of: 'critical', 'recommended', 'optional'
+- sort_order: integer, not null, default 0
+- created_at: timestamptz, default now()
+
+RLS: Enable RLS. Add SELECT policy for all authenticated users.
+
+TABLE 2: make_template_overrides
+Stores make-specific interval adjustments that override the defaults.
+
+Columns:
+- id: uuid, primary key, default gen_random_uuid()
+- template_id: uuid, not null, FK → maintenance_templates(id) ON DELETE CASCADE
+- make: text, not null
+- interval_miles: integer, nullable
+- interval_months: integer, nullable
+- year_start: integer, nullable
+- year_end: integer, nullable
+- notes: text, nullable
+- is_excluded: boolean, not null, default false
+- created_at: timestamptz, default now()
+
+Add unique constraint on (template_id, make, year_start, year_end).
+RLS: Enable RLS. Add SELECT policy for all authenticated users.
+
+TABLE 3: user_vehicle_maintenance_tasks
+User-facing table populated at runtime when vehicles are added.
+
+Columns:
+- id: uuid, primary key, default gen_random_uuid()
+- user_id: uuid, not null, FK → auth.users(id) ON DELETE CASCADE
+- vehicle_id: uuid, not null, FK → user_vehicles(id) ON DELETE CASCADE
+- template_id: uuid, nullable, FK → maintenance_templates(id) ON DELETE SET NULL
+- name: text, not null
+- description: text, nullable
+- category: text, not null
+- interval_miles: integer, nullable
+- interval_months: integer, nullable
+- last_completed_date: timestamptz, nullable
+- last_completed_miles: integer, nullable
+- next_due_date: timestamptz, nullable
+- next_due_miles: integer, nullable
+- status: text, not null, default 'upcoming' — one of: 'upcoming', 'due_soon', 'overdue', 'completed'
+- priority: text, not null, default 'recommended'
+- is_custom: boolean, not null, default false
+- source: text, not null, default 'template' — one of: 'template', 'api', 'custom'
+- created_at: timestamptz, default now()
+- updated_at: timestamptz, default now()
+
+RLS: Enable RLS. Add SELECT, INSERT, UPDATE, DELETE policies where user_id = auth.uid().
+Create index on (user_id, vehicle_id).
+Create index on (vehicle_id, status).
+Add trigger to auto-update updated_at on row changes.
+
+ERROR HANDLING: If any table already exists, skip it and log a notice. Do NOT drop existing tables.
+
+VERIFICATION: After migration, confirm all three tables exist with correct columns. Do NOT insert any data yet.
+
