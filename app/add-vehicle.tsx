@@ -498,7 +498,10 @@ export default function AddVehicleScreen() {
   }
 
   async function handleSave() {
+    console.log('SAVE: entered');
+    console.log('SAVE: isLoading =', isLoading);
     if (isLoading) return;
+    console.log('SAVE: past guard');
     if (!user) return;
 
     // 1. Validate — all existing checks unchanged
@@ -625,7 +628,7 @@ export default function AddVehicleScreen() {
           <Text style={styles.title}>Add Vehicle</Text>
           <Pressable
             style={({ pressed }) => [styles.saveBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={handleSave}
+            onPress={() => { console.log('SAVE: button tapped'); handleSave(); }}
             disabled={isLoading}
           >
             {isLoading
