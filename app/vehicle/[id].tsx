@@ -310,7 +310,7 @@ export default function VehicleDetailScreen() {
     handleCloseMarkComplete();
 
     try {
-      const [taskRes, vehicleRes] = await Promise.all([
+      const [taskRes, vehicleRes, logRes] = await Promise.all([
         supabase.from("user_vehicle_maintenance_tasks").update({
           last_completed_date: completeDate,
           last_completed_miles: mileageNum,
@@ -320,13 +320,28 @@ export default function VehicleDetailScreen() {
           updated_at: now,
         }).eq("id", task.id),
         supabase.from("vehicles").update({ mileage: mileageNum }).eq("id", id!),
+        supabase.from("maintenance_logs").insert({
+          user_id: user!.id,
+          vehicle_id: id,
+          property_id: null,
+          service_name: task.name,
+          service_date: completeDate,
+          cost: null,
+          mileage: mileageNum,
+          provider_name: null,
+          provider_contact: null,
+          receipt_url: null,
+          notes: completeNotes.trim() || null,
+        }),
       ]);
 
       if (taskRes.error || vehicleRes.error) throw taskRes.error ?? vehicleRes.error;
+      if (logRes.error) console.warn("[maintenance_logs insert] Failed:", logRes.error.message);
 
       queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["maintenance_logs", id] });
 
       let toastMsg = `${task.name} marked complete!`;
       if (newNextDueMiles != null) {

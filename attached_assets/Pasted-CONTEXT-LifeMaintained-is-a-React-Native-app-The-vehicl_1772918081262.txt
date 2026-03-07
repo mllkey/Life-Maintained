@@ -1,0 +1,58 @@
+CONTEXT: LifeMaintained is a React Native app. The vehicle detail screen has three tabs: Tasks, Schedule, and History. The Schedule tab has a "Mark Complete" flow that updates the task in user_vehicle_maintenance_tasks. The History tab reads from the maintenance_logs table. Currently, marking a task complete on the Schedule tab does NOT create a record in maintenance_logs, so the completion never shows up in the History tab.
+
+IMPORTANT: This is a small, focused change. Do NOT rewrite the Mark Complete flow. Only ADD an insert into maintenance_logs at the correct point.
+
+
+
+
+TASK: When a user marks a maintenance task complete on the Schedule tab, also insert a row into the maintenance_logs table so the completion appears in the History tab.
+
+SCHEMA — maintenance_logs columns:
+- id: uuid (auto-generated)
+- user_id: uuid
+- vehicle_id: uuid
+- property_id: text, nullable (leave null for vehicle maintenance)
+- service_name: text
+- service_date: date
+- cost: numeric, nullable (leave null — Mark Complete doesn't ask for cost)
+- mileage: integer, nullable
+- provider_name: text, nullable (leave null)
+- provider_contact: text, nullable (leave null)
+- receipt_url: text, nullable (leave null)
+- notes: text, nullable
+- created_at: timestamptz (auto)
+- updated_at: timestamptz (auto)
+
+WHERE TO ADD THE INSERT: Find the handleSaveMarkComplete function (or equivalent) in the vehicle detail screen file (app/vehicle/[id].tsx). This function already:
+1. Updates the task row in user_vehicle_maintenance_tasks
+2. Updates the vehicle's mileage in the vehicles table
+
+Add a THIRD operation: insert a row into maintenance_logs. This should run in the same Promise.all block as the other two updates (or immediately after them).
+
+THE INSERT should map these values:
+- user_id: current authenticated user's id
+- vehicle_id: the current vehicle's id
+- property_id: null
+- service_name: the task's name (from markCompleteTask.name)
+- service_date: the date the user selected in the Mark Complete form (completeDate)
+- cost: null
+- mileage: the mileage the user entered (completeMileage, parsed as integer)
+- provider_name: null
+- provider_contact: null
+- receipt_url: null
+- notes: the notes the user entered (completeNotes), or null if empty
+
+ERROR HANDLING: If the maintenance_logs insert fails, log the error to console but do NOT block or revert the Mark Complete flow. The task update and mileage update are the primary operations. The history log is a nice-to-have that should fail silently.
+
+ALSO: After the insert, invalidate any query cache related to maintenance_logs or service history so the History tab refreshes. Look for existing query keys like "maintenance_logs", "service_history", "service_records", or similar in the codebase and invalidate them. If no such query key exists, check what query key the History tab uses to fetch its data and invalidate that one.
+
+DO NOT modify the Mark Complete bottom sheet UI. Do NOT add new form fields. Do NOT change the existing task update or mileage update logic. Only add the maintenance_logs insert.
+
+VERIFICATION: After this change, the flow should be:
+1. User taps Mark Complete on a Schedule task
+2. Fills in mileage, date, optional notes
+3. Taps Save
+4. Task updates in user_vehicle_maintenance_tasks (existing)
+5. Vehicle mileage updates in vehicles (existing)
+6. NEW: Row inserted into maintenance_logs with service_name, date, mileage, notes
+7. History tab now shows the completed service
