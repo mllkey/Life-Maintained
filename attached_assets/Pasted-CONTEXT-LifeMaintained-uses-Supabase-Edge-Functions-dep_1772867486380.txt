@@ -1,0 +1,110 @@
+CONTEXT: LifeMaintained uses Supabase Edge Functions deployed from the CLI. We have three tables:
+- maintenance_templates (29 rows of template data)
+- make_template_overrides (20 rows of make-specific adjustments)
+- user_vehicle_maintenance_tasks (empty — populated at runtime)
+- vehicles (the existing vehicles table)
+
+We need an Edge Function that generates a personalized maintenance schedule when a user adds a vehicle.
+
+IMPORTANT: This function is called from the React Native app immediately after a vehicle is inserted into the vehicles table.
+
+
+
+
+TASK: Create a Supabase Edge Function called "generate-maintenance-schedule".
+
+ENDPOINT: POST /functions/v1/generate-maintenance-schedule
+
+REQUEST BODY (JSON):
+{
+  "vehicle_id": "uuid",
+  "make": "Toyota",
+  "year": 2020,
+  "current_mileage": 45000,
+  "vehicle_type": "gas",
+  "is_awd": false
+}
+
+Required fields: vehicle_id, make, year, current_mileage
+Optional fields: vehicle_type (default "gas"), is_awd (default false)
+
+IMPORTANT SCHEMA NOTES — read these carefully:
+- The vehicles table is called "vehicles" (not "user_vehicles")
+- The vehicles table stores mileage in a column called "mileage" (not "current_mileage")
+- In maintenance_templates, the task name column is "task" (not "name")
+- In maintenance_templates, mileage interval is "mileage_interval" and a value of 0 means "no mileage interval" (treat 0 the same as null)
+- In maintenance_templates, time interval is "time_interval_months" and a value of 0 means "no time interval" (treat 0 the same as null)
+- In user_vehicle_maintenance_tasks, the task name column is "name"
+- In user_vehicle_maintenance_tasks, the columns are "interval_miles" and "interval_months" (these ARE nullable)
+- When copying from maintenance_templates to user_vehicle_maintenance_tasks, map: task → name, mileage_interval → interval_miles (convert 0 to null), time_interval_months → interval_months (convert 0 to null)
+
+AUTHENTICATION: Validate the JWT from the Authorization header. Extract user_id. Verify that vehicle_id belongs to this user by querying: SELECT id FROM vehicles WHERE id = vehicle_id AND user_id = auth_user_id. Return 403 if no match.
+
+CORS: Include standard CORS headers for preflight (OPTIONS) and POST requests. Allow origin "*" for development.
+
+LOGIC (step by step):
+
+1. Parse and validate the request body. Return 400 with a clear error message if required fields are missing or wrong types.
+
+2. Authenticate the user from the JWT.
+
+3. Verify vehicle ownership: SELECT id FROM vehicles WHERE id = vehicle_id AND user_id = auth_user_id. Return 403 if no match.
+
+4. Check for existing tasks: SELECT count(*) FROM user_vehicle_maintenance_tasks WHERE vehicle_id = vehicle_id. If count > 0, return 409 with message "Maintenance schedule already exists for this vehicle. Delete existing tasks first to regenerate."
+
+5. Determine which vehicle_type values to query from maintenance_templates. Build an array:
+   - Always include 'all'
+   - Include the vehicle_type from the request ('gas', 'diesel', 'ev', 'hybrid')
+   - If is_awd is true, also include 'awd_4wd'
+   Example: for a gas AWD vehicle, query WHERE vehicle_type IN ('all', 'gas', 'awd_4wd')
+
+6. Query templates: SELECT * FROM maintenance_templates WHERE vehicle_type = ANY(type_array)
+
+7. For each template, check for a make-specific override:
+   SELECT * FROM make_template_overrides
+   WHERE template_id = template.id
+   AND LOWER(make) = LOWER(request.make)
+   AND (year_start IS NULL OR year_start <= request.year)
+   AND (year_end IS NULL OR year_end >= request.year)
+   LIMIT 1
+
+8. For each template, resolve the final values:
+   - If override exists AND is_excluded = true → SKIP this template (do not create a task)
+   - If override exists AND is_excluded = false → use override.interval_miles if not null, else use template.mileage_interval (convert 0 to null). Same for interval_months/time_interval_months.
+   - If no override → use template.mileage_interval (convert 0 to null) and template.time_interval_months (convert 0 to null)
+
+9. Calculate due dates for each task:
+   - next_due_miles: if resolved interval_miles is not null and > 0 → current_mileage + interval_miles. Else null.
+   - next_due_date: if resolved interval_months is not null and > 0 → today + interval_months months. Else null.
+   - status: 'upcoming'
+
+10. Batch INSERT all tasks into user_vehicle_maintenance_tasks in a single statement. Map columns:
+    - user_id: from JWT
+    - vehicle_id: from request
+    - template_id: template.id
+    - name: template.task (the "task" column from maintenance_templates goes into the "name" column)
+    - description: template.description
+    - category: template.category
+    - interval_miles: resolved value (null if 0 or not applicable)
+    - interval_months: resolved value (null if 0 or not applicable)
+    - last_completed_date: null
+    - last_completed_miles: null
+    - next_due_miles: calculated value
+    - next_due_date: calculated value
+    - status: 'upcoming'
+    - priority: template.priority
+    - is_custom: false
+    - source: 'template'
+
+11. Return 200 with JSON:
+{ "success": true, "tasks_created": <count>, "vehicle_id": "<id>" }
+
+ERROR HANDLING:
+- Wrap entire function in try/catch
+- Supabase query errors → return 500 with { "error": "Failed to generate schedule", "detail": error.message }
+- Log errors to console
+- HTTP codes: 400 (bad input), 403 (unauthorized), 409 (duplicate), 500 (server error)
+
+Always return JSON with Content-Type: application/json.
+Add an example curl command as a comment at the top of the file.
+
