@@ -1,0 +1,68 @@
+CONTEXT: LifeMaintained is a React Native app. The vehicle detail screen has a Schedule tab that displays maintenance tasks as cards. Currently, the ONLY way to mark a task complete is by tapping a small circular checkmark icon on the right side of each card. This is a usability problem:
+- The checkmark icon is too small to be a reliable touch target (Nielsen Norman Group requires minimum 44x44pt interactive elements)
+- Users expect tapping a list card to do something — right now tapping the card body does nothing, which feels broken
+- The primary action (Mark Complete) should be the easiest thing to do, not hidden behind a tiny icon
+
+RESEARCH BASIS: Nielsen Norman Group recommends all interactive elements be at least 1cm x 1cm (44x44pt). Apple Human Interface Guidelines set the same 44x44pt minimum. Tapping a full list row to open an action is the standard iOS pattern used by Apple Reminders, Health, and Settings. Swipe-to-complete was considered but rejected because NNG research shows users associate swipe gestures with destructive actions (delete/remove) and non-destructive actions hidden behind swipe have poor discoverability.
+
+IMPORTANT: This is a VISUAL and INTERACTION change only. Do NOT modify any data fetching, status calculation, database operations, or the Mark Complete bottom sheet itself. Only change how the user triggers the bottom sheet.
+
+
+
+
+TASK: Make the entire maintenance task card tappable to open the Mark Complete bottom sheet. Remove the standalone checkmark button.
+
+CHANGES TO ScheduleTaskCard COMPONENT:
+
+1. WRAP the entire card in a TouchableOpacity (or Pressable). When tapped, call the same onMarkComplete handler that the checkmark icon currently calls. This makes the full card width and height the touch target.
+
+2. REMOVE the circular checkmark button (the checkmark-circle-outline icon button on the right side of non-completed cards). It is no longer needed because the entire card is now tappable.
+
+3. ADD a right-facing chevron icon (chevron-right or chevron-forward, from the same icon library the app already uses) on the right side of non-completed task cards, in the same position where the checkmark was. Style it:
+   - Color: subtle gray (match the app's secondary text color)
+   - Size: 20-24pt
+   - Opacity: 0.5
+   This chevron is a universal iOS affordance that tells users "tap this row to do something." It is NOT a button — it is purely a visual indicator. The tap target is the entire card, not the chevron.
+
+4. FOR COMPLETED TASK CARDS: Show a filled green checkmark icon (checkmark-circle) in the same right-side position, but do NOT make completed cards tappable. Completed cards should remain static with no onPress handler. The green checkmark is a status indicator, not a button.
+
+5. ADD a subtle press state to the card. When the user presses down on a non-completed card, the card should:
+   - Reduce opacity slightly (opacity: 0.7) OR
+   - Slightly scale down (transform: [{ scale: 0.98 }])
+   Use whichever pattern the rest of the app already uses for pressed states. If no pattern exists, use opacity: 0.7 with a 100ms activeOpacity on TouchableOpacity.
+
+6. DO NOT change any of the card's existing content layout:
+   - Task name (bold) stays in the same position
+   - Category badge stays in the same position
+   - Due info text stays in the same position
+   - Priority indicator (red "!" for critical) stays in the same position
+   - Left border color coding (overdue=red, due_soon=amber, upcoming=white, completed=green) stays exactly the same
+
+CHANGES TO ScheduleSection COMPONENT:
+
+7. Verify that onMarkComplete is still passed through correctly from ScheduleSection to ScheduleTaskCard. The prop name and handler should not change — only the trigger point changes (from checkmark button tap to full card tap).
+
+WHAT NOT TO CHANGE:
+- Do NOT modify handleOpenMarkComplete, handleSaveMarkComplete, handleCloseMarkComplete, or any other handler function
+- Do NOT modify the MarkCompleteSheet component (the bottom sheet modal)
+- Do NOT modify data fetching, status calculation, or database queries
+- Do NOT modify the maintenance_logs insert
+- Do NOT add swipe gestures
+- Do NOT change the section headers (Action Needed, Upcoming, Completed) or their collapse/expand behavior
+- Do NOT change the empty state
+- Do NOT change any colors, fonts, spacing, or card dimensions except the specific changes listed above
+
+ACCESSIBILITY:
+- Add accessibilityLabel to each tappable card: "[Task name] — tap to mark complete"
+- Add accessibilityRole="button" to each tappable card
+- Completed cards should have accessibilityLabel: "[Task name] — completed" with no button role
+
+VERIFICATION — test these exact scenarios:
+1. Tap anywhere on an "upcoming" task card → Mark Complete bottom sheet opens with correct task data
+2. Tap anywhere on a "due_soon" task card → Mark Complete bottom sheet opens
+3. Tap anywhere on an "overdue" task card → Mark Complete bottom sheet opens
+4. Tap on a "completed" task card → nothing happens (no response, no sheet)
+5. The chevron icon appears on non-completed cards, green checkmark on completed cards
+6. The card shows a pressed state when touched (opacity change or scale)
+7. All existing card content (name, badge, due info, priority indicator, left border) renders identically to before
+8. The Mark Complete bottom sheet still works exactly as before (mileage input, date picker, notes, save)

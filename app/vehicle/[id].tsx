@@ -999,7 +999,16 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete }: {
   }
 
   return (
-    <View style={[styles.scheduleCard, { borderLeftColor: borderColor }]}>
+    <Pressable
+      onPress={!isCompleted ? () => onMarkComplete(task) : undefined}
+      style={({ pressed }) => [
+        styles.scheduleCard,
+        { borderLeftColor: borderColor },
+        !isCompleted && pressed && { opacity: 0.7 },
+      ]}
+      accessibilityRole={!isCompleted ? "button" : undefined}
+      accessibilityLabel={isCompleted ? `${task.name} — completed` : `${task.name} — tap to mark complete`}
+    >
       <View style={styles.scheduleCardInner}>
         <View style={styles.scheduleCardBody}>
           <View style={styles.scheduleCardTop}>
@@ -1044,19 +1053,13 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete }: {
           </View>
         </View>
         {!isCompleted && (
-          <Pressable
-            onPress={() => onMarkComplete(task)}
-            style={({ pressed }) => [styles.scheduleCompleteBtn, { opacity: pressed ? 0.7 : 1 }]}
-            hitSlop={8}
-          >
-            <Ionicons name="checkmark-circle-outline" size={26} color={Colors.good} />
-          </Pressable>
+          <Ionicons name="chevron-forward" size={22} color={Colors.textTertiary} style={{ opacity: 0.5 }} />
         )}
         {isCompleted && (
           <Ionicons name="checkmark-circle" size={22} color={Colors.good} style={{ opacity: 0.5 }} />
         )}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
