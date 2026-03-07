@@ -48,7 +48,7 @@ export default function PropertyTaskHistoryScreen() {
     enabled: !!(propertyId && task),
   });
 
-  async function handleDelete(logId: string) {
+  function handleDelete(logId: string) {
     Alert.alert(
       "Delete Record",
       "This service record will be permanently deleted.",
@@ -58,10 +58,14 @@ export default function PropertyTaskHistoryScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            await supabase.from("maintenance_logs").delete().eq("id", logId);
-            queryClient.invalidateQueries({ queryKey: ["property_task_logs", propertyId, task] });
-            queryClient.invalidateQueries({ queryKey: ["property_logs", propertyId] });
+            try {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              await supabase.from("maintenance_logs").delete().eq("id", logId);
+              queryClient.invalidateQueries({ queryKey: ["property_task_logs", propertyId, task] });
+              queryClient.invalidateQueries({ queryKey: ["property_logs", propertyId] });
+            } catch (err: any) {
+              Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+            }
           },
         },
       ]

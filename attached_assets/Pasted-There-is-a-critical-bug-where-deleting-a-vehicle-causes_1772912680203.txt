@@ -1,0 +1,35 @@
+There is a critical bug where deleting a vehicle causes the app to freeze. This has happened twice after deleting 2 vehicles in a row. Scan the entire app for this class of bug and fix every instance.
+
+PART 1 — DIAGNOSE AND FIX VEHICLE DELETE
+Find the delete handler for vehicles (likely in the vehicle detail screen, vehicle list, or a context menu). Audit it for all of the following freeze causes:
+1. Missing or incorrect loading state cleanup
+If the delete handler sets a loading/deleting state to true but never resets it to false on success or failure, the UI will freeze on the second delete. Fix:
+javascriptconst handleDelete = async () => {
+  if (isDeleting) return;
+  setIsDeleting(true);
+  try {
+    // ... perform delete ...
+    router.back();
+  } catch (error) {
+    setIsDeleting(false); // must reset on failure
+    // show error
+  }
+  // NOTE: do NOT reset isDeleting on success — navigate away instead
+};
+2. Stale state / unmounted component setState calls
+If the component tries to call setState after navigating away (component unmounted), React Native will freeze or throw. Fix by checking if the component is still mounted before any setState call that happens after an async operation:
+javascriptconst isMounted = useRef(true);
+useEffect(() => {
+  return () => { isMounted.current = false; };
+}, []);
+
+// then before any post-async setState:
+if (isMounted.current) setIsDeleting(false);
+3. Subscription or real-time listener not cleaned up after delete
+If the screen has a Supabase real-time subscription or useEffect data fetch tied to the deleted vehicle's ID, and that subscription fires after the record is deleted, it can cause infinite re-renders or a freeze. Ensure all subscriptions are unsubscribed in the useEffect cleanup and that the data fetch handles a null/empty result gracefully without re-fetching in a loop.
+4. List re-render after delete causing index out of bounds
+If the vehicle list uses a FlatList or similar and the item count changes after delete, ensure the keyExtractor uses stable unique IDs (not array index). If keyExtractor={(item, index) => index.toString()} exists anywhere near vehicle lists, change it to keyExtractor={(item) => item.id}.
+5. Confirmation dialog blocking the UI thread
+If an Alert.alert confirmation dialog is used before delete, ensure the delete logic is inside the onPress of the confirm button — not running before the dialog resolves.
+6. Cascading deletes not awaited
+If the app manually deletes related records (tasks, service history, etc.) before deleting the vehicle, ensure each delete is awaited in sequence or done in a single Supabase RPC. An unawaited promise that throws silently can leave the UI in a broken loading state.

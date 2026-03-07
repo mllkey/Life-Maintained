@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -35,6 +35,7 @@ export default function FamilyMemberDetailScreen() {
 
   const [activeTab, setActiveTab] = useState<"appointments" | "medications">("appointments");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const isDeletingMemberRef = useRef(false);
 
   const { data: member, isLoading: loadingMember } = useQuery({
     queryKey: ["family_member", id],
@@ -103,8 +104,8 @@ export default function FamilyMemberDetailScreen() {
     });
   }, [appointments]);
 
-  async function handleDeleteMember() {
-    if (!member) return;
+  function handleDeleteMember() {
+    if (!member || isDeletingMemberRef.current) return;
     Alert.alert(
       `Remove ${member.name}?`,
       `This will delete all their appointments and medications.`,
@@ -114,22 +115,29 @@ export default function FamilyMemberDetailScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            await supabase.from("health_appointments").delete().eq("family_member_id", id!);
-            await supabase.from("medications").delete().eq("family_member_id", id!);
-            await supabase.from("family_members").delete().eq("id", id!);
-            queryClient.invalidateQueries({ queryKey: ["family_members"] });
-            queryClient.invalidateQueries({ queryKey: ["health_appointments"] });
-            queryClient.invalidateQueries({ queryKey: ["medications"] });
-            queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-            router.back();
+            if (isDeletingMemberRef.current) return;
+            isDeletingMemberRef.current = true;
+            try {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              await supabase.from("health_appointments").delete().eq("family_member_id", id!);
+              await supabase.from("medications").delete().eq("family_member_id", id!);
+              await supabase.from("family_members").delete().eq("id", id!);
+              queryClient.invalidateQueries({ queryKey: ["family_members"] });
+              queryClient.invalidateQueries({ queryKey: ["health_appointments"] });
+              queryClient.invalidateQueries({ queryKey: ["medications"] });
+              queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+              router.back();
+            } catch (err: any) {
+              isDeletingMemberRef.current = false;
+              Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+            }
           },
         },
       ]
     );
   }
 
-  async function handleDeleteAppointment(apptId: string) {
+  function handleDeleteAppointment(apptId: string) {
     Alert.alert(
       "Delete Appointment",
       "This appointment type will be removed from the tracker.",
@@ -139,10 +147,14 @@ export default function FamilyMemberDetailScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            await supabase.from("health_appointments").delete().eq("id", apptId);
-            queryClient.invalidateQueries({ queryKey: ["member_appointments", id] });
-            queryClient.invalidateQueries({ queryKey: ["health_appointments"] });
+            try {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              await supabase.from("health_appointments").delete().eq("id", apptId);
+              queryClient.invalidateQueries({ queryKey: ["member_appointments", id] });
+              queryClient.invalidateQueries({ queryKey: ["health_appointments"] });
+            } catch (err: any) {
+              Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+            }
           },
         },
       ]

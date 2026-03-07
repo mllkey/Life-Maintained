@@ -106,6 +106,7 @@ export default function PropertyDetailScreen() {
   }
 
   function handleDelete() {
+    if (isDeleting) return;
     Alert.alert(
       "Delete Property",
       "This will permanently delete this property and all its tasks. This cannot be undone.",
@@ -116,14 +117,19 @@ export default function PropertyDetailScreen() {
           style: "destructive",
           onPress: async () => {
             setIsDeleting(true);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            await supabase.from("property_maintenance_tasks").delete().eq("property_id", id!);
-            await supabase.from("maintenance_logs").delete().eq("property_id", id!);
-            await supabase.from("properties").delete().eq("id", id!);
-            queryClient.invalidateQueries({ queryKey: ["properties"] });
-            queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-            queryClient.invalidateQueries({ queryKey: ["dashboard_counts"] });
-            router.back();
+            try {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              await supabase.from("property_maintenance_tasks").delete().eq("property_id", id!);
+              await supabase.from("maintenance_logs").delete().eq("property_id", id!);
+              await supabase.from("properties").delete().eq("id", id!);
+              queryClient.invalidateQueries({ queryKey: ["properties"] });
+              queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+              queryClient.invalidateQueries({ queryKey: ["dashboard_counts"] });
+              router.back();
+            } catch (err: any) {
+              setIsDeleting(false);
+              Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+            }
           },
         },
       ]
