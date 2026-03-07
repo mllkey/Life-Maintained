@@ -277,6 +277,7 @@ export default function AddVehicleScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("Vehicle saved!");
   const [showPaywall, setShowPaywall] = useState(false);
 
   const [vin, setVin] = useState("");
@@ -567,10 +568,39 @@ export default function AddVehicleScreen() {
       await supabase.from("vehicle_maintenance_tasks").insert(taskRows);
     }
 
+    let finalToastMessage = "Vehicle saved!";
+    try {
+      const { error: scheduleError } = await supabase.functions.invoke(
+        "generate-maintenance-schedule",
+        {
+          body: {
+            vehicle_id: inserted.id,
+            make: make.trim(),
+            year: yearNum,
+            current_mileage: mileage ? parseInt(mileage) : 0,
+            vehicle_type: "gas",
+            is_awd: false,
+          },
+        },
+      );
+      if (scheduleError) {
+        const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
+        if (httpStatus !== 409) {
+          console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
+          finalToastMessage = "Vehicle added! We had trouble setting up your maintenance schedule.";
+        }
+      }
+    } catch (scheduleErr) {
+      console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
+      finalToastMessage = "Vehicle added! We had trouble setting up your maintenance schedule.";
+    }
+
     setIsLoading(false);
+    setToastMessage(finalToastMessage);
     queryClient.invalidateQueries({ queryKey: ["vehicles"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
+    queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowToast(true);
     setTimeout(() => router.dismiss(), 900);
@@ -867,7 +897,7 @@ export default function AddVehicleScreen() {
         onClose={() => { setModelPickerVisible(false); setModelSearch(""); }}
         insets={insets}
       />
-      <SaveToast visible={showToast} message="Vehicle saved!" />
+      <SaveToast visible={showToast} message={toastMessage} />
       {showPaywall && (
         <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
           <Paywall

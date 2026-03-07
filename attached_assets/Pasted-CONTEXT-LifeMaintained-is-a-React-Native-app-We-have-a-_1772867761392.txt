@@ -1,0 +1,49 @@
+CONTEXT: LifeMaintained is a React Native app. We have a Supabase Edge Function "generate-maintenance-schedule" that creates a maintenance schedule. Now we need to call it when a user adds a vehicle.
+
+IMPORTANT: Do NOT rewrite the vehicle add flow. Only ADD the Edge Function call at the correct point.
+
+IMPORTANT SCHEMA NOTE: The vehicles table is called "vehicles" (not "user_vehicles"). The mileage column is called "mileage" (not "current_mileage").
+
+
+
+
+TASK: Modify the vehicle add/save handler to call the Edge Function after a successful vehicle insert.
+
+STEP 1: Find the existing code where a new vehicle is inserted into the "vehicles" table. Identify the point AFTER the successful insert where we have access to the new vehicle's id, make, year, and mileage.
+
+STEP 2: Immediately after the successful vehicle insert, add this call:
+
+const { data, error } = await supabase.functions.invoke('generate-maintenance-schedule', {
+  body: {
+    vehicle_id: newVehicle.id,
+    make: newVehicle.make,
+    year: parseInt(newVehicle.year),
+    current_mileage: parseInt(newVehicle.mileage || '0'),
+    vehicle_type: 'gas',
+    is_awd: false,
+  }
+});
+
+NOTE: We are defaulting vehicle_type to 'gas' and is_awd to false for now. The vehicles table has a vehicle_type column but it stores values like 'car' and 'other' which don't map to our maintenance template types ('gas', 'diesel', 'ev', 'hybrid'). We will add a fuel type picker in a future prompt.
+
+STEP 3: Handle the response:
+- Success → continue normally with whatever the app does after vehicle add (navigate back, show toast, etc)
+- Error → log to console, show subtle warning toast: "Vehicle added! We had trouble setting up your maintenance schedule." Do NOT block the vehicle add flow. The vehicle was saved successfully.
+- 409 (duplicate) → ignore silently, schedule already exists
+
+CRITICAL REQUIREMENTS:
+- The Edge Function call must be NON-BLOCKING. If it fails, the vehicle add still succeeds.
+- Use the existing Supabase client instance (do not create a new one).
+- The JWT is passed automatically by supabase.functions.invoke — do not set Authorization headers manually.
+- Do NOT modify any existing UI components except to add the function call and error handling.
+- Do NOT add new form fields in this prompt.
+- Preserve all existing vehicle add behavior exactly as-is.
+
+VERIFICATION: Trace through the flow:
+1. User fills out vehicle form and taps Save
+2. Vehicle is inserted into "vehicles" table → returns new vehicle record
+3. Edge Function is called with vehicle details
+4. If success → tasks now exist in user_vehicle_maintenance_tasks
+5. If failure → vehicle still saved, user sees subtle warning
+6. App continues to next screen as normal
+
