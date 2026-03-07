@@ -449,6 +449,7 @@ export default function VehicleDetailScreen() {
   }
 
   function handleDeleteVehicle() {
+    console.log('DELETE: handler started');
     if (!vehicle || isDeletingVehicleRef.current) return;
     const name = vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
     Alert.alert(
@@ -460,19 +461,28 @@ export default function VehicleDetailScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
+            console.log('DELETE: user confirmed');
             if (isDeletingVehicleRef.current) return;
             isDeletingVehicleRef.current = true;
             try {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-              await supabase.from("vehicle_maintenance_tasks").delete().eq("vehicle_id", id!);
-              await supabase.from("user_vehicle_maintenance_tasks").delete().eq("vehicle_id", id!);
-              await supabase.from("maintenance_logs").delete().eq("vehicle_id", id!);
-              await supabase.from("vehicle_mileage_history").delete().eq("vehicle_id", id!);
-              await supabase.from("vehicles").delete().eq("id", id!);
+              console.log('DELETE: calling supabase');
+              const r1 = await supabase.from("vehicle_maintenance_tasks").delete().eq("vehicle_id", id!);
+              console.log('DELETE: supabase returned', { data: r1.data, error: r1.error });
+              const r2 = await supabase.from("user_vehicle_maintenance_tasks").delete().eq("vehicle_id", id!);
+              console.log('DELETE: supabase returned', { data: r2.data, error: r2.error });
+              const r3 = await supabase.from("maintenance_logs").delete().eq("vehicle_id", id!);
+              console.log('DELETE: supabase returned', { data: r3.data, error: r3.error });
+              const r4 = await supabase.from("vehicle_mileage_history").delete().eq("vehicle_id", id!);
+              console.log('DELETE: supabase returned', { data: r4.data, error: r4.error });
+              const r5 = await supabase.from("vehicles").delete().eq("id", id!);
+              console.log('DELETE: supabase returned', { data: r5.data, error: r5.error });
               queryClient.invalidateQueries({ queryKey: ["vehicles"] });
               queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+              console.log('DELETE: navigating away');
               router.back();
             } catch (err: any) {
+              console.log('DELETE: error caught', err);
               isDeletingVehicleRef.current = false;
               Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
             }
