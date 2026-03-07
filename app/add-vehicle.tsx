@@ -1024,7 +1024,7 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
         <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 8 }]}>
           <View style={styles.modalHandle} />
@@ -1053,8 +1053,10 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
               sections={sections}
               keyExtractor={(mk) => mk}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
               style={{ maxHeight: 380 }}
+              contentContainerStyle={{ paddingBottom: 20 }}
               stickySectionHeadersEnabled={false}
               renderSectionHeader={({ section }) => (
                 <MakeSectionHeader title={section.title} />
@@ -1069,8 +1071,10 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
               data={filteredMakes}
               keyExtractor={(mk) => mk}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
               style={{ maxHeight: 380 }}
+              contentContainerStyle={{ paddingBottom: 20 }}
               renderItem={({ item: mk }) => (
                 <MakeRow mk={mk} onSelect={onSelect} />
               )}
@@ -1079,7 +1083,7 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
             />
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -1098,7 +1102,7 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
 }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
         <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 8 }]}>
           <View style={styles.modalHandle} />
@@ -1150,8 +1154,10 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
               data={filteredModels}
               keyExtractor={m => m}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
               style={{ maxHeight: 320 }}
+              contentContainerStyle={{ paddingBottom: 20 }}
               getItemLayout={(_, index) => ({
                 length: MODEL_ITEM_HEIGHT,
                 offset: MODEL_ITEM_HEIGHT * index,
@@ -1190,7 +1196,7 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
             />
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

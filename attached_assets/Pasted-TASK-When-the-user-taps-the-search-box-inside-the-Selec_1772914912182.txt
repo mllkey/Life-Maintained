@@ -1,0 +1,43 @@
+TASK: When the user taps the search box inside the Select Model (or Select Make) bottom sheet, the keyboard appears and covers the entire list of results, making it impossible to see or tap any options. Fix this and audit the entire app for the same issue.
+PART 1 — FIX THE MODEL/MAKE PICKER SHEETS
+Find the Select Model and Select Make bottom sheet/modal components. The fix requires the list to scroll up and remain visible above the keyboard when it appears.
+Implement KeyboardAvoidingView wrapping the sheet content:
+javascriptimport { KeyboardAvoidingView, Platform } from 'react-native';
+
+<KeyboardAvoidingView
+  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+  keyboardVerticalOffset={/* measure from bottom of sheet header to bottom of screen */}
+>
+  {/* search input */}
+  {/* results list */}
+</KeyboardAvoidingView>
+Additionally, ensure the results list uses FlatList (not ScrollView) with these props set:
+javascriptkeyboardShouldPersistTaps="handled"
+keyboardDismissMode="on-drag"
+contentContainerStyle={{ paddingBottom: 20 }}
+keyboardShouldPersistTaps="handled" is critical — without it, tapping a result first dismisses the keyboard instead of registering the tap, requiring the user to tap twice.
+The search input itself must NOT use autoFocus — keyboard must only open when the user explicitly taps the search box, never automatically. If autoFocus is present on these inputs, remove it.
+PART 2 — FULL APP AUDIT
+Scan every bottom sheet, modal, and screen in the app that contains both a text input AND a scrollable list or tappable options below it. This includes:
+
+Any other picker sheets (Year picker, Trim picker, etc.)
+Log Service form
+Add Vehicle, Add Property, Add Family Member, Add Medication forms
+Any search or filter inputs that sit above a list
+Any form where the keyboard could obscure buttons, inputs, or selectable options below the active input
+
+For each one found, apply the same three fixes:
+
+Wrap with KeyboardAvoidingView using padding behavior on iOS and height on Android
+Add keyboardShouldPersistTaps="handled" to any FlatList or ScrollView in the same sheet/screen
+Remove autoFocus from any input inside a bottom sheet or modal — keyboards must never open automatically when a sheet appears
+
+CRITICAL REQUIREMENTS:
+
+Do NOT change any layout, styling, or component structure beyond adding KeyboardAvoidingView and the keyboard-related props
+The list must remain fully scrollable and tappable while the keyboard is open
+On iOS, the sheet content must animate up with the keyboard — the list should never be hidden behind it
+If a sheet uses a third-party bottom sheet library (such as @gorhom/bottom-sheet), use that library's built-in keyboardBehavior="interactive" and keyboardBlurBehavior="restore" props instead of wrapping with KeyboardAvoidingView — do not mix both approaches
+Test the fix mentally by tracing: user opens sheet → taps search box → keyboard appears → list is still visible above keyboard → user taps a result → result is selected on first tap
+
+VERIFICATION: List every file modified and confirm that no sheet or modal in the app has a search input that obscures its own results list when the keyboard opens.
