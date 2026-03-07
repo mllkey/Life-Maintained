@@ -1,0 +1,85 @@
+CONTEXT: We just created three tables: maintenance_templates, make_template_overrides, and user_vehicle_maintenance_tasks. Now we need to seed the first two with data. Do NOT touch user_vehicle_maintenance_tasks — it gets populated at runtime.
+
+
+
+
+TASK: Insert seed data into maintenance_templates and make_template_overrides.
+
+INSERT INTO maintenance_templates:
+
+Universal (vehicle_type = 'all'):
+1. "Engine Oil & Filter Change" | engine | 7500 mi | 6 mo | critical | sort 1
+2. "Tire Rotation" | tires | 7500 mi | 6 mo | critical | sort 2
+3. "Brake Pad Inspection" | brakes | 15000 mi | 12 mo | critical | sort 3
+4. "Cabin Air Filter" | engine | 20000 mi | 24 mo | recommended | sort 4
+5. "Engine Air Filter" | engine | 30000 mi | 24 mo | recommended | sort 5
+6. "Wiper Blade Replacement" | body | null mi | 12 mo | recommended | sort 6
+7. "Battery Check / Replacement" | electrical | null mi | 36 mo | recommended | sort 7
+8. "Brake Fluid Flush" | brakes | 30000 mi | 24 mo | recommended | sort 8
+9. "Coolant Flush" | fluids | 50000 mi | 48 mo | recommended | sort 9
+10. "Multi-Point Inspection" | engine | 15000 mi | 12 mo | optional | sort 10
+
+Gas-only (vehicle_type = 'gas'):
+11. "Spark Plug Replacement" | engine | 60000 mi | null | recommended | sort 11
+12. "Transmission Fluid (Automatic)" | fluids | 60000 mi | 48 mo | recommended | sort 12
+13. "Serpentine Belt Replacement" | engine | 75000 mi | null | recommended | sort 13
+14. "Timing Belt Replacement" | engine | 100000 mi | null | critical | sort 14
+15. "Fuel Filter Replacement" | engine | 60000 mi | null | optional | sort 15
+16. "PCV Valve Replacement" | engine | 60000 mi | null | optional | sort 16
+
+Diesel-only (vehicle_type = 'diesel'):
+17. "Diesel Exhaust Fluid (DEF) Refill" | fluids | 10000 mi | null | critical | sort 11
+18. "Fuel Filter Replacement (Diesel)" | engine | 15000 mi | null | critical | sort 12
+19. "Diesel Particulate Filter Cleaning" | engine | 100000 mi | null | recommended | sort 13
+20. "Glow Plug Replacement" | engine | 100000 mi | null | recommended | sort 14
+
+EV-only (vehicle_type = 'ev'):
+21. "Battery Health Check" | electrical | null mi | 12 mo | critical | sort 11
+22. "Electric Motor Coolant" | fluids | 50000 mi | 48 mo | recommended | sort 12
+23. "Regenerative Brake Inspection" | brakes | 50000 mi | 24 mo | recommended | sort 13
+
+Hybrid-only (vehicle_type = 'hybrid'):
+24. "Hybrid Battery Health Check" | electrical | null mi | 12 mo | critical | sort 11
+25. "Spark Plug Replacement (Hybrid)" | engine | 60000 mi | null | recommended | sort 12
+26. "Transmission Fluid (Hybrid/CVT)" | fluids | 60000 mi | null | recommended | sort 13
+
+AWD/4WD add-on (vehicle_type = 'awd_4wd'):
+27. "Transfer Case Fluid" | drivetrain | 30000 mi | null | recommended | sort 20
+28. "Front Differential Fluid" | drivetrain | 30000 mi | null | recommended | sort 21
+29. "Rear Differential Fluid" | drivetrain | 30000 mi | null | recommended | sort 22
+
+
+
+
+INSERT INTO make_template_overrides:
+
+Use the template_id from the row you just inserted. Reference templates by name.
+
+Oil Change overrides:
+- Toyota: 10000 mi, 12 mo, year_start 2010, notes "10,000 mi with full synthetic 0W-20"
+- Honda: 7500 mi, 12 mo, year_start 2010
+- BMW: 10000 mi, 12 mo
+- Mercedes-Benz: 10000 mi, 12 mo
+- Subaru: 6000 mi, 6 mo
+- Hyundai: 7500 mi, year_start 2015
+- Kia: 7500 mi, year_start 2015
+- Ford: 7500 mi, year_start 2015
+
+Spark Plug overrides:
+- Toyota: 120000 mi, notes "Iridium plugs rated 120k"
+- Honda: 100000 mi
+- BMW: 60000 mi
+- Subaru: 60000 mi
+- Ford: 100000 mi, year_start 2010
+
+Timing Belt overrides (is_excluded = true for chain-driven makes):
+- Toyota: is_excluded = true
+- Honda: is_excluded = true, year_start 2018
+- BMW: is_excluded = true
+- Ford: is_excluded = true
+- Hyundai: is_excluded = true, year_start 2011
+- Kia: is_excluded = true, year_start 2011
+- Subaru: 105000 mi (NOT excluded — Subaru uses timing belts)
+
+VERIFICATION: Log count of maintenance_templates (should be 29) and make_template_overrides (should be 20).
+
