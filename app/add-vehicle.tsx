@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { SaveToast } from "@/components/SaveToast";
 import {
   View,
   Text,
@@ -13,6 +12,7 @@ import {
   Modal,
   Platform,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -276,8 +276,6 @@ export default function AddVehicleScreen() {
   const [isSeasonal, setIsSeasonal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState("Vehicle saved!");
   const [showPaywall, setShowPaywall] = useState(false);
 
   const [vin, setVin] = useState("");
@@ -502,6 +500,8 @@ export default function AddVehicleScreen() {
   async function handleSave() {
     if (isLoading) return;
     if (!user) return;
+
+    // 1. Validate — all existing checks unchanged
     if (!year || !make || !model) {
       setError("Year, make, and model are required");
       return;
@@ -515,6 +515,8 @@ export default function AddVehicleScreen() {
       setError("Estimated monthly miles is required for this vehicle type");
       return;
     }
+
+    // 2. Paywall check (must await before dismissing — can't dismiss if paywall needs to show)
     try {
       const { count } = await supabase
         .from("vehicles")
@@ -526,84 +528,91 @@ export default function AddVehicleScreen() {
       }
     } catch {}
 
+    // 3. All checks passed — dismiss immediately and optimistically refresh
     setIsLoading(true);
-    setError(null);
-
-    const { data: inserted, error: err } = await supabase
-      .from("vehicles")
-      .insert({
-        user_id: user.id,
-        year: yearNum,
-        make: make.trim(),
-        model: model.trim(),
-        trim: trim.trim() || null,
-        nickname: nickname.trim() || null,
-        vehicle_type: vehicleType,
-        mileage: mileage ? parseInt(mileage) : null,
-        average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth) : null,
-        is_seasonal: isSeasonal,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
-
-    if (err || !inserted) {
-      setIsLoading(false);
-      setError(err?.message ?? "Failed to save vehicle");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
-
-    if (hasManufacturerSchedule && manufacturerTasks.length > 0) {
-      const taskRows = manufacturerTasks.map(t => ({
-        vehicle_id: inserted.id,
-        task: t.task,
-        interval: t.interval_days,
-        mileage_interval: t.mileage_interval,
-        estimated_cost: t.estimated_cost,
-        priority: t.priority,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }));
-      await supabase.from("vehicle_maintenance_tasks").insert(taskRows);
-    }
-
-    let finalToastMessage = "Vehicle saved!";
-    try {
-      const { error: scheduleError } = await supabase.functions.invoke(
-        "generate-maintenance-schedule",
-        {
-          body: {
-            vehicle_id: inserted.id,
-            make: make.trim(),
-            year: yearNum,
-            current_mileage: mileage ? parseInt(mileage) : 0,
-            vehicle_type: "gas",
-            is_awd: false,
-          },
-        },
-      );
-      if (scheduleError) {
-        const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
-        if (httpStatus !== 409) {
-          console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
-          finalToastMessage = "Vehicle added! We had trouble setting up your maintenance schedule.";
-        }
-      }
-    } catch (scheduleErr) {
-      console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
-      finalToastMessage = "Vehicle added! We had trouble setting up your maintenance schedule.";
-    }
-
-    setToastMessage(finalToastMessage);
     queryClient.invalidateQueries({ queryKey: ["vehicles"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
     queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setShowToast(true);
-    setTimeout(() => router.dismiss(), 900);
+    router.back();
+
+    // 4. Save in background — user is already back on the previous screen
+    const vehicleData = {
+      user_id: user.id,
+      year: yearNum,
+      make: make.trim(),
+      model: model.trim(),
+      trim: trim.trim() || null,
+      nickname: nickname.trim() || null,
+      vehicle_type: vehicleType,
+      mileage: mileage ? parseInt(mileage) : null,
+      average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth) : null,
+      is_seasonal: isSeasonal,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    try {
+      const { data: inserted, error: err } = await supabase
+        .from("vehicles")
+        .insert(vehicleData)
+        .select("id")
+        .single();
+
+      if (err || !inserted) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert("Save Failed", err?.message ?? "Failed to save vehicle. Please try again.");
+        return;
+      }
+
+      if (hasManufacturerSchedule && manufacturerTasks.length > 0) {
+        const taskRows = manufacturerTasks.map(t => ({
+          vehicle_id: inserted.id,
+          task: t.task,
+          interval: t.interval_days,
+          mileage_interval: t.mileage_interval,
+          estimated_cost: t.estimated_cost,
+          priority: t.priority,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+        await supabase.from("vehicle_maintenance_tasks").insert(taskRows);
+      }
+
+      try {
+        const { error: scheduleError } = await supabase.functions.invoke(
+          "generate-maintenance-schedule",
+          {
+            body: {
+              vehicle_id: inserted.id,
+              make: make.trim(),
+              year: yearNum,
+              current_mileage: mileage ? parseInt(mileage) : 0,
+              vehicle_type: "gas",
+              is_awd: false,
+            },
+          },
+        );
+        if (scheduleError) {
+          const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
+          if (httpStatus !== 409) {
+            console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
+          }
+        }
+      } catch (scheduleErr) {
+        console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
+      }
+
+      // Re-invalidate after insert completes so the list reflects the real data
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (saveErr) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Save Failed", "Failed to save vehicle. Please try again.");
+    }
   }
 
   return (
@@ -897,7 +906,6 @@ export default function AddVehicleScreen() {
         onClose={() => { setModelPickerVisible(false); setModelSearch(""); }}
         insets={insets}
       />
-      <SaveToast visible={showToast} message={toastMessage} />
       {showPaywall && (
         <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
           <Paywall
