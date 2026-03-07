@@ -81,7 +81,7 @@ export default function VehicleDetailScreen() {
   const [activeTab, setActiveTab] = useState<"tasks" | "schedule" | "history">("tasks");
   const [isExporting, setIsExporting] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
-  const isDeletingVehicleRef = useRef(false);
+  const [isDeletingVehicle, setIsDeletingVehicle] = useState(false);
   const [scheduleRefreshing, setScheduleRefreshing] = useState(false);
   const [actionNeededExpanded, setActionNeededExpanded] = useState(true);
   const [upcomingExpanded, setUpcomingExpanded] = useState(true);
@@ -450,7 +450,7 @@ export default function VehicleDetailScreen() {
 
   function handleDeleteVehicle() {
     console.log('DELETE: handler started');
-    if (!vehicle || isDeletingVehicleRef.current) return;
+    if (!vehicle || isDeletingVehicle) return;
     const name = vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
     Alert.alert(
       "Delete this vehicle?",
@@ -462,8 +462,8 @@ export default function VehicleDetailScreen() {
           style: "destructive",
           onPress: async () => {
             console.log('DELETE: user confirmed');
-            if (isDeletingVehicleRef.current) return;
-            isDeletingVehicleRef.current = true;
+            if (isDeletingVehicle) return;
+            setIsDeletingVehicle(true);
             try {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
               console.log('DELETE: calling supabase');
@@ -477,13 +477,13 @@ export default function VehicleDetailScreen() {
               console.log('DELETE: supabase returned', { data: r4.data, error: r4.error });
               const r5 = await supabase.from("vehicles").delete().eq("id", id!);
               console.log('DELETE: supabase returned', { data: r5.data, error: r5.error });
-              queryClient.invalidateQueries({ queryKey: ["vehicles"] });
-              queryClient.invalidateQueries({ queryKey: ["dashboard"] });
               console.log('DELETE: navigating away');
               router.back();
+              queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+              queryClient.invalidateQueries({ queryKey: ["dashboard"] });
             } catch (err: any) {
               console.log('DELETE: error caught', err);
-              isDeletingVehicleRef.current = false;
+              setIsDeletingVehicle(false);
               Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
             }
           },
