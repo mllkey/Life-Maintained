@@ -333,6 +333,7 @@ export default function AddPropertyScreen() {
   }
 
   async function handleSave() {
+    if (isLoading) return;
     if (!user) return;
     if (!street.trim()) {
       setError("Street address is required");
@@ -381,7 +382,6 @@ export default function AddPropertyScreen() {
       await supabase.from("property_maintenance_tasks").insert(tasks);
     }
 
-    setIsLoading(false);
     queryClient.invalidateQueries({ queryKey: ["properties"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

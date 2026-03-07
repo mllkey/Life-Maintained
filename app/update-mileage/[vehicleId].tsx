@@ -34,6 +34,7 @@ export default function UpdateMileageScreen() {
   });
 
   async function handleSave() {
+    if (isLoading) return;
     if (!vehicleId || !mileage) return;
     const m = parseInt(mileage);
     if (isNaN(m)) return;
@@ -51,7 +52,6 @@ export default function UpdateMileageScreen() {
       created_at: new Date().toISOString(),
     });
 
-    setIsLoading(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
     queryClient.invalidateQueries({ queryKey: ["vehicles"] });

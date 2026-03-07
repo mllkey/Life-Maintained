@@ -59,6 +59,7 @@ export default function HealthProfileScreen() {
   }
 
   async function handleSave() {
+    if (isLoading) return;
     if (!user) return;
     setIsLoading(true);
 
@@ -75,7 +76,6 @@ export default function HealthProfileScreen() {
       updated_at: new Date().toISOString(),
     });
 
-    setIsLoading(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     queryClient.invalidateQueries({ queryKey: ["health_profile"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });

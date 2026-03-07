@@ -207,6 +207,7 @@ export default function LogServiceScreen() {
   // ─────────────────────────────────────────────────────────────────────────
 
   async function handleSave() {
+    if (isLoading) return;
     if (!user || !vehicleId) return;
     setIsLoading(true);
     setError(null);

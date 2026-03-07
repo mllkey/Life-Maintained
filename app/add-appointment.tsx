@@ -72,6 +72,7 @@ export default function AddAppointmentScreen() {
   });
 
   async function handleSave() {
+    if (isLoading) return;
     if (!user) return;
     if (!appointmentType.trim()) { setError("Appointment type is required"); return; }
     setIsLoading(true);
@@ -98,8 +99,7 @@ export default function AddAppointmentScreen() {
       updated_at: new Date().toISOString(),
     });
 
-    setIsLoading(false);
-    if (err) { setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
+    if (err) { setIsLoading(false); setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
     else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["health_appointments"] });

@@ -56,6 +56,7 @@ export default function AddPropertyTaskScreen() {
   }
 
   async function handleSave() {
+    if (isLoading) return;
     if (!propertyId) return;
     if (!task.trim()) { setError("Task name is required"); return; }
     setIsLoading(true);
@@ -85,8 +86,7 @@ export default function AddPropertyTaskScreen() {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
-    setIsLoading(false);
-    if (err) { setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
+    if (err) { setIsLoading(false); setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
     else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["property_tasks"] });

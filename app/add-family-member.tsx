@@ -50,6 +50,7 @@ export default function AddFamilyMemberScreen() {
   }
 
   async function handleSave() {
+    if (isLoading) return;
     if (!user) return;
     if (!name.trim()) { setError("Name is required"); return; }
     try {
@@ -84,8 +85,7 @@ export default function AddFamilyMemberScreen() {
       updated_at: new Date().toISOString(),
     });
 
-    setIsLoading(false);
-    if (err) { setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
+    if (err) { setIsLoading(false); setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
     else {
       queryClient.invalidateQueries({ queryKey: ["family_members"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

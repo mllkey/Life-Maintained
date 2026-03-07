@@ -500,6 +500,7 @@ export default function AddVehicleScreen() {
   }
 
   async function handleSave() {
+    if (isLoading) return;
     if (!user) return;
     if (!year || !make || !model) {
       setError("Year, make, and model are required");
@@ -595,7 +596,6 @@ export default function AddVehicleScreen() {
       finalToastMessage = "Vehicle added! We had trouble setting up your maintenance schedule.";
     }
 
-    setIsLoading(false);
     setToastMessage(finalToastMessage);
     queryClient.invalidateQueries({ queryKey: ["vehicles"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });

@@ -44,6 +44,7 @@ export default function AddMedicationScreen() {
   });
 
   async function handleSave() {
+    if (isLoading) return;
     if (!user) return;
     if (!name.trim()) { setError("Medication name is required"); return; }
     setIsLoading(true);
@@ -59,8 +60,7 @@ export default function AddMedicationScreen() {
       updated_at: new Date().toISOString(),
     });
 
-    setIsLoading(false);
-    if (err) { setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
+    if (err) { setIsLoading(false); setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
     else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["medications"] });

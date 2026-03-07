@@ -1,0 +1,72 @@
+Fix the navigation-after-save bug on the Add Vehicle screen, then scan every other form/modal/sheet in the app that performs a save, submit, or create action and apply the same fix wherever needed.
+
+PART 1 — FIX ADD VEHICLE
+Find the Save handler in the Add Vehicle screen (likely app/add-vehicle.tsx or similar).
+The correct post-save navigation pattern for Expo Router is:
+javascriptrouter.back();
+// OR if this screen was pushed onto a stack:
+router.replace('/(tabs)/'); // only if router.back() is not appropriate
+The fix must:
+
+Only navigate away AFTER the Supabase insert returns successfully — never before
+If the screen is a modal, call router.back() or router.dismiss() as appropriate for the modal presentation style
+Disable the Save button immediately on first tap (set a isSaving state to true) and re-enable it only if the save fails — this prevents duplicate submissions regardless of navigation timing
+Show a loading indicator on the Save button while isSaving is true (spinner or opacity change)
+After a successful save, do NOT re-enable the Save button — just navigate away
+
+The isSaving pattern to implement:
+javascriptconst [isSaving, setIsSaving] = useState(false);
+
+const handleSave = async () => {
+  if (isSaving) return; // guard against double-tap
+  setIsSaving(true);
+  try {
+    // ... perform save ...
+    router.back(); // navigate away on success
+  } catch (error) {
+    setIsSaving(false); // only re-enable on failure
+    // show error to user
+  }
+};
+Apply this isSaving pattern to the Save button:
+javascript<Button 
+  onPress={handleSave} 
+  disabled={isSaving}
+  // show loading state when isSaving is true
+/>
+
+PART 2 — FULL APP AUDIT
+Scan every screen, modal, bottom sheet, and form in the app for the same class of bug. Look for any handler that:
+
+Performs a Supabase insert, upsert, or update call
+AND does not immediately disable the submit button on first tap
+AND/OR does not navigate away or dismiss the screen after a successful save
+
+Specifically check these flows (and any others you find):
+
+Add Property
+Add Family Member / Add Health Record
+Add Medication
+Log Service (all vehicle types)
+Update Mileage
+Any settings save actions
+Any onboarding steps with a confirm/save action
+Any modal or bottom sheet with a submit button
+
+For each one found, apply the same three fixes:
+
+isSaving state guard on the handler (prevent double-tap)
+Disable + loading state on the submit button while saving
+Correct navigation/dismissal after successful save (router.back(), router.dismiss(), or closing the sheet — whichever is appropriate for that UI pattern)
+
+
+CRITICAL REQUIREMENTS:
+
+Do NOT rewrite any screen's layout, UI, or logic beyond the save handler and button state
+Do NOT change any existing navigation structure — only add the post-save navigation call where it is missing
+Preserve all existing validation, error handling, and toast messages exactly as they are
+If a screen already correctly dismisses after save, leave it untouched
+The isSaving guard must be the very first line inside every save handler — before any validation, before any async calls
+Every save button across the app must be visually disabled (not just functionally) while a save is in progress
+
+VERIFICATION: After making all changes, list every file that was modified and describe what was changed in each one. Then confirm that no screen in the app can result in a duplicate record from a double-tap or from the screen failing to dismiss after a successful save.
