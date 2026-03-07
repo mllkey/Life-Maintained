@@ -8,10 +8,10 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
-  Share,
   Platform,
   Modal,
-  Animated,
+  TextInput,
+  KeyboardAvoidingView,
 } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,7 +23,7 @@ import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
-import { parseISO, isBefore, addDays, format, differenceInDays } from "date-fns";
+import { parseISO, isBefore, addDays, addMonths, format, differenceInDays } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
 import Paywall from "@/components/Paywall";
 import { hasPersonalOrAbove } from "@/lib/subscription";
@@ -89,6 +89,12 @@ export default function VehicleDetailScreen() {
   const [scheduleToast, setScheduleToast] = useState("");
   const [showScheduleToast, setShowScheduleToast] = useState(false);
   const lastStatusHashRef = useRef("");
+
+  const [markCompleteTask, setMarkCompleteTask] = useState<any | null>(null);
+  const [completeMileage, setCompleteMileage] = useState("");
+  const [completeDate, setCompleteDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [completeNotes, setCompleteNotes] = useState("");
+  const [isSavingComplete, setIsSavingComplete] = useState(false);
 
   const { data: vehicle, isLoading: loadingVehicle } = useQuery({
     queryKey: ["vehicle", id],
@@ -240,6 +246,98 @@ export default function VehicleDetailScreen() {
     setScheduleToast(msg);
     setShowScheduleToast(true);
     setTimeout(() => setShowScheduleToast(false), 2800);
+  }
+
+  function formatDateLabel(dateStr: string) {
+    const today = format(new Date(), "yyyy-MM-dd");
+    const yesterday = format(addDays(new Date(), -1), "yyyy-MM-dd");
+    if (dateStr === today) return `Today  ·  ${format(parseISO(dateStr), "MMM d")}`;
+    if (dateStr === yesterday) return `Yesterday  ·  ${format(parseISO(dateStr), "MMM d")}`;
+    return format(parseISO(dateStr), "MMM d, yyyy");
+  }
+
+  function handleOpenMarkComplete(task: any) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setMarkCompleteTask(task);
+    setCompleteMileage(vehicle?.mileage != null ? String(vehicle.mileage) : "");
+    setCompleteDate(format(new Date(), "yyyy-MM-dd"));
+    setCompleteNotes("");
+    setIsSavingComplete(false);
+  }
+
+  function handleCloseMarkComplete() {
+    setMarkCompleteTask(null);
+    setCompleteMileage("");
+    setCompleteNotes("");
+    setIsSavingComplete(false);
+  }
+
+  async function handleSaveMarkComplete() {
+    if (!markCompleteTask) return;
+    const mileageNum = parseInt(completeMileage, 10);
+    if (!completeMileage.trim() || isNaN(mileageNum) || mileageNum < 0) {
+      showToast("Please enter a valid mileage.");
+      return;
+    }
+    const task = markCompleteTask;
+    setIsSavingComplete(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const newNextDueMiles = task.interval_miles != null
+      ? mileageNum + task.interval_miles
+      : null;
+    const newNextDueDate = task.interval_months != null
+      ? format(addMonths(parseISO(completeDate), task.interval_months), "yyyy-MM-dd")
+      : null;
+    const now = new Date().toISOString();
+
+    const updatedTask = {
+      ...task,
+      last_completed_date: completeDate,
+      last_completed_miles: mileageNum,
+      next_due_miles: newNextDueMiles,
+      next_due_date: newNextDueDate,
+      status: "upcoming",
+      updated_at: now,
+    };
+
+    queryClient.setQueryData(["user_vehicle_maintenance_tasks", id], (old: any[] | undefined) => {
+      if (!old) return old;
+      return old.map(t => t.id === task.id ? updatedTask : t);
+    });
+
+    handleCloseMarkComplete();
+
+    try {
+      const [taskRes, vehicleRes] = await Promise.all([
+        supabase.from("user_vehicle_maintenance_tasks").update({
+          last_completed_date: completeDate,
+          last_completed_miles: mileageNum,
+          next_due_miles: newNextDueMiles,
+          next_due_date: newNextDueDate,
+          status: "upcoming",
+          updated_at: now,
+        }).eq("id", task.id),
+        supabase.from("vehicles").update({ mileage: mileageNum }).eq("id", id!),
+      ]);
+
+      if (taskRes.error || vehicleRes.error) throw taskRes.error ?? vehicleRes.error;
+
+      queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+
+      let toastMsg = `${task.name} marked complete!`;
+      if (newNextDueMiles != null) {
+        toastMsg += ` Next due at ${newNextDueMiles.toLocaleString()} mi.`;
+      } else if (newNextDueDate != null) {
+        toastMsg += ` Next due ${format(parseISO(newNextDueDate), "MMM d, yyyy")}.`;
+      }
+      showToast(toastMsg);
+    } catch (e) {
+      queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", id] });
+      showToast("Failed to save. Please try again.");
+    }
   }
 
   async function handleRefreshAll() {
@@ -624,6 +722,7 @@ export default function VehicleDetailScreen() {
                       onToggle={() => { Haptics.selectionAsync(); setActionNeededExpanded(v => !v); }}
                       tasks={actionNeededTasks}
                       vehicle={vehicle}
+                      onMarkComplete={handleOpenMarkComplete}
                     />
                   )}
                   <ScheduleSection
@@ -633,6 +732,7 @@ export default function VehicleDetailScreen() {
                     tasks={upcomingTasks}
                     vehicle={vehicle}
                     emptyMessage="No upcoming tasks"
+                    onMarkComplete={handleOpenMarkComplete}
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
@@ -642,6 +742,7 @@ export default function VehicleDetailScreen() {
                       onToggle={() => { Haptics.selectionAsync(); setCompletedExpanded(v => !v); }}
                       tasks={completedTasks}
                       vehicle={vehicle}
+                      onMarkComplete={handleOpenMarkComplete}
                     />
                   )}
                 </>
@@ -746,6 +847,22 @@ export default function VehicleDetailScreen() {
 
       <SaveToast visible={showScheduleToast} message={scheduleToast} />
 
+      <MarkCompleteSheet
+        visible={markCompleteTask != null}
+        task={markCompleteTask}
+        mileage={completeMileage}
+        onMileageChange={setCompleteMileage}
+        date={completeDate}
+        onDateChange={setCompleteDate}
+        notes={completeNotes}
+        onNotesChange={setCompleteNotes}
+        onSave={handleSaveMarkComplete}
+        onClose={handleCloseMarkComplete}
+        isSaving={isSavingComplete}
+        formatDateLabel={formatDateLabel}
+        insets={insets}
+      />
+
       {showPaywall && (
         <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
           <Paywall
@@ -780,6 +897,7 @@ function ScheduleSection({
   tasks,
   vehicle,
   emptyMessage,
+  onMarkComplete,
 }: {
   title: string;
   titleColor?: string;
@@ -788,6 +906,7 @@ function ScheduleSection({
   tasks: any[];
   vehicle: any;
   emptyMessage?: string;
+  onMarkComplete: (task: any) => void;
 }) {
   return (
     <View style={styles.scheduleSection}>
@@ -807,7 +926,12 @@ function ScheduleSection({
             <Text style={styles.scheduleSectionEmpty}>{emptyMessage}</Text>
           ) : (
             tasks.map(task => (
-              <ScheduleTaskCard key={task.id} task={task} vehicle={vehicle} />
+              <ScheduleTaskCard
+                key={task.id}
+                task={task}
+                vehicle={vehicle}
+                onMarkComplete={onMarkComplete}
+              />
             ))
           )}
         </View>
@@ -816,11 +940,16 @@ function ScheduleSection({
   );
 }
 
-function ScheduleTaskCard({ task, vehicle }: { task: any; vehicle: any }) {
+function ScheduleTaskCard({ task, vehicle, onMarkComplete }: {
+  task: any;
+  vehicle: any;
+  onMarkComplete: (task: any) => void;
+}) {
   const borderColor = STATUS_BORDER[task.status] ?? Colors.border;
   const catColors = CATEGORY_COLORS[task.category?.toLowerCase()] ?? { bg: Colors.surface, text: Colors.textSecondary };
   const isCritical = task.priority === "critical";
   const isOptional = task.priority === "optional";
+  const isCompleted = task.status === "completed";
 
   const dueLines: string[] = [];
   if (task.next_due_miles != null) {
@@ -829,43 +958,70 @@ function ScheduleTaskCard({ task, vehicle }: { task: any; vehicle: any }) {
   if (task.next_due_date != null) {
     dueLines.push(`Due by ${format(parseISO(task.next_due_date), "MMM d, yyyy")}`);
   }
-  if (dueLines.length === 0) {
+  if (dueLines.length === 0 && !isCompleted) {
     dueLines.push("No schedule set.");
+  }
+  if (isCompleted && task.last_completed_date) {
+    dueLines.push(`Done ${format(parseISO(task.last_completed_date), "MMM d, yyyy")}`);
   }
 
   return (
     <View style={[styles.scheduleCard, { borderLeftColor: borderColor }]}>
-      <View style={styles.scheduleCardTop}>
-        <Text
-          style={[
-            styles.scheduleCardName,
-            isOptional && { color: Colors.textSecondary },
-          ]}
-          numberOfLines={2}
-        >
-          {task.name}
-        </Text>
-        {isCritical && (
-          <View style={styles.criticalDot}>
-            <Text style={styles.criticalDotText}>!</Text>
-          </View>
-        )}
-      </View>
-      <View style={styles.scheduleCardRow}>
-        {task.category ? (
-          <View style={[styles.categoryBadge, { backgroundColor: catColors.bg }]}>
-            <Text style={[styles.categoryBadgeText, { color: catColors.text }]}>
-              {task.category.charAt(0).toUpperCase() + task.category.slice(1)}
+      <View style={styles.scheduleCardInner}>
+        <View style={styles.scheduleCardBody}>
+          <View style={styles.scheduleCardTop}>
+            <Text
+              style={[
+                styles.scheduleCardName,
+                isOptional && { color: Colors.textSecondary },
+                isCompleted && { color: Colors.textTertiary },
+              ]}
+              numberOfLines={2}
+            >
+              {task.name}
             </Text>
+            {isCritical && !isCompleted && (
+              <View style={styles.criticalDot}>
+                <Text style={styles.criticalDotText}>!</Text>
+              </View>
+            )}
           </View>
-        ) : null}
-        <View style={styles.dueInfo}>
-          {dueLines.map((line, i) => (
-            <Text key={i} style={[styles.scheduleCardDue, isOptional && { color: Colors.textTertiary }]}>
-              {line}
-            </Text>
-          ))}
+          <View style={styles.scheduleCardRow}>
+            {task.category ? (
+              <View style={[styles.categoryBadge, { backgroundColor: catColors.bg }]}>
+                <Text style={[styles.categoryBadgeText, { color: catColors.text }]}>
+                  {task.category.charAt(0).toUpperCase() + task.category.slice(1)}
+                </Text>
+              </View>
+            ) : null}
+            <View style={styles.dueInfo}>
+              {dueLines.map((line, i) => (
+                <Text
+                  key={i}
+                  style={[
+                    styles.scheduleCardDue,
+                    isOptional && { color: Colors.textTertiary },
+                    isCompleted && { color: Colors.textTertiary },
+                  ]}
+                >
+                  {line}
+                </Text>
+              ))}
+            </View>
+          </View>
         </View>
+        {!isCompleted && (
+          <Pressable
+            onPress={() => onMarkComplete(task)}
+            style={({ pressed }) => [styles.scheduleCompleteBtn, { opacity: pressed ? 0.7 : 1 }]}
+            hitSlop={8}
+          >
+            <Ionicons name="checkmark-circle-outline" size={26} color={Colors.good} />
+          </Pressable>
+        )}
+        {isCompleted && (
+          <Ionicons name="checkmark-circle" size={22} color={Colors.good} style={{ opacity: 0.5 }} />
+        )}
       </View>
     </View>
   );
@@ -920,6 +1076,166 @@ function TaskGroup({ title, color, tasks, onComplete, vehicle }: {
         );
       })}
     </View>
+  );
+}
+
+function MarkCompleteSheet({
+  visible,
+  task,
+  mileage,
+  onMileageChange,
+  date,
+  onDateChange,
+  notes,
+  onNotesChange,
+  onSave,
+  onClose,
+  isSaving,
+  formatDateLabel,
+  insets,
+}: {
+  visible: boolean;
+  task: any | null;
+  mileage: string;
+  onMileageChange: (v: string) => void;
+  date: string;
+  onDateChange: (v: string) => void;
+  notes: string;
+  onNotesChange: (v: string) => void;
+  onSave: () => void;
+  onClose: () => void;
+  isSaving: boolean;
+  formatDateLabel: (d: string) => string;
+  insets: { bottom: number };
+}) {
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const yesterdayStr = format(addDays(new Date(), -1), "yyyy-MM-dd");
+
+  function adjustDate(days: number) {
+    const current = parseISO(date);
+    const next = addDays(current, days);
+    onDateChange(format(next, "yyyy-MM-dd"));
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        style={styles.sheetOverlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={onClose} />
+        <View style={[styles.sheetContainer, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>
+            {task?.name ?? "Mark Complete"}
+          </Text>
+
+          <View style={styles.sheetFields}>
+            <View style={styles.sheetField}>
+              <Text style={styles.sheetFieldLabel}>Current Mileage</Text>
+              <TextInput
+                style={styles.sheetInput}
+                value={mileage}
+                onChangeText={onMileageChange}
+                keyboardType="number-pad"
+                placeholder="e.g. 52,000"
+                placeholderTextColor={Colors.textTertiary}
+                returnKeyType="done"
+              />
+            </View>
+
+            <View style={styles.sheetField}>
+              <Text style={styles.sheetFieldLabel}>Date Completed</Text>
+              <View style={styles.dateStepper}>
+                <Pressable
+                  style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]}
+                  onPress={() => adjustDate(-1)}
+                  hitSlop={8}
+                >
+                  <Ionicons name="chevron-back" size={18} color={Colors.text} />
+                </Pressable>
+                <Text style={styles.dateStepValue}>{formatDateLabel(date)}</Text>
+                <Pressable
+                  style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]}
+                  onPress={() => adjustDate(1)}
+                  disabled={date >= todayStr}
+                  hitSlop={8}
+                >
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={date >= todayStr ? Colors.textTertiary : Colors.text}
+                  />
+                </Pressable>
+              </View>
+              <View style={styles.dateQuickRow}>
+                <Pressable
+                  onPress={() => onDateChange(todayStr)}
+                  style={[styles.dateQuickBtn, date === todayStr && styles.dateQuickBtnActive]}
+                >
+                  <Text style={[styles.dateQuickText, date === todayStr && styles.dateQuickTextActive]}>
+                    Today
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => onDateChange(yesterdayStr)}
+                  style={[styles.dateQuickBtn, date === yesterdayStr && styles.dateQuickBtnActive]}
+                >
+                  <Text style={[styles.dateQuickText, date === yesterdayStr && styles.dateQuickTextActive]}>
+                    Yesterday
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.sheetField}>
+              <Text style={styles.sheetFieldLabel}>Notes  <Text style={styles.sheetFieldOptional}>(optional)</Text></Text>
+              <TextInput
+                style={[styles.sheetInput, styles.sheetInputMultiline]}
+                value={notes}
+                onChangeText={onNotesChange}
+                placeholder="e.g. Used Mobil 1 5W-30"
+                placeholderTextColor={Colors.textTertiary}
+                multiline
+                numberOfLines={2}
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+
+          <View style={styles.sheetActions}>
+            <Pressable
+              style={({ pressed }) => [styles.sheetCancelBtn, { opacity: pressed ? 0.8 : 1 }]}
+              onPress={onClose}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.sheetSaveBtn,
+                { opacity: pressed || isSaving ? 0.8 : 1 },
+              ]}
+              onPress={onSave}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color={Colors.textInverse} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
+                  <Text style={styles.sheetSaveText}>Mark Complete</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -1134,5 +1450,105 @@ const styles = StyleSheet.create({
   },
   skeletonLine: {
     height: 14, borderRadius: 7, backgroundColor: Colors.surface, width: "80%",
+  },
+
+  scheduleCardInner: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+  },
+  scheduleCardBody: { flex: 1 },
+  scheduleCompleteBtn: {
+    width: 36, height: 36, alignItems: "center", justifyContent: "center", flexShrink: 0,
+  },
+
+  sheetOverlay: {
+    flex: 1, justifyContent: "flex-end",
+  },
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  sheetContainer: {
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: Colors.border,
+  },
+  sheetHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: Colors.border, alignSelf: "center", marginBottom: 16,
+  },
+  sheetTitle: {
+    fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text,
+    marginBottom: 20, textAlign: "center",
+  },
+  sheetFields: { gap: 16 },
+  sheetField: { gap: 6 },
+  sheetFieldLabel: {
+    fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary,
+    textTransform: "uppercase", letterSpacing: 0.5,
+  },
+  sheetFieldOptional: {
+    fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
+    textTransform: "none", letterSpacing: 0,
+  },
+  sheetInput: {
+    backgroundColor: Colors.surface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  sheetInputMultiline: {
+    minHeight: 64, textAlignVertical: "top",
+  },
+  dateStepper: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: Colors.surface, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border, overflow: "hidden",
+  },
+  dateStepBtn: {
+    width: 44, height: 46, alignItems: "center", justifyContent: "center",
+  },
+  dateStepValue: {
+    flex: 1, textAlign: "center",
+    fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text,
+  },
+  dateQuickRow: {
+    flexDirection: "row", gap: 8, marginTop: 6,
+  },
+  dateQuickBtn: {
+    flex: 1, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
+    alignItems: "center",
+  },
+  dateQuickBtnActive: {
+    backgroundColor: Colors.accentMuted, borderColor: Colors.accent,
+  },
+  dateQuickText: {
+    fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary,
+  },
+  dateQuickTextActive: {
+    color: Colors.accent, fontFamily: "Inter_600SemiBold",
+  },
+  sheetActions: {
+    flexDirection: "row", gap: 10, marginTop: 24,
+  },
+  sheetCancelBtn: {
+    flex: 1, paddingVertical: 13, borderRadius: 13, alignItems: "center",
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
+  },
+  sheetCancelText: {
+    fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary,
+  },
+  sheetSaveBtn: {
+    flex: 2, paddingVertical: 13, borderRadius: 13,
+    backgroundColor: Colors.accent, alignItems: "center", justifyContent: "center",
+    flexDirection: "row", gap: 6,
+  },
+  sheetSaveText: {
+    fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse,
   },
 });

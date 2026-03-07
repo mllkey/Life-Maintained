@@ -1,0 +1,44 @@
+CONTEXT: We just added the maintenance schedule display to the vehicle detail screen (Prompt 4A). Now we need the "Mark Complete" interaction so users can record when they've done a maintenance task.
+
+IMPORTANT SCHEMA NOTES:
+- user_vehicle_maintenance_tasks has: last_completed_date, last_completed_miles, next_due_date, next_due_miles, interval_miles, interval_months, status, updated_at
+- The vehicles table mileage column is "mileage"
+
+
+
+
+TASK: Add a "Mark Complete" action to each maintenance task card.
+
+TRIGGER: Each task card (except completed ones) gets a tappable checkmark icon or "Mark Complete" button.
+
+BOTTOM SHEET: Tapping opens a bottom sheet / modal with:
+1. "Current Mileage" — numeric input, pre-filled with the vehicle's current mileage from the vehicles.mileage column
+2. "Date Completed" — date picker, defaults to today
+3. "Notes" (optional) — text input for things like "Used Mobil 1 5W-30" or "Done at Jiffy Lube"
+4. "Save" button and "Cancel" button
+
+ON SUBMIT: Update the task row in user_vehicle_maintenance_tasks:
+- last_completed_date = entered date
+- last_completed_miles = entered mileage
+- next_due_miles = if interval_miles is not null → entered_mileage + interval_miles. Else null.
+- next_due_date = if interval_months is not null → entered_date + interval_months. Else null.
+- status = 'upcoming' (resets after completion so the task cycles to its next due date)
+- updated_at = now()
+
+ALSO: Update the vehicle's mileage in the vehicles table:
+- SET mileage = entered_mileage WHERE id = vehicle_id
+This keeps the vehicle's mileage in sync with the latest service record.
+
+SUCCESS FEEDBACK:
+- Show toast: "[Task name] marked complete! Next due at XX,XXX miles." (or "Next due [date]" if no mileage interval)
+- Refresh the task list so the task moves from Action Needed/Upcoming to its new position
+- Close the bottom sheet
+
+UI BEHAVIOR:
+- Use optimistic updates — update the UI immediately, then sync to database
+- If the database update fails, revert the UI and show an error toast
+- Disable the Save button while saving to prevent double-taps
+- Validate that mileage is a positive number before saving
+
+STYLING: Match the existing app's bottom sheet / modal patterns. If no existing pattern, use a standard React Native bottom sheet with rounded top corners, drag handle, and backdrop overlay.
+
