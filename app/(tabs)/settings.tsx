@@ -120,6 +120,7 @@ export default function SettingsScreen() {
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const savedRef = useRef<AppSettings>(DEFAULT_SETTINGS);
+  const isDeletingAccountRef = useRef(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -269,7 +270,8 @@ export default function SettingsScreen() {
     ]);
   }
 
-  async function handleDeleteAccount() {
+  function handleDeleteAccount() {
+    if (isDeletingAccountRef.current) return;
     Alert.alert(
       "Delete Account",
       "This will permanently delete your account and all data. This cannot be undone.",
@@ -285,12 +287,19 @@ export default function SettingsScreen() {
                 text: "Yes, Delete My Account",
                 style: "destructive",
                 onPress: async () => {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                  if (!user) return;
-                  await supabase.rpc("delete_user_account", { user_id: user.id }).maybeSingle();
-                  await supabase.auth.signOut();
-                  queryClient.clear();
-                  router.replace("/(auth)");
+                  if (isDeletingAccountRef.current) return;
+                  isDeletingAccountRef.current = true;
+                  try {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                    if (!user) return;
+                    await supabase.rpc("delete_user_account", { user_id: user.id }).maybeSingle();
+                    await supabase.auth.signOut();
+                    queryClient.clear();
+                    router.replace("/(auth)");
+                  } catch (err: any) {
+                    isDeletingAccountRef.current = false;
+                    Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+                  }
                 },
               },
             ]);
