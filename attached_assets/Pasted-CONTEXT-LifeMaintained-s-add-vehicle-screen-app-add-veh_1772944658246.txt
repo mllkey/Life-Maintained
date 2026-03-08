@@ -1,0 +1,85 @@
+CONTEXT: LifeMaintained's add-vehicle screen (app/add-vehicle.tsx) has a MAKES_BY_TYPE constant (around line 42) that defines the makes available in the make picker for each vehicle type. The current car list covers all major active brands well but is missing discontinued brands that still have millions of vehicles on US roads. Since LifeMaintained tracks maintenance for vehicles of ALL ages (not just new cars), users adding a 2008 Pontiac G6, 2014 Scion tC, 2010 Mercury Milan, or 2015 Fiat 500 can't find their make without typing a custom entry — and most users won't realize they can do that.
+The other vehicle type lists (motorcycle, boat, etc.) are also missing some notable brands.
+IMPORTANT: Only modify the MAKES_BY_TYPE constant. Do NOT change any other code, UI components, picker logic, or NHTSA query logic. Keep all existing makes in their current order. Add new makes at the END of each array so existing users don't see their list rearranged.
+
+TASK: Expand MAKES_BY_TYPE to include discontinued-but-common brands and missing active brands across all vehicle types.
+ADD TO car array (after "Scout"):
+
+"Pontiac" — discontinued 2010, millions still registered in US (G6, Grand Prix, Grand Am, Vibe, Firebird, GTO)
+"Saturn" — discontinued 2010, still very common (Vue, Outlook, Ion, Aura, Sky)
+"Mercury" — discontinued 2011, still common (Grand Marquis, Milan, Mariner, Mountaineer, Sable)
+"Scion" — discontinued 2016, extremely common used car (tC, xB, xD, FR-S, iA, iM)
+"Hummer" — discontinued 2010, revived as GMC sub-brand but original H2/H3 still on roads
+"Fiat" — still technically active in US, sells 500e and some models
+"Saab" — discontinued 2012, still some on roads (9-3, 9-5)
+"Suzuki" — left US market 2012, still common (Grand Vitara, SX4, Kizashi)
+"Isuzu" — left US passenger market ~2009, trucks still around (Rodeo, Trooper, Ascender)
+"Oldsmobile" — discontinued 2004, some still maintained (Alero, Intrigue, Bravada)
+"Plymouth" — discontinued 2001, classic car community (Barracuda, Road Runner, Prowler)
+"Polestar" — active EV brand, growing US presence
+"VinFast" — active Vietnamese EV brand, now selling in US
+"Smart" — discontinued US 2019, some still on roads (Fortwo)
+"Fisker" — bankrupt but vehicles still on roads (Ocean)
+
+ADD TO motorcycle array (after "Benelli"):
+
+"CFMoto" — growing Chinese brand with US dealer network
+"LiveWire" — Harley-Davidson's EV spin-off brand
+"Vespa" — iconic scooter brand (Piaggio)
+"Buell" — American sport motorcycle brand (Erik Buell Racing)
+"MV Agusta" — Italian premium brand
+
+ADD TO boat array (after "Alumacraft"):
+
+"Yamaha" — major boat manufacturer (also makes jet boats and outboards)
+"Bennington" — popular pontoon boat brand
+"Robalo" — center console fishing boats
+"Wellcraft" — fishing and sport boats
+"Key West" — center console boats
+"Stingray" — sport boats
+"Carolina Skiff" — affordable fishing boats
+"Regulator" — offshore fishing boats
+"Scout Boats" — premium center console
+"Sylvan" — pontoon boats
+"Sun Tracker" — pontoon boats
+"Godfrey" — pontoon boats
+
+ADD TO rv array (after "Fleetwood"):
+
+"Dutchmen" — travel trailers and fifth wheels
+"CrossRoads" — travel trailers
+"Venture RV" — travel trailers
+"Palomino" — truck campers and trailers
+"Lance" — truck campers and travel trailers
+"nuCamp" — small travel trailers (T@B, T@G)
+"Pleasure-Way" — Class B vans
+"Roadtrek" — Class B camper vans
+"Entegra" — luxury motorhomes
+
+ADD TO atv array (after "CFMoto"):
+
+"KYMCO" — Taiwanese brand with US ATV presence
+"Segway" — Powersports division makes ATVs
+
+ADD TO utv array (after "CFMoto"):
+
+"KYMCO"
+"Segway"
+"Hisun" — Chinese UTV brand common in US
+
+ADD TO snowmobile array (after "Lynx"):
+
+"Taiga" — electric snowmobile brand
+
+DO NOT remove any existing makes. DO NOT reorder existing makes. Only append new makes at the end of each array.
+VERIFICATION:
+
+Open the add-vehicle form, select "Car / Truck / SUV" type
+Open the make picker — verify all new makes appear (Pontiac, Saturn, Scion, etc.)
+Select "Pontiac" as make, year 2008 — verify NHTSA model picker loads models (G6, Grand Prix, etc.)
+Select "Scion" as make, year 2014 — verify models load (tC, xB, FR-S, etc.)
+Switch to Motorcycle type — verify CFMoto, LiveWire, Vespa appear
+Switch to Boat type — verify Yamaha, Bennington, etc. appear
+All existing makes remain in their original positions
+Custom make input still works for brands not on the list
+Zero TypeScript errors

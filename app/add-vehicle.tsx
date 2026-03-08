@@ -47,32 +47,43 @@ const MAKES_BY_TYPE: Record<string, string[]> = {
     "Lexus", "Acura", "Infiniti", "Lincoln", "Mitsubishi", "Porsche",
     "Land Rover", "Jaguar", "Mini", "Alfa Romeo", "Genesis", "Rivian",
     "Lucid", "Scout",
+    "Pontiac", "Saturn", "Mercury", "Scion", "Hummer", "Fiat", "Saab",
+    "Suzuki", "Isuzu", "Oldsmobile", "Plymouth", "Polestar", "VinFast",
+    "Smart", "Fisker",
   ],
   motorcycle: [
     "Harley-Davidson", "Honda", "Kawasaki", "Yamaha", "Suzuki", "Ducati",
     "BMW", "KTM", "Triumph", "Royal Enfield", "Indian", "Can-Am",
     "Zero Motorcycles", "Aprilia", "Moto Guzzi", "Husqvarna", "Benelli",
+    "CFMoto", "LiveWire", "Vespa", "Buell", "MV Agusta",
   ],
   rv: [
     "Winnebago", "Airstream", "Thor Industries", "Forest River", "Coachmen",
     "Keystone", "Grand Design", "Jayco", "Heartland", "Tiffin", "Newmar",
     "Fleetwood",
+    "Dutchmen", "CrossRoads", "Venture RV", "Palomino", "Lance", "nuCamp",
+    "Pleasure-Way", "Roadtrek", "Entegra",
   ],
   boat: [
     "Sea Ray", "Bayliner", "Boston Whaler", "Malibu", "MasterCraft",
     "Grady-White", "Lund", "Tracker", "Chaparral", "Cobalt", "Ranger",
     "Crestliner", "Nitro", "Skeeter", "Triton", "Alumacraft",
+    "Yamaha", "Bennington", "Robalo", "Wellcraft", "Key West", "Stingray",
+    "Carolina Skiff", "Regulator", "Scout Boats", "Sylvan", "Sun Tracker",
+    "Godfrey",
   ],
   atv: [
     "Honda", "Yamaha", "Can-Am", "Polaris", "Kawasaki",
     "Suzuki", "Arctic Cat", "CFMoto",
+    "KYMCO", "Segway",
   ],
   utv: [
     "Polaris", "Can-Am", "Kawasaki", "Yamaha", "Honda",
     "Arctic Cat", "Textron", "John Deere", "Kubota", "CFMoto",
+    "KYMCO", "Segway", "Hisun",
   ],
   pwc: ["Sea-Doo", "Yamaha", "Kawasaki"],
-  snowmobile: ["Ski-Doo", "Polaris", "Arctic Cat", "Yamaha", "Lynx"],
+  snowmobile: ["Ski-Doo", "Polaris", "Arctic Cat", "Yamaha", "Lynx", "Taiga"],
   other: [],
 };
 
@@ -86,30 +97,35 @@ const CAR_MAKE_SECTIONS: MakeSection[] = [
   { title: "B", data: ["BMW", "Buick"] },
   { title: "C", data: ["Cadillac", "Chrysler"] },
   { title: "D", data: ["Dodge"] },
+  { title: "F", data: ["Fiat", "Fisker"] },
   { title: "G", data: ["Genesis"] },
-  { title: "I", data: ["Infiniti"] },
+  { title: "H", data: ["Hummer"] },
+  { title: "I", data: ["Infiniti", "Isuzu"] },
   { title: "J", data: ["Jaguar"] },
   { title: "L", data: ["Land Rover", "Lexus", "Lincoln", "Lucid"] },
-  { title: "M", data: ["Mazda", "Mercedes-Benz", "Mini", "Mitsubishi"] },
-  { title: "P", data: ["Porsche"] },
+  { title: "M", data: ["Mazda", "Mercedes-Benz", "Mercury", "Mini", "Mitsubishi"] },
+  { title: "O", data: ["Oldsmobile"] },
+  { title: "P", data: ["Plymouth", "Polestar", "Pontiac", "Porsche"] },
   { title: "R", data: ["Rivian"] },
-  { title: "S", data: ["Scout"] },
+  { title: "S", data: ["Saab", "Saturn", "Scion", "Scout", "Smart", "Suzuki"] },
   { title: "T", data: ["Tesla"] },
-  { title: "V", data: ["Volkswagen", "Volvo"] },
+  { title: "V", data: ["VinFast", "Volkswagen", "Volvo"] },
 ];
 
 const MOTO_MAKE_SECTIONS: MakeSection[] = [
   { title: "Most Popular", data: ["Harley-Davidson", "Honda", "Kawasaki", "Yamaha", "Suzuki"] },
   { title: "A", data: ["Aprilia"] },
-  { title: "B", data: ["Benelli", "BMW"] },
-  { title: "C", data: ["Can-Am"] },
+  { title: "B", data: ["Benelli", "BMW", "Buell"] },
+  { title: "C", data: ["Can-Am", "CFMoto"] },
   { title: "D", data: ["Ducati"] },
   { title: "H", data: ["Husqvarna"] },
   { title: "I", data: ["Indian"] },
   { title: "K", data: ["KTM"] },
-  { title: "M", data: ["Moto Guzzi"] },
+  { title: "L", data: ["LiveWire"] },
+  { title: "M", data: ["Moto Guzzi", "MV Agusta"] },
   { title: "R", data: ["Royal Enfield"] },
   { title: "T", data: ["Triumph"] },
+  { title: "V", data: ["Vespa"] },
   { title: "Z", data: ["Zero Motorcycles"] },
 ];
 
@@ -117,16 +133,18 @@ const ATV_MAKE_SECTIONS: MakeSection[] = [
   { title: "Most Popular", data: ["Honda", "Yamaha", "Can-Am", "Polaris", "Kawasaki"] },
   { title: "A", data: ["Arctic Cat"] },
   { title: "C", data: ["CFMoto"] },
-  { title: "S", data: ["Suzuki"] },
+  { title: "K", data: ["KYMCO"] },
+  { title: "S", data: ["Segway", "Suzuki"] },
 ];
 
 const UTV_MAKE_SECTIONS: MakeSection[] = [
   { title: "Most Popular", data: ["Polaris", "Can-Am", "Kawasaki", "Yamaha"] },
   { title: "A", data: ["Arctic Cat"] },
   { title: "C", data: ["CFMoto"] },
-  { title: "H", data: ["Honda"] },
+  { title: "H", data: ["Hisun", "Honda"] },
   { title: "J", data: ["John Deere"] },
-  { title: "K", data: ["Kubota"] },
+  { title: "K", data: ["Kubota", "KYMCO"] },
+  { title: "S", data: ["Segway"] },
   { title: "T", data: ["Textron"] },
 ];
 
@@ -137,6 +155,7 @@ const PWC_MAKE_SECTIONS: MakeSection[] = [
 const SNOWMOBILE_MAKE_SECTIONS: MakeSection[] = [
   { title: "Most Popular", data: ["Ski-Doo", "Polaris", "Arctic Cat"] },
   { title: "L", data: ["Lynx"] },
+  { title: "T", data: ["Taiga"] },
   { title: "Y", data: ["Yamaha"] },
 ];
 
