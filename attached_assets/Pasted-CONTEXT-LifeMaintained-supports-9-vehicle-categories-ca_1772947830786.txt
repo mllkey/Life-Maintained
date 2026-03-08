@@ -1,0 +1,41 @@
+CONTEXT: LifeMaintained supports 9 vehicle categories: car, motorcycle, rv, boat, atv, utv, pwc, snowmobile, other. The app was built car-first, and many screens show car-centric UI elements (mileage fields, "Update Mileage" buttons, mileage labels) unconditionally for all vehicle types, including boats and PWCs that don't track mileage. This creates a confusing, unprofessional experience for non-car users.
+This prompt fixes every instance across the app where vehicle-type context is missing. The vehicle category is stored in the vehicles table as "vehicle_type" (values: car, motorcycle, rv, boat, atv, utv, pwc, snowmobile, other).
+IMPORTANT: The constant MILEAGE_TRACKED_TYPES already exists in add-vehicle.tsx as: new Set(["car", "motorcycle", "rv", "utv", "snowmobile"]). Boats, ATVs, PWCs do NOT track mileage. Use this same set (or recreate it) in every file that needs it.
+
+TASK: Audit and fix every vehicle-type-unaware UI element across the app.
+FIX 1 — add-vehicle.tsx: Mileage FieldGroup should be conditional
+The "Mileage" FieldGroup (containing "Current Mileage" input and "Estimated Monthly Miles" input) currently ALWAYS shows the "Current Mileage" field. Only the "Estimated Monthly Miles" field is wrapped in a MILEAGE_TRACKED_TYPES check. Wrap the ENTIRE Mileage FieldGroup in a condition so it only renders when MILEAGE_TRACKED_TYPES.has(vehicleType). Boats, PWCs, and ATVs should see NO mileage fields at all.
+FIX 2 — vehicle/[id].tsx: "Update Mileage" button should be conditional
+The vehicle detail screen always shows an "Update Mileage" button in the header actions area. This makes no sense for boats, PWCs, or ATVs. Only show the "Update Mileage" button if the vehicle's type is in the mileage-tracked set. Check vehicle.vehicle_type against the set. If not mileage-tracked, hide the button.
+FIX 3 — vehicle/[id].tsx: Mileage stat in header should say "miles" only for mileage-tracked types
+The stat box shows "{mileage} miles" when mileage is not null. This is fine — it already only shows when mileage exists. But verify it doesn't show stale mileage data for boats that somehow got a mileage value. No change likely needed here, just verify.
+FIX 4 — (tabs)/vehicles.tsx: Mileage row on vehicle cards should be conditional
+The vehicles list shows a mileage row on every vehicle card with a speedometer icon and "{mileage} mi" or "No mileage". For boats, PWCs, and ATVs, this row should be hidden entirely instead of showing "No mileage". Check vehicle.vehicle_type (or v.vehicle_type) against the mileage-tracked set. If not tracked, don't render the mileage row.
+FIX 5 — log-service/[vehicleId].tsx: Mileage field should be conditional
+The log service screen has a "Mileage" input field that shows for all vehicles. For boats and PWCs, this field should be hidden. Fetch the vehicle's type in this screen (it may already be fetched) and conditionally render the mileage field. The mileage field is optional anyway (users can leave it blank), but showing it for a boat is confusing.
+FIX 6 — vehicle/[id].tsx: Mark Complete sheet mileage field should be conditional
+The Mark Complete bottom sheet has a "Current Mileage" input. For boats and PWCs, hide this field. The mark complete should still work — just without the mileage input. When mileage is hidden, don't update the vehicle's mileage on save, and don't calculate next_due_miles.
+FIX 7 — Wallet tab applicability
+The Wallet tab (registration, insurance, ID) makes sense for cars, motorcycles, and RVs. It also makes sense for boats (registration is required). It does NOT make sense for ATVs, UTVs, PWCs, or snowmobiles in most states (though some do require registration). For now, keep the Wallet tab visible for ALL vehicle types — registration requirements vary by state and we don't want to hide it from users who need it. No change needed here.
+WHERE TO DEFINE THE MILEAGE SET:
+Since multiple files need the same set, create a shared constant. Add it to a shared location — either:
+
+Create it in lib/vehicleTypes.ts (new file) and import everywhere, OR
+Recreate the Set in each file that needs it (simpler but duplicated)
+
+Either approach is fine. If creating a shared file, export:
+export const MILEAGE_TRACKED_TYPES = new Set(["car", "motorcycle", "rv", "utv", "snowmobile"]);
+DO NOT modify the Edge Function, maintenance templates, notification scheduler, property screens, health screens, or database schema.
+VERIFICATION:
+
+Add-vehicle: select "Boat" → no Mileage section, no Powertrain section
+Add-vehicle: select "Car" → Mileage section shows, Powertrain shows
+Vehicles list: a boat card shows no mileage row (no speedometer, no "No mileage" text)
+Vehicles list: a car card still shows mileage row as before
+Vehicle detail for a boat: no "Update Mileage" button in header
+Vehicle detail for a car: "Update Mileage" button still present
+Log service for a boat: no mileage input field
+Log service for a car: mileage input field still present
+Mark Complete on a boat's task: no mileage input in the bottom sheet
+Mark Complete on a car's task: mileage input still present
+Zero TypeScript errors

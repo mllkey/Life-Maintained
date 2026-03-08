@@ -20,6 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays, differenceInDays } from "date-fns";
 import { vehicleLimit } from "@/lib/subscription";
+import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 
 type Vehicle = {
   id: string;
@@ -214,6 +215,7 @@ export default function VehiclesScreen() {
                   </View>
                 </View>
 
+                {MILEAGE_TRACKED_TYPES.has(v.vehicle_type ?? "") && (
                 <View style={styles.mileageRow}>
                   <View style={styles.mileagePill}>
                     <Ionicons name="speedometer-outline" size={13} color={Colors.textSecondary} />
@@ -230,6 +232,7 @@ export default function VehiclesScreen() {
                     </View>
                   )}
                 </View>
+                )}
 
                 <View style={styles.badgesRow}>
                   <View style={[

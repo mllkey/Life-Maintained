@@ -28,6 +28,7 @@ import { ReceiptScanResult } from "@/lib/receiptScanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { parseISO, format } from "date-fns";
 import { matchAndUpdateVehicleTask, CATEGORY_GROUPS, type MatchResult } from "@/lib/maintenanceMatcher";
+import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 
 type PricingInsight = {
   cost: number | null;
@@ -61,6 +62,17 @@ export default function LogServiceScreen() {
   const [receiptWarning, setReceiptWarning] = useState(false);
   const [pricingInsight, setPricingInsight] = useState<PricingInsight | null>(null);
   const insightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [vehicleType, setVehicleType] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!vehicleId) return;
+    supabase
+      .from("vehicles")
+      .select("vehicle_type")
+      .eq("id", vehicleId)
+      .single()
+      .then(({ data }) => { if (data) setVehicleType(data.vehicle_type); });
+  }, [vehicleId]);
 
   const itemsTotal = scannedItems.length > 0
     ? scannedItems.reduce((sum, item) => sum + (item.cost ?? 0), 0)
@@ -513,16 +525,18 @@ export default function LogServiceScreen() {
                   maxLength={10}
                 />
               </Field>
-              <Field label="Mileage" style={{ flex: 1 }}>
-                <TextInput
-                  style={styles.input}
-                  value={mileage}
-                  onChangeText={setMileage}
-                  placeholder="45000"
-                  placeholderTextColor={Colors.textTertiary}
-                  keyboardType="numeric"
-                />
-              </Field>
+              {MILEAGE_TRACKED_TYPES.has(vehicleType ?? "") && (
+                <Field label="Mileage" style={{ flex: 1 }}>
+                  <TextInput
+                    style={styles.input}
+                    value={mileage}
+                    onChangeText={setMileage}
+                    placeholder="45000"
+                    placeholderTextColor={Colors.textTertiary}
+                    keyboardType="numeric"
+                  />
+                </Field>
+              )}
             </View>
             <View style={styles.row}>
               <Field label={scannedItems.length > 0 ? "Total Cost" : "Cost ($)"} style={{ flex: 1 }}>

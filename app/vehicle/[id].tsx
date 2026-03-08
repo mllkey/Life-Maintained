@@ -29,6 +29,7 @@ import { useAuth } from "@/context/AuthContext";
 import Paywall from "@/components/Paywall";
 import { hasPersonalOrAbove } from "@/lib/subscription";
 import { SaveToast } from "@/components/SaveToast";
+import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   engine:     { bg: Colors.blueMuted,      text: Colors.blue },
@@ -265,16 +266,21 @@ export default function VehicleDetailScreen() {
 
   async function handleSaveMarkComplete() {
     if (!markCompleteTask) return;
-    const mileageNum = parseInt(completeMileage, 10);
-    if (!completeMileage.trim() || isNaN(mileageNum) || mileageNum < 0) {
-      showToast("Please enter a valid mileage.");
-      return;
+    const tracksMileage = MILEAGE_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "");
+    let mileageNum: number | null = null;
+    if (tracksMileage) {
+      const parsed = parseInt(completeMileage, 10);
+      if (!completeMileage.trim() || isNaN(parsed) || parsed < 0) {
+        showToast("Please enter a valid mileage.");
+        return;
+      }
+      mileageNum = parsed;
     }
     const task = markCompleteTask;
     setIsSavingComplete(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    const newNextDueMiles = task.interval_miles != null
+    const newNextDueMiles = (task.interval_miles != null && mileageNum != null)
       ? mileageNum + task.interval_miles
       : null;
     const newNextDueDate = task.interval_months != null
@@ -309,7 +315,9 @@ export default function VehicleDetailScreen() {
           status: "upcoming",
           updated_at: now,
         }).eq("id", task.id),
-        supabase.from("vehicles").update({ mileage: mileageNum }).eq("id", id!),
+        mileageNum != null
+          ? supabase.from("vehicles").update({ mileage: mileageNum }).eq("id", id!)
+          : Promise.resolve({ error: null }),
         supabase.from("maintenance_logs").insert({
           user_id: user!.id,
           vehicle_id: id,
@@ -615,13 +623,15 @@ export default function VehicleDetailScreen() {
             </View>
 
             <View style={styles.vehicleActions}>
-              <Pressable
-                style={({ pressed }) => [styles.vehicleActionBtn, { opacity: pressed ? 0.8 : 1 }]}
-                onPress={() => router.push(`/update-mileage/${id}` as any)}
-              >
-                <Ionicons name="speedometer-outline" size={14} color={Colors.textSecondary} />
-                <Text style={styles.vehicleActionText}>Update Mileage</Text>
-              </Pressable>
+              {MILEAGE_TRACKED_TYPES.has(vehicle.vehicle_type ?? "") && (
+                <Pressable
+                  style={({ pressed }) => [styles.vehicleActionBtn, { opacity: pressed ? 0.8 : 1 }]}
+                  onPress={() => router.push(`/update-mileage/${id}` as any)}
+                >
+                  <Ionicons name="speedometer-outline" size={14} color={Colors.textSecondary} />
+                  <Text style={styles.vehicleActionText}>Update Mileage</Text>
+                </Pressable>
+              )}
               <Pressable
                 style={({ pressed }) => [styles.vehicleActionBtnAccent, { opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => router.push(`/log-service/${id}` as any)}
@@ -837,6 +847,7 @@ export default function VehicleDetailScreen() {
         task={markCompleteTask}
         mileage={completeMileage}
         onMileageChange={setCompleteMileage}
+        showMileage={MILEAGE_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "")}
         date={completeDate}
         onDateChange={setCompleteDate}
         notes={completeNotes}
@@ -1072,6 +1083,7 @@ function MarkCompleteSheet({
   task,
   mileage,
   onMileageChange,
+  showMileage = true,
   date,
   onDateChange,
   notes,
@@ -1086,6 +1098,7 @@ function MarkCompleteSheet({
   task: any | null;
   mileage: string;
   onMileageChange: (v: string) => void;
+  showMileage?: boolean;
   date: string;
   onDateChange: (v: string) => void;
   notes: string;
@@ -1124,18 +1137,20 @@ function MarkCompleteSheet({
           </Text>
 
           <View style={styles.sheetFields}>
-            <View style={styles.sheetField}>
-              <Text style={styles.sheetFieldLabel}>Current Mileage</Text>
-              <TextInput
-                style={styles.sheetInput}
-                value={mileage}
-                onChangeText={onMileageChange}
-                keyboardType="number-pad"
-                placeholder="e.g. 52,000"
-                placeholderTextColor={Colors.textTertiary}
-                returnKeyType="done"
-              />
-            </View>
+            {showMileage && (
+              <View style={styles.sheetField}>
+                <Text style={styles.sheetFieldLabel}>Current Mileage</Text>
+                <TextInput
+                  style={styles.sheetInput}
+                  value={mileage}
+                  onChangeText={onMileageChange}
+                  keyboardType="number-pad"
+                  placeholder="e.g. 52,000"
+                  placeholderTextColor={Colors.textTertiary}
+                  returnKeyType="done"
+                />
+              </View>
+            )}
 
             <View style={styles.sheetField}>
               <Text style={styles.sheetFieldLabel}>Date Completed</Text>

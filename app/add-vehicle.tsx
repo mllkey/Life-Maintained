@@ -1097,20 +1097,20 @@ export default function AddVehicleScreen() {
           )}
 
           {/* ── Mileage ───────────────────────────────────────── */}
-          <FieldGroup label="Mileage">
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Current Mileage</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={mileage}
-                onChangeText={setMileage}
-                placeholder="45000"
-                placeholderTextColor={Colors.textTertiary}
-                keyboardType="numeric"
-                returnKeyType="next"
-              />
-            </View>
-            {MILEAGE_TRACKED_TYPES.has(vehicleType) && (
+          {MILEAGE_TRACKED_TYPES.has(vehicleType) && (
+            <FieldGroup label="Mileage">
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Current Mileage</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={mileage}
+                  onChangeText={setMileage}
+                  placeholder="45000"
+                  placeholderTextColor={Colors.textTertiary}
+                  keyboardType="numeric"
+                  returnKeyType="next"
+                />
+              </View>
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>Estimated Monthly Miles *</Text>
                 <TextInput
@@ -1124,8 +1124,8 @@ export default function AddVehicleScreen() {
                 />
                 <Text style={styles.fieldHint}>Used to calculate mileage-based maintenance intervals</Text>
               </View>
-            )}
-          </FieldGroup>
+            </FieldGroup>
+          )}
 
           {/* ── Options ───────────────────────────────────────── */}
           <FieldGroup label="Options">
