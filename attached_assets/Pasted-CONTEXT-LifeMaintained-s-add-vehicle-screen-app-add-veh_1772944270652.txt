@@ -1,0 +1,70 @@
+CONTEXT: LifeMaintained's add-vehicle screen (app/add-vehicle.tsx) loads models from the NHTSA API using GetModelsForMakeYear. When vehicleType is "car" (which covers Cars, Trucks, and SUVs), it queries two NHTSA vehicleType categories: "Passenger Car" and "Truck". However, some common vehicles are missing from the model picker because NHTSA categorizes them under different vehicleType values. For example:
+
+A 2004 Dodge Ram may not show "Ram 1500", "Ram 2500", "Ram 3500" because NHTSA may categorize them under "Multipurpose Passenger Vehicle (MPV)" instead of "Truck"
+SUVs like the Ford Explorer, Chevy Tahoe, Jeep Grand Cherokee may be under "MPV" not "Truck" or "Passenger Car"
+Some crossovers and minivans may only appear under "MPV"
+Vans (Transit, Sprinter, Express) may be under "Bus" or "Incomplete Vehicle"
+
+This means a significant number of the most popular US vehicles are invisible in the model picker, forcing users to type a custom model name — which most users won't think to do.
+
+TASK: Fix the NHTSA model query for the "car" vehicle type to include ALL relevant vehicle classifications, and verify the same issue doesn't exist for other vehicle types.
+FIX 1 — Expand the "car" vehicleType query:
+Find the block that handles vehicleType === "car" in the loadModels function (around line 395). It currently fetches:
+
+vehicleType=Passenger%20Car
+vehicleType=Truck
+
+Change it to fetch ALL of these in parallel:
+
+vehicleType=Passenger%20Car
+vehicleType=Truck
+vehicleType=Multipurpose%20Passenger%20Vehicle%20(MPV)
+
+Merge all three result sets, deduplicate by model name, and sort alphabetically. The MPV category is where NHTSA puts SUVs, crossovers, minivans, and many pickup trucks that aren't classified as commercial trucks.
+The code pattern should follow the existing Promise.all approach — add a third fetch to the array:
+const [passengerResp, truckResp, mpvResp] = await Promise.all([
+  fetch(`${nhtsaBase}?format=json&vehicleType=Passenger%20Car`),
+  fetch(`${nhtsaBase}?format=json&vehicleType=Truck`),
+  fetch(`${nhtsaBase}?format=json&vehicleType=Multipurpose%20Passenger%20Vehicle%20(MPV)`),
+]);
+const [passengerJson, truckJson, mpvJson] = await Promise.all([
+  passengerResp.json(),
+  truckResp.json(),
+  mpvResp.json(),
+]);
+names = [...new Set([
+  ...extractNames(passengerJson),
+  ...extractNames(truckJson),
+  ...extractNames(mpvJson),
+])];
+FIX 2 — Expand the RV vehicleType query:
+The RV block currently fetches "Incomplete Vehicle" and "Bus". Add "Multipurpose Passenger Vehicle (MPV)" here too, since many large SUVs and conversion vehicles that RV owners might classify as RVs show up under MPV:
+const [incompleteResp, busResp, mpvResp] = await Promise.all([
+  fetch(`${nhtsaBase}?format=json&vehicleType=Incomplete%20Vehicle`),
+  fetch(`${nhtsaBase}?format=json&vehicleType=Bus`),
+  fetch(`${nhtsaBase}?format=json&vehicleType=Multipurpose%20Passenger%20Vehicle%20(MPV)`),
+]);
+Same pattern — merge, deduplicate, sort.
+FIX 3 — Add a fallback "all types" query:
+After the type-specific queries complete, if the resulting model list has FEWER than 3 models, run a fallback query with NO vehicleType filter to catch anything NHTSA categorized unexpectedly:
+if (names.length < 3) {
+  const allResp = await fetch(`${nhtsaBase}?format=json`);
+  const allJson = await allResp.json();
+  names = [...new Set([...names, ...extractNames(allJson)])];
+}
+This ensures that even if NHTSA recategorizes vehicles, users always see a complete list. The threshold of 3 ensures the fallback only fires when the primary queries came up nearly empty.
+FIX 4 — Make the custom model option more discoverable:
+The model picker already supports typing a custom model, but users don't realize this because the "Use [custom name]" option only appears at the bottom of the search results when the search text doesn't match any NHTSA model.
+Add a persistent helper text at the top of the model list (below the search bar, above the first result):
+"Don't see your model? Type it in the search bar above."
+Style it as a subtle hint: small text, tertiary color, italic. This should always be visible regardless of search state, except when the list is in a loading state.
+DO NOT change the make picker, year picker, VIN decode, trim field, or any other part of the add-vehicle form. Only modify the model loading logic and model picker display.
+VERIFICATION:
+
+Select year 2004, make Dodge, type "car" → model picker should show Ram 1500, Ram 2500, Ram 3500, Durango, Dakota, Caravan, Grand Caravan, Neon, Stratus, Intrepid, Viper
+Select year 2024, make Ford, type "car" → should show F-150, Explorer, Escape, Bronco, Edge, Expedition, Maverick, Ranger, Transit (if available)
+Select year 2024, make Chevrolet, type "car" → should show Silverado 1500, Tahoe, Suburban, Equinox, Traverse, Trax, Blazer, Colorado, Camaro, Corvette, Malibu
+Select year 2024, make Jeep, type "car" → should show Grand Cherokee, Wrangler, Cherokee, Compass, Gladiator, Renegade, Wagoneer, Grand Wagoneer
+Hint text "Don't see your model?" appears in model picker
+Typing a custom model name still works as before
+Other vehicle types (motorcycle, RV, boat, ATV, etc.) still load correctly
