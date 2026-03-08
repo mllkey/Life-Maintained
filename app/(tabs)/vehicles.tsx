@@ -33,6 +33,8 @@ type Vehicle = {
   color: string | null;
   nickname: string | null;
   is_seasonal: boolean | null;
+  season_start_month: number | null;
+  season_end_month: number | null;
   vehicle_category: string | null;
   updated_at: string | null;
   average_miles_per_month: number | null;
@@ -63,7 +65,22 @@ function getEstimatedMileage(v: Vehicle): number | null {
   if (!v.mileage || !v.average_miles_per_month || !v.updated_at) return null;
   const daysSince = differenceInDays(new Date(), parseISO(v.updated_at));
   if (daysSince < 7) return null;
-  return Math.round(v.mileage + (daysSince / 30.44) * v.average_miles_per_month);
+
+  let activeFraction = 1;
+  if (
+    v.is_seasonal &&
+    v.season_start_month != null &&
+    v.season_end_month != null
+  ) {
+    const start = v.season_start_month;
+    const end = v.season_end_month;
+    const activeMonths = start <= end
+      ? end - start + 1
+      : (12 - start + 1) + end;
+    activeFraction = activeMonths / 12;
+  }
+
+  return Math.round(v.mileage + (daysSince / 30.44) * v.average_miles_per_month * activeFraction);
 }
 
 export default function VehiclesScreen() {

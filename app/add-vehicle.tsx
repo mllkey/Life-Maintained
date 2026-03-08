@@ -170,6 +170,21 @@ const MAKE_SECTIONS_BY_TYPE: Record<string, MakeSection[]> = {
 
 const MILEAGE_TRACKED_TYPES = new Set(["car", "motorcycle", "rv", "utv", "snowmobile"]);
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function isMonthInRange(month: number, start: number | null, end: number | null): boolean {
+  if (start === null) return false;
+  if (end === null) return month === start;
+  if (start <= end) return month >= start && month <= end;
+  return month >= start || month <= end;
+}
+
+function countMonthsInRange(start: number | null, end: number | null): number {
+  if (start === null || end === null) return 0;
+  if (start <= end) return end - start + 1;
+  return (12 - start + 1) + end;
+}
+
 const VEHICLE_TYPES: { value: string; label: string; icon: string }[] = [
   { value: "car",        label: "Car / Truck / SUV",    icon: "car" },
   { value: "motorcycle", label: "Motorcycle",            icon: "motorbike" },
@@ -454,6 +469,8 @@ export default function AddVehicleScreen() {
   const [mileage, setMileage] = useState("");
   const [avgMilesPerMonth, setAvgMilesPerMonth] = useState("");
   const [isSeasonal, setIsSeasonal] = useState(false);
+  const [seasonStartMonth, setSeasonStartMonth] = useState<number | null>(null);
+  const [seasonEndMonth, setSeasonEndMonth] = useState<number | null>(null);
   const [fuelType, setFuelType] = useState<"gas" | "diesel" | "hybrid" | "ev">("gas");
   const [isAwd, setIsAwd] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -712,6 +729,26 @@ export default function AddVehicleScreen() {
     Haptics.selectionAsync();
   }
 
+  function handleMonthTap(m: number) {
+    Haptics.selectionAsync();
+    if (seasonStartMonth === null || (seasonStartMonth !== null && seasonEndMonth !== null)) {
+      setSeasonStartMonth(m);
+      setSeasonEndMonth(null);
+    } else {
+      if (m === seasonStartMonth) {
+        setSeasonStartMonth(null);
+      } else {
+        setSeasonEndMonth(m);
+      }
+    }
+  }
+
+  function applyPreset(start: number, end: number) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSeasonStartMonth(start);
+    setSeasonEndMonth(end);
+  }
+
   async function handleSave() {
     if (isLoading) return;
     if (!user) return;
@@ -757,6 +794,8 @@ export default function AddVehicleScreen() {
       mileage: mileage ? parseInt(mileage) : null,
       average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth) : null,
       is_seasonal: isSeasonal,
+      season_start_month: isSeasonal ? seasonStartMonth : null,
+      season_end_month: isSeasonal ? seasonEndMonth : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -1131,7 +1170,12 @@ export default function AddVehicleScreen() {
           <FieldGroup label="Options">
             <Pressable
               style={styles.toggleRow}
-              onPress={() => { Haptics.selectionAsync(); setIsSeasonal(!isSeasonal); }}
+              onPress={() => {
+                Haptics.selectionAsync();
+                const next = !isSeasonal;
+                setIsSeasonal(next);
+                if (!next) { setSeasonStartMonth(null); setSeasonEndMonth(null); }
+              }}
             >
               <View>
                 <Text style={styles.toggleLabel}>Seasonal Vehicle</Text>
@@ -1141,6 +1185,68 @@ export default function AddVehicleScreen() {
                 <View style={[styles.toggleThumb, isSeasonal && styles.toggleThumbOn]} />
               </View>
             </Pressable>
+
+            {isSeasonal && (
+              <View style={styles.monthPickerWrap}>
+                <Text style={styles.monthPickerLabel}>Active months — when this vehicle is in use</Text>
+                {[0, 1, 2].map(row => (
+                  <View key={row} style={styles.monthRow}>
+                    {MONTHS.slice(row * 4, row * 4 + 4).map((abbr, col) => {
+                      const monthNum = row * 4 + col + 1;
+                      const inRange = isMonthInRange(monthNum, seasonStartMonth, seasonEndMonth);
+                      const isEdge = monthNum === seasonStartMonth || monthNum === seasonEndMonth;
+                      return (
+                        <Pressable
+                          key={monthNum}
+                          style={({ pressed }) => [
+                            styles.monthTile,
+                            inRange && styles.monthTileSelected,
+                            isEdge && styles.monthTileEdge,
+                            { opacity: pressed ? 0.75 : 1 },
+                          ]}
+                          onPress={() => handleMonthTap(monthNum)}
+                        >
+                          <Text style={[styles.monthTileText, inRange && styles.monthTileTextSelected]}>
+                            {abbr}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ))}
+
+                <View style={styles.presetRow}>
+                  {([
+                    { label: "Spring–Fall", start: 4, end: 10 },
+                    { label: "Winter",      start: 11, end: 3 },
+                    { label: "Summer",      start: 5, end: 9 },
+                  ] as { label: string; start: number; end: number }[]).map(preset => {
+                    const active = seasonStartMonth === preset.start && seasonEndMonth === preset.end;
+                    return (
+                      <Pressable
+                        key={preset.label}
+                        style={[styles.presetChip, active && styles.presetChipActive]}
+                        onPress={() => applyPreset(preset.start, preset.end)}
+                      >
+                        <Text style={[styles.presetChipText, active && styles.presetChipTextActive]}>
+                          {preset.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {seasonStartMonth !== null && seasonEndMonth !== null && (
+                  <Text style={styles.monthRangeSummary}>
+                    {MONTHS[seasonStartMonth - 1]} – {MONTHS[seasonEndMonth - 1]}
+                    {" "}({countMonthsInRange(seasonStartMonth, seasonEndMonth)} months active)
+                  </Text>
+                )}
+                {seasonStartMonth !== null && seasonEndMonth === null && (
+                  <Text style={styles.monthRangeSummary}>Tap a second month to complete the range</Text>
+                )}
+              </View>
+            )}
           </FieldGroup>
         </ScrollView>
       </View>
@@ -1866,5 +1972,82 @@ const styles = StyleSheet.create({
     fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
     fontStyle: "italic", textAlign: "center",
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4,
+  },
+  monthPickerWrap: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    gap: 6,
+  },
+  monthPickerLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textTertiary,
+    marginBottom: 4,
+  },
+  monthRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  monthTile: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: Colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  monthTileSelected: {
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
+  },
+  monthTileEdge: {
+    borderWidth: 2,
+    borderColor: Colors.accent,
+  },
+  monthTileText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+  },
+  monthTileTextSelected: {
+    color: "#FFFFFF",
+    fontFamily: "Inter_700Bold",
+  },
+  presetRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+    flexWrap: "wrap",
+  },
+  presetChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  presetChipActive: {
+    backgroundColor: Colors.accentLight,
+    borderColor: Colors.accent,
+  },
+  presetChipText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+  },
+  presetChipTextActive: {
+    color: Colors.accent,
+  },
+  monthRangeSummary: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textTertiary,
+    textAlign: "center",
+    marginTop: 4,
   },
 });

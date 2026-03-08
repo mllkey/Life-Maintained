@@ -1,0 +1,68 @@
+For a month range picker (not a specific date), the research points toward a tile/toggle grid of all 12 months — tile-based pickers are recommended for quick selection from a fixed set of options Mobbin. Since we're selecting a contiguous range of months (e.g., April through October), a horizontal row of 12 month tiles where you tap the start and end month is the most intuitive pattern. Here's the prompt:
+
+Copy everything below and paste into Replit Agent:
+
+CONTEXT: LifeMaintained's add-vehicle screen (app/add-vehicle.tsx) has a "Seasonal Vehicle" toggle in the Options FieldGroup. When toggled on, the vehicles table has columns season_start_month (integer 1-12) and season_end_month (integer 1-12) ready to store the active season — but nothing in the UI lets the user select those months. Currently is_seasonal is saved but season_start_month and season_end_month are always null.
+This also affects mileage estimation: the vehicles list (app/(tabs)/vehicles.tsx) calculates estimated mileage using average_miles_per_month spread evenly across all 12 months. For a seasonal motorcycle ridden April–October, the app should only accrue estimated mileage during those months, not year-round.
+RESEARCH BASIS: UX best practice from Mobbin and Smashing Magazine recommends tile-based selectors for picking from a small fixed set of options (12 months). For range selection, users should see all options at once and tap start/end points with the range highlighted between them. NNGroup recommends avoiding scroll-based pickers for small fixed sets — tapping is faster and more accurate.
+IMPORTANT: Only modify app/add-vehicle.tsx and app/(tabs)/vehicles.tsx. Do NOT modify the Edge Function, database schema, notification scheduler, or any other files.
+
+TASK: Add a month range picker that appears when the Seasonal Vehicle toggle is turned on, and make mileage estimation seasonal-aware.
+STEP 1 — Month Range Picker UI in add-vehicle.tsx:
+When isSeasonal is toggled ON, animate open (or conditionally render) a month range selector directly below the Seasonal Vehicle toggle, still inside the Options FieldGroup.
+Design the picker as a grid of 12 month tiles — 4 columns × 3 rows:
+Jan  Feb  Mar  Apr
+May  Jun  Jul  Aug
+Sep  Oct  Nov  Dec
+Each tile shows the 3-letter month abbreviation. Tiles have three visual states:
+
+Unselected: dark card background, secondary text color (the vehicle is NOT used this month)
+Selected (in range): teal/accent background, white text (the vehicle IS used this month)
+Start/End: slightly bolder border or heavier accent to indicate the range boundaries
+
+Interaction: User taps first month → it becomes the start (highlighted). User taps second month → it becomes the end. All months between start and end (inclusive) are highlighted as the active range. If start is after end (e.g., Nov to Mar for a snowmobile), the range wraps around the calendar year — Nov, Dec, Jan, Feb, Mar are all highlighted.
+Quick presets: Below the grid, show 2-3 common presets as small tappable chips:
+
+"Spring–Fall (Apr–Oct)" — common for motorcycles, boats
+"Winter (Nov–Mar)" — common for snowmobiles
+"Summer (May–Sep)" — common for PWC, boats
+
+Tapping a preset fills in the start/end months immediately. The user can still manually adjust after selecting a preset.
+Add state variables for seasonStartMonth and seasonEndMonth (integers 1-12, default to null). When isSeasonal is toggled OFF, reset both to null and collapse/hide the picker.
+Add a subtle label above the grid: "Active months — when this vehicle is in use"
+STEP 2 — Save season months to database:
+Update the vehicleData object in handleSave to include:
+
+season_start_month: isSeasonal ? seasonStartMonth : null
+season_end_month: isSeasonal ? seasonEndMonth : null
+
+These columns already exist on the vehicles table (integer, nullable). No migration needed.
+STEP 3 — Validate before save:
+If isSeasonal is true but the user hasn't selected both a start and end month, show a validation error: "Please select the months this vehicle is in use." Don't block save on this — instead, default to a full year (1-12) if not set, but show a gentle warning nudge.
+STEP 4 — Mileage estimation seasonal awareness in vehicles.tsx:
+Update the getEstimatedMileage function to account for seasonal vehicles. Currently it calculates:
+mileage + (daysSince / 30.44) * average_miles_per_month
+For seasonal vehicles, only count days that fall within the active season. The vehicle type already has is_seasonal, season_start_month, and season_end_month columns — add these to the Vehicle type and the select query.
+Logic: For each day in the range from the vehicle's updated_at date to today, check if that day's month falls within the active season (accounting for wrap-around like Nov–Mar). Only count active-season days toward the mileage estimate.
+Simplified approach (good enough): Calculate the fraction of the year the vehicle is active. For Apr–Oct, that's 7/12. Multiply the accrued estimate by this fraction:
+const activeFraction = seasonal ? activeMonthCount / 12 : 1;
+return Math.round(v.mileage + (daysSince / 30.44) * v.average_miles_per_month * activeFraction);
+For wrap-around ranges (Nov–Mar): count the months correctly. Nov(11) to Mar(3) = Nov, Dec, Jan, Feb, Mar = 5 months. A helper function isMonthInRange(month, start, end) should handle this:
+function isMonthInRange(month: number, start: number, end: number): boolean {
+  if (start <= end) return month >= start && month <= end;
+  return month >= start || month <= end; // wraps around year
+}
+STEP 5 — Haptic feedback:
+Each month tile tap should trigger Haptics.selectionAsync(). Preset chip taps should trigger Haptics.impactAsync(ImpactFeedbackStyle.Light).
+STYLING:
+
+Month tiles: 70×44pt each, rounded corners 10px, 6px gap between tiles
+Selected tiles: accent/teal background (#14B8A6), white bold text
+Unselected tiles: surface/card background, secondary text color
+The grid should be centered within the FieldGroup
+Preset chips: small rounded pills below the grid, border style when unselected, filled accent when matching current selection
+Animate the picker appearing/disappearing when toggle changes (simple height animation or layout animation)
+Match existing app design language (Colors constants, Inter font family)
+
+DO NOT modify the Edge Function, notification scheduler, vehicle detail screen, or any database schema.
+VERIFICATION:
