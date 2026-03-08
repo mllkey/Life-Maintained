@@ -22,14 +22,6 @@ import * as Notifications from "expo-notifications";
 import { parseISO, isBefore, addDays, format } from "date-fns";
 import { isFreeTier } from "@/lib/subscription";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowList: true,
-  }),
-});
 
 async function scheduleMedicationNotification(medName: string, reminderTime: string): Promise<boolean> {
   const { status } = await Notifications.requestPermissionsAsync();
