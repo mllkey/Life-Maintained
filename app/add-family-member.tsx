@@ -90,7 +90,7 @@ export default function AddFamilyMemberScreen() {
       queryClient.invalidateQueries({ queryKey: ["family_members"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowToast(true);
-      setTimeout(() => router.dismiss(), 900);
+      setTimeout(() => router.back(), 900);
     }
   }
 
@@ -98,7 +98,7 @@ export default function AddFamilyMemberScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
-          <Pressable onPress={() => router.dismiss()} style={styles.closeBtn}>
+          <Pressable onPress={() => router.back()} style={styles.closeBtn}>
             <Ionicons name="close" size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.title}>Add Family Member</Text>

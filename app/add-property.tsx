@@ -386,7 +386,7 @@ export default function AddPropertyScreen() {
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowToast(true);
-    setTimeout(() => router.dismiss(), 900);
+    setTimeout(() => router.back(), 900);
   }
 
   return (
@@ -396,7 +396,7 @@ export default function AddPropertyScreen() {
     >
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
-          <Pressable onPress={() => router.dismiss()} style={styles.closeBtn}>
+          <Pressable onPress={() => router.back()} style={styles.closeBtn}>
             <Ionicons name="close" size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.title}>Add Property</Text>
