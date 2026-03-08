@@ -1,0 +1,86 @@
+This is Expo managed workflow (no ios/android folders, no expo-dev-client). That means no native modules — no CoreBluetooth, no AVAudioSession, no react-native-ble-plx. Auto-detecting Bluetooth connections is not possible without ejecting from managed Expo.
+The right feature for your current setup is a quick mileage update from the dashboard — one tap to update any vehicle's mileage without navigating deep into the app. This is actually more useful than Bluetooth detection for most users anyway, because it works for everyone, not just people who pair their phone to their car.
+Here's the rewritten prompt — single concern, no ambiguity:
+
+Copy everything below and paste into Replit Agent:
+
+CONTEXT: LifeMaintained is a React Native / Expo managed workflow app. The dashboard (app/(tabs)/index.tsx) shows overdue and upcoming maintenance items across vehicles, properties, and health. To update a vehicle's mileage, users currently have to: tap a vehicle → open vehicle detail → tap "Update Mileage" → enter mileage → save. That's 4 taps minimum for something users should do frequently.
+We need a quick mileage update flow accessible directly from the dashboard in one tap. This is the #1 driver of accurate maintenance tracking — if mileage is stale, due date calculations are wrong and the app loses credibility.
+Research basis: NNGroup's research on reducing interaction cost shows that every additional step in a workflow increases abandonment. Apple HIG recommends surfacing frequent actions at the top level of navigation. Fitness apps like Strava and Nike Run Club place their primary action (start workout) on the main tab — we should do the same with mileage updates.
+IMPORTANT: Only modify app/(tabs)/index.tsx (dashboard). Do NOT modify vehicle detail, add-vehicle, notification scheduler, or any other screens.
+
+TASK: Add a "Quick Mileage Update" card to the dashboard that lets users update any vehicle's mileage in one tap.
+PLACEMENT: Add the card in the dashboard scroll view, BELOW the greeting/header area and ABOVE the overdue/due_soon items list. It should be one of the first things users see when they open the app.
+DISPLAY LOGIC: Only show this card if the user has at least one vehicle that tracks mileage (check MILEAGE_TRACKED_TYPES from lib/vehicleTypes.ts or recreate the set). If the user has no mileage-tracked vehicles, don't show the card.
+CARD DESIGN — collapsed state (default):
+
+Compact horizontal card, full width
+Left side: speedometer icon + "Update Mileage"
+Right side: shows how many vehicles have stale mileage (not updated in 7+ days). Example: "2 vehicles need updating" in amber text, or "All up to date" in green text if all vehicles were updated within the last 7 days.
+Tapping the card expands it
+
+CARD DESIGN — expanded state:
+
+Shows a vertical list of the user's mileage-tracked vehicles
+Each vehicle row shows:
+
+Vehicle name (nickname or "Year Make Model")
+Current mileage formatted with commas (e.g., "13,300 mi")
+Last updated: "Updated 3d ago" or "Updated today" — amber text if 7+ days stale, green if recent
+A numeric input field on the right, pre-filled with current mileage
+A small "Save" button next to the input
+
+
+User types new mileage → taps Save → mileage updates instantly with success haptic
+On save: UPDATE vehicles SET mileage = newMileage, last_mileage_update = now(), updated_at = now() WHERE id = vehicleId
+Also insert into vehicle_mileage_history if that table exists (check the schema — it was referenced in the log-service flow)
+Invalidate vehicle and dashboard query caches after save
+Show a brief inline checkmark animation on the saved row, then collapse back after 1.5 seconds if all vehicles are updated
+
+STALENESS CALCULATION:
+
+Use the last_mileage_update column on the vehicles table if it exists, otherwise fall back to updated_at
+"Stale" = more than 7 days since last update
+Sort vehicles in the expanded list: stale vehicles first (most stale at top), recently updated at bottom
+
+DATA FETCHING:
+
+Query vehicles WHERE user_id = current user AND vehicle_type IN mileage-tracked types
+Select: id, year, make, model, nickname, mileage, vehicle_type, last_mileage_update, updated_at
+This query should run as part of the existing dashboard data fetch, not as a separate query
+
+ANIMATIONS:
+
+Expand/collapse should use LayoutAnimation or Reanimated (whichever the app already uses) for a smooth height transition
+Save success: brief scale pulse on the checkmark icon
+
+STYLING:
+
+Card background: slightly elevated surface color (Colors.card with subtle border)
+Speedometer icon: teal/accent color
+Stale count text: amber (Colors.dueSoon) when vehicles need updating, green (Colors.good) when all current
+Input field: compact, numeric keyboard, right-aligned text, matching existing input styles
+Save button: small teal pill button, matches app accent
+Collapse/expand: subtle chevron rotation animation
+The card should feel lightweight and fast — not a modal, not a sheet, just an inline expandable card
+
+EDGE CASES:
+
+User has only one mileage-tracked vehicle: skip the vehicle list, show the single vehicle's mileage input directly in the card without needing to expand
+User has no mileage-tracked vehicles (all boats/PWCs): don't render the card at all
+Mileage input validation: must be a positive integer, must be >= current mileage (can't go backwards). If user enters a lower number, show a subtle error: "Mileage can't be less than current reading"
+If save fails: show error toast, don't clear the input
+
+DO NOT modify any other screen. DO NOT add Bluetooth detection, background processing, or native modules.
+VERIFICATION:
+
+Dashboard shows the Quick Mileage Update card below the greeting
+Card shows "2 vehicles need updating" if two vehicles haven't been updated in 7+ days
+Tap card → expands to show vehicle list with mileage inputs
+Type new mileage for a vehicle → tap Save → mileage updates, checkmark shows, row turns green
+All vehicles updated → card collapses back, shows "All up to date" in green
+User with one car: card shows inline mileage input without expand step
+User with only boats: card doesn't appear
+Enter mileage lower than current → validation error shown
+Pull-to-refresh on dashboard refreshes the mileage card data too
+Zero TypeScript errors

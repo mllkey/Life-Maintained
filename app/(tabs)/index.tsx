@@ -7,11 +7,15 @@ import {
   Pressable,
   RefreshControl,
   Platform,
+  TextInput,
+  LayoutAnimation,
+  ActivityIndicator,
+  UIManager,
 } from "react-native";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
@@ -22,6 +26,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { useBudgetAlert } from "@/context/BudgetAlertContext";
 import TrialBanner from "@/components/TrialBanner";
+import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const SCREENING_NOTIF_KEY = "screening_notif_optins";
 
@@ -39,6 +48,17 @@ type DashboardItem = {
   status: "overdue" | "due_soon" | "good";
   category: "vehicles" | "properties" | "health";
   entityId: string;
+};
+
+type MileageVehicle = {
+  id: string;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  nickname: string | null;
+  mileage: number | null;
+  vehicle_type: string | null;
+  updated_at: string | null;
 };
 
 function getStatus(dueDate: string | null): "overdue" | "due_soon" | "good" {
@@ -199,6 +219,20 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
+  const { data: mileageVehicles, refetch: refetchMileage } = useQuery({
+    queryKey: ["mileage_vehicles", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data } = await supabase
+        .from("vehicles")
+        .select("id, year, make, model, nickname, mileage, vehicle_type, updated_at")
+        .eq("user_id", user.id)
+        .in("vehicle_type", MILEAGE_TRACKED_TYPES as unknown as string[]);
+      return (data ?? []) as MileageVehicle[];
+    },
+    enabled: !!user,
+  });
+
   const { data: healthProfile } = useQuery({
     queryKey: ["health_profile", user?.id],
     queryFn: async () => {
@@ -223,6 +257,7 @@ export default function DashboardScreen() {
     refetchCounts();
     refetchDash();
     refetchSpending();
+    refetchMileage();
   }
 
   const isLoading = countsLoading || dashLoading;
@@ -290,6 +325,10 @@ export default function DashboardScreen() {
             )}
             <CategoryCardsRow counts={counts ?? { vehicles: 0, properties: 0, health: 0 }} />
 
+            {(mileageVehicles?.length ?? 0) > 0 && (
+              <QuickMileageCard vehicles={mileageVehicles!} userId={user!.id} />
+            )}
+
             <View style={styles.twoCol}>
               <UpcomingTasksCard items={upcomingItems} />
               <SpendingCard spending={spending ?? {}} />
@@ -332,6 +371,214 @@ export default function DashboardScreen() {
         )}
       </View>
     </ScrollView>
+    </View>
+  );
+}
+
+function formatMileageAge(updatedAt: string | null): string {
+  if (!updatedAt) return "Never updated";
+  const days = differenceInDays(new Date(), parseISO(updatedAt));
+  if (days === 0) return "Updated today";
+  if (days === 1) return "Updated 1d ago";
+  return `Updated ${days}d ago`;
+}
+
+function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; userId: string }) {
+  const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const [saved, setSaved] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const isStale = (v: MileageVehicle) => {
+    if (!v.updated_at) return true;
+    return differenceInDays(new Date(), parseISO(v.updated_at)) >= 7;
+  };
+
+  const staleCount = vehicles.filter(isStale).length;
+  const allUpToDate = staleCount === 0;
+
+  const sortedVehicles = [...vehicles].sort((a, b) => {
+    const aDays = a.updated_at ? differenceInDays(new Date(), parseISO(a.updated_at)) : 9999;
+    const bDays = b.updated_at ? differenceInDays(new Date(), parseISO(b.updated_at)) : 9999;
+    return bDays - aDays;
+  });
+
+  function getInput(v: MileageVehicle): string {
+    return inputs[v.id] ?? (v.mileage != null ? String(v.mileage) : "");
+  }
+
+  async function handleSave(v: MileageVehicle) {
+    const input = getInput(v).replace(/,/g, "");
+    const newMileage = parseInt(input, 10);
+    if (!input.trim() || isNaN(newMileage) || newMileage <= 0) {
+      setErrors(e => ({ ...e, [v.id]: "Please enter a valid mileage" }));
+      return;
+    }
+    if (v.mileage != null && newMileage < v.mileage) {
+      setErrors(e => ({ ...e, [v.id]: "Mileage can't be less than current reading" }));
+      return;
+    }
+    setErrors(e => ({ ...e, [v.id]: "" }));
+    setSaving(s => ({ ...s, [v.id]: true }));
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const now = new Date().toISOString();
+      await supabase.from("vehicles").update({ mileage: newMileage, updated_at: now }).eq("id", v.id);
+      const { error: histErr } = await supabase.from("vehicle_mileage_history").insert({ vehicle_id: v.id, user_id: userId, mileage: newMileage, recorded_at: now });
+      if (histErr && !histErr.message.includes("does not exist")) throw histErr;
+      setSaved(s => ({ ...s, [v.id]: true }));
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
+      setTimeout(() => {
+        setSaved(s => ({ ...s, [v.id]: false }));
+      }, 1500);
+    } catch {
+      setErrors(e => ({ ...e, [v.id]: "Save failed. Try again." }));
+    } finally {
+      setSaving(s => ({ ...s, [v.id]: false }));
+    }
+  }
+
+  function VehicleRow({ v }: { v: MileageVehicle }) {
+    const stale = isStale(v);
+    const inputVal = getInput(v);
+    const isSaving = saving[v.id] ?? false;
+    const isSaved = saved[v.id] ?? false;
+    const err = errors[v.id];
+    const vehicleName = v.nickname ?? [v.year, v.make, v.model].filter(Boolean).join(" ");
+
+    return (
+      <View style={styles.qmVehicleRow}>
+        <View style={styles.qmVehicleInfo}>
+          <Text style={styles.qmVehicleName} numberOfLines={1}>{vehicleName}</Text>
+          <Text style={[styles.qmVehicleAge, { color: stale ? Colors.dueSoon : Colors.good }]}>
+            {formatMileageAge(v.updated_at)}
+          </Text>
+          {!!err && <Text style={styles.qmError}>{err}</Text>}
+        </View>
+        <View style={styles.qmInputRow}>
+          <TextInput
+            style={styles.qmInput}
+            value={inputVal}
+            onChangeText={t => {
+              setInputs(i => ({ ...i, [v.id]: t }));
+              if (errors[v.id]) setErrors(e => ({ ...e, [v.id]: "" }));
+            }}
+            keyboardType="number-pad"
+            returnKeyType="done"
+            selectTextOnFocus
+            placeholder="miles"
+            placeholderTextColor={Colors.textTertiary}
+          />
+          <Pressable
+            style={[styles.qmSaveBtn, isSaved && { backgroundColor: Colors.good }]}
+            onPress={() => { if (!isSaving && !isSaved) handleSave(v); }}
+            disabled={isSaving}
+          >
+            {isSaved ? (
+              <Ionicons name="checkmark" size={14} color="#fff" />
+            ) : isSaving ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.qmSaveBtnText}>Save</Text>
+            )}
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  if (vehicles.length === 1) {
+    const v = vehicles[0];
+    const vehicleName = v.nickname ?? [v.year, v.make, v.model].filter(Boolean).join(" ");
+    return (
+      <View style={styles.qmCard}>
+        <View style={styles.qmCardHeaderStatic}>
+          <View style={styles.qmIconWrap}>
+            <Ionicons name="speedometer-outline" size={18} color={Colors.accent} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.qmCardTitle}>Update Mileage</Text>
+            <Text style={[styles.qmCardSub, { color: isStale(v) ? Colors.dueSoon : Colors.good }]}>
+              {vehicleName}
+            </Text>
+          </View>
+          <View style={styles.qmInputRow}>
+            <TextInput
+              style={styles.qmInput}
+              value={getInput(v)}
+              onChangeText={t => {
+                setInputs(i => ({ ...i, [v.id]: t }));
+                if (errors[v.id]) setErrors(e => ({ ...e, [v.id]: "" }));
+              }}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              selectTextOnFocus
+              placeholder="miles"
+              placeholderTextColor={Colors.textTertiary}
+            />
+            <Pressable
+              style={[styles.qmSaveBtn, (saved[v.id] ?? false) && { backgroundColor: Colors.good }]}
+              onPress={() => { if (!(saving[v.id] ?? false) && !(saved[v.id] ?? false)) handleSave(v); }}
+              disabled={saving[v.id] ?? false}
+            >
+              {(saved[v.id] ?? false) ? (
+                <Ionicons name="checkmark" size={14} color="#fff" />
+              ) : (saving[v.id] ?? false) ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.qmSaveBtnText}>Save</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+        {!!(errors[v.id]) && <Text style={[styles.qmError, { marginTop: 6, marginLeft: 50 }]}>{errors[v.id]}</Text>}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.qmCard}>
+      <Pressable
+        style={styles.qmCardHeader}
+        onPress={() => {
+          Haptics.selectionAsync();
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setExpanded(e => !e);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={expanded ? "Collapse mileage updater" : "Expand mileage updater"}
+      >
+        <View style={styles.qmIconWrap}>
+          <Ionicons name="speedometer-outline" size={18} color={Colors.accent} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.qmCardTitle}>Update Mileage</Text>
+          <Text style={[styles.qmCardSub, { color: allUpToDate ? Colors.good : Colors.dueSoon }]}>
+            {allUpToDate
+              ? "All up to date"
+              : `${staleCount} vehicle${staleCount !== 1 ? "s" : ""} need updating`}
+          </Text>
+        </View>
+        <Ionicons
+          name={expanded ? "chevron-up" : "chevron-down"}
+          size={16}
+          color={Colors.textTertiary}
+        />
+      </Pressable>
+
+      {expanded && (
+        <View style={styles.qmVehicleList}>
+          {sortedVehicles.map((v, idx) => (
+            <View key={v.id} style={idx < sortedVehicles.length - 1 ? styles.qmVehicleRowBorder : undefined}>
+              <VehicleRow v={v} />
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -648,4 +895,115 @@ const styles = StyleSheet.create({
   emptyCardLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
   emptyCardDesc: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", lineHeight: 15 },
   emptyCardBtn: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center", marginTop: 2 },
+
+  qmCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: "hidden",
+  },
+  qmCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+  },
+  qmCardHeaderStatic: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+  },
+  qmIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.accentMuted,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  qmCardTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.text,
+    lineHeight: 18,
+  },
+  qmCardSub: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    lineHeight: 16,
+    marginTop: 1,
+  },
+  qmVehicleList: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  qmVehicleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  qmVehicleRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  qmVehicleInfo: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  qmVehicleName: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.text,
+    lineHeight: 17,
+  },
+  qmVehicleAge: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 15,
+  },
+  qmInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    flexShrink: 0,
+  },
+  qmInput: {
+    width: 82,
+    height: 34,
+    backgroundColor: Colors.surface,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 9,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.text,
+    textAlign: "right",
+  },
+  qmSaveBtn: {
+    height: 34,
+    paddingHorizontal: 13,
+    borderRadius: 9,
+    backgroundColor: Colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 52,
+  },
+  qmSaveBtnText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#fff",
+  },
+  qmError: {
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    color: Colors.overdue,
+    lineHeight: 14,
+  },
 });

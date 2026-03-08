@@ -18,7 +18,7 @@ A native iOS / cross-platform mobile app built with Expo React Native that track
 - `app/(auth)/` — Login, signup, email verification, forgot-password screens
 - `app/(onboarding)/` — 3-step onboarding: category selection, health profile, complete
 - `app/(tabs)/` — Main 5-tab layout (Dashboard, Vehicles, Home, Health, Settings)
-- `app/(tabs)/index.tsx` — Dashboard: overdue/due-soon items + age-based screenings with notification opt-in toggles
+- `app/(tabs)/index.tsx` — Dashboard: Quick Mileage Update card (inline expandable, saves to vehicles table), overdue/due-soon items, age-based health screenings with notification opt-in toggles
 - `app/(tabs)/vehicles.tsx` — Vehicle list with status indicators
 - `app/(tabs)/home-tab.tsx` — Property list (uses home-tab.tsx to avoid routing conflicts)
 - `app/(tabs)/health.tsx` — Health tab: appointments/medications/family; push notification scheduling for medications
