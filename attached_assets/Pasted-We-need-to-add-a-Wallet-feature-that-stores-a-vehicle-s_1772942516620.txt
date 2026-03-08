@@ -1,0 +1,72 @@
+We need to add a "Wallet" feature that stores a vehicle's registration, insurance, and ID card info — like a digital glove box. This prompt creates the database table and the read-only display. The next prompt will add the add/edit forms and copy-from-vehicle flow.
+IMPORTANT: This feature stores sensitive personal information (policy numbers, license numbers). All data must be stored in Supabase with RLS policies ensuring only the owning user can read/write. No sensitive data in AsyncStorage.
+
+TASK: Create the wallet database table and add a Wallet tab to the vehicle detail screen that displays document cards.
+STEP 1 — DATABASE: Create a table called "vehicle_wallet_documents" via Supabase migration.
+Columns:
+
+id: uuid, primary key, default gen_random_uuid()
+user_id: uuid, not null, FK → auth.users(id) ON DELETE CASCADE
+vehicle_id: uuid, not null, FK → vehicles(id) ON DELETE CASCADE
+document_type: text, not null — one of: 'registration', 'insurance', 'id_card'
+data: jsonb, not null
+created_at: timestamptz, default now()
+updated_at: timestamptz, default now()
+
+RLS policies: SELECT, INSERT, UPDATE, DELETE all scoped to user_id = auth.uid().
+Add index on (user_id, vehicle_id, document_type).
+Add unique constraint on (vehicle_id, document_type) — one document per type per vehicle.
+The JSONB "data" field stores different shapes per document_type:
+Registration: { "state": "IL", "plate_number": "ABC1234", "registration_number": "REG123456", "expiration_date": "2027-03-15", "registered_owner": "John Doe" }
+Insurance: { "provider": "State Farm", "policy_number": "POL-987654", "group_number": "", "coverage_type": "Full Coverage", "expiration_date": "2026-09-01", "agent_name": "Jane Smith", "agent_phone": "847-555-1234", "claims_phone": "800-555-0000" }
+ID Card: { "full_name": "John Doe", "license_number": "D123-4567-8901", "state": "IL", "expiration_date": "2028-06-15", "date_of_birth": "1990-01-15", "class": "D" }
+STEP 2 — WALLET TAB: Add a third tab "Wallet" to the vehicle detail screen. Tab order: Schedule | Wallet | History. Update the activeTab type and tab bar array.
+STEP 3 — WALLET TAB CONTENT: The Wallet tab fetches from vehicle_wallet_documents WHERE vehicle_id = current vehicle AND user_id = current user. Display three card sections stacked vertically:
+REGISTRATION CARD:
+
+Header: "Registration" with document-text icon
+Shows: State, Plate Number, Registration #, Expiration, Registered Owner
+If expiration_date is past → red "Expired" badge
+If within 60 days → amber "Expiring Soon" badge
+If no registration saved → "Add Registration" button (placeholder for now — the add/edit form comes in the next prompt)
+
+INSURANCE CARD:
+
+Header: "Insurance" with shield icon
+Shows: Provider, Policy #, Coverage Type, Expiration, Agent Name, Agent Phone (tappable to call via Linking.openURL), Claims Phone (tappable)
+Same expiration badges
+If no insurance → "Add Insurance" placeholder button
+
+ID CARD:
+
+Header: "Driver's License" with card icon
+Shows: Full Name, License #, State, Class, Expiration, DOB
+Same expiration badges
+If no ID → "Add ID" placeholder button
+
+SECURITY DISPLAY RULES:
+
+Policy numbers, license numbers, registration numbers, and DOB are MASKED by default — show last 4 characters with dots (e.g., "••••••4567")
+Each masked field has an eye icon toggle — tap to reveal, tap to hide
+Reveal state resets when user leaves the screen or switches tabs (use useState, not persisted)
+Phone numbers are NOT masked (need to be tappable)
+Add an "Edit" pencil icon button in the top-right of each card — make it a placeholder that shows "Coming soon" toast for now
+
+STYLING:
+
+Cards should look like physical cards — rounded corners 16px, subtle shadow, dark card background
+Registration accent: blue. Insurance accent: green. ID accent: amber/gold.
+Match existing app Colors constants, fonts, spacing
+Masked fields use monospace-style dots
+
+DO NOT modify Schedule tab, History tab, or any existing functionality.
+VERIFICATION:
+
+Vehicle detail shows three tabs: Schedule, Wallet, History
+Wallet tab shows three card sections with empty states
+Masked field display works (dots with last 4 chars visible)
+Eye icon toggles reveal/hide
+Switching tabs re-masks all fields
+Phone numbers are tappable
+Expiration badges show correctly
+RLS verified — user can only see their own documents

@@ -12,6 +12,7 @@ import {
   Modal,
   TextInput,
   KeyboardAvoidingView,
+  Linking,
 } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -78,7 +79,7 @@ export default function VehicleDetailScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { profile, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"schedule" | "history">("schedule");
+  const [activeTab, setActiveTab] = useState<"schedule" | "wallet" | "history">("schedule");
   const [isExporting, setIsExporting] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isDeletingVehicle, setIsDeletingVehicle] = useState(false);
@@ -631,7 +632,7 @@ export default function VehicleDetailScreen() {
           </View>
 
           <View style={styles.tabs}>
-            {(["schedule", "history"] as const).map(tab => (
+            {(["schedule", "wallet", "history"] as const).map(tab => (
               <Pressable
                 key={tab}
                 style={[styles.tab, activeTab === tab && styles.tabActive]}
@@ -640,6 +641,7 @@ export default function VehicleDetailScreen() {
                 <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                   {tab === "schedule"
                     ? (scheduleAttentionCount > 0 ? `Schedule (${scheduleAttentionCount})` : "Schedule")
+                    : tab === "wallet" ? "Wallet"
                     : "History"}
                 </Text>
               </Pressable>
@@ -728,6 +730,8 @@ export default function VehicleDetailScreen() {
                 </>
               )}
             </View>
+          ) : activeTab === "wallet" ? (
+            <WalletTab vehicleId={id!} userId={user!.id} showToast={showToast} />
           ) : (
             <View style={styles.historyContainer}>
               {groupedHistory.length === 0 ? (
@@ -1221,6 +1225,306 @@ function MarkCompleteSheet({
     </Modal>
   );
 }
+
+// ─── Wallet Tab ───────────────────────────────────────────────────────────────
+
+type WalletDoc = { id: string; document_type: string; data: Record<string, any> };
+
+function maskValue(value: string | null | undefined): string {
+  if (!value) return "—";
+  if (value.length <= 4) return value;
+  return "••••" + value.slice(-4);
+}
+
+function ExpiryBadge({ dateStr }: { dateStr: string | null | undefined }) {
+  if (!dateStr) return null;
+  const d = parseISO(dateStr);
+  const now = new Date();
+  if (isBefore(d, now)) {
+    return (
+      <View style={walletStyles.badgeExpired}>
+        <Text style={walletStyles.badgeExpiredText}>Expired</Text>
+      </View>
+    );
+  }
+  if (differenceInDays(d, now) <= 60) {
+    return (
+      <View style={walletStyles.badgeSoon}>
+        <Text style={walletStyles.badgeSoonText}>Expiring Soon</Text>
+      </View>
+    );
+  }
+  return null;
+}
+
+function MaskedRow({
+  label, value, fieldKey, revealed, onToggle,
+}: {
+  label: string; value: string | null | undefined;
+  fieldKey: string; revealed: boolean; onToggle: () => void;
+}) {
+  const display = revealed ? (value || "—") : maskValue(value);
+  return (
+    <View style={walletStyles.row}>
+      <Text style={walletStyles.rowLabel}>{label}</Text>
+      <View style={walletStyles.rowRight}>
+        <Text style={[walletStyles.rowValue, !revealed && !!value && value.length > 4 && walletStyles.rowMasked]}>
+          {display}
+        </Text>
+        {!!value && value.length > 4 && (
+          <Pressable onPress={onToggle} hitSlop={8}>
+            <Ionicons
+              name={revealed ? "eye-off-outline" : "eye-outline"}
+              size={16}
+              color={Colors.textSecondary}
+            />
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function PlainRow({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <View style={walletStyles.row}>
+      <Text style={walletStyles.rowLabel}>{label}</Text>
+      <Text style={walletStyles.rowValue}>{value || "—"}</Text>
+    </View>
+  );
+}
+
+function PhoneRow({ label, phone }: { label: string; phone: string | null | undefined }) {
+  if (!phone) return <PlainRow label={label} value={null} />;
+  return (
+    <View style={walletStyles.row}>
+      <Text style={walletStyles.rowLabel}>{label}</Text>
+      <Pressable onPress={() => Linking.openURL(`tel:${phone.replace(/\D/g, "")}`)}>
+        <Text style={walletStyles.rowPhone}>{phone}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function WalletCard({
+  title, icon, accentColor, children, onEdit,
+}: {
+  title: string; icon: string; accentColor: string;
+  children: React.ReactNode; onEdit: () => void;
+}) {
+  return (
+    <View style={[walletStyles.card, { borderTopColor: accentColor, borderTopWidth: 3 }]}>
+      <View style={walletStyles.cardHeader}>
+        <View style={walletStyles.cardHeaderLeft}>
+          <View style={[walletStyles.cardIconWrap, { backgroundColor: accentColor + "22" }]}>
+            <Ionicons name={icon as any} size={18} color={accentColor} />
+          </View>
+          <Text style={walletStyles.cardTitle}>{title}</Text>
+        </View>
+        <Pressable onPress={onEdit} hitSlop={8}>
+          <Ionicons name="pencil-outline" size={17} color={Colors.textSecondary} />
+        </Pressable>
+      </View>
+      {children}
+    </View>
+  );
+}
+
+function WalletTab({
+  vehicleId, userId, showToast,
+}: {
+  vehicleId: string; userId: string; showToast: (msg: string) => void;
+}) {
+  const { data: docs, isLoading } = useQuery<WalletDoc[]>({
+    queryKey: ["wallet_docs", vehicleId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("vehicle_wallet_documents")
+        .select("*")
+        .eq("vehicle_id", vehicleId)
+        .eq("user_id", userId);
+      if (error) throw error;
+      return (data ?? []) as WalletDoc[];
+    },
+  });
+
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  function toggle(key: string) {
+    Haptics.selectionAsync();
+    setRevealed(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  const reg = docs?.find(d => d.document_type === "registration")?.data ?? null;
+  const ins = docs?.find(d => d.document_type === "insurance")?.data ?? null;
+  const idc = docs?.find(d => d.document_type === "id_card")?.data ?? null;
+
+  if (isLoading) {
+    return (
+      <View style={walletStyles.loading}>
+        <ActivityIndicator color={Colors.accent} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={walletStyles.container}>
+      {/* ── Registration ──────────────────────────── */}
+      <WalletCard
+        title="Registration"
+        icon="document-text-outline"
+        accentColor={Colors.blue}
+        onEdit={() => showToast("Coming soon")}
+      >
+        {reg ? (
+          <>
+            <View style={walletStyles.badgeRow}>
+              <ExpiryBadge dateStr={reg.expiration_date} />
+            </View>
+            <PlainRow label="State" value={reg.state} />
+            <PlainRow label="Plate" value={reg.plate_number} />
+            <MaskedRow label="Reg #" value={reg.registration_number} fieldKey="reg_num" revealed={!!revealed.reg_num} onToggle={() => toggle("reg_num")} />
+            <PlainRow label="Expires" value={reg.expiration_date ? format(parseISO(reg.expiration_date), "MMM d, yyyy") : null} />
+            <PlainRow label="Owner" value={reg.registered_owner} />
+          </>
+        ) : (
+          <View style={walletStyles.emptyCard}>
+            <Text style={walletStyles.emptyCardText}>No registration saved</Text>
+            <Pressable style={walletStyles.addBtn} onPress={() => showToast("Coming soon")}>
+              <Ionicons name="add" size={14} color={Colors.blue} />
+              <Text style={[walletStyles.addBtnText, { color: Colors.blue }]}>Add Registration</Text>
+            </Pressable>
+          </View>
+        )}
+      </WalletCard>
+
+      {/* ── Insurance ─────────────────────────────── */}
+      <WalletCard
+        title="Insurance"
+        icon="shield-checkmark-outline"
+        accentColor={Colors.good}
+        onEdit={() => showToast("Coming soon")}
+      >
+        {ins ? (
+          <>
+            <View style={walletStyles.badgeRow}>
+              <ExpiryBadge dateStr={ins.expiration_date} />
+            </View>
+            <PlainRow label="Provider" value={ins.provider} />
+            <MaskedRow label="Policy #" value={ins.policy_number} fieldKey="pol_num" revealed={!!revealed.pol_num} onToggle={() => toggle("pol_num")} />
+            {!!ins.group_number && (
+              <MaskedRow label="Group #" value={ins.group_number} fieldKey="grp_num" revealed={!!revealed.grp_num} onToggle={() => toggle("grp_num")} />
+            )}
+            <PlainRow label="Coverage" value={ins.coverage_type} />
+            <PlainRow label="Expires" value={ins.expiration_date ? format(parseISO(ins.expiration_date), "MMM d, yyyy") : null} />
+            <PlainRow label="Agent" value={ins.agent_name} />
+            <PhoneRow label="Agent Phone" phone={ins.agent_phone} />
+            <PhoneRow label="Claims" phone={ins.claims_phone} />
+          </>
+        ) : (
+          <View style={walletStyles.emptyCard}>
+            <Text style={walletStyles.emptyCardText}>No insurance saved</Text>
+            <Pressable style={walletStyles.addBtn} onPress={() => showToast("Coming soon")}>
+              <Ionicons name="add" size={14} color={Colors.good} />
+              <Text style={[walletStyles.addBtnText, { color: Colors.good }]}>Add Insurance</Text>
+            </Pressable>
+          </View>
+        )}
+      </WalletCard>
+
+      {/* ── Driver's License ──────────────────────── */}
+      <WalletCard
+        title="Driver's License"
+        icon="card-outline"
+        accentColor={Colors.vehicle}
+        onEdit={() => showToast("Coming soon")}
+      >
+        {idc ? (
+          <>
+            <View style={walletStyles.badgeRow}>
+              <ExpiryBadge dateStr={idc.expiration_date} />
+            </View>
+            <PlainRow label="Name" value={idc.full_name} />
+            <MaskedRow label="License #" value={idc.license_number} fieldKey="lic_num" revealed={!!revealed.lic_num} onToggle={() => toggle("lic_num")} />
+            <PlainRow label="State" value={idc.state} />
+            <PlainRow label="Class" value={idc.class} />
+            <PlainRow label="Expires" value={idc.expiration_date ? format(parseISO(idc.expiration_date), "MMM d, yyyy") : null} />
+            <MaskedRow label="Date of Birth" value={idc.date_of_birth} fieldKey="dob" revealed={!!revealed.dob} onToggle={() => toggle("dob")} />
+          </>
+        ) : (
+          <View style={walletStyles.emptyCard}>
+            <Text style={walletStyles.emptyCardText}>No ID saved</Text>
+            <Pressable style={walletStyles.addBtn} onPress={() => showToast("Coming soon")}>
+              <Ionicons name="add" size={14} color={Colors.vehicle} />
+              <Text style={[walletStyles.addBtnText, { color: Colors.vehicle }]}>Add Driver's License</Text>
+            </Pressable>
+          </View>
+        )}
+      </WalletCard>
+    </View>
+  );
+}
+
+const walletStyles = StyleSheet.create({
+  container: { gap: 14 },
+  loading: { paddingVertical: 40, alignItems: "center" },
+  card: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  cardHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  cardIconWrap: {
+    width: 32, height: 32, borderRadius: 8,
+    alignItems: "center", justifyContent: "center",
+  },
+  cardTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  badgeRow: { paddingHorizontal: 16, paddingTop: 10, flexDirection: "row", gap: 6 },
+  badgeExpired: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+    backgroundColor: Colors.overdueMuted,
+  },
+  badgeExpiredText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.overdue },
+  badgeSoon: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+    backgroundColor: Colors.dueSoonMuted,
+  },
+  badgeSoonText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.dueSoon },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderSubtle,
+  },
+  rowLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 },
+  rowRight: { flexDirection: "row", alignItems: "center", gap: 8, flex: 2, justifyContent: "flex-end" },
+  rowValue: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.text, textAlign: "right", flex: 1 },
+  rowMasked: { fontFamily: "Inter_400Regular", letterSpacing: 2, color: Colors.textTertiary },
+  rowPhone: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.blue },
+  emptyCard: { padding: 20, alignItems: "center", gap: 10 },
+  emptyCardText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  addBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 10, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  addBtnText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
