@@ -189,6 +189,15 @@ const FUEL_TYPES: { value: "gas" | "diesel" | "hybrid" | "ev"; label: string }[]
   { value: "ev",      label: "Electric" },
 ];
 
+const FUEL_OPTIONS_BY_TYPE: Record<string, ("gas" | "diesel" | "hybrid" | "ev")[]> = {
+  car:        ["gas", "diesel", "hybrid", "ev"],
+  motorcycle: ["gas", "ev"],
+  rv:         ["gas", "diesel"],
+  other:      ["gas", "diesel", "hybrid", "ev"],
+};
+
+const AWD_TYPES = new Set(["car", "rv", "utv", "other"]);
+
 const HARDCODED_MODELS: Record<string, Record<string, string[]>> = {
   pwc: {
     "Sea-Doo": [
@@ -633,6 +642,19 @@ export default function AddVehicleScreen() {
     };
   }, [year, make, vehicleType]);
 
+  useEffect(() => {
+    if (!AWD_TYPES.has(vehicleType)) {
+      setIsAwd(false);
+    }
+    const allowedFuels = FUEL_OPTIONS_BY_TYPE[vehicleType];
+    if (allowedFuels && !allowedFuels.includes(fuelType)) {
+      setFuelType("gas");
+    }
+    if (!allowedFuels) {
+      setFuelType("gas");
+    }
+  }, [vehicleType]);
+
   async function handleVinLookup() {
     const cleanVin = vin.trim().toUpperCase();
     if (cleanVin.length !== 17) {
@@ -1034,39 +1056,45 @@ export default function AddVehicleScreen() {
           </FieldGroup>
 
           {/* ── Powertrain ───────────────────────────────────── */}
-          <FieldGroup label="Powertrain">
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Fuel Type</Text>
-              <View style={styles.segControl}>
-                {FUEL_TYPES.map(ft => {
-                  const isSelected = fuelType === ft.value;
-                  return (
-                    <Pressable
-                      key={ft.value}
-                      style={[styles.segOption, isSelected && styles.segOptionSelected]}
-                      onPress={() => { Haptics.selectionAsync(); setFuelType(ft.value); }}
-                    >
-                      <Text style={[styles.segOptionText, isSelected && styles.segOptionTextSelected]}>
-                        {ft.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-            <Pressable
-              style={styles.toggleRow}
-              onPress={() => { Haptics.selectionAsync(); setIsAwd(!isAwd); }}
-            >
-              <View>
-                <Text style={styles.toggleLabel}>AWD / 4WD</Text>
-                <Text style={styles.toggleSub}>All-wheel or four-wheel drive</Text>
-              </View>
-              <View style={[styles.toggle, isAwd && styles.toggleOn]}>
-                <View style={[styles.toggleThumb, isAwd && styles.toggleThumbOn]} />
-              </View>
-            </Pressable>
-          </FieldGroup>
+          {(FUEL_OPTIONS_BY_TYPE[vehicleType] || AWD_TYPES.has(vehicleType)) && (
+            <FieldGroup label="Powertrain">
+              {FUEL_OPTIONS_BY_TYPE[vehicleType] && (
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>Fuel Type</Text>
+                  <View style={styles.segControl}>
+                    {FUEL_TYPES.filter(ft => FUEL_OPTIONS_BY_TYPE[vehicleType].includes(ft.value)).map(ft => {
+                      const isSelected = fuelType === ft.value;
+                      return (
+                        <Pressable
+                          key={ft.value}
+                          style={[styles.segOption, isSelected && styles.segOptionSelected]}
+                          onPress={() => { Haptics.selectionAsync(); setFuelType(ft.value); }}
+                        >
+                          <Text style={[styles.segOptionText, isSelected && styles.segOptionTextSelected]}>
+                            {ft.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+              {AWD_TYPES.has(vehicleType) && (
+                <Pressable
+                  style={styles.toggleRow}
+                  onPress={() => { Haptics.selectionAsync(); setIsAwd(!isAwd); }}
+                >
+                  <View>
+                    <Text style={styles.toggleLabel}>AWD / 4WD</Text>
+                    <Text style={styles.toggleSub}>All-wheel or four-wheel drive</Text>
+                  </View>
+                  <View style={[styles.toggle, isAwd && styles.toggleOn]}>
+                    <View style={[styles.toggleThumb, isAwd && styles.toggleThumbOn]} />
+                  </View>
+                </Pressable>
+              )}
+            </FieldGroup>
+          )}
 
           {/* ── Mileage ───────────────────────────────────────── */}
           <FieldGroup label="Mileage">

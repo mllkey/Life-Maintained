@@ -1,0 +1,46 @@
+CONTEXT: LifeMaintained's add-vehicle form (app/add-vehicle.tsx) shows the same Powertrain section (Fuel Type picker + AWD toggle) for every vehicle type. This creates absurd UX: a motorcycle shows an AWD toggle, a boat shows a Hybrid fuel option. The form was built for cars and never adapted for other vehicle categories.
+IMPORTANT: Only modify app/add-vehicle.tsx. Do NOT modify any other files, the Edge Function, database, or existing save logic.
+
+TASK: Make the Powertrain section (Fuel Type + AWD) conditional based on the selected vehicle type.
+STEP 1 — Define which vehicle types get which options. Add these constants near the top of the file, after the existing FUEL_TYPES constant:
+Fuel type visibility per vehicle type:
+
+car: Gas, Diesel, Hybrid, Electric (all four)
+motorcycle: Gas, Electric (only two — no diesel or hybrid motorcycles)
+rv: Gas, Diesel (only two — no hybrid or EV RVs in mainstream market)
+other: Gas, Diesel, Hybrid, Electric (all four)
+boat, atv, utv, pwc, snowmobile: NO fuel type picker at all (virtually all are gas)
+
+AWD toggle visibility:
+
+car, rv, utv, other: show AWD toggle
+motorcycle, boat, atv, pwc, snowmobile: hide AWD toggle
+
+STEP 2 — Conditionally render the Powertrain FieldGroup:
+If the vehicle type has neither fuel options nor AWD, hide the entire Powertrain FieldGroup.
+If the vehicle type has fuel options, render the fuel type segmented control using ONLY the applicable options (e.g., motorcycle shows only Gas and Electric as two buttons, not four).
+If the vehicle type has AWD, render the AWD toggle. Otherwise hide it.
+STEP 3 — Reset values when vehicle type changes:
+Add a useEffect that watches vehicleType. When it changes:
+
+If the new vehicle type doesn't support AWD, reset isAwd to false
+If the new vehicle type doesn't include the currently selected fuelType in its options, reset fuelType to "gas"
+
+This prevents invisible bad state — for example, a user selects Electric for a car, then switches to boat. Without the reset, "ev" would be silently saved as the boat's fuel type.
+STEP 4 — Default fuel type for types without a picker:
+For vehicle types that don't show a fuel type picker (boat, atv, utv, pwc, snowmobile), the fuelType should default to "gas" and is_awd should default to false. The reset in Step 3 handles this automatically.
+DO NOT modify the save handler, Edge Function call, mileage fields, seasonal toggle, model picker, make picker, or any other part of the form. Only change the Powertrain FieldGroup rendering and add the reset useEffect.
+VERIFICATION:
+
+Select "Car / Truck / SUV" → Powertrain section shows all 4 fuel types + AWD toggle
+Select "Motorcycle" → Powertrain section shows only Gas and Electric buttons, NO AWD toggle
+Select "RV / Camper" → Powertrain shows Gas and Diesel only + AWD toggle
+Select "Boat" → NO Powertrain section at all
+Select "ATV" → NO Powertrain section
+Select "UTV / Side-by-Side" → AWD toggle only, no fuel type picker (or Gas only if you prefer)
+Select "Personal Watercraft" → NO Powertrain section
+Select "Snowmobile" → NO Powertrain section
+Start with Car, select Electric + AWD on, then switch to Motorcycle → fuel resets to Gas, AWD resets to off
+Start with Car, select Diesel, then switch to Boat → fuel resets to Gas
+Save a motorcycle → fuel_type saves as "gas" or "ev" (not "diesel" or "hybrid")
+Zero TypeScript errors
