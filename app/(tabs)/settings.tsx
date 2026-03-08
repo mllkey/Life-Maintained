@@ -55,20 +55,20 @@ type PredVehicle = {
 
 type PredTask = {
   id: string;
-  task: string;
-  interval: number | null;
-  mileage_interval: number | null;
+  name: string;
+  interval_months: number | null;
+  interval_miles: number | null;
   next_due_date: string | null;
-  last_service_mileage: number | null;
-  estimated_cost: number | null;
+  last_completed_miles: number | null;
+  priority: string | null;
 };
 
 function getDaysUntil(t: PredTask, v: PredVehicle | null): number | null {
   if (t.next_due_date) {
     return differenceInDays(parseISO(t.next_due_date), new Date());
   }
-  if (t.mileage_interval != null && v?.mileage != null && v.average_miles_per_month) {
-    const milesLeft = t.mileage_interval - (v.mileage - (t.last_service_mileage ?? 0));
+  if (t.interval_miles != null && v?.mileage != null && v.average_miles_per_month) {
+    const milesLeft = t.interval_miles - (v.mileage - (t.last_completed_miles ?? 0));
     return Math.round(milesLeft / (v.average_miles_per_month / 30.44));
   }
   return null;
@@ -83,12 +83,12 @@ function formatDaysUntil(days: number | null, nextDueDate: string | null): strin
 }
 
 function formatInterval(t: PredTask): string {
-  if (t.mileage_interval != null) {
-    return t.mileage_interval >= 1000
-      ? `${t.mileage_interval / 1000}k mi`
-      : `${t.mileage_interval} mi`;
+  if (t.interval_miles != null) {
+    return t.interval_miles >= 1000
+      ? `${t.interval_miles / 1000}k mi`
+      : `${t.interval_miles} mi`;
   }
-  if (t.interval != null) return `${t.interval}d`;
+  if (t.interval_months != null) return `${t.interval_months}mo`;
   return "-";
 }
 
@@ -177,8 +177,8 @@ export default function SettingsScreen() {
     queryFn: async () => {
       if (!selectedVehicleId) return [] as PredTask[];
       const { data } = await supabase
-        .from("vehicle_maintenance_tasks")
-        .select("id, task, interval, mileage_interval, next_due_date, last_service_mileage, estimated_cost")
+        .from("user_vehicle_maintenance_tasks")
+        .select("id, name, interval_months, interval_miles, next_due_date, last_completed_miles, priority")
         .eq("vehicle_id", selectedVehicleId)
         .order("next_due_date", { ascending: true, nullsFirst: false });
       return (data ?? []) as PredTask[];
@@ -593,17 +593,14 @@ export default function SettingsScreen() {
                       const color = rowColor(daysLeft);
                       const dateLabel = formatDaysUntil(daysLeft, pt.next_due_date);
                       const intervalLabel = formatInterval(pt);
-                      const costLabel = pt.estimated_cost != null ? `$${pt.estimated_cost}` : "-";
-
                       return (
                         <View key={pt.id} style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}>
                           <View style={{ flex: 2, flexDirection: "row", alignItems: "center", gap: 6 }}>
                             <View style={[styles.tableDot, { backgroundColor: color }]} />
-                            <Text style={styles.tableCellMain} numberOfLines={1}>{pt.task}</Text>
+                            <Text style={styles.tableCellMain} numberOfLines={1}>{pt.name}</Text>
                           </View>
                           <Text style={[styles.tableCell, styles.tableCellRight]}>{intervalLabel}</Text>
                           <Text style={[styles.tableCell, styles.tableCellRight, { color }]}>{dateLabel}</Text>
-                          <Text style={[styles.tableCell, styles.tableCellRight]}>{costLabel}</Text>
                         </View>
                       );
                     })}

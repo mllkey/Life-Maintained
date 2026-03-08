@@ -109,7 +109,7 @@ export default function VehicleDetailScreen() {
     queryKey: ["vehicle_tasks", id],
     queryFn: async () => {
       const { data } = await supabase
-        .from("vehicle_maintenance_tasks")
+        .from("user_vehicle_maintenance_tasks")
         .select("*")
         .eq("vehicle_id", id)
         .order("next_due_date", { ascending: true });
@@ -367,15 +367,15 @@ export default function VehicleDetailScreen() {
     const task = tasks?.find(t => t.id === taskId);
     if (!task) return;
     let nextDate: string | null = null;
-    if (task.interval) {
+    if (task.interval_months) {
       const next = new Date();
-      next.setDate(next.getDate() + task.interval);
+      next.setMonth(next.getMonth() + task.interval_months);
       nextDate = next.toISOString().split("T")[0];
     }
-    await supabase.from("vehicle_maintenance_tasks").update({
-      last_completed_at: new Date().toISOString(),
+    await supabase.from("user_vehicle_maintenance_tasks").update({
+      last_completed_date: new Date().toISOString().split("T")[0],
       next_due_date: nextDate,
-      last_service_mileage: vehicle?.mileage,
+      last_completed_miles: vehicle?.mileage ?? null,
       updated_at: new Date().toISOString(),
     }).eq("id", taskId);
     queryClient.invalidateQueries({ queryKey: ["vehicle_tasks", id] });
@@ -482,8 +482,6 @@ export default function VehicleDetailScreen() {
             try {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
               console.log('DELETE: calling supabase');
-              const r1 = await supabase.from("vehicle_maintenance_tasks").delete().eq("vehicle_id", id!);
-              console.log('DELETE: supabase returned', { data: r1.data, error: r1.error });
               const r2 = await supabase.from("user_vehicle_maintenance_tasks").delete().eq("vehicle_id", id!);
               console.log('DELETE: supabase returned', { data: r2.data, error: r2.error });
               const r3 = await supabase.from("maintenance_logs").delete().eq("vehicle_id", id!);
@@ -1083,7 +1081,7 @@ function TaskGroup({ title, color, tasks, onComplete, vehicle }: {
         return (
           <View key={task.id} style={styles.taskCard}>
             <View style={styles.taskCardLeft}>
-              <Text style={styles.taskName}>{task.task}</Text>
+              <Text style={styles.taskName}>{task.name}</Text>
               <View style={styles.taskMeta}>
                 {task.next_due_date && (
                   <Text style={[styles.taskDue, { color: statusColor }]}>

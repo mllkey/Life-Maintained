@@ -140,7 +140,7 @@ export default function DashboardScreen() {
       if (!user) return [];
       const items: DashboardItem[] = [];
       const [vehicleTasks, propertyTasks, healthAppts] = await Promise.all([
-        supabase.from("vehicle_maintenance_tasks").select("*, vehicles(make, model, nickname)").eq("vehicles.user_id", user.id),
+        supabase.from("user_vehicle_maintenance_tasks").select("*, vehicles(make, model, nickname)").eq("vehicles.user_id", user.id),
         supabase.from("property_maintenance_tasks").select("*, properties(address, nickname)").eq("properties.user_id", user.id),
         supabase.from("health_appointments").select("*").eq("user_id", user.id),
       ]);
@@ -149,7 +149,7 @@ export default function DashboardScreen() {
         if (!v) continue;
         const status = getStatus(t.next_due_date);
         if (status !== "good") {
-          items.push({ id: t.id, title: t.task, subtitle: v.nickname ?? `${v.make} ${v.model}`, dueDate: t.next_due_date, status, category: "vehicles", entityId: t.vehicle_id });
+          items.push({ id: t.id, title: t.name, subtitle: v.nickname ?? `${v.make} ${v.model}`, dueDate: t.next_due_date, status, category: "vehicles", entityId: t.vehicle_id });
         }
       }
       for (const t of propertyTasks.data ?? []) {

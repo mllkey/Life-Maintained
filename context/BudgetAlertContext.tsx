@@ -60,20 +60,7 @@ export function BudgetAlertProvider({ userId, children }: Props) {
         0
       );
 
-      let vehicleSum = 0;
-      if (vehicleIds.length > 0) {
-        const { data: vtasks } = await supabase
-          .from("vehicle_maintenance_tasks")
-          .select("estimated_cost")
-          .in("vehicle_id", vehicleIds)
-          .not("estimated_cost", "is", null)
-          .gte("next_due_date", monthStart)
-          .lte("next_due_date", monthEnd);
-        vehicleSum = (vtasks ?? []).reduce(
-          (s: number, t: any) => s + (t.estimated_cost ?? 0),
-          0
-        );
-      }
+      const vehicleSum = 0;
 
       const total = vehicleSum + propertySum;
       const threshold = prefsRes.data?.budget_threshold ?? null;

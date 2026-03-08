@@ -579,20 +579,6 @@ export default function AddVehicleScreen() {
         return;
       }
 
-      if (hasManufacturerSchedule && manufacturerTasks.length > 0) {
-        const taskRows = manufacturerTasks.map(t => ({
-          vehicle_id: inserted.id,
-          task: t.task,
-          interval: t.interval_days,
-          mileage_interval: t.mileage_interval,
-          estimated_cost: t.estimated_cost,
-          priority: t.priority,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }));
-        await supabase.from("vehicle_maintenance_tasks").insert(taskRows);
-      }
-
       try {
         const { error: scheduleError } = await supabase.functions.invoke(
           "generate-maintenance-schedule",

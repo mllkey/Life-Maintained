@@ -1,0 +1,74 @@
+CONTEXT: LifeMaintained has two vehicle maintenance task tables that were created at different times. The OLD table is "vehicle_maintenance_tasks" with columns like task, interval, mileage_interval, estimated_cost, last_completed_at, last_service_mileage. The NEW table is "user_vehicle_maintenance_tasks" with columns like name, interval_miles, interval_months, next_due_date, next_due_miles, last_completed_date, last_completed_miles, status, priority, category, source.
+The new table is the correct one — it's populated by the generate-maintenance-schedule Edge Function and has better data. The old table needs to be removed from the codebase entirely.
+IMPORTANT: Do NOT modify user_vehicle_maintenance_tasks queries that already exist (like in the Schedule tab of vehicle/[id].tsx). Only change files that still reference the OLD "vehicle_maintenance_tasks" table.
+
+TASK: Replace every reference to "vehicle_maintenance_tasks" with "user_vehicle_maintenance_tasks" across the entire codebase, updating column names to match the new schema. Also remove the old manufacturer_schedules task insert from add-vehicle.tsx.
+COLUMN MAPPING (old → new):
+
+task → name
+interval → interval_months (note: old was integer days, new is integer months — may need conversion)
+mileage_interval → interval_miles
+estimated_cost → (does not exist on new table, use null/0)
+last_completed_at → last_completed_date
+last_service_mileage → last_completed_miles
+next_due_date → next_due_date (same)
+vehicle_id → vehicle_id (same)
+
+FILES TO CHANGE:
+
+app/(tabs)/index.tsx (~line 143):
+Change: .from("vehicle_maintenance_tasks")
+To: .from("user_vehicle_maintenance_tasks")
+Also change: title: t.task → title: t.name
+The .select and .eq pattern should work the same since user_vehicle_maintenance_tasks also has a vehicle_id FK to vehicles.
+app/(tabs)/vehicles.tsx (~line 93):
+Change: .from("vehicle_maintenance_tasks")
+To: .from("user_vehicle_maintenance_tasks")
+Change: .select("vehicle_id, next_due_date, mileage_interval")
+To: .select("vehicle_id, next_due_date, interval_miles")
+Change: t.mileage_interval → t.interval_miles (around line 113)
+app/(tabs)/settings.tsx (~line 180):
+Change: .from("vehicle_maintenance_tasks")
+To: .from("user_vehicle_maintenance_tasks")
+Change: .select("id, task, interval, mileage_interval, next_due_date, last_service_mileage, estimated_cost")
+To: .select("id, name, interval_months, interval_miles, next_due_date, last_completed_miles, priority")
+Update the PredTask type (~line 56) to match new columns:
+
+task: string → name: string
+interval: number | null → interval_months: number | null
+mileage_interval: number | null → interval_miles: number | null
+last_service_mileage: number | null → last_completed_miles: number | null
+estimated_cost: number | null → (remove or keep as null)
+Update ALL references to the old field names in getDaysUntil, formatInterval, and the render code: t.task → t.name, t.mileage_interval → t.interval_miles, t.interval → t.interval_months, t.last_service_mileage → t.last_completed_miles, t.estimated_cost → null or remove cost column from display.
+
+
+app/vehicle/[id].tsx — the "tasks" query (~line 108-118):
+Change: .from("vehicle_maintenance_tasks")
+To: .from("user_vehicle_maintenance_tasks")
+This query feeds the Tasks tab. Update any column references in the Tasks tab rendering code: task → name, last_completed_at → last_completed_date, last_service_mileage → last_completed_miles.
+Also update the markComplete function (~line 375) that updates vehicle_maintenance_tasks to update user_vehicle_maintenance_tasks instead, with correct column names.
+app/add-vehicle.tsx (~lines 582-594):
+REMOVE the entire block that checks hasManufacturerSchedule and inserts into vehicle_maintenance_tasks. This is approximately:
+
+   if (hasManufacturerSchedule && manufacturerTasks.length > 0) {
+     const taskRows = manufacturerTasks.map(t => ({...}));
+     await supabase.from("vehicle_maintenance_tasks").insert(taskRows);
+   }
+DELETE this entire if-block. The Edge Function call below it handles task generation. Keep the Edge Function call untouched.
+
+lib/maintenanceMatcher.ts (~lines 161, 191):
+Change both: .from("vehicle_maintenance_tasks")
+To: .from("user_vehicle_maintenance_tasks")
+Update matchAndUpdateVehicleTask: matched.task → matched.name in the return value. Update the .update() payload: last_completed_at → last_completed_date, last_service_mileage → last_completed_miles.
+context/BudgetAlertContext.tsx (~line 66):
+Change: .from("vehicle_maintenance_tasks")
+To: .from("user_vehicle_maintenance_tasks")
+The new table does not have estimated_cost. Change the query to select "next_due_date" only and set vehicleSum to 0 (vehicle cost data not available). Alternatively, if you want to preserve budget alert functionality, you can remove the vehicle cost portion entirely and only use property costs for now.
+
+VERIFICATION:
+
+Search the entire codebase for "vehicle_maintenance_tasks" (without "user_" prefix) — should return ZERO results
+The app should compile with zero TypeScript errors
+The Dashboard should show overdue/due_soon vehicle tasks from user_vehicle_maintenance_tasks
+The Vehicles list should show correct task status indicators
+The vehicle detail Tasks tab should show data from user_vehicle_maintenance_tasks

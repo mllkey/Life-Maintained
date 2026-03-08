@@ -90,8 +90,8 @@ export default function VehiclesScreen() {
       if (!user || !vehicles?.length) return {};
       const ids = vehicles.map(v => v.id);
       const { data } = await supabase
-        .from("vehicle_maintenance_tasks")
-        .select("vehicle_id, next_due_date, mileage_interval")
+        .from("user_vehicle_maintenance_tasks")
+        .select("vehicle_id, next_due_date, interval_miles")
         .in("vehicle_id", ids);
 
       const map: Record<string, {
@@ -109,7 +109,7 @@ export default function VehiclesScreen() {
         if (s === "overdue" || (s === "due_soon" && map[t.vehicle_id].worstStatus === "good")) {
           map[t.vehicle_id].worstStatus = s;
         }
-        if (t.mileage_interval) map[t.vehicle_id].hasMileageInterval = true;
+        if (t.interval_miles) map[t.vehicle_id].hasMileageInterval = true;
       }
       return map;
     },

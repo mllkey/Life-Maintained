@@ -33,7 +33,7 @@ export function fuzzyMatchTask(serviceName: string, tasks: any[]): any | null {
   let bestScore = 0;
 
   for (const t of tasks) {
-    const taskNorm = normalize(t.task ?? "");
+    const taskNorm = normalize(t.name ?? t.task ?? "");
     let score = 0;
 
     const sWords = serviceNorm.split(" ").filter(w => w.length >= 3);
@@ -158,7 +158,7 @@ export async function matchAndUpdateVehicleTask(
 
   try {
     const [{ data: tasks }, { data: vehicle }] = await Promise.all([
-      supabase.from("vehicle_maintenance_tasks").select("*").eq("vehicle_id", vehicleId),
+      supabase.from("user_vehicle_maintenance_tasks").select("*").eq("vehicle_id", vehicleId),
       supabase.from("vehicles").select("average_miles_per_month").eq("id", vehicleId).single(),
     ]);
 
@@ -167,32 +167,35 @@ export async function matchAndUpdateVehicleTask(
     const matched = fuzzyMatchTask(serviceName, tasks);
     if (!matched) return null;
 
-    const asNeeded = isAsNeededInterval(matched.interval);
+    const intervalStr = matched.interval_months != null
+      ? `${matched.interval_months}_months`
+      : (matched.interval ?? null);
+    const mileageInterval = matched.interval_miles ?? matched.mileage_interval ?? null;
+    const asNeeded = isAsNeededInterval(intervalStr);
     const nextDue = asNeeded
       ? null
       : calculateNextDue(
-          matched.interval,
-          matched.mileage_interval,
+          intervalStr,
+          mileageInterval,
           serviceDate,
           serviceMileage,
           (vehicle as any)?.average_miles_per_month ?? null,
         );
 
     const updatePayload: Record<string, any> = {
-      last_completed_at: new Date(serviceDate + "T12:00:00").toISOString(),
-      last_service_mileage: serviceMileage,
-      is_completed: false,
+      last_completed_date: new Date(serviceDate + "T12:00:00").toISOString().split("T")[0],
+      last_completed_miles: serviceMileage,
       updated_at: new Date().toISOString(),
     };
     if (!asNeeded) {
       updatePayload.next_due_date = nextDue;
     }
 
-    await supabase.from("vehicle_maintenance_tasks")
+    await supabase.from("user_vehicle_maintenance_tasks")
       .update(updatePayload)
       .eq("id", matched.id);
 
-    return { taskId: matched.id, taskName: matched.task, nextDue };
+    return { taskId: matched.id, taskName: matched.name, nextDue };
   } catch {
     return null;
   }
