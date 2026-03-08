@@ -1,0 +1,131 @@
+CONTEXT: LifeMaintained generates maintenance schedules via the generate-maintenance-schedule Edge Function. The function receives vehicle_type which is actually the FUEL TYPE (gas/diesel/hybrid/ev) and is_awd (boolean). But it NEVER receives the VEHICLE CATEGORY (car/motorcycle/rv/boat/atv/utv/pwc/snowmobile). The maintenance_templates table has vehicle_type values of 'all', 'gas', 'diesel', 'ev', 'hybrid', 'awd_4wd' — all fuel-based, no category awareness.
+This means a MOTORCYCLE gets ALL templates marked 'all' + 'gas', including absurd items like Tire Rotation (motorcycles don't rotate tires — they have one front and one rear, different sizes), Cabin Air Filter (no cabin), Wiper Blade Replacement (no wipers), Serpentine Belt (most use chain drive), Transmission Fluid Automatic (most are manual), and PCV Valve. Same problem for boats, ATVs, PWCs, snowmobiles — they all get car-centric templates.
+This is a credibility-destroying bug. A motorcycle owner seeing "Tire Rotation" immediately loses trust in the entire app.
+
+TASK: Add vehicle category awareness to the maintenance schedule system. This requires changes to the Edge Function, the add-vehicle call, and the maintenance_templates table.
+STEP 1 — Update the Edge Function (supabase/functions/generate-maintenance-schedule/index.ts):
+Add a new optional parameter "vehicle_category" to the request body. Accept values: "car", "motorcycle", "rv", "boat", "atv", "utv", "pwc", "snowmobile", "other". Default to "car" if not provided.
+After fetching templates (step 6 in the function), add a FILTER step that removes inappropriate templates based on vehicle_category. Use an exclusion map — this is safer than an inclusion map because new templates default to applying everywhere unless explicitly excluded.
+Define these exclusions IN the Edge Function as a constant:
+const CATEGORY_EXCLUSIONS: Record<string, string[]> = {
+  motorcycle: [
+    "Tire Rotation",
+    "Cabin Air Filter",
+    "Wiper Blade Replacement",
+    "Serpentine Belt Replacement",
+    "Transmission Fluid (Automatic)",
+    "PCV Valve Replacement",
+    "Timing Belt Replacement",
+    "Multi-Point Inspection",
+    "Transmission Fluid (Hybrid/CVT)",
+  ],
+  boat: [
+    "Tire Rotation",
+    "Brake Pad Inspection",
+    "Brake Fluid Flush",
+    "Cabin Air Filter",
+    "Engine Air Filter",
+    "Wiper Blade Replacement",
+    "Serpentine Belt Replacement",
+    "Transmission Fluid (Automatic)",
+    "PCV Valve Replacement",
+    "Timing Belt Replacement",
+    "Multi-Point Inspection",
+    "Spark Plug Replacement",
+    "Transmission Fluid (Hybrid/CVT)",
+    "Transfer Case Fluid",
+    "Front Differential Fluid",
+    "Rear Differential Fluid",
+  ],
+  pwc: [
+    "Tire Rotation",
+    "Brake Pad Inspection",
+    "Brake Fluid Flush",
+    "Cabin Air Filter",
+    "Engine Air Filter",
+    "Wiper Blade Replacement",
+    "Serpentine Belt Replacement",
+    "Transmission Fluid (Automatic)",
+    "PCV Valve Replacement",
+    "Timing Belt Replacement",
+    "Multi-Point Inspection",
+    "Transmission Fluid (Hybrid/CVT)",
+    "Transfer Case Fluid",
+    "Front Differential Fluid",
+    "Rear Differential Fluid",
+  ],
+  snowmobile: [
+    "Tire Rotation",
+    "Brake Fluid Flush",
+    "Cabin Air Filter",
+    "Wiper Blade Replacement",
+    "Serpentine Belt Replacement",
+    "Transmission Fluid (Automatic)",
+    "PCV Valve Replacement",
+    "Timing Belt Replacement",
+    "Multi-Point Inspection",
+    "Transmission Fluid (Hybrid/CVT)",
+  ],
+  atv: [
+    "Tire Rotation",
+    "Cabin Air Filter",
+    "Wiper Blade Replacement",
+    "Serpentine Belt Replacement",
+    "Transmission Fluid (Automatic)",
+    "PCV Valve Replacement",
+    "Timing Belt Replacement",
+    "Multi-Point Inspection",
+    "Transmission Fluid (Hybrid/CVT)",
+  ],
+  utv: [
+    "Cabin Air Filter",
+    "Wiper Blade Replacement",
+    "Serpentine Belt Replacement",
+    "PCV Valve Replacement",
+    "Timing Belt Replacement",
+    "Transmission Fluid (Hybrid/CVT)",
+  ],
+  rv: [
+    // RVs are essentially large vehicles — most car templates apply
+    // Only exclude items that don't make sense
+  ],
+};
+After fetching templates, filter them:
+const excluded = CATEGORY_EXCLUSIONS[vehicleCategory] ?? [];
+const filteredTemplates = templates.filter(t => !excluded.includes(t.task));
+Then use filteredTemplates instead of templates for the rest of the function (override resolution, due date calculation, batch insert).
+STEP 2 — Update the add-vehicle call (app/add-vehicle.tsx):
+Find the supabase.functions.invoke("generate-maintenance-schedule") call. Add vehicle_category to the body:
+FROM:
+body: {
+  vehicle_id: inserted.id,
+  make: make.trim(),
+  year: yearNum,
+  current_mileage: mileage ? parseInt(mileage) : 0,
+  vehicle_type: fuelType,
+  is_awd: isAwd,
+}
+TO:
+body: {
+  vehicle_id: inserted.id,
+  make: make.trim(),
+  year: yearNum,
+  current_mileage: mileage ? parseInt(mileage) : 0,
+  vehicle_type: fuelType,
+  is_awd: isAwd,
+  vehicle_category: vehicleType,
+}
+Note: vehicleType is the existing state variable that holds "car", "motorcycle", "boat", etc. (from the VEHICLE_TYPES selector at the top of the form). fuelType is the fuel type (gas/diesel/hybrid/ev). These are two different things.
+STEP 3 — Update the "Generate Schedule" button on the vehicle detail screen:
+Find the empty state "Generate Schedule" button in app/vehicle/[id].tsx that calls the Edge Function manually. It also needs to pass vehicle_category. The vehicle's category is stored in the vehicles table as vehicle_type (confusingly named — it stores "car", "motorcycle", etc., not the fuel type). Pass vehicle.vehicle_type as vehicle_category in that call.
+STEP 4 — Redeploy the Edge Function:
+After making changes to the Edge Function file, remind me to deploy it:
+cd ~/lifemaintained-functions && supabase functions deploy generate-maintenance-schedule
+DO NOT modify the maintenance_templates table, the notification scheduler, or any other files. The exclusion logic lives entirely in the Edge Function.
+VERIFICATION:
+
+Delete the existing test motorcycle's maintenance tasks from Supabase (user_vehicle_maintenance_tasks WHERE vehicle_id = the motorcycle's id)
+Open the motorcycle in the app → Schedule tab → tap "Generate Schedule"
+The motorcycle should get: Engine Oil & Filter Change, Brake Pad Inspection, Engine Air Filter, Battery Check, Coolant Flush, Spark Plugs, Fuel Filter — but NOT Tire Rotation, Cabin Air Filter, Wiper Blades, Serpentine Belt, Automatic Transmission Fluid, PCV Valve, Timing Belt
+Add a new car → should get the full set of templates as before (no exclusions for cars)
+If you have a boat or ATV to test, verify those also get appropriate templates without car-specific items

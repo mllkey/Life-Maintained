@@ -213,8 +213,9 @@ export default function VehicleDetailScreen() {
           make: vehicle.make,
           year: parseInt(vehicle.year),
           current_mileage: vehicle.mileage ?? 0,
-          vehicle_type: "gas",
-          is_awd: false,
+          vehicle_type: vehicle.fuel_type ?? "gas",
+          is_awd: vehicle.is_awd ?? false,
+          vehicle_category: vehicle.vehicle_type ?? "car",
         },
       });
       if (error) {

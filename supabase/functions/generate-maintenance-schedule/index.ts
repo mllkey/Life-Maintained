@@ -58,7 +58,7 @@ serve(async (req: Request) => {
       return json({ error: "Invalid JSON body" }, 400);
     }
 
-    const { vehicle_id, make, year, current_mileage, vehicle_type, is_awd } = body;
+    const { vehicle_id, make, year, current_mileage, vehicle_type, is_awd, vehicle_category } = body;
 
     if (!vehicle_id || typeof vehicle_id !== "string") {
       return json({ error: "Missing or invalid required field: vehicle_id (string)" }, 400);
@@ -75,6 +75,89 @@ serve(async (req: Request) => {
 
     const resolvedVehicleType = typeof vehicle_type === "string" ? vehicle_type : "gas";
     const resolvedIsAwd = typeof is_awd === "boolean" ? is_awd : false;
+    const vehicleCategory = typeof vehicle_category === "string" ? vehicle_category : "car";
+
+    // ── Category exclusion map ─────────────────────────────────────────────
+    const CATEGORY_EXCLUSIONS: Record<string, string[]> = {
+      motorcycle: [
+        "Tire Rotation",
+        "Cabin Air Filter",
+        "Wiper Blade Replacement",
+        "Serpentine Belt Replacement",
+        "Transmission Fluid (Automatic)",
+        "PCV Valve Replacement",
+        "Timing Belt Replacement",
+        "Multi-Point Inspection",
+        "Transmission Fluid (Hybrid/CVT)",
+      ],
+      boat: [
+        "Tire Rotation",
+        "Brake Pad Inspection",
+        "Brake Fluid Flush",
+        "Cabin Air Filter",
+        "Engine Air Filter",
+        "Wiper Blade Replacement",
+        "Serpentine Belt Replacement",
+        "Transmission Fluid (Automatic)",
+        "PCV Valve Replacement",
+        "Timing Belt Replacement",
+        "Multi-Point Inspection",
+        "Spark Plug Replacement",
+        "Transmission Fluid (Hybrid/CVT)",
+        "Transfer Case Fluid",
+        "Front Differential Fluid",
+        "Rear Differential Fluid",
+      ],
+      pwc: [
+        "Tire Rotation",
+        "Brake Pad Inspection",
+        "Brake Fluid Flush",
+        "Cabin Air Filter",
+        "Engine Air Filter",
+        "Wiper Blade Replacement",
+        "Serpentine Belt Replacement",
+        "Transmission Fluid (Automatic)",
+        "PCV Valve Replacement",
+        "Timing Belt Replacement",
+        "Multi-Point Inspection",
+        "Transmission Fluid (Hybrid/CVT)",
+        "Transfer Case Fluid",
+        "Front Differential Fluid",
+        "Rear Differential Fluid",
+      ],
+      snowmobile: [
+        "Tire Rotation",
+        "Brake Fluid Flush",
+        "Cabin Air Filter",
+        "Wiper Blade Replacement",
+        "Serpentine Belt Replacement",
+        "Transmission Fluid (Automatic)",
+        "PCV Valve Replacement",
+        "Timing Belt Replacement",
+        "Multi-Point Inspection",
+        "Transmission Fluid (Hybrid/CVT)",
+      ],
+      atv: [
+        "Tire Rotation",
+        "Cabin Air Filter",
+        "Wiper Blade Replacement",
+        "Serpentine Belt Replacement",
+        "Transmission Fluid (Automatic)",
+        "PCV Valve Replacement",
+        "Timing Belt Replacement",
+        "Multi-Point Inspection",
+        "Transmission Fluid (Hybrid/CVT)",
+      ],
+      utv: [
+        "Cabin Air Filter",
+        "Wiper Blade Replacement",
+        "Serpentine Belt Replacement",
+        "PCV Valve Replacement",
+        "Timing Belt Replacement",
+        "Transmission Fluid (Hybrid/CVT)",
+      ],
+      rv: [],
+    };
 
     // ── 2. Authenticate user from JWT ──────────────────────────────────────
     const authHeader = req.headers.get("Authorization");
@@ -151,8 +234,14 @@ serve(async (req: Request) => {
       return json({ success: true, tasks_created: 0, vehicle_id }, 200);
     }
 
+    // ── 6b. Filter templates by vehicle category ───────────────────────────
+    const excluded = CATEGORY_EXCLUSIONS[vehicleCategory] ?? [];
+    const filteredTemplates = excluded.length > 0
+      ? templates.filter((t: Record<string, unknown>) => !excluded.includes(t.task as string))
+      : templates;
+
     // ── 7. Fetch all relevant overrides for this make in one query ─────────
-    const templateIds = templates.map((t: Record<string, unknown>) => t.id as string);
+    const templateIds = filteredTemplates.map((t: Record<string, unknown>) => t.id as string);
 
     const { data: overrides, error: overridesError } = await adminClient
       .from("make_template_overrides")
@@ -179,7 +268,7 @@ serve(async (req: Request) => {
     const today = new Date();
     const tasksToInsert: Record<string, unknown>[] = [];
 
-    for (const template of templates) {
+    for (const template of filteredTemplates) {
       const t = template as Record<string, unknown>;
       const templateId = t.id as string;
       const override = overrideMap.get(templateId) ?? null;
