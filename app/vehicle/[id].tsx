@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -731,7 +731,7 @@ export default function VehicleDetailScreen() {
               )}
             </View>
           ) : activeTab === "wallet" ? (
-            <WalletTab vehicleId={id!} userId={user!.id} showToast={showToast} />
+            <WalletTab vehicleId={id!} userId={user!.id} />
           ) : (
             <View style={styles.historyContainer}>
               {groupedHistory.length === 0 ? (
@@ -1228,7 +1228,18 @@ function MarkCompleteSheet({
 
 // ─── Wallet Tab ───────────────────────────────────────────────────────────────
 
+const US_STATES = [
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
+  "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+  "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+  "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC",
+];
+
+const COVERAGE_TYPES = ["Liability Only", "Full Coverage", "Comprehensive"];
+
 type WalletDoc = { id: string; document_type: string; data: Record<string, any> };
+type DocType = "registration" | "insurance" | "id_card";
 
 function maskValue(value: string | null | undefined): string {
   if (!value) return "—";
@@ -1330,11 +1341,496 @@ function WalletCard({
   );
 }
 
-function WalletTab({
-  vehicleId, userId, showToast,
+function StatePickerModal({
+  visible, selected, onSelect, onClose,
 }: {
-  vehicleId: string; userId: string; showToast: (msg: string) => void;
+  visible: boolean; selected: string; onSelect: (s: string) => void; onClose: () => void;
 }) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={walletStyles.pickerOverlay}>
+        <Pressable style={walletStyles.pickerBackdrop} onPress={onClose} />
+        <View style={walletStyles.pickerContainer}>
+          <View style={walletStyles.pickerHeader}>
+            <Text style={walletStyles.pickerTitle}>Select State</Text>
+            <Pressable onPress={onClose} hitSlop={8}>
+              <Ionicons name="close" size={22} color={Colors.text} />
+            </Pressable>
+          </View>
+          <ScrollView style={walletStyles.pickerScroll} showsVerticalScrollIndicator={false}>
+            {US_STATES.map(s => (
+              <Pressable
+                key={s}
+                style={({ pressed }) => [
+                  walletStyles.pickerOption,
+                  selected === s && walletStyles.pickerOptionSelected,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+                onPress={() => { Haptics.selectionAsync(); onSelect(s); onClose(); }}
+              >
+                <Text style={[walletStyles.pickerOptionText, selected === s && walletStyles.pickerOptionTextSelected]}>
+                  {s}
+                </Text>
+                {selected === s && <Ionicons name="checkmark" size={16} color={Colors.accent} />}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function WalletFormSheet({
+  visible, docType, existingDoc, vehicleId, userId, onClose, onSaved, insets,
+}: {
+  visible: boolean;
+  docType: DocType | null;
+  existingDoc: WalletDoc | null;
+  vehicleId: string;
+  userId: string;
+  onClose: () => void;
+  onSaved: () => void;
+  insets: { bottom: number };
+}) {
+  const queryClient = useQueryClient();
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showStatePicker, setShowStatePicker] = useState(false);
+
+  const [regState, setRegState] = useState("");
+  const [regPlate, setRegPlate] = useState("");
+  const [regNumber, setRegNumber] = useState("");
+  const [regExpiry, setRegExpiry] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [regOwner, setRegOwner] = useState("");
+
+  const [insProvider, setInsProvider] = useState("");
+  const [insPolicyNum, setInsPolicyNum] = useState("");
+  const [insGroupNum, setInsGroupNum] = useState("");
+  const [insCoverage, setInsCoverage] = useState("Full Coverage");
+  const [insExpiry, setInsExpiry] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [insAgent, setInsAgent] = useState("");
+  const [insAgentPhone, setInsAgentPhone] = useState("");
+  const [insClaimsPhone, setInsClaimsPhone] = useState("");
+
+  const [idcName, setIdcName] = useState("");
+  const [idcLicenseNum, setIdcLicenseNum] = useState("");
+  const [idcState, setIdcState] = useState("");
+  const [idcClass, setIdcClass] = useState("");
+  const [idcExpiry, setIdcExpiry] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [idcDob, setIdcDob] = useState("1990-01-15");
+
+  useEffect(() => {
+    if (!visible || !docType) return;
+    const d = existingDoc?.data ?? {};
+    if (docType === "registration") {
+      setRegState(d.state ?? "");
+      setRegPlate(d.plate_number ?? "");
+      setRegNumber(d.registration_number ?? "");
+      setRegExpiry(d.expiration_date ?? format(new Date(), "yyyy-MM-dd"));
+      setRegOwner(d.registered_owner ?? "");
+    } else if (docType === "insurance") {
+      setInsProvider(d.provider ?? "");
+      setInsPolicyNum(d.policy_number ?? "");
+      setInsGroupNum(d.group_number ?? "");
+      setInsCoverage(d.coverage_type ?? "Full Coverage");
+      setInsExpiry(d.expiration_date ?? format(new Date(), "yyyy-MM-dd"));
+      setInsAgent(d.agent_name ?? "");
+      setInsAgentPhone(d.agent_phone ?? "");
+      setInsClaimsPhone(d.claims_phone ?? "");
+    } else if (docType === "id_card") {
+      setIdcName(d.full_name ?? "");
+      setIdcLicenseNum(d.license_number ?? "");
+      setIdcState(d.state ?? "");
+      setIdcClass(d.class ?? "");
+      setIdcExpiry(d.expiration_date ?? format(new Date(), "yyyy-MM-dd"));
+      setIdcDob(d.date_of_birth ?? "1990-01-15");
+    }
+  }, [visible, docType, existingDoc]);
+
+  function buildData(): Record<string, any> {
+    if (docType === "registration") {
+      return {
+        state: regState, plate_number: regPlate,
+        registration_number: regNumber, expiration_date: regExpiry,
+        registered_owner: regOwner,
+      };
+    } else if (docType === "insurance") {
+      return {
+        provider: insProvider, policy_number: insPolicyNum,
+        group_number: insGroupNum || null, coverage_type: insCoverage,
+        expiration_date: insExpiry, agent_name: insAgent,
+        agent_phone: insAgentPhone || null, claims_phone: insClaimsPhone || null,
+      };
+    } else {
+      return {
+        full_name: idcName, license_number: idcLicenseNum,
+        state: idcState, class: idcClass,
+        expiration_date: idcExpiry, date_of_birth: idcDob,
+      };
+    }
+  }
+
+  function adjustDate(current: string, days: number): string {
+    return format(addDays(parseISO(current), days), "yyyy-MM-dd");
+  }
+
+  async function handleSave() {
+    if (isSaving || !docType) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("vehicle_wallet_documents")
+        .upsert(
+          {
+            vehicle_id: vehicleId,
+            user_id: userId,
+            document_type: docType,
+            data: buildData(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "vehicle_id,document_type" },
+        );
+      if (error) throw error;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      queryClient.invalidateQueries({ queryKey: ["wallet_docs", vehicleId] });
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      setIsSaving(false);
+      Alert.alert("Save Failed", e?.message ?? "Could not save. Please try again.");
+    }
+  }
+
+  function handleDelete() {
+    if (!existingDoc || isDeleting) return;
+    Alert.alert(
+      "Delete Document",
+      "This will permanently remove this document from your wallet.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              await supabase.from("vehicle_wallet_documents").delete().eq("id", existingDoc.id);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              queryClient.invalidateQueries({ queryKey: ["wallet_docs", vehicleId] });
+              onSaved();
+              onClose();
+            } catch {
+              setIsDeleting(false);
+              Alert.alert("Error", "Could not delete document.");
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  const isEditing = !!existingDoc;
+  const titleMap: Record<DocType, string> = {
+    registration: "Registration",
+    insurance: "Insurance",
+    id_card: "Driver's License",
+  };
+
+  if (!docType) return null;
+
+  const stateValue = docType === "registration" ? regState : idcState;
+  const setStateValue = docType === "registration" ? setRegState : setIdcState;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={styles.sheetOverlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={onClose} />
+        <View style={[walletStyles.formSheet, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>{isEditing ? "Edit" : "Add"} {titleMap[docType]}</Text>
+
+          <ScrollView
+            style={walletStyles.formScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.sheetFields}>
+
+              {docType === "registration" && (
+                <>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>State</Text>
+                    <Pressable
+                      style={[styles.sheetInput, walletStyles.pickerTrigger]}
+                      onPress={() => setShowStatePicker(true)}
+                    >
+                      <Text style={regState ? walletStyles.pickerTriggerText : walletStyles.pickerTriggerPlaceholder}>
+                        {regState || "Select state"}
+                      </Text>
+                      <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
+                    </Pressable>
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Plate Number</Text>
+                    <TextInput
+                      style={styles.sheetInput} value={regPlate} onChangeText={setRegPlate}
+                      placeholder="e.g. ABC1234" placeholderTextColor={Colors.textTertiary}
+                      autoCapitalize="characters" returnKeyType="next"
+                    />
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Registration #</Text>
+                    <TextInput
+                      style={styles.sheetInput} value={regNumber} onChangeText={setRegNumber}
+                      placeholder="e.g. REG123456" placeholderTextColor={Colors.textTertiary}
+                      secureTextEntry returnKeyType="next"
+                    />
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Expiration Date</Text>
+                    <View style={styles.dateStepper}>
+                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setRegExpiry(adjustDate(regExpiry, -1))}>
+                        <Ionicons name="chevron-back" size={18} color={Colors.text} />
+                      </Pressable>
+                      <Text style={styles.dateStepValue}>{format(parseISO(regExpiry), "MMM d, yyyy")}</Text>
+                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setRegExpiry(adjustDate(regExpiry, 1))}>
+                        <Ionicons name="chevron-forward" size={18} color={Colors.text} />
+                      </Pressable>
+                    </View>
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Registered Owner</Text>
+                    <TextInput
+                      style={styles.sheetInput} value={regOwner} onChangeText={setRegOwner}
+                      placeholder="e.g. John Doe" placeholderTextColor={Colors.textTertiary}
+                      autoCapitalize="words" returnKeyType="done"
+                    />
+                  </View>
+                </>
+              )}
+
+              {docType === "insurance" && (
+                <>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Provider</Text>
+                    <TextInput
+                      style={styles.sheetInput} value={insProvider} onChangeText={setInsProvider}
+                      placeholder="e.g. State Farm" placeholderTextColor={Colors.textTertiary}
+                      autoCapitalize="words" returnKeyType="next"
+                    />
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Policy Number</Text>
+                    <TextInput
+                      style={styles.sheetInput} value={insPolicyNum} onChangeText={setInsPolicyNum}
+                      placeholder="e.g. POL-987654" placeholderTextColor={Colors.textTertiary}
+                      secureTextEntry returnKeyType="next"
+                    />
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>
+                      Group Number{" "}
+                      <Text style={styles.sheetFieldOptional}>(optional)</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.sheetInput} value={insGroupNum} onChangeText={setInsGroupNum}
+                      placeholder="e.g. GRP-001" placeholderTextColor={Colors.textTertiary}
+                      secureTextEntry returnKeyType="next"
+                    />
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Coverage Type</Text>
+                    <View style={walletStyles.segControl}>
+                      {COVERAGE_TYPES.map(ct => {
+                        const isSelected = insCoverage === ct;
+                        return (
+                          <Pressable
+                            key={ct}
+                            style={[walletStyles.segOption, isSelected && walletStyles.segOptionSelected]}
+                            onPress={() => { Haptics.selectionAsync(); setInsCoverage(ct); }}
+                          >
+                            <Text
+                              style={[walletStyles.segOptionText, isSelected && walletStyles.segOptionTextSelected]}
+                              numberOfLines={2}
+                            >
+                              {ct}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Expiration Date</Text>
+                    <View style={styles.dateStepper}>
+                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setInsExpiry(adjustDate(insExpiry, -1))}>
+                        <Ionicons name="chevron-back" size={18} color={Colors.text} />
+                      </Pressable>
+                      <Text style={styles.dateStepValue}>{format(parseISO(insExpiry), "MMM d, yyyy")}</Text>
+                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setInsExpiry(adjustDate(insExpiry, 1))}>
+                        <Ionicons name="chevron-forward" size={18} color={Colors.text} />
+                      </Pressable>
+                    </View>
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>
+                      Agent Name{" "}
+                      <Text style={styles.sheetFieldOptional}>(optional)</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.sheetInput} value={insAgent} onChangeText={setInsAgent}
+                      placeholder="e.g. Jane Smith" placeholderTextColor={Colors.textTertiary}
+                      autoCapitalize="words" returnKeyType="next"
+                    />
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>
+                      Agent Phone{" "}
+                      <Text style={styles.sheetFieldOptional}>(optional)</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.sheetInput} value={insAgentPhone} onChangeText={setInsAgentPhone}
+                      placeholder="e.g. 847-555-1234" placeholderTextColor={Colors.textTertiary}
+                      keyboardType="phone-pad" returnKeyType="next"
+                    />
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>
+                      Claims Phone{" "}
+                      <Text style={styles.sheetFieldOptional}>(optional)</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.sheetInput} value={insClaimsPhone} onChangeText={setInsClaimsPhone}
+                      placeholder="e.g. 800-555-0000" placeholderTextColor={Colors.textTertiary}
+                      keyboardType="phone-pad" returnKeyType="done"
+                    />
+                  </View>
+                </>
+              )}
+
+              {docType === "id_card" && (
+                <>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Full Name</Text>
+                    <TextInput
+                      style={styles.sheetInput} value={idcName} onChangeText={setIdcName}
+                      placeholder="e.g. John Doe" placeholderTextColor={Colors.textTertiary}
+                      autoCapitalize="words" returnKeyType="next"
+                    />
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>License Number</Text>
+                    <TextInput
+                      style={styles.sheetInput} value={idcLicenseNum} onChangeText={setIdcLicenseNum}
+                      placeholder="e.g. D123-4567-8901" placeholderTextColor={Colors.textTertiary}
+                      secureTextEntry autoCapitalize="characters" returnKeyType="next"
+                    />
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>State</Text>
+                    <Pressable
+                      style={[styles.sheetInput, walletStyles.pickerTrigger]}
+                      onPress={() => setShowStatePicker(true)}
+                    >
+                      <Text style={idcState ? walletStyles.pickerTriggerText : walletStyles.pickerTriggerPlaceholder}>
+                        {idcState || "Select state"}
+                      </Text>
+                      <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
+                    </Pressable>
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Class</Text>
+                    <TextInput
+                      style={styles.sheetInput} value={idcClass} onChangeText={setIdcClass}
+                      placeholder="e.g. D" placeholderTextColor={Colors.textTertiary}
+                      autoCapitalize="characters" returnKeyType="next"
+                    />
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Expiration Date</Text>
+                    <View style={styles.dateStepper}>
+                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setIdcExpiry(adjustDate(idcExpiry, -1))}>
+                        <Ionicons name="chevron-back" size={18} color={Colors.text} />
+                      </Pressable>
+                      <Text style={styles.dateStepValue}>{format(parseISO(idcExpiry), "MMM d, yyyy")}</Text>
+                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setIdcExpiry(adjustDate(idcExpiry, 1))}>
+                        <Ionicons name="chevron-forward" size={18} color={Colors.text} />
+                      </Pressable>
+                    </View>
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetFieldLabel}>Date of Birth</Text>
+                    <View style={styles.dateStepper}>
+                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setIdcDob(adjustDate(idcDob, -1))}>
+                        <Ionicons name="chevron-back" size={18} color={Colors.text} />
+                      </Pressable>
+                      <Text style={styles.dateStepValue}>{format(parseISO(idcDob), "MMM d, yyyy")}</Text>
+                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setIdcDob(adjustDate(idcDob, 1))}>
+                        <Ionicons name="chevron-forward" size={18} color={Colors.text} />
+                      </Pressable>
+                    </View>
+                  </View>
+                </>
+              )}
+
+            </View>
+
+            {isEditing && (
+              <Pressable
+                style={({ pressed }) => [walletStyles.deleteBtn, { opacity: pressed || isDeleting ? 0.7 : 1 }]}
+                onPress={handleDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting
+                  ? <ActivityIndicator size="small" color={Colors.overdue} />
+                  : <Text style={walletStyles.deleteBtnText}>Delete Document</Text>
+                }
+              </Pressable>
+            )}
+          </ScrollView>
+
+          <View style={styles.sheetActions}>
+            <Pressable
+              style={({ pressed }) => [styles.sheetCancelBtn, { opacity: pressed ? 0.8 : 1 }]}
+              onPress={onClose}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.sheetSaveBtn, { opacity: pressed || isSaving ? 0.8 : 1 }]}
+              onPress={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving
+                ? <ActivityIndicator size="small" color={Colors.textInverse} />
+                : <Text style={styles.sheetSaveText}>Save</Text>
+              }
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+
+      <StatePickerModal
+        visible={showStatePicker}
+        selected={stateValue}
+        onSelect={setStateValue}
+        onClose={() => setShowStatePicker(false)}
+      />
+    </Modal>
+  );
+}
+
+function WalletTab({
+  vehicleId, userId,
+}: {
+  vehicleId: string; userId: string;
+}) {
+  const insets = useSafeAreaInsets();
+
   const { data: docs, isLoading } = useQuery<WalletDoc[]>({
     queryKey: ["wallet_docs", vehicleId],
     queryFn: async () => {
@@ -1349,9 +1845,28 @@ function WalletTab({
   });
 
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [sheetDocType, setSheetDocType] = useState<DocType | null>(null);
+  const [editingDoc, setEditingDoc] = useState<WalletDoc | null>(null);
+
   function toggle(key: string) {
     Haptics.selectionAsync();
     setRevealed(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function openAdd(dt: DocType) {
+    setEditingDoc(null);
+    setSheetDocType(dt);
+  }
+
+  function openEdit(dt: DocType) {
+    const doc = docs?.find(d => d.document_type === dt) ?? null;
+    setEditingDoc(doc);
+    setSheetDocType(dt);
+  }
+
+  function closeSheet() {
+    setSheetDocType(null);
+    setEditingDoc(null);
   }
 
   const reg = docs?.find(d => d.document_type === "registration")?.data ?? null;
@@ -1373,7 +1888,7 @@ function WalletTab({
         title="Registration"
         icon="document-text-outline"
         accentColor={Colors.blue}
-        onEdit={() => showToast("Coming soon")}
+        onEdit={() => openEdit("registration")}
       >
         {reg ? (
           <>
@@ -1389,7 +1904,7 @@ function WalletTab({
         ) : (
           <View style={walletStyles.emptyCard}>
             <Text style={walletStyles.emptyCardText}>No registration saved</Text>
-            <Pressable style={walletStyles.addBtn} onPress={() => showToast("Coming soon")}>
+            <Pressable style={walletStyles.addBtn} onPress={() => openAdd("registration")}>
               <Ionicons name="add" size={14} color={Colors.blue} />
               <Text style={[walletStyles.addBtnText, { color: Colors.blue }]}>Add Registration</Text>
             </Pressable>
@@ -1402,7 +1917,7 @@ function WalletTab({
         title="Insurance"
         icon="shield-checkmark-outline"
         accentColor={Colors.good}
-        onEdit={() => showToast("Coming soon")}
+        onEdit={() => openEdit("insurance")}
       >
         {ins ? (
           <>
@@ -1423,7 +1938,7 @@ function WalletTab({
         ) : (
           <View style={walletStyles.emptyCard}>
             <Text style={walletStyles.emptyCardText}>No insurance saved</Text>
-            <Pressable style={walletStyles.addBtn} onPress={() => showToast("Coming soon")}>
+            <Pressable style={walletStyles.addBtn} onPress={() => openAdd("insurance")}>
               <Ionicons name="add" size={14} color={Colors.good} />
               <Text style={[walletStyles.addBtnText, { color: Colors.good }]}>Add Insurance</Text>
             </Pressable>
@@ -1436,7 +1951,7 @@ function WalletTab({
         title="Driver's License"
         icon="card-outline"
         accentColor={Colors.vehicle}
-        onEdit={() => showToast("Coming soon")}
+        onEdit={() => openEdit("id_card")}
       >
         {idc ? (
           <>
@@ -1453,13 +1968,24 @@ function WalletTab({
         ) : (
           <View style={walletStyles.emptyCard}>
             <Text style={walletStyles.emptyCardText}>No ID saved</Text>
-            <Pressable style={walletStyles.addBtn} onPress={() => showToast("Coming soon")}>
+            <Pressable style={walletStyles.addBtn} onPress={() => openAdd("id_card")}>
               <Ionicons name="add" size={14} color={Colors.vehicle} />
               <Text style={[walletStyles.addBtnText, { color: Colors.vehicle }]}>Add Driver's License</Text>
             </Pressable>
           </View>
         )}
       </WalletCard>
+
+      <WalletFormSheet
+        visible={!!sheetDocType}
+        docType={sheetDocType}
+        existingDoc={editingDoc}
+        vehicleId={vehicleId}
+        userId={userId}
+        onClose={closeSheet}
+        onSaved={closeSheet}
+        insets={insets}
+      />
     </View>
   );
 }
@@ -1524,8 +2050,63 @@ const walletStyles = StyleSheet.create({
     backgroundColor: Colors.surface,
   },
   addBtnText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  formSheet: {
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: 12, paddingHorizontal: 20,
+    maxHeight: "90%",
+  },
+  formScroll: { marginTop: 4 },
+  deleteBtn: {
+    marginTop: 8, marginBottom: 16,
+    paddingVertical: 14, alignItems: "center",
+    borderRadius: 12, borderWidth: 1,
+    borderColor: Colors.overdueMuted,
+  },
+  deleteBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.overdue },
+  pickerOverlay: { flex: 1, justifyContent: "flex-end" },
+  pickerBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.5)" },
+  pickerContainer: {
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: 12, maxHeight: "60%",
+  },
+  pickerHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 20, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  pickerTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  pickerScroll: { paddingBottom: 32 },
+  pickerOption: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 20, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
+  },
+  pickerOptionSelected: { backgroundColor: Colors.accent + "12" },
+  pickerOptionText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.text },
+  pickerOptionTextSelected: { fontFamily: "Inter_600SemiBold", color: Colors.accent },
+  pickerTrigger: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+  },
+  pickerTriggerText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.text },
+  pickerTriggerPlaceholder: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  segControl: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  segOption: {
+    flex: 1, paddingVertical: 8, paddingHorizontal: 6,
+    borderRadius: 10, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.surface, alignItems: "center",
+  },
+  segOptionSelected: {
+    backgroundColor: Colors.accent + "22",
+    borderColor: Colors.accent,
+  },
+  segOptionText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary, textAlign: "center" },
+  segOptionTextSelected: { color: Colors.accent, fontFamily: "Inter_600SemiBold" },
 });
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {

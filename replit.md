@@ -124,6 +124,24 @@ The tab layout uses `isLiquidGlassAvailable()` from `expo-glass-effect` to check
 - Notification preferences stored in AsyncStorage under key `notification_prefs`
 - Health screening opt-ins stored in AsyncStorage under key `screening_notif_optins`
 
+## Wallet Tab (vehicle/[id].tsx)
+
+Three wallet cards per vehicle: Registration (blue), Insurance (green), Driver's License (amber).
+
+**Add/Edit forms** — `WalletFormSheet` bottom sheet modal:
+- Registration: State (picker), Plate, Reg # (secure), Expiration (stepper), Owner
+- Insurance: Provider, Policy # (secure), Group # (optional/secure), Coverage Type (segmented: Liability/Full/Comprehensive), Expiration (stepper), Agent, Agent Phone, Claims Phone
+- Driver's License: Name, License # (secure), State (picker), Class, Expiration (stepper), DOB (stepper/secure)
+- Save: upsert to `vehicle_wallet_documents` with `onConflict: "vehicle_id,document_type"`
+- Edit mode shows red "Delete Document" button → confirmation Alert → delete row
+- State picker via `StatePickerModal` — separate full-height modal with scrollable US state list
+
+**Copy-from-vehicle flow** (add-vehicle.tsx):
+- `useQuery` pre-fetches other vehicles with insurance/registration docs while user fills the form
+- If candidates exist when Save is tapped: saves vehicle synchronously, then shows `CopyFromVehicleModal`
+- Modal lists candidate vehicles; tapping one copies insurance + registration docs (never id_card) to new vehicle
+- "Skip" or backdrop tap dismisses and navigates back; no-candidates case preserves instant-nav behavior
+
 ## Subscription Enforcement
 
 Tier limits enforced across the entire app via `lib/subscription.ts` helpers:

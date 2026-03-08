@@ -1,0 +1,35 @@
+LifeMaintained now has a Wallet tab on the vehicle detail screen showing registration, insurance, and ID card display cards. The vehicle_wallet_documents table exists in Supabase. The display cards have placeholder "Add" and "Edit" buttons. This prompt wires up the actual add/edit forms and the copy-from-vehicle flow when adding a new vehicle.
+
+TASK: Build the add/edit document forms and the copy-documents-from-another-vehicle flow.
+STEP 1 — ADD/EDIT FORMS: Replace the placeholder "Add" buttons and "Edit" pencil icons with working interactions. Tapping "Add" or "Edit" on any card opens a bottom sheet modal with a form for that document type.
+Registration form fields: State (picker from US states list), Plate Number (text), Registration Number (text, secureTextEntry), Expiration Date (date picker), Registered Owner (text)
+Insurance form fields: Provider (text), Policy Number (text, secureTextEntry), Group Number (text, optional), Coverage Type (segmented control: Liability Only / Full Coverage / Comprehensive), Expiration Date (date picker), Agent Name (text), Agent Phone (phone keyboard), Claims Phone (phone keyboard)
+ID Card form fields: Full Name (text), License Number (text, secureTextEntry), State (picker), Class (text), Expiration Date (date picker), Date of Birth (date picker)
+On save: upsert into vehicle_wallet_documents with vehicle_id, user_id, document_type, and data as JSONB. Use the unique constraint on (vehicle_id, document_type) for upsert conflict resolution. Show success toast. Close sheet. Refresh the wallet data.
+On edit: pre-fill all form fields from the existing document's data JSONB.
+DELETE: Add a "Delete" option (red text at the bottom of the edit form). Tapping it shows a confirmation alert, then deletes the row from vehicle_wallet_documents.
+STEP 2 — COPY FROM ANOTHER VEHICLE: In the add-vehicle screen (app/add-vehicle.tsx), AFTER the vehicle is successfully saved and the Edge Function has been called, check if the user has other vehicles with wallet documents.
+Query: SELECT DISTINCT v.id, v.year, v.make, v.model, v.nickname FROM vehicles v JOIN vehicle_wallet_documents d ON d.vehicle_id = v.id WHERE v.user_id = current_user_id AND v.id != new_vehicle_id AND d.document_type IN ('insurance', 'registration')
+If results exist, show a modal/alert:
+
+Title: "Copy documents from another vehicle?"
+Subtitle: "Import your insurance and registration info"
+List the user's other vehicles that have documents
+User taps a vehicle → copy that vehicle's insurance AND registration documents to the new vehicle (insert new rows with new vehicle_id, same user_id, same data JSONB)
+Do NOT copy id_card (it's personal, not vehicle-specific)
+"Skip" button to dismiss
+This flow is optional and non-blocking — if it fails, the vehicle is still saved. Log errors to console only.
+
+STEP 3 — FORM STYLING: Match existing bottom sheet patterns in the app (same as Mark Complete sheet). Form fields should match existing input styles. Date pickers should match existing date picker patterns. The US states picker should be a scrollable list or modal picker.
+DO NOT modify the Wallet tab display cards, Schedule tab, History tab, or any existing functionality except to replace the placeholder buttons with working handlers.
+VERIFICATION:
+
+Tap "Add Registration" → form opens → fill fields → save → card displays data
+Tap Edit pencil on registration → form pre-fills → change a field → save → card updates
+Tap Delete in edit form → confirmation → card returns to empty "Add" state
+Same flow works for Insurance and ID Card
+secureTextEntry fields show dots during input
+Add a new vehicle when another vehicle has insurance → copy prompt appears
+Tap a vehicle to copy from → new vehicle's Wallet shows copied insurance and registration
+Tap Skip → no documents copied, vehicle still saved normally
+ID card is never copied between vehicles

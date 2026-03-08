@@ -21,7 +21,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import Paywall from "@/components/Paywall";
 import { vehicleLimit } from "@/lib/subscription";
 
@@ -267,10 +267,155 @@ function mapNhtsaVehicleType(nhtsaType: string): string {
   return "other";
 }
 
+function CopyFromVehicleModal({
+  visible,
+  newVehicleId,
+  userId,
+  candidates,
+  onClose,
+}: {
+  visible: boolean;
+  newVehicleId: string | null;
+  userId: string;
+  candidates: { id: string; year: number; make: string; model: string; nickname: string | null }[];
+  onClose: () => void;
+}) {
+  const [copying, setCopying] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
+
+  async function copyDocs(fromVehicleId: string) {
+    if (!newVehicleId || copying) return;
+    setCopying(fromVehicleId);
+    try {
+      const { data: docs } = await supabase
+        .from("vehicle_wallet_documents")
+        .select("*")
+        .eq("vehicle_id", fromVehicleId)
+        .eq("user_id", userId)
+        .in("document_type", ["insurance", "registration"]);
+      if (docs && docs.length > 0) {
+        const inserts = docs.map((d: any) => ({
+          vehicle_id: newVehicleId,
+          user_id: userId,
+          document_type: d.document_type,
+          data: d.data,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+        await supabase.from("vehicle_wallet_documents").insert(inserts);
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      console.warn("[CopyFromVehicleModal] copy error:", e);
+    } finally {
+      setCopying(null);
+      onClose();
+    }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={copyStyles.overlay}>
+        <Pressable style={copyStyles.backdrop} onPress={onClose} />
+        <View style={[copyStyles.sheet, { paddingBottom: insets.bottom + 20 }]}>
+          <View style={copyStyles.handle} />
+          <Text style={copyStyles.title}>Copy Documents?</Text>
+          <Text style={copyStyles.subtitle}>Import insurance and registration from another vehicle</Text>
+
+          {candidates.map(v => {
+            const isCopying = copying === v.id;
+            const label = v.nickname
+              ? `${v.nickname} (${v.year} ${v.make} ${v.model})`
+              : `${v.year} ${v.make} ${v.model}`;
+            return (
+              <Pressable
+                key={v.id}
+                style={({ pressed }) => [copyStyles.vehicleRow, { opacity: pressed || !!copying ? 0.7 : 1 }]}
+                onPress={() => copyDocs(v.id)}
+                disabled={!!copying}
+              >
+                <View style={copyStyles.vehicleIcon}>
+                  <Ionicons name="car-outline" size={20} color={Colors.accent} />
+                </View>
+                <Text style={copyStyles.vehicleLabel} numberOfLines={1}>{label}</Text>
+                {isCopying
+                  ? <ActivityIndicator size="small" color={Colors.accent} />
+                  : <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
+                }
+              </Pressable>
+            );
+          })}
+
+          <Pressable
+            style={({ pressed }) => [copyStyles.skipBtn, { opacity: pressed ? 0.7 : 1 }]}
+            onPress={onClose}
+            disabled={!!copying}
+          >
+            <Text style={copyStyles.skipText}>Skip</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const copyStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: "flex-end" },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.5)" },
+  sheet: {
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: 12, paddingHorizontal: 20,
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: "center", marginBottom: 16,
+  },
+  title: { fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.text, marginBottom: 6 },
+  subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginBottom: 20 },
+  vehicleRow: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
+  },
+  vehicleIcon: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: Colors.accentLight,
+    alignItems: "center", justifyContent: "center",
+  },
+  vehicleLabel: { flex: 1, fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
+  skipBtn: {
+    marginTop: 16, paddingVertical: 14, alignItems: "center",
+  },
+  skipText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+});
+
 export default function AddVehicleScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
+
+  const { data: walletCandidates } = useQuery<{ id: string; year: number; make: string; model: string; nickname: string | null }[]>({
+    queryKey: ["wallet_copy_candidates", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data: docVehicles } = await supabase
+        .from("vehicle_wallet_documents")
+        .select("vehicle_id")
+        .eq("user_id", user.id)
+        .in("document_type", ["insurance", "registration"]);
+      if (!docVehicles?.length) return [];
+      const vehicleIds = [...new Set(docVehicles.map((d: any) => d.vehicle_id as string))];
+      const { data: vehicles } = await supabase
+        .from("vehicles")
+        .select("id, year, make, model, nickname")
+        .eq("user_id", user.id)
+        .in("id", vehicleIds);
+      return (vehicles ?? []) as { id: string; year: number; make: string; model: string; nickname: string | null }[];
+    },
+    enabled: !!user,
+  });
 
   const [year, setYear] = useState("");
   const [make, setMake] = useState("");
@@ -286,6 +431,8 @@ export default function AddVehicleScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [savedVehicleId, setSavedVehicleId] = useState<string | null>(null);
 
   const [vin, setVin] = useState("");
   const [isVinLoading, setIsVinLoading] = useState(false);
@@ -507,10 +654,7 @@ export default function AddVehicleScreen() {
   }
 
   async function handleSave() {
-    console.log('SAVE: entered');
-    console.log('SAVE: isLoading =', isLoading);
     if (isLoading) return;
-    console.log('SAVE: past guard');
     if (!user) return;
 
     // 1. Validate — all existing checks unchanged
@@ -540,15 +684,7 @@ export default function AddVehicleScreen() {
       }
     } catch {}
 
-    // 3. All checks passed — dismiss immediately and optimistically refresh
-    setIsLoading(true);
-    queryClient.invalidateQueries({ queryKey: ["vehicles"] });
-    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
-    queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
-    router.back();
-
-    // 4. Save in background — user is already back on the previous screen
+    const hasCandidates = walletCandidates && walletCandidates.length > 0;
     const vehicleData = {
       user_id: user.id,
       year: yearNum,
@@ -566,50 +702,85 @@ export default function AddVehicleScreen() {
       updated_at: new Date().toISOString(),
     };
 
+    if (!hasCandidates) {
+      // 3a. No copy candidates — instant nav + background save (original flow)
+      setIsLoading(true);
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
+      router.back();
+
+      try {
+        const { data: inserted, error: err } = await supabase
+          .from("vehicles")
+          .insert(vehicleData)
+          .select("id")
+          .single();
+        if (err || !inserted) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          Alert.alert("Save Failed", err?.message ?? "Failed to save vehicle. Please try again.");
+          return;
+        }
+        try {
+          const { error: scheduleError } = await supabase.functions.invoke(
+            "generate-maintenance-schedule",
+            { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd } },
+          );
+          if (scheduleError) {
+            const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
+            if (httpStatus !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
+          }
+        } catch (scheduleErr) {
+          console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
+        }
+        queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
+        queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (saveErr) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert("Save Failed", "Failed to save vehicle. Please try again.");
+      }
+      return;
+    }
+
+    // 3b. Copy candidates exist — save first (show spinner), then show copy modal
+    setIsLoading(true);
     try {
       const { data: inserted, error: err } = await supabase
         .from("vehicles")
         .insert(vehicleData)
         .select("id")
         .single();
-
       if (err || !inserted) {
+        setIsLoading(false);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert("Save Failed", err?.message ?? "Failed to save vehicle. Please try again.");
         return;
       }
-
       try {
         const { error: scheduleError } = await supabase.functions.invoke(
           "generate-maintenance-schedule",
-          {
-            body: {
-              vehicle_id: inserted.id,
-              make: make.trim(),
-              year: yearNum,
-              current_mileage: mileage ? parseInt(mileage) : 0,
-              vehicle_type: fuelType,
-              is_awd: isAwd,
-            },
-          },
+          { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd } },
         );
         if (scheduleError) {
           const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
-          if (httpStatus !== 409) {
-            console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
-          }
+          if (httpStatus !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
         }
       } catch (scheduleErr) {
         console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
       }
-
-      // Re-invalidate after insert completes so the list reflects the real data
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setSavedVehicleId(inserted.id);
+      setShowCopyModal(true);
     } catch (saveErr) {
+      setIsLoading(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Save Failed", "Failed to save vehicle. Please try again.");
     }
@@ -625,7 +796,7 @@ export default function AddVehicleScreen() {
           <Text style={styles.title}>Add Vehicle</Text>
           <Pressable
             style={({ pressed }) => [styles.saveBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={() => { console.log('SAVE: button tapped'); handleSave(); }}
+            onPress={handleSave}
             disabled={isLoading}
           >
             {isLoading
@@ -950,6 +1121,17 @@ export default function AddVehicleScreen() {
           />
         </Modal>
       )}
+
+      <CopyFromVehicleModal
+        visible={showCopyModal}
+        newVehicleId={savedVehicleId}
+        userId={user?.id ?? ""}
+        candidates={walletCandidates ?? []}
+        onClose={() => {
+          setShowCopyModal(false);
+          router.back();
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
