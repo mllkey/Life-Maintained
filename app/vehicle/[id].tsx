@@ -78,7 +78,7 @@ export default function VehicleDetailScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { profile, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"tasks" | "schedule" | "history">("tasks");
+  const [activeTab, setActiveTab] = useState<"schedule" | "history">("schedule");
   const [isExporting, setIsExporting] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isDeletingVehicle, setIsDeletingVehicle] = useState(false);
@@ -102,18 +102,6 @@ export default function VehicleDetailScreen() {
     queryFn: async () => {
       const { data } = await supabase.from("vehicles").select("*").eq("id", id).single();
       return data;
-    },
-  });
-
-  const { data: tasks, isLoading: loadingTasks, refetch: refetchTasks } = useQuery({
-    queryKey: ["vehicle_tasks", id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_vehicle_maintenance_tasks")
-        .select("*")
-        .eq("vehicle_id", id)
-        .order("next_due_date", { ascending: true });
-      return data ?? [];
     },
   });
 
@@ -358,28 +346,8 @@ export default function VehicleDetailScreen() {
 
   async function handleRefreshAll() {
     setScheduleRefreshing(true);
-    await Promise.all([refetchTasks(), refetchSchedule(), refetchLogs()]);
+    await Promise.all([refetchSchedule(), refetchLogs()]);
     setScheduleRefreshing(false);
-  }
-
-  async function markComplete(taskId: string) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const task = tasks?.find(t => t.id === taskId);
-    if (!task) return;
-    let nextDate: string | null = null;
-    if (task.interval_months) {
-      const next = new Date();
-      next.setMonth(next.getMonth() + task.interval_months);
-      nextDate = next.toISOString().split("T")[0];
-    }
-    await supabase.from("user_vehicle_maintenance_tasks").update({
-      last_completed_date: new Date().toISOString().split("T")[0],
-      next_due_date: nextDate,
-      last_completed_miles: vehicle?.mileage ?? null,
-      updated_at: new Date().toISOString(),
-    }).eq("id", taskId);
-    queryClient.invalidateQueries({ queryKey: ["vehicle_tasks", id] });
-    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
   }
 
   function buildCsv(logsData: any[]) {
@@ -517,12 +485,8 @@ export default function VehicleDetailScreen() {
     ]);
   }
 
-  const isLoading = loadingVehicle || loadingTasks;
+  const isLoading = loadingVehicle;
   const vehicleName = vehicle ? (vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`) : "Vehicle";
-
-  const overdue = tasks?.filter(t => getStatus(t.next_due_date) === "overdue") ?? [];
-  const dueSoon = tasks?.filter(t => getStatus(t.next_due_date) === "due_soon") ?? [];
-  const good = tasks?.filter(t => getStatus(t.next_due_date) === "good") ?? [];
 
   const groupedHistory = useMemo(() => {
     if (!logs || logs.length === 0) return [];
@@ -641,8 +605,8 @@ export default function VehicleDetailScreen() {
                 </View>
               )}
               <View style={styles.statBox}>
-                <Text style={[styles.statValue, { color: overdue.length > 0 ? Colors.overdue : dueSoon.length > 0 ? Colors.dueSoon : Colors.good }]}>
-                  {overdue.length + dueSoon.length}
+                <Text style={[styles.statValue, { color: actionNeededTasks.some(t => t.status === "overdue") ? Colors.overdue : scheduleAttentionCount > 0 ? Colors.dueSoon : Colors.good }]}>
+                  {scheduleAttentionCount}
                 </Text>
                 <Text style={styles.statLabel}>need attention</Text>
               </View>
@@ -667,37 +631,22 @@ export default function VehicleDetailScreen() {
           </View>
 
           <View style={styles.tabs}>
-            {(["tasks", "schedule", "history"] as const).map(tab => (
+            {(["schedule", "history"] as const).map(tab => (
               <Pressable
                 key={tab}
                 style={[styles.tab, activeTab === tab && styles.tabActive]}
                 onPress={() => { Haptics.selectionAsync(); setActiveTab(tab); }}
               >
                 <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                  {tab === "tasks" ? "Tasks" : tab === "schedule" ? (
-                    scheduleAttentionCount > 0 ? `Schedule (${scheduleAttentionCount})` : "Schedule"
-                  ) : "History"}
+                  {tab === "schedule"
+                    ? (scheduleAttentionCount > 0 ? `Schedule (${scheduleAttentionCount})` : "Schedule")
+                    : "History"}
                 </Text>
               </Pressable>
             ))}
           </View>
 
-          {activeTab === "tasks" ? (
-            <View style={styles.tasksContainer}>
-              {tasks?.length === 0 ? (
-                <View style={styles.emptyTasks}>
-                  <Ionicons name="checkmark-circle-outline" size={36} color={Colors.good} />
-                  <Text style={styles.emptyTasksText}>No maintenance tasks yet</Text>
-                </View>
-              ) : (
-                <>
-                  {overdue.length > 0 && <TaskGroup title="Overdue" color={Colors.overdue} tasks={overdue} onComplete={markComplete} vehicle={vehicle} />}
-                  {dueSoon.length > 0 && <TaskGroup title="Due Soon" color={Colors.dueSoon} tasks={dueSoon} onComplete={markComplete} vehicle={vehicle} />}
-                  {good.length > 0 && <TaskGroup title="Up to Date" color={Colors.good} tasks={good} onComplete={markComplete} vehicle={vehicle} />}
-                </>
-              )}
-            </View>
-          ) : activeTab === "schedule" ? (
+          {activeTab === "schedule" ? (
             <View style={styles.scheduleContainer}>
               {loadingSchedule ? (
                 <ScheduleSkeleton />

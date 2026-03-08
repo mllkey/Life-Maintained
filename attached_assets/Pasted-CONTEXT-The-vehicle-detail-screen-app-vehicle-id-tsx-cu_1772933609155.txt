@@ -1,0 +1,24 @@
+CONTEXT: The vehicle detail screen (app/vehicle/[id].tsx) currently has three tabs: Tasks, Schedule, and History. The Tasks tab and Schedule tab both show maintenance tasks but from different queries. After the previous prompt unified everything to user_vehicle_maintenance_tasks, both tabs now show the same data source. The Schedule tab has a better UI (status color coding, category badges, collapsible sections, full-card tap to mark complete, history logging). The Tasks tab is now redundant.
+IMPORTANT: Do NOT modify the Schedule tab or History tab code. Only remove the Tasks tab.
+
+TASK: Remove the Tasks tab from the vehicle detail screen so only Schedule and History remain.
+STEP 1: Change the activeTab default from "tasks" to "schedule":
+Find: useState<"tasks" | "schedule" | "history">("tasks")
+Change to: useState<"schedule" | "history">("schedule")
+STEP 2: Remove "tasks" from the tab bar rendering. Find the array that maps over tabs (around line 672):
+Find: {(["tasks", "schedule", "history"] as const).map(tab => (
+Change to: {(["schedule", "history"] as const).map(tab => (
+STEP 3: Remove the tab label logic for "tasks". The tab label rendering has a conditional for "tasks" — simplify it so "schedule" shows "Schedule" and "history" shows "History".
+STEP 4: Remove the Tasks tab content block. Find the conditional rendering (around line 687):
+The block that starts with: {activeTab === "tasks" ? (
+Remove this entire branch including all its JSX down to the closing bracket, leaving only the "schedule" and "history" branches.
+STEP 5: Remove the old tasks query if it's no longer used anywhere. The query with queryKey ["vehicle_tasks", id] that fetches from vehicle_maintenance_tasks (or user_vehicle_maintenance_tasks after Prompt 1) is no longer needed since the Schedule tab has its own query. Remove this useQuery call and its associated variables (tasks, loadingTasks, refetchTasks) ONLY if they are not referenced anywhere else in the file. Search before removing.
+STEP 6: Remove any unused state, functions, or imports that were only used by the Tasks tab.
+DO NOT modify the Schedule tab, History tab, Mark Complete flow, or any data fetching for those tabs.
+VERIFICATION:
+
+Vehicle detail screen shows two tabs: Schedule and History
+Schedule tab is selected by default when opening a vehicle
+Schedule tab works exactly as before (task cards, mark complete, generate schedule)
+History tab works exactly as before
+Zero TypeScript errors
