@@ -540,25 +540,37 @@ export default function AddVehicleScreen() {
           let names: string[] = [];
 
           if (vehicleType === "car") {
-            const [passengerResp, truckResp] = await Promise.all([
+            const [passengerResp, truckResp, mpvResp] = await Promise.all([
               fetch(`${nhtsaBase}?format=json&vehicleType=Passenger%20Car`),
               fetch(`${nhtsaBase}?format=json&vehicleType=Truck`),
+              fetch(`${nhtsaBase}?format=json&vehicleType=Multipurpose%20Passenger%20Vehicle%20(MPV)`),
             ]);
-            const [passengerJson, truckJson] = await Promise.all([
+            const [passengerJson, truckJson, mpvJson] = await Promise.all([
               passengerResp.json(),
               truckResp.json(),
+              mpvResp.json(),
             ]);
-            names = [...new Set([...extractNames(passengerJson), ...extractNames(truckJson)])];
+            names = [...new Set([
+              ...extractNames(passengerJson),
+              ...extractNames(truckJson),
+              ...extractNames(mpvJson),
+            ])];
           } else if (vehicleType === "rv") {
-            const [incompleteResp, busResp] = await Promise.all([
+            const [incompleteResp, busResp, mpvResp] = await Promise.all([
               fetch(`${nhtsaBase}?format=json&vehicleType=Incomplete%20Vehicle`),
               fetch(`${nhtsaBase}?format=json&vehicleType=Bus`),
+              fetch(`${nhtsaBase}?format=json&vehicleType=Multipurpose%20Passenger%20Vehicle%20(MPV)`),
             ]);
-            const [incompleteJson, busJson] = await Promise.all([
+            const [incompleteJson, busJson, mpvJson] = await Promise.all([
               incompleteResp.json(),
               busResp.json(),
+              mpvResp.json(),
             ]);
-            names = [...new Set([...extractNames(incompleteJson), ...extractNames(busJson)])];
+            names = [...new Set([
+              ...extractNames(incompleteJson),
+              ...extractNames(busJson),
+              ...extractNames(mpvJson),
+            ])];
           } else if (vehicleType === "motorcycle") {
             const motoResp = await fetch(`${nhtsaBase}?format=json&vehicleType=Motorcycle`);
             const motoJson = await motoResp.json();
@@ -571,6 +583,12 @@ export default function AddVehicleScreen() {
             const allResp = await fetch(`${nhtsaBase}?format=json`);
             const allJson = await allResp.json();
             names = extractNames(allJson);
+          }
+
+          if (names.length < 3) {
+            const allResp = await fetch(`${nhtsaBase}?format=json`);
+            const allJson = await allResp.json();
+            names = [...new Set([...names, ...extractNames(allJson)])];
           }
 
           if (!modelCancelled) {
@@ -1383,6 +1401,11 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
               showsVerticalScrollIndicator={false}
               style={{ maxHeight: 320 }}
               contentContainerStyle={{ paddingBottom: 20 }}
+              ListHeaderComponent={
+                <Text style={styles.modelHint}>
+                  Don't see your model? Type it in the search bar above.
+                </Text>
+              }
               getItemLayout={(_, index) => ({
                 length: MODEL_ITEM_HEIGHT,
                 offset: MODEL_ITEM_HEIGHT * index,
@@ -1792,4 +1815,9 @@ const styles = StyleSheet.create({
   listRowCustomSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.accent },
   listEmpty: { paddingVertical: 32, alignItems: "center", paddingHorizontal: 24 },
   listEmptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  modelHint: {
+    fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
+    fontStyle: "italic", textAlign: "center",
+    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4,
+  },
 });
