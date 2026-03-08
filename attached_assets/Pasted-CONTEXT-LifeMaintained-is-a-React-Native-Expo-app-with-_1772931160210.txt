@@ -1,0 +1,53 @@
+CONTEXT: LifeMaintained is a React Native / Expo app with push notifications already partially built. The notification scheduler (lib/notificationScheduler.ts) and notification settings screen (app/notifications-settings.tsx) exist and are functional. However, there are two bugs preventing notifications from working correctly:
+
+BUG 1: The notification scheduler queries the WRONG TABLE for vehicle maintenance tasks. It currently queries "vehicle_maintenance_tasks" (line ~94 in notificationScheduler.ts), but the actual data lives in "user_vehicle_maintenance_tasks". It also selects column "task" but the correct column name in user_vehicle_maintenance_tasks is "name".
+
+BUG 2: app.json is missing the expo-notifications plugin configuration, which means iOS push notification permissions will not work on a real device.
+
+IMPORTANT: These are small, targeted fixes. Do NOT rewrite the notification scheduler or settings screen. Only fix the specific issues listed below.
+
+TASK: Fix two bugs so push notifications work correctly.
+
+FIX 1 — notificationScheduler.ts (lib/notificationScheduler.ts):
+
+Find this code (around line 92-97):
+supabase
+.from("vehicle_maintenance_tasks")
+.select("vehicle_id, task, next_due_date")
+.in("vehicle_id", vehicleIds)
+.not("next_due_date", "is", null)
+
+Change it to:
+supabase
+.from("user_vehicle_maintenance_tasks")
+.select("vehicle_id, name, next_due_date")
+.in("vehicle_id", vehicleIds)
+.not("next_due_date", "is", null)
+
+Then find EVERY reference to "task.task" in the vehicle tasks loop (around line 117-122) and change it to "task.name". Specifically, the line that calls enqueue() should pass task.name instead of task.task as the first argument.
+
+Do NOT change the property_maintenance_tasks query — that table name and column ("task") may be correct for properties. Only change the vehicle query.
+
+FIX 2 — app.json:
+
+Add "expo-notifications" to the plugins array. The current plugins array is: "plugins": [ ["expo-router", { "origin": "https://replit.com/" }], "expo-font", "expo-web-browser" ]
+
+Change it to: "plugins": [ ["expo-router", { "origin": "https://replit.com/" }], "expo-font", "expo-web-browser", [ "expo-notifications", { "icon": "./assets/images/icon.png", "color": "
+#14B8A6" } ] ]
+
+The color 
+#14B8A6 is teal to match the app's accent color.
+
+DO NOT modify:
+
+The notification settings screen (app/notifications-settings.tsx)
+The _layout.tsx notification initialization
+The property_maintenance_tasks query
+Any scheduling logic, quiet hours, badge count, or mute functionality
+Any other file
+VERIFICATION:
+
+Open notificationScheduler.ts — confirm it queries "user_vehicle_maintenance_tasks" with column "name"
+Open app.json — confirm "expo-notifications" is in the plugins array
+The app should compile with zero errors
+When a user has push notifications enabled and has vehicle maintenance tasks with next_due_date values, notifications should schedule at 30 days before, 7 days before, day of, and 7 days after the due date

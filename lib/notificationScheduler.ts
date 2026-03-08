@@ -91,8 +91,8 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     const [vehicleTasksRes, propertyTasksRes] = await Promise.all([
       vehicleIds.length > 0
         ? supabase
-            .from("vehicle_maintenance_tasks")
-            .select("vehicle_id, task, next_due_date")
+            .from("user_vehicle_maintenance_tasks")
+            .select("vehicle_id, name, next_due_date")
             .in("vehicle_id", vehicleIds)
             .not("next_due_date", "is", null)
         : Promise.resolve({ data: [] as any[] }),
@@ -155,7 +155,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       if (!vehicle) continue;
       const assetName = vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
       const isMuted = (prefs.mutedVehicles ?? []).includes(task.vehicle_id);
-      enqueue(task.task, assetName, task.next_due_date, isMuted);
+      enqueue(task.name, assetName, task.next_due_date, isMuted);
     }
 
     for (const task of propertyTasks) {
