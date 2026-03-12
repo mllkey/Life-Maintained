@@ -1,0 +1,28 @@
+CONTEXT: The voice log feature saves entries to maintenance_logs. But it doesn't update the maintenance schedule (user_vehicle_maintenance_tasks for vehicles, property_maintenance_tasks for properties). The app already has matchAndUpdateVehicleTask and matchAndUpdatePropertyTask functions in lib/maintenanceMatcher.ts that fuzzy-match a service name to an existing task and recalculate the next due date.
+IMPORTANT: Only modify the voice log save handler in app/(tabs)/index.tsx. Do NOT modify maintenanceMatcher.ts or any other file.
+
+TASK: After saving a voice log entry to maintenance_logs, also call the existing matcher functions to update the maintenance schedule.
+For vehicle entries: after the maintenance_logs insert succeeds, call:
+await matchAndUpdateVehicleTask(assetId, serviceName, serviceDate, mileage);
+Import matchAndUpdateVehicleTask from '@/lib/maintenanceMatcher'.
+For property entries: after the maintenance_logs insert succeeds, call:
+await matchAndUpdatePropertyTask(assetId, serviceName, serviceDate);
+Import matchAndUpdatePropertyTask from '@/lib/maintenanceMatcher'.
+Both calls should be non-blocking — wrap in try/catch, log errors to console, but don't fail the save. The maintenance_logs insert is the primary operation. Task matching is secondary.
+After both operations complete, also call scheduleMaintenanceNotifications(userId) to refresh notification schedules with the updated due dates. Import from '@/lib/notificationScheduler'.
+Invalidate these query caches after save:
+
+["maintenance_logs", assetId]
+["user_vehicle_maintenance_tasks", assetId] (for vehicles)
+["property_tasks", assetId] (for properties)
+["dashboard"]
+["vehicles"] or ["properties"]
+
+VERIFICATION:
+
+Voice log "Oil change on my Ninja at 14k miles" → saves to maintenance_logs AND updates the Oil Change task in user_vehicle_maintenance_tasks (next_due_miles recalculates)
+Voice log "Replaced HVAC filter at the house" → saves to maintenance_logs AND updates the HVAC Filter task in property_maintenance_tasks (next_due_date recalculates)
+Schedule tab on the vehicle shows updated next due date after voice logging
+Notification schedules refresh after save
+If matcher fails, maintenance_logs entry is still saved
+Zero TypeScript errors

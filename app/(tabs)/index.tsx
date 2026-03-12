@@ -29,6 +29,8 @@ import * as Haptics from "expo-haptics";
 import { useBudgetAlert } from "@/context/BudgetAlertContext";
 import TrialBanner from "@/components/TrialBanner";
 import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import { matchAndUpdateVehicleTask, matchAndUpdatePropertyTask } from "@/lib/maintenanceMatcher";
+import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -705,11 +707,49 @@ function ConfirmCard({
         });
       }
 
+      // Non-blocking: match and update the maintenance schedule task
+      if (isVehicle && item.asset_id) {
+        try {
+          await matchAndUpdateVehicleTask(
+            item.asset_id,
+            serviceName.trim(),
+            date || now.split("T")[0],
+            mileage ? parseInt(mileage) : null,
+          );
+        } catch (matchErr) {
+          console.error("matchAndUpdateVehicleTask failed (non-blocking):", matchErr);
+        }
+      } else if (item.category === "property" && item.asset_id) {
+        try {
+          await matchAndUpdatePropertyTask(
+            item.asset_id,
+            serviceName.trim(),
+            date || now.split("T")[0],
+          );
+        } catch (matchErr) {
+          console.error("matchAndUpdatePropertyTask failed (non-blocking):", matchErr);
+        }
+      }
+
+      // Refresh notification schedule with updated due dates
+      try {
+        await scheduleMaintenanceNotifications(userId);
+      } catch (notifErr) {
+        console.error("scheduleMaintenanceNotifications failed (non-blocking):", notifErr);
+      }
+
       queryClient.invalidateQueries({ queryKey: ["maintenance_logs"] });
+      queryClient.invalidateQueries({ queryKey: ["maintenance_logs", item.asset_id] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
-      queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard_spending"] });
+      queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
+      if (isVehicle && item.asset_id) {
+        queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+        queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", item.asset_id] });
+      } else if (item.category === "property" && item.asset_id) {
+        queryClient.invalidateQueries({ queryKey: ["properties"] });
+        queryClient.invalidateQueries({ queryKey: ["property_tasks", item.asset_id] });
+      }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onDone();
