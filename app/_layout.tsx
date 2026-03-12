@@ -14,6 +14,7 @@ import NotifPermissionBanner from "@/components/NotifPermissionBanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { BudgetAlertProvider } from "@/context/BudgetAlertContext";
 import * as Notifications from "expo-notifications";
+import * as Linking from "expo-linking";
 import { supabase } from "@/lib/supabase";
 
 SplashScreen.preventAutoHideAsync();
@@ -27,6 +28,8 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
+
+const VOICE_LOG_URL = "lifemaintained://voice-log";
 
 function RootLayoutNav() {
   const { session, isLoading, onboardingCompleted, refreshProfile } = useAuth();
@@ -130,6 +133,26 @@ function RootLayoutNav() {
       }
     };
   }, [session?.user?.id]);
+
+  // Deep link: lifemaintained://voice-log → navigate to dashboard tab
+  useEffect(() => {
+    if (!session || isLoading) return;
+    const { router } = require("expo-router");
+
+    const handleUrl = (url: string | null) => {
+      if (!url) return;
+      try {
+        const parsed = Linking.parse(url);
+        if (parsed.scheme === "lifemaintained" && parsed.path === "voice-log") {
+          router.navigate("/(tabs)");
+        }
+      } catch {}
+    };
+
+    Linking.getInitialURL().then(handleUrl);
+    const sub = Linking.addEventListener("url", (e) => handleUrl(e.url));
+    return () => sub.remove();
+  }, [session, isLoading]);
 
   if (isLoading) {
     return (

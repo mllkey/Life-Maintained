@@ -149,6 +149,7 @@ export default function SettingsScreen() {
   });
 
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [actionButtonExpanded, setActionButtonExpanded] = useState(false);
 
   const { data: predVehicles } = useQuery({
     queryKey: ["settings_pred_vehicles", user?.id],
@@ -617,6 +618,54 @@ export default function SettingsScreen() {
             )}
           </SectionCard>
 
+          {/* Action Button shortcut tip card */}
+          <Pressable
+            style={({ pressed }) => [styles.actionBtnCard, { opacity: pressed ? 0.95 : 1 }]}
+            onPress={() => { Haptics.selectionAsync(); setActionButtonExpanded(v => !v); }}
+          >
+            <View style={styles.actionBtnRow}>
+              <View style={styles.actionBtnIconWrap}>
+                <Ionicons name="flash-outline" size={18} color={Colors.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.actionBtnTitle}>Quick Log with Action Button</Text>
+                <Text style={styles.actionBtnSub}>iPhone 15 Pro or newer? Instantly open voice logging.</Text>
+              </View>
+              <Ionicons
+                name={actionButtonExpanded ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={Colors.textTertiary}
+              />
+            </View>
+
+            {actionButtonExpanded && (
+              <View style={styles.actionBtnSteps}>
+                <Text style={styles.actionBtnStepHeader}>How to set up your Action Button:</Text>
+                {[
+                  "Open the Settings app on your iPhone",
+                  'Tap "Action Button"',
+                  'Swipe to "Shortcut"',
+                  'Tap "Choose a Shortcut"',
+                  "Tap + to create a new shortcut",
+                  'Add action "Open URLs"',
+                  "Enter: lifemaintained://voice-log",
+                  "Save the shortcut and select it",
+                ].map((step, i) => (
+                  <View key={i} style={styles.actionBtnStep}>
+                    <View style={styles.actionBtnStepNum}>
+                      <Text style={styles.actionBtnStepNumText}>{i + 1}</Text>
+                    </View>
+                    <Text style={styles.actionBtnStepText}>{step}</Text>
+                  </View>
+                ))}
+                <View style={styles.actionBtnUrlBox}>
+                  <Ionicons name="link-outline" size={13} color={Colors.accent} />
+                  <Text style={styles.actionBtnUrl}>lifemaintained://voice-log</Text>
+                </View>
+              </View>
+            )}
+          </Pressable>
+
           <View style={styles.legalRow}>
             <Pressable
               style={({ pressed }) => [styles.legalBtn, { opacity: pressed ? 0.7 : 1 }]}
@@ -990,4 +1039,94 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   saveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+
+  actionBtnCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.accent + "33",
+    marginBottom: 12,
+    overflow: "hidden",
+  },
+  actionBtnRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 16,
+  },
+  actionBtnIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.accent + "18",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionBtnTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.text,
+    marginBottom: 2,
+  },
+  actionBtnSub: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+  },
+  actionBtnSteps: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    padding: 16,
+    gap: 10,
+  },
+  actionBtnStepHeader: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  actionBtnStep: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  actionBtnStepNum: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.accent + "22",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  actionBtnStepNumText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.accent,
+  },
+  actionBtnStepText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: Colors.text,
+    lineHeight: 19,
+  },
+  actionBtnUrlBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.surface,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  actionBtnUrl: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: Colors.accent,
+    letterSpacing: 0.3,
+  },
 });

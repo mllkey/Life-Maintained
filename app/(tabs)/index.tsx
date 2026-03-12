@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ import * as Haptics from "expo-haptics";
 import { useBudgetAlert } from "@/context/BudgetAlertContext";
 import TrialBanner from "@/components/TrialBanner";
 import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import * as Linking from "expo-linking";
 import { matchAndUpdateVehicleTask, matchAndUpdatePropertyTask } from "@/lib/maintenanceMatcher";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 
@@ -125,8 +126,29 @@ export default function DashboardScreen() {
   const [screeningOptIns, setScreeningOptIns] = useState<Record<string, boolean>>({});
   const [budgetDismissed, setBudgetDismissed] = useState(false);
   const [logSheetVisible, setLogSheetVisible] = useState(false);
+  const handledDeepLinkRef = useRef<string | null>(null);
   const webTopPad = Platform.OS === "web" ? 67 : 0;
   const { monthlyCost, budgetThreshold } = useBudgetAlert();
+
+  // Deep link: lifemaintained://voice-log → auto-open the voice log sheet
+  useEffect(() => {
+    if (!user) return;
+
+    const openIfMatch = (url: string | null) => {
+      if (!url || url === handledDeepLinkRef.current) return;
+      try {
+        const parsed = Linking.parse(url);
+        if (parsed.scheme === "lifemaintained" && parsed.path === "voice-log") {
+          handledDeepLinkRef.current = url;
+          setLogSheetVisible(true);
+        }
+      } catch {}
+    };
+
+    Linking.getInitialURL().then(openIfMatch);
+    const sub = Linking.addEventListener("url", (e) => openIfMatch(e.url));
+    return () => sub.remove();
+  }, [user]);
 
   useEffect(() => {
     AsyncStorage.getItem(SCREENING_NOTIF_KEY).then(raw => {

@@ -1,0 +1,44 @@
+
+CONTEXT: LifeMaintained is a React Native / Expo Router app. The app already has a URL scheme defined in app.json as "lifemaintained". The dashboard has a voice logging FAB that opens a bottom sheet for AI-powered maintenance logging. We want users to be able to press their iPhone's Action Button and go directly to the voice log sheet — skipping the dashboard entirely.
+This works via iOS Siri Shortcuts: the user creates a shortcut "Open URL: lifemaintained://voice-log" and assigns it to their Action Button. When pressed, iOS opens the app and passes the deep link. The app detects the link and opens the voice log sheet automatically.
+IMPORTANT: Only modify app/_layout.tsx (to handle the deep link) and app/(tabs)/index.tsx (to auto-open the voice log sheet). Do NOT modify any other files.
+
+TASK: Add deep link handling so "lifemaintained://voice-log" opens the voice log sheet.
+STEP 1 — Handle the deep link in the root layout (app/_layout.tsx):
+Use expo-linking to listen for incoming URLs. When the app receives a URL matching "lifemaintained://voice-log", set a global flag or navigate to the dashboard with a parameter indicating the voice log should auto-open.
+Expo Router supports initial URL handling and URL listeners. Use the useURL() hook from expo-linking or Linking.addEventListener to detect incoming URLs both when the app is cold-launched (opened from killed state) and when it's already running in the background.
+When "lifemaintained://voice-log" is detected:
+
+Ensure the user is authenticated (don't open voice log if not logged in)
+Navigate to the dashboard tab if not already there
+Set a flag that the dashboard can read to auto-open the voice log sheet
+
+The simplest approach: use a lightweight global state (a simple exported ref or a context value) that the dashboard checks on mount/focus. When the deep link sets it to true, the dashboard auto-opens the LogSheet, then resets the flag to false.
+STEP 2 — Auto-open voice log sheet on the dashboard (app/(tabs)/index.tsx):
+Check the deep link flag when the dashboard mounts or receives focus. If the flag is true, immediately open the LogSheet (set showLogSheet to true or however the sheet is triggered), then reset the flag.
+Use useFocusEffect or useEffect so it works both on cold launch (app was closed) and warm resume (app was in background).
+STEP 3 — Add setup instructions in the app:
+In the notification settings screen or a new "Tips" section on the settings page, add a small info card:
+Title: "Quick Log with Action Button"
+Body: "iPhone 15 Pro or newer? Set up your Action Button to instantly open voice logging."
+Expandable instructions:
+
+Open the Settings app
+Tap "Action Button"
+Swipe to "Shortcut"
+Tap "Choose a Shortcut"
+Tap + to create a new shortcut
+Add action "Open URLs"
+Enter: lifemaintained://voice-log
+Save the shortcut and select it
+
+This is a static info card — no functionality needed, just text with the steps.
+DO NOT modify the voice log sheet, Edge Function, or any other existing functionality.
+VERIFICATION:
+
+Open Safari on iPhone, type "lifemaintained://voice-log" in the address bar → app opens with voice log sheet showing
+Close the app completely → open the URL again → app cold-launches to dashboard with voice log sheet auto-opening
+App is in background → open the URL → app resumes with voice log sheet opening
+If user is not logged in → deep link is ignored, normal auth flow shows
+Settings page shows the Action Button setup instructions
+Zero TypeScript errors
