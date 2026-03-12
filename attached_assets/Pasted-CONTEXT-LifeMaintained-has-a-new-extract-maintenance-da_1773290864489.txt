@@ -1,0 +1,32 @@
+CONTEXT: LifeMaintained has a new "extract-maintenance-data" Edge Function that takes natural language text and returns structured maintenance data with matched asset IDs. We need the UI to use it.
+IMPORTANT: Only modify app/(tabs)/index.tsx (dashboard). Do NOT modify any other screens. Follow existing bottom sheet patterns from vehicle/[id].tsx.
+
+TASK: Add a floating action button (FAB) and voice/text logging sheet to the dashboard.
+FAB: 56pt teal circle with mic-outline icon, bottom-right corner, 16pt above tab bar. Haptic on tap. Opens a bottom sheet.
+BOTTOM SHEET contains:
+
+A multiline TextInput (4 lines, auto-focused, keyboard appears immediately). Placeholder: "Describe what you did... e.g. 'Oil change on my Ninja, 14k miles, $45 at Cycle Gear'". Users can type OR tap iOS keyboard dictation mic.
+A "Process" button below the input. Tapping it calls supabase.functions.invoke('extract-maintenance-data', { body: { text } }).
+While processing: show "Analyzing..." with a subtle loading indicator.
+When results arrive: replace the input with EDITABLE CONFIRMATION CARDS, one per extracted item. Each card shows:
+
+Category icon + matched asset name (or a picker to select asset if no match)
+Pre-filled editable fields: Service Name, Date, Cost, Mileage (vehicles only), Provider, Notes
+If confidence is "low": amber "Please verify" badge
+"Save" button (teal) and "Discard" button (gray text)
+
+
+On Save: insert into maintenance_logs (same table the Log Service button writes to). If vehicle with mileage, also update vehicles.mileage. Invalidate relevant query caches. Show success toast. Close card.
+On error or empty results: show "Couldn't understand that. Try being more specific." Keep the text input visible so user can rephrase.
+After all cards saved/discarded: close sheet.
+
+STYLING: Match existing app design. FAB has 4pt shadow. Sheet matches existing bottom sheet patterns. Cards have rounded corners, clear field labels, accent-colored Save button.
+VERIFICATION:
+
+FAB visible on dashboard
+Tap FAB → sheet opens with focused text input
+Type "Oil change on my Ninja at 14k miles, $45" → tap Process → confirmation card shows with correct fields
+Edit cost → tap Save → maintenance_logs gets new row, mileage updates
+Vehicle History tab shows new entry
+Vague input → "Couldn't understand" message with text preserved
+Zero TypeScript errors
