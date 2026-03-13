@@ -314,7 +314,7 @@ export default function DashboardScreen() {
       refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.accent} />}
     >
       <LinearGradient
-        colors={["rgba(0,201,167,0.10)", "transparent"]}
+        colors={["rgba(232,147,58,0.06)", "transparent"]}
         style={[styles.headerGradient, { paddingTop: insets.top + webTopPad + 16 }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -323,6 +323,11 @@ export default function DashboardScreen() {
           <View>
             <Text style={styles.greeting}>{getGreeting()}</Text>
             <Text style={styles.headerTitle}>Dashboard</Text>
+            {!isLoading && !isNewUser && (
+              <Text style={styles.headerSummary}>
+                {counts?.vehicles ?? 0} vehicle{(counts?.vehicles ?? 0) !== 1 ? "s" : ""}{" · "}{counts?.properties ?? 0} propert{(counts?.properties ?? 0) !== 1 ? "ies" : "y"}{" · "}{counts?.health ?? 0} health item{(counts?.health ?? 0) !== 1 ? "s" : ""}
+              </Text>
+            )}
           </View>
           {!isNewUser && !isLoading && (
             <View style={styles.statusBadges}>
@@ -363,25 +368,19 @@ export default function DashboardScreen() {
                 <Ionicons name="close" size={14} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
               </Pressable>
             )}
-            <CategoryCardsRow counts={counts ?? { vehicles: 0, properties: 0, health: 0 }} />
-
             {(mileageVehicles?.length ?? 0) > 0 && (
               <QuickMileageCard vehicles={mileageVehicles!} userId={user!.id} />
             )}
 
-            <View style={styles.twoCol}>
-              <UpcomingTasksCard items={upcomingItems} />
-              <SpendingCard spending={spending ?? {}} />
-            </View>
+            <UpcomingTasksCard items={upcomingItems} />
+            <Text style={styles.spendingSummary}>
+              {"This month: $"}{((spending ?? {})[format(new Date(), "yyyy-MM")] ?? 0).toFixed(0)}{" spent on maintenance"}
+            </Text>
 
             {screenings.length > 0 && (familyMembers?.length ?? 0) > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Health Screenings</Text>
-                  <View style={styles.screeningBadge}>
-                    <Ionicons name="medical-outline" size={11} color={Colors.health} />
-                    <Text style={styles.screeningBadgeText}>Age-based</Text>
-                  </View>
                 </View>
                 {screenings.slice(0, 3).map((s, i) => (
                   <View key={i} style={styles.screeningCard}>
@@ -1013,31 +1012,6 @@ function DashboardSkeleton() {
   );
 }
 
-function CategoryCardsRow({ counts }: { counts: { vehicles: number; properties: number; health: number } }) {
-  const cats: (keyof typeof CAT)[] = ["vehicles", "properties", "health"];
-  return (
-    <View style={styles.catRow}>
-      {cats.map(key => {
-        const cat = CAT[key];
-        const count = counts[key];
-        return (
-          <Pressable
-            key={key}
-            style={({ pressed }) => [styles.catCard, { opacity: pressed ? 0.85 : 1 }]}
-            onPress={() => { Haptics.selectionAsync(); router.push(cat.tab); }}
-          >
-            <View style={[styles.catIconWrap, { backgroundColor: cat.muted }]}>
-              <Ionicons name={cat.icon} size={22} color={cat.color} />
-            </View>
-            <Text style={[styles.catCount, { color: cat.color }]}>{count}</Text>
-            <Text style={styles.catLabel}>{cat.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
   function handlePress(item: DashboardItem) {
     Haptics.selectionAsync();
@@ -1047,7 +1021,7 @@ function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
   }
 
   return (
-    <View style={[styles.panelCard, { flex: 5 }]}>
+    <View style={styles.panelCard}>
       <View style={styles.panelHeader}>
         <Text style={styles.panelTitle}>Upcoming</Text>
         {items.length > 0 && (
@@ -1089,43 +1063,6 @@ function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
           })}
         </View>
       )}
-    </View>
-  );
-}
-
-function SpendingCard({ spending }: { spending: Record<string, number> }) {
-  const months = useMemo(() => {
-    const result: { key: string; label: string; amount: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = subMonths(new Date(), i);
-      const key = format(d, "yyyy-MM");
-      result.push({ key, label: format(d, "MMM"), amount: spending[key] ?? 0 });
-    }
-    return result;
-  }, [spending]);
-
-  const maxAmount = Math.max(...months.map(m => m.amount), 1);
-  const totalSpent = months.reduce((sum, m) => sum + m.amount, 0);
-
-  return (
-    <View style={[styles.panelCard, { flex: 3 }]}>
-      <View style={styles.panelHeader}>
-        <Text style={styles.panelTitle}>Spending</Text>
-      </View>
-      <Text style={styles.spendTotal}>${totalSpent.toFixed(0)}</Text>
-      <Text style={styles.spendLabel}>6 months</Text>
-      <View style={styles.chartArea}>
-        {months.map(m => {
-          const barH = maxAmount > 0 ? Math.round((m.amount / maxAmount) * 48) : 0;
-          return (
-            <View key={m.key} style={styles.chartBarWrap}>
-              <View style={[styles.chartBar, { height: Math.max(barH, m.amount > 0 ? 3 : 0), backgroundColor: barH > 0 ? Colors.blue : Colors.border }]} />
-              <Text style={styles.chartLabel}>{m.label.charAt(0)}</Text>
-            </View>
-          );
-        })}
-      </View>
-      <Text style={styles.spendSubLabel}>Vehicle maintenance</Text>
     </View>
   );
 }
@@ -1176,7 +1113,7 @@ const styles = StyleSheet.create({
   badge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10 },
   badgeDot: { width: 6, height: 6, borderRadius: 3 },
   badgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  content: { paddingHorizontal: 16, paddingTop: 4, gap: 20 },
+  content: { paddingHorizontal: 20, paddingTop: 4, gap: 12 },
   budgetBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1196,24 +1133,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  catRow: { flexDirection: "row", gap: 10 },
-  catCard: {
-    flex: 1,
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 14,
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    minHeight: 110,
-    justifyContent: "center",
-  },
-  catIconWrap: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  catCount: { fontSize: 24, fontFamily: "Inter_700Bold", lineHeight: 28 },
-  catLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textSecondary, textAlign: "center" },
-
-  twoCol: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   panelCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 14, gap: 2, borderWidth: 1, borderColor: Colors.border },
   panelHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
   panelTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.text },
@@ -1231,19 +1150,12 @@ const styles = StyleSheet.create({
   taskSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, lineHeight: 14 },
   taskDue: { fontSize: 11, fontFamily: "Inter_600SemiBold", flexShrink: 0 },
 
-  spendTotal: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 26 },
-  spendLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginBottom: 10 },
-  chartArea: { flexDirection: "row", alignItems: "flex-end", gap: 4, height: 56, marginTop: 4 },
-  chartBarWrap: { flex: 1, alignItems: "center", justifyContent: "flex-end", gap: 3 },
-  chartBar: { width: "100%", borderRadius: 3 },
-  chartLabel: { fontSize: 9, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  spendSubLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 6 },
+  headerSummary: { fontSize: 13, fontFamily: "Inter_400Regular", fontWeight: "300" as const, color: Colors.textTertiary, marginTop: 4 },
+  spendingSummary: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: -4, marginBottom: 4 },
 
   section: { gap: 10 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   sectionTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  screeningBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: Colors.healthMuted, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  screeningBadgeText: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.health },
   screeningCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.border },
   screeningIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.healthMuted, alignItems: "center", justifyContent: "center" },
   screeningContent: { flex: 1, gap: 2 },

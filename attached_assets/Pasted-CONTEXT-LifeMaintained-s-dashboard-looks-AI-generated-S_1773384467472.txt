@@ -1,0 +1,36 @@
+CONTEXT: LifeMaintained's dashboard looks AI-generated. Stanford University research found 46% of users judge credibility on visual design alone. The target aesthetic is Apple Health — clean, spacious, typography-driven hierarchy.
+IMPORTANT: Only modify app/(tabs)/index.tsx. Keep all data fetching, voice log sheet, and navigation logic identical. Only change rendering and styles.
+
+TASK: Restructure the dashboard layout. Five changes.
+
+Fix stale teal gradient in header:
+Find: colors={["rgba(0,201,167,0.10)", "transparent"]}
+Replace: colors={["rgba(232,147,58,0.06)", "transparent"]}
+Replace CategoryCardsRow with inline text:
+Delete the three colored stat boxes (the CategoryCardsRow component AND its call). Replace with a subtitle under "Dashboard":
+
+<Text style={styles.headerSummary}>
+  {counts?.vehicles ?? 0} vehicle{(counts?.vehicles ?? 0) !== 1 ? "s" : ""} · {counts?.properties ?? 0} propert{(counts?.properties ?? 0) !== 1 ? "ies" : "y"} · {counts?.health ?? 0} health item{(counts?.health ?? 0) !== 1 ? "s" : ""}
+</Text>
+Style: 13px, Colors.textTertiary, fontWeight "300". Delete the CategoryCardsRow function and all catRow/catCard/catIconWrap/catCount/catLabel styles.
+
+Remove two-column layout — make tasks full width:
+Delete the <View style={styles.twoCol}> wrapper. Render UpcomingTasksCard at full width. Move spending below tasks as a single line of text (not a separate card):
+
+<Text style={styles.spendingSummary}>
+  This month: ${totalSpending} spent on maintenance
+</Text>
+Style: 13px, Colors.textSecondary, marginTop 8, marginBottom 16. Delete the SpendingCard component and its styles. Calculate totalSpending from the spending object values.
+
+Increase content padding:
+Change horizontal padding on the content area from 16px to 20px.
+Remove "Age-based" badge from Health Screenings section header. Just show "Health Screenings" as the section title.
+
+VERIFICATION:
+
+No three colored stat boxes — inline summary text instead
+No two-column layout — tasks are full width
+Spending is one line of text below tasks
+Header gradient is warm orange, not teal
+All data still loads correctly
+Zero TypeScript errors
