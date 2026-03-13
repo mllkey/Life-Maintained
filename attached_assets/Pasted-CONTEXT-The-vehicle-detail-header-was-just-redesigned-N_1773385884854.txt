@@ -1,0 +1,51 @@
+CONTEXT: The vehicle detail header was just redesigned. Now the Schedule tab content needs the same treatment. The current task rows have colored category badges (Tires, Engine, Fluids, Brakes), red warning icons on every row, and chevron arrows. It looks busy and alarming. The target is Apple Health — calm, scannable, with color used only for actual status.
+IMPORTANT: Only modify app/vehicle/[id].tsx. Only change the Schedule tab rendering and styles — the collapsible sections (Action Needed/Upcoming/Completed), task data, mark-complete logic, and MarkCompleteSheet must stay identical.
+
+TASK: Redesign schedule task rows. Four changes.
+
+Redesign individual task rows:
+
+Each maintenance task row currently shows: task name, a colored category badge (Engine, Tires, etc.), mileage/date info, a red warning icon, and a chevron. Redesign:
+
+Remove the colored category badge pill (Engine, Fluids, Brakes, Tires). The task name already tells the user what category it is — "Engine Oil & Filter Change" is obviously engine. The badges are visual noise.
+Task name: 15px, fontWeight "600", Colors.text. Single line, truncate if needed.
+Below the name: due info in 13px, Colors.textSecondary. Example: "Due at 7,500 mi · Sep 7, 2026". Combine mileage and date on one line.
+Remove the red warning/alert icon from every row. Instead, use a small colored vertical bar on the left (same pattern as dashboard tasks): 4px wide, 28px tall, rounded. Red for overdue, yellow/amber for upcoming, green for completed.
+Remove the chevron arrow on the right. The whole row is tappable for mark-complete — the chevron adds clutter.
+Row padding: 14px vertical, 16px horizontal. Subtle bottom border (1px Colors.borderSubtle) between rows.
+
+
+Redesign section headers:
+
+The collapsible sections (Action Needed, Upcoming, Completed) should use the same small-caps label style as the dashboard:
+
+Section label: 11px, fontWeight "600", letterSpacing 1.5, Colors.textTertiary, textTransform uppercase.
+Include the count in parentheses: "ACTION NEEDED (3)"
+The expand/collapse chevron: keep it but make it 14px, Colors.textTertiary.
+No background color on the section header — just the label text and chevron.
+
+
+Completed tasks styling:
+
+For tasks in the Completed section:
+
+Task name: 14px, fontWeight "400", Colors.textTertiary (dimmed to de-emphasize).
+Left bar: Colors.good (green) at 50% opacity.
+Due info replaced with completion info: "Completed Mar 1, 2026" in 12px, Colors.textTertiary.
+These should feel clearly secondary to the active tasks above.
+
+
+Empty schedule state:
+
+If the schedule has no tasks at all, show: "No maintenance schedule yet" in 15px, Colors.textSecondary, centered with 40px vertical padding. Below it: "Tap Log Service to record maintenance" in 13px, Colors.textTertiary.
+DO NOT modify the Wallet tab, History tab, MarkCompleteSheet, header, tab bar, or any data logic.
+VERIFICATION:
+
+No colored category badge pills on task rows
+Colored vertical bars on the left of each row (red/yellow/green by status)
+No red warning icons or chevron arrows
+Section headers in small caps with counts
+Completed tasks are visually dimmed
+Tapping a task still opens mark-complete flow
+Collapsible sections still expand/collapse
+Zero TypeScript errors

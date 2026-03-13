@@ -660,13 +660,8 @@ export default function VehicleDetailScreen() {
                 </View>
               ) : processedScheduleTasks.length === 0 ? (
                 <View style={styles.scheduleEmpty}>
-                  <View style={styles.scheduleEmptyIcon}>
-                    <Ionicons name="calendar-outline" size={36} color={Colors.textTertiary} />
-                  </View>
                   <Text style={styles.scheduleEmptyTitle}>No maintenance schedule yet</Text>
-                  <Text style={styles.scheduleEmptySubtitle}>
-                    Generate a schedule based on your vehicle's make and mileage
-                  </Text>
+                  <Text style={styles.scheduleEmptySubtitle}>Tap Log Service to record maintenance</Text>
                   <Pressable
                     style={({ pressed }) => [styles.generateBtn, { opacity: pressed ? 0.85 : 1 }]}
                     onPress={generateSchedule}
@@ -680,13 +675,6 @@ export default function VehicleDetailScreen() {
                         <Text style={styles.generateBtnText}>Generate Schedule</Text>
                       </>
                     )}
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [styles.customTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
-                    onPress={() => showToast("Coming soon")}
-                  >
-                    <Ionicons name="add" size={15} color={Colors.textSecondary} />
-                    <Text style={styles.customTaskBtnText}>Add Custom Task</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -703,7 +691,7 @@ export default function VehicleDetailScreen() {
                     />
                   )}
                   <ScheduleSection
-                    title="Upcoming"
+                    title={`Upcoming (${upcomingTasks.length})`}
                     expanded={upcomingExpanded}
                     onToggle={() => { Haptics.selectionAsync(); setUpcomingExpanded(v => !v); }}
                     tasks={upcomingTasks}
@@ -713,7 +701,7 @@ export default function VehicleDetailScreen() {
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
-                      title="Completed"
+                      title={`Completed (${completedTasks.length})`}
                       titleColor={Colors.good}
                       expanded={completedExpanded}
                       onToggle={() => { Haptics.selectionAsync(); setCompletedExpanded(v => !v); }}
@@ -861,8 +849,11 @@ function ScheduleSkeleton() {
     <View style={styles.skeletonContainer}>
       {[1, 2, 3, 4].map(i => (
         <View key={i} style={styles.skeletonCard}>
-          <View style={styles.skeletonLine} />
-          <View style={[styles.skeletonLine, { width: "60%", marginTop: 8 }]} />
+          <View style={{ width: 4, height: 28, borderRadius: 2, backgroundColor: Colors.surface, flexShrink: 0 }} />
+          <View style={{ flex: 1, gap: 8 }}>
+            <View style={styles.skeletonLine} />
+            <View style={[styles.skeletonLine, { width: "55%" }]} />
+          </View>
         </View>
       ))}
     </View>
@@ -891,13 +882,13 @@ function ScheduleSection({
   return (
     <View style={styles.scheduleSection}>
       <Pressable style={styles.scheduleSectionHeader} onPress={onToggle} hitSlop={6}>
-        <Text style={[styles.scheduleSectionTitle, titleColor ? { color: titleColor } : {}]}>
-          {title}
+        <Text style={styles.scheduleSectionTitle}>
+          {title.toUpperCase()}
         </Text>
         <Ionicons
           name={expanded ? "chevron-up" : "chevron-down"}
-          size={16}
-          color={titleColor ?? Colors.textSecondary}
+          size={14}
+          color={Colors.textTertiary}
         />
       </Pressable>
       {expanded && (
@@ -905,12 +896,13 @@ function ScheduleSection({
           {tasks.length === 0 && emptyMessage ? (
             <Text style={styles.scheduleSectionEmpty}>{emptyMessage}</Text>
           ) : (
-            tasks.map(task => (
+            tasks.map((task, idx) => (
               <ScheduleTaskCard
                 key={task.id}
                 task={task}
                 vehicle={vehicle}
                 onMarkComplete={onMarkComplete}
+                isLast={idx === tasks.length - 1}
               />
             ))
           )}
@@ -920,90 +912,55 @@ function ScheduleSection({
   );
 }
 
-function ScheduleTaskCard({ task, vehicle, onMarkComplete }: {
+function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast }: {
   task: any;
   vehicle: any;
   onMarkComplete: (task: any) => void;
+  isLast?: boolean;
 }) {
-  const borderColor = STATUS_BORDER[task.status] ?? Colors.border;
-  const catColors = CATEGORY_COLORS[task.category?.toLowerCase()] ?? { bg: Colors.surface, text: Colors.textSecondary };
-  const isCritical = task.priority === "critical";
-  const isOptional = task.priority === "optional";
   const isCompleted = task.status === "completed";
 
-  const dueLines: string[] = [];
-  if (task.next_due_miles != null) {
-    dueLines.push(`Due at ${task.next_due_miles.toLocaleString()} mi`);
+  const barColor = task.status === "overdue"
+    ? Colors.overdue
+    : task.status === "due_soon"
+      ? Colors.dueSoon
+      : task.status === "completed"
+        ? Colors.good
+        : Colors.borderSubtle;
+
+  const dueParts: string[] = [];
+  if (!isCompleted) {
+    if (task.next_due_miles != null) dueParts.push(`Due at ${task.next_due_miles.toLocaleString()} mi`);
+    if (task.next_due_date != null) dueParts.push(format(parseISO(task.next_due_date), "MMM d, yyyy"));
+    if (dueParts.length === 0) dueParts.push("No schedule set");
+  } else if (task.last_completed_date) {
+    dueParts.push(`Completed ${format(parseISO(task.last_completed_date), "MMM d, yyyy")}`);
   }
-  if (task.next_due_date != null) {
-    dueLines.push(`Due by ${format(parseISO(task.next_due_date), "MMM d, yyyy")}`);
-  }
-  if (dueLines.length === 0 && !isCompleted) {
-    dueLines.push("No schedule set.");
-  }
-  if (isCompleted && task.last_completed_date) {
-    dueLines.push(`Done ${format(parseISO(task.last_completed_date), "MMM d, yyyy")}`);
-  }
+  const dueText = dueParts.join(" · ");
 
   return (
     <Pressable
       onPress={!isCompleted ? () => onMarkComplete(task) : undefined}
       style={({ pressed }) => [
         styles.scheduleCard,
-        { borderLeftColor: borderColor },
+        !isLast && styles.scheduleCardBorder,
         !isCompleted && pressed && { opacity: 0.7 },
       ]}
       accessibilityRole={!isCompleted ? "button" : undefined}
       accessibilityLabel={isCompleted ? `${task.name} — completed` : `${task.name} — tap to mark complete`}
     >
-      <View style={styles.scheduleCardInner}>
-        <View style={styles.scheduleCardBody}>
-          <View style={styles.scheduleCardTop}>
-            <Text
-              style={[
-                styles.scheduleCardName,
-                isOptional && { color: Colors.textSecondary },
-                isCompleted && { color: Colors.textTertiary },
-              ]}
-              numberOfLines={2}
-            >
-              {task.name}
-            </Text>
-            {isCritical && !isCompleted && (
-              <View style={styles.criticalDot}>
-                <Text style={styles.criticalDotText}>!</Text>
-              </View>
-            )}
-          </View>
-          <View style={styles.scheduleCardRow}>
-            {task.category ? (
-              <View style={[styles.categoryBadge, { backgroundColor: catColors.bg }]}>
-                <Text style={[styles.categoryBadgeText, { color: catColors.text }]}>
-                  {task.category.charAt(0).toUpperCase() + task.category.slice(1)}
-                </Text>
-              </View>
-            ) : null}
-            <View style={styles.dueInfo}>
-              {dueLines.map((line, i) => (
-                <Text
-                  key={i}
-                  style={[
-                    styles.scheduleCardDue,
-                    isOptional && { color: Colors.textTertiary },
-                    isCompleted && { color: Colors.textTertiary },
-                  ]}
-                >
-                  {line}
-                </Text>
-              ))}
-            </View>
-          </View>
-        </View>
-        {!isCompleted && (
-          <Ionicons name="chevron-forward" size={22} color={Colors.textTertiary} style={{ opacity: 0.5 }} />
-        )}
-        {isCompleted && (
-          <Ionicons name="checkmark-circle" size={22} color={Colors.good} style={{ opacity: 0.5 }} />
+      <View style={[styles.scheduleCardBar, { backgroundColor: barColor, opacity: isCompleted ? 0.5 : 1 }]} />
+      <View style={styles.scheduleCardBody}>
+        <Text
+          style={[styles.scheduleCardName, isCompleted && styles.scheduleCardNameDone]}
+          numberOfLines={1}
+        >
+          {task.name}
+        </Text>
+        {!!dueText && (
+          <Text style={[styles.scheduleCardDue, isCompleted && styles.scheduleCardDueDone]}>
+            {dueText}
+          </Text>
         )}
       </View>
     </Pressable>
@@ -2215,74 +2172,62 @@ const styles = StyleSheet.create({
   historyGroupCardRight: { alignItems: "flex-end", gap: 6, flexShrink: 0 },
   historyGroupCardCost: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.vehicle },
 
-  scheduleContainer: { gap: 12 },
-  scheduleSection: {
+  scheduleContainer: { gap: 16 },
+  scheduleSection: { gap: 0 },
+  scheduleSectionHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 4, paddingBottom: 8,
+  },
+  scheduleSectionTitle: {
+    fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary,
+    textTransform: "uppercase", letterSpacing: 1.5,
+  },
+  scheduleSectionContent: {
     backgroundColor: Colors.card, borderRadius: 14,
     borderWidth: 1, borderColor: Colors.border, overflow: "hidden",
   },
-  scheduleSectionHeader: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 14, paddingVertical: 12,
-  },
-  scheduleSectionTitle: {
-    fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary,
-    textTransform: "uppercase", letterSpacing: 0.6,
-  },
-  scheduleSectionContent: { borderTopWidth: 1, borderTopColor: Colors.border, gap: 1 },
   scheduleSectionEmpty: {
     fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
     textAlign: "center", paddingVertical: 20,
   },
   scheduleCard: {
-    backgroundColor: Colors.card, paddingHorizontal: 14, paddingVertical: 12,
-    borderLeftWidth: 3, gap: 6,
+    flexDirection: "row", alignItems: "center", gap: 14,
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  scheduleCardBorder: {
     borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
   },
-  scheduleCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  scheduleCardBar: {
+    width: 4, height: 28, borderRadius: 2, flexShrink: 0,
+  },
+  scheduleCardBody: { flex: 1, gap: 3 },
   scheduleCardName: {
-    flex: 1, fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text,
+    fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text,
   },
-  criticalDot: {
-    width: 18, height: 18, borderRadius: 9, backgroundColor: Colors.overdueMuted,
-    alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1,
+  scheduleCardNameDone: {
+    fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
   },
-  criticalDotText: {
-    fontSize: 11, fontFamily: "Inter_700Bold", color: Colors.overdue,
-  },
-  scheduleCardRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, flexWrap: "wrap" },
-  categoryBadge: {
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-  },
-  categoryBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  dueInfo: { flex: 1, gap: 2 },
   scheduleCardDue: {
-    fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary,
+    fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary,
+  },
+  scheduleCardDueDone: {
+    fontSize: 12, color: Colors.textTertiary,
   },
   scheduleEmpty: {
-    alignItems: "center", paddingVertical: 40, paddingHorizontal: 16, gap: 10,
-  },
-  scheduleEmptyIcon: {
-    width: 72, height: 72, borderRadius: 20, backgroundColor: Colors.surface,
-    alignItems: "center", justifyContent: "center", marginBottom: 4,
+    alignItems: "center", paddingVertical: 40, paddingHorizontal: 16, gap: 8,
   },
   scheduleEmptyTitle: {
-    fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text,
+    fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary, textAlign: "center",
   },
   scheduleEmptySubtitle: {
-    fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary,
-    textAlign: "center", lineHeight: 19,
+    fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
+    textAlign: "center",
   },
   generateBtn: {
     flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: Colors.accent,
     borderRadius: 12, paddingHorizontal: 22, paddingVertical: 12, marginTop: 6,
   },
   generateBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  customTaskBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 12,
-    paddingHorizontal: 16, paddingVertical: 10,
-    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
-  },
-  customTaskBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
   scheduleError: { alignItems: "center", paddingVertical: 36, gap: 10 },
   scheduleErrorText: {
     fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center",
@@ -2292,22 +2237,14 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border, marginTop: 4,
   },
   retryBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  skeletonContainer: { gap: 1, backgroundColor: Colors.card, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: Colors.border },
+  skeletonContainer: { gap: 0, backgroundColor: Colors.card, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: Colors.border },
   skeletonCard: {
-    backgroundColor: Colors.card, paddingHorizontal: 14, paddingVertical: 14,
-    borderLeftWidth: 3, borderLeftColor: Colors.border,
+    flexDirection: "row", alignItems: "center", gap: 14,
+    paddingHorizontal: 16, paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
   },
   skeletonLine: {
     height: 14, borderRadius: 7, backgroundColor: Colors.surface, width: "80%",
-  },
-
-  scheduleCardInner: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-  },
-  scheduleCardBody: { flex: 1 },
-  scheduleCompleteBtn: {
-    width: 36, height: 36, alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
 
   sheetOverlay: {
