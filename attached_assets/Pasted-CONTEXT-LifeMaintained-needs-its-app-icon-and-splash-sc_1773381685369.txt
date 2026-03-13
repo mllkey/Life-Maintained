@@ -1,0 +1,104 @@
+CONTEXT: LifeMaintained needs its app icon and splash screen replaced with the actual brand logo. The logo PNG with transparent background has been uploaded to assets/images/brand-logo.png. It's an "LM" monogram in navy blue and orange.
+IMPORTANT: Only replace image assets and update app.json. Do NOT modify any component code or color constants.
+
+TASK: Generate all required icon assets from the brand logo using a Node.js build script with the sharp package.
+STEP 1 — Install sharp and create a build script:
+Run: npm install sharp
+Create a file: scripts/generate-icons.js
+This script reads assets/images/brand-logo.png (the transparent PNG) and generates every required icon asset programmatically:
+javascriptconst sharp = require('sharp');
+const path = require('path');
+
+const LOGO = path.join(__dirname, '..', 'assets', 'images', 'brand-logo.png');
+const OUT = path.join(__dirname, '..', 'assets', 'images');
+
+async function generate() {
+  // 1. App icon: logo centered on white background, 1024x1024
+  await sharp(LOGO)
+    .resize(680, 680, { fit: 'inside' })
+    .flatten({ background: '#FFFFFF' })
+    .extend({
+      top: 172, bottom: 172, left: 172, right: 172,
+      background: '#FFFFFF'
+    })
+    .resize(1024, 1024)
+    .png()
+    .toFile(path.join(OUT, 'icon.png'));
+
+  // 2. Android foreground: logo centered on transparent, 512x512
+  // Logo in center 66% (338px) with padding
+  await sharp(LOGO)
+    .resize(338, 338, { fit: 'inside' })
+    .extend({
+      top: 87, bottom: 87, left: 87, right: 87,
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
+    })
+    .resize(512, 512)
+    .png()
+    .toFile(path.join(OUT, 'android-icon-foreground.png'));
+
+  // 3. Android background: solid white, 512x512
+  await sharp({
+    create: { width: 512, height: 512, channels: 4, background: '#FFFFFF' }
+  }).png().toFile(path.join(OUT, 'android-icon-background.png'));
+
+  // 4. Android monochrome: white silhouette, 512x512
+  await sharp(LOGO)
+    .resize(338, 338, { fit: 'inside' })
+    .threshold(128)
+    .negate()
+    .extend({
+      top: 87, bottom: 87, left: 87, right: 87,
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
+    })
+    .resize(512, 512)
+    .png()
+    .toFile(path.join(OUT, 'android-icon-monochrome.png'));
+
+  // 5. Favicon: logo on white, 48x48
+  await sharp(LOGO)
+    .resize(32, 32, { fit: 'inside' })
+    .flatten({ background: '#FFFFFF' })
+    .extend({
+      top: 8, bottom: 8, left: 8, right: 8,
+      background: '#FFFFFF'
+    })
+    .resize(48, 48)
+    .png()
+    .toFile(path.join(OUT, 'favicon.png'));
+
+  // 6. Splash icon: logo on transparent, 512x512
+  await sharp(LOGO)
+    .resize(400, 400, { fit: 'inside' })
+    .extend({
+      top: 56, bottom: 56, left: 56, right: 56,
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
+    })
+    .resize(512, 512)
+    .png()
+    .toFile(path.join(OUT, 'splash-icon.png'));
+
+  console.log('All icons generated successfully');
+}
+
+generate().catch(console.error);
+Adjust the resize values if the output doesn't look right — the logo should be centered with comfortable padding and never touch the edges. Run the script: node scripts/generate-icons.js
+STEP 2 — Verify the generated files visually. Open each one and confirm:
+
+icon.png: logo clearly visible, centered on white, 1024x1024
+android-icon-foreground.png: logo centered, transparent background, 512x512
+favicon.png: logo recognizable at 48x48
+
+If sharp produces unexpected results (wrong colors, clipping, etc.), adjust the script and re-run. Do NOT manually create placeholder images.
+STEP 3 — Update app.json splash background:
+Change the splash backgroundColor to dark navy that matches the brand:
+"backgroundColor": "#0C111B"
+DO NOT modify constants/colors.ts, any component files, or any functionality.
+VERIFICATION:
+
+Run: node scripts/generate-icons.js — completes without errors
+Open assets/images/icon.png — shows LM logo centered on white, 1024x1024
+Open assets/images/splash-icon.png — shows LM logo on transparent background
+Open assets/images/favicon.png — logo recognizable at small size
+app.json splash backgroundColor is "#0C111B"
+Zero TypeScript errors
