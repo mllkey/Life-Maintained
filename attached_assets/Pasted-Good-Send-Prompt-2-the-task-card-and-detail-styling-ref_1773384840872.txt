@@ -1,0 +1,61 @@
+Good. Send Prompt 2 — the task card and detail styling refinement:
+
+Copy everything below and paste into Replit Agent:
+
+CONTEXT: The dashboard layout was just restructured — stat boxes removed, full-width tasks, inline spending. Now the individual task rows and remaining elements need visual refinement to match the Apple Health clean-utility aesthetic.
+IMPORTANT: Only modify app/(tabs)/index.tsx. Keep all data fetching and navigation logic identical. Only change rendering and styles within the UpcomingTasksCard function and remaining dashboard elements.
+
+TASK: Refine task card styling and dashboard details. Five changes.
+
+Redesign task rows in UpcomingTasksCard:
+
+Replace the colored dot + cramped row layout with a cleaner design:
+
+Each task row gets a small colored vertical bar on the left (4px wide, 28px tall, rounded 2px, using status color — red for overdue, yellow for due soon). This replaces the small dot.
+Remove the chevron arrow on the right side of each row if one exists.
+Task name: 15px, fontWeight "600", Colors.text.
+Subtitle (asset name): 13px, fontWeight "400", Colors.textSecondary.
+Due date on the right: compact text, 12px, fontWeight "500", status color. No pill background — just the colored text.
+Row padding: 14px vertical, with a subtle bottom border (1px, Colors.borderSubtle) between rows instead of a full divider.
+The "Upcoming" header inside the card: change to "NEEDS ATTENTION" in 11px, fontWeight "600", letterSpacing 1.5, Colors.textTertiary, textTransform uppercase. Place it ABOVE the card as a section label, not inside it.
+
+
+Limit visible tasks to 4:
+
+Show a maximum of 4 task rows. If there are more, add a pressable text link below the last row: "See all X items →" in 13px, Colors.accent, fontWeight "500". Tapping it navigates to the first tab that has overdue items (vehicles or properties).
+
+Refine QuickMileageCard:
+
+
+Remove the circular icon wrapper on the left side. Replace with just the vehicle name as bold text (15px, fontWeight "600") and "Update mileage" as subtitle (12px, Colors.textSecondary).
+Card border radius: 14px.
+Add a subtle border: 1px solid Colors.border (instead of relying only on background color for depth).
+
+
+Refine Health Screening rows:
+
+
+Replace the pink circle icon on the left with a small vertical bar (same pattern as task rows — 4px wide, 28px tall, Colors.health).
+Increase gap between screening items to 10px.
+Remove the notification bell icon on the right side — it adds clutter and the opt-in state isn't obvious enough to be useful at a glance.
+
+
+Consistent card styling:
+
+Apply these to all remaining cards on the dashboard:
+
+borderRadius: 14px
+border: 1px solid Colors.border
+No box shadows (remove elevation/shadow styles if any exist)
+Padding: 16px
+
+VERIFICATION:
+
+Task rows have colored vertical bars on the left, not dots
+"NEEDS ATTENTION" label above task list in small caps
+Maximum 4 tasks shown with "See all" link if more exist
+Mileage card has no circle icon — clean text layout
+Health screenings use vertical bars, no bell icons
+All cards have consistent 14px radius and subtle borders
+All navigation still works (tapping tasks, mileage save, screenings)
+Zero TypeScript errors

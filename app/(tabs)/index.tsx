@@ -383,26 +383,13 @@ export default function DashboardScreen() {
                   <Text style={styles.sectionTitle}>Health Screenings</Text>
                 </View>
                 {screenings.slice(0, 3).map((s, i) => (
-                  <View key={i} style={styles.screeningCard}>
-                    <View style={styles.screeningIcon}>
-                      <Ionicons name="heart-outline" size={17} color={Colors.health} />
-                    </View>
-                    <Pressable style={styles.screeningContent} onPress={() => router.push("/add-appointment" as any)}>
+                  <Pressable key={i} style={({ pressed }) => [styles.screeningCard, { opacity: pressed ? 0.8 : 1 }]} onPress={() => router.push("/add-appointment" as any)}>
+                    <View style={styles.screeningBar} />
+                    <View style={styles.screeningContent}>
                       <Text style={styles.screeningTitle}>{s.title}</Text>
                       <Text style={styles.screeningDesc}>{s.description}</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.screeningNotifBtn, screeningOptIns[s.title] && styles.screeningNotifBtnActive]}
-                      onPress={() => toggleScreeningOptIn(s.title)}
-                      hitSlop={8}
-                    >
-                      <Ionicons
-                        name={screeningOptIns[s.title] ? "notifications" : "notifications-outline"}
-                        size={16}
-                        color={screeningOptIns[s.title] ? Colors.health : Colors.textTertiary}
-                      />
-                    </Pressable>
-                  </View>
+                    </View>
+                  </Pressable>
                 ))}
               </View>
             )}
@@ -556,14 +543,9 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
     return (
       <View style={styles.qmCard}>
         <View style={styles.qmCardHeaderStatic}>
-          <View style={styles.qmIconWrap}>
-            <Ionicons name="speedometer-outline" size={18} color={Colors.accent} />
-          </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.qmCardTitle}>Update Mileage</Text>
-            <Text style={[styles.qmCardSub, { color: isStale(v) ? Colors.dueSoon : Colors.good }]}>
-              {vehicleName}
-            </Text>
+            <Text style={styles.qmCardTitle}>{vehicleName}</Text>
+            <Text style={styles.qmCardSub}>Update mileage</Text>
           </View>
           <View style={styles.qmInputRow}>
             <TextInput
@@ -611,11 +593,8 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
         accessibilityRole="button"
         accessibilityLabel={expanded ? "Collapse mileage updater" : "Expand mileage updater"}
       >
-        <View style={styles.qmIconWrap}>
-          <Ionicons name="speedometer-outline" size={18} color={Colors.accent} />
-        </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.qmCardTitle}>Update Mileage</Text>
+          <Text style={styles.qmCardTitle}>Mileage</Text>
           <Text style={[styles.qmCardSub, { color: allUpToDate ? Colors.good : Colors.dueSoon }]}>
             {allUpToDate
               ? "All up to date"
@@ -1020,50 +999,57 @@ function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
     else router.push("/(tabs)/health");
   }
 
+  const visibleItems = items.slice(0, 4);
+  const hasMore = items.length > 4;
+  const firstNavItem = items.find(i => i.category === "vehicles" || i.category === "properties");
+  const seeAllRoute: any = firstNavItem?.category === "vehicles" ? "/(tabs)/vehicles" : "/(tabs)/home-tab";
+
   return (
-    <View style={styles.panelCard}>
-      <View style={styles.panelHeader}>
-        <Text style={styles.panelTitle}>Upcoming</Text>
-        {items.length > 0 && (
-          <View style={[styles.panelBadge, { backgroundColor: items.some(i => i.status === "overdue") ? Colors.overdueMuted : Colors.dueSoonMuted }]}>
-            <Text style={[styles.panelBadgeText, { color: items.some(i => i.status === "overdue") ? Colors.overdue : Colors.dueSoon }]}>
-              {items.length}
-            </Text>
+    <>
+      {items.length > 0 && (
+        <Text style={styles.sectionLabel}>NEEDS ATTENTION</Text>
+      )}
+      <View style={styles.panelCard}>
+        {items.length === 0 ? (
+          <View style={styles.panelEmpty}>
+            <Ionicons name="checkmark-circle-outline" size={24} color={Colors.good} />
+            <Text style={styles.panelEmptyText}>All good</Text>
+          </View>
+        ) : (
+          <View style={styles.taskList}>
+            {visibleItems.map((item, idx) => {
+              const statusColor = item.status === "overdue" ? Colors.overdue : Colors.dueSoon;
+              return (
+                <Pressable
+                  key={item.id}
+                  style={({ pressed }) => [
+                    styles.taskRow,
+                    (idx < visibleItems.length - 1 || hasMore) && styles.taskRowBorder,
+                    { opacity: pressed ? 0.75 : 1 },
+                  ]}
+                  onPress={() => handlePress(item)}
+                >
+                  <View style={[styles.taskBar, { backgroundColor: statusColor }]} />
+                  <View style={styles.taskInfo}>
+                    <Text style={styles.taskTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.taskSub} numberOfLines={1}>{item.subtitle}</Text>
+                  </View>
+                  <Text style={[styles.taskDue, { color: statusColor }]}>{formatDueDate(item.dueDate)}</Text>
+                </Pressable>
+              );
+            })}
+            {hasMore && (
+              <Pressable
+                style={({ pressed }) => [styles.seeAllRow, { opacity: pressed ? 0.7 : 1 }]}
+                onPress={() => { Haptics.selectionAsync(); router.push(seeAllRoute); }}
+              >
+                <Text style={styles.seeAllText}>{"See all "}{items.length}{" items →"}</Text>
+              </Pressable>
+            )}
           </View>
         )}
       </View>
-      {items.length === 0 ? (
-        <View style={styles.panelEmpty}>
-          <Ionicons name="checkmark-circle-outline" size={24} color={Colors.good} />
-          <Text style={styles.panelEmptyText}>All good</Text>
-        </View>
-      ) : (
-        <View style={styles.taskList}>
-          {items.map((item, idx) => {
-            const statusColor = item.status === "overdue" ? Colors.overdue : Colors.dueSoon;
-            const catColor = CAT[item.category].color;
-            return (
-              <Pressable
-                key={item.id}
-                style={({ pressed }) => [
-                  styles.taskRow,
-                  idx < items.length - 1 && styles.taskRowBorder,
-                  { opacity: pressed ? 0.75 : 1 },
-                ]}
-                onPress={() => handlePress(item)}
-              >
-                <View style={[styles.taskDot, { backgroundColor: statusColor }]} />
-                <View style={styles.taskInfo}>
-                  <Text style={styles.taskTitle} numberOfLines={1}>{item.title}</Text>
-                  <Text style={styles.taskSub} numberOfLines={1}>{item.subtitle}</Text>
-                </View>
-                <Text style={[styles.taskDue, { color: statusColor }]}>{formatDueDate(item.dueDate)}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-    </View>
+    </>
   );
 }
 
@@ -1133,22 +1119,23 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  panelCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 14, gap: 2, borderWidth: 1, borderColor: Colors.border },
-  panelHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
-  panelTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  panelBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7 },
-  panelBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  panelCard: { backgroundColor: Colors.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.border },
   panelEmpty: { alignItems: "center", paddingVertical: 16, gap: 6 },
   panelEmptyText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
 
+  sectionLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, letterSpacing: 1.5, textTransform: "uppercase" },
+
   taskList: { gap: 0 },
-  taskRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 9, minHeight: 44 },
-  taskRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.border },
-  taskDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
-  taskInfo: { flex: 1, gap: 1 },
-  taskTitle: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.text, lineHeight: 16 },
-  taskSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, lineHeight: 14 },
-  taskDue: { fontSize: 11, fontFamily: "Inter_600SemiBold", flexShrink: 0 },
+  taskRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14 },
+  taskRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle },
+  taskBar: { width: 4, height: 28, borderRadius: 2, flexShrink: 0 },
+  taskInfo: { flex: 1, gap: 2 },
+  taskTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 19 },
+  taskSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 17 },
+  taskDue: { fontSize: 12, fontFamily: "Inter_500Medium", flexShrink: 0 },
+
+  seeAllRow: { paddingVertical: 12, alignItems: "center" },
+  seeAllText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
 
   headerSummary: { fontSize: 13, fontFamily: "Inter_400Regular", fontWeight: "300" as const, color: Colors.textTertiary, marginTop: 4 },
   spendingSummary: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: -4, marginBottom: 4 },
@@ -1156,13 +1143,11 @@ const styles = StyleSheet.create({
   section: { gap: 10 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   sectionTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  screeningCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.border },
-  screeningIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.healthMuted, alignItems: "center", justifyContent: "center" },
+  screeningCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.border },
+  screeningBar: { width: 4, height: 28, borderRadius: 2, backgroundColor: Colors.health, flexShrink: 0 },
   screeningContent: { flex: 1, gap: 2 },
   screeningTitle: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
   screeningDesc: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  screeningNotifBtn: { width: 44, height: 44, borderRadius: 10, backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.border },
-  screeningNotifBtnActive: { backgroundColor: Colors.healthMuted, borderColor: Colors.health + "44" },
 
   welcomeWrap: { gap: 16 },
   welcomeBanner: { flexDirection: "row", gap: 14, backgroundColor: Colors.accentLight, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: Colors.accent + "30", alignItems: "flex-start" },
@@ -1190,7 +1175,7 @@ const styles = StyleSheet.create({
 
   qmCard: {
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -1199,13 +1184,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    padding: 14,
+    padding: 16,
   },
   qmCardHeaderStatic: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    padding: 14,
+    padding: 16,
   },
   qmIconWrap: {
     width: 36,
@@ -1217,14 +1202,15 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   qmCardTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     color: Colors.text,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   qmCardSub: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
     lineHeight: 16,
     marginTop: 1,
   },
