@@ -1,0 +1,67 @@
+Which screen first — vehicles list or vehicle detail?
+The vehicles list (screenshot 2) has the bigger problems: massive card with wasted space, "No mileage" and "Manufacturer" placeholder badges, and the two buttons at the bottom. That's 1 screen, 1 prompt.
+The vehicle detail (screenshot 3) is more complex — header, schedule tabs, task rows. That's probably 2 prompts.
+I'll start with the vehicles list:
+
+Copy everything below and paste into Replit Agent:
+
+CONTEXT: LifeMaintained's vehicles list screen looks AI-generated. The vehicle card is oversized with wasted space, placeholder-style badges ("No mileage", "Manufacturer"), and two buttons crammed at the bottom. The target aesthetic is Apple Health — clean, compact, typography-driven.
+IMPORTANT: Only modify app/(tabs)/vehicles.tsx. Keep all data fetching, navigation, and mileage estimation logic identical. Only change rendering and styles.
+
+TASK: Redesign vehicle cards on the vehicles list. Six changes.
+
+Compact the vehicle card:
+
+The current card is too tall with too much empty space. Redesign as a compact horizontal layout:
+
+Left side: vehicle type icon (keep Ionicons car/motorcycle/boat icon) displayed as a small 36×36 rounded square with the vehicle category color at 10% opacity background. No large circle.
+Center: vehicle name (nickname or "Year Make Model") as 16px fontWeight "600", and below it a single line of metadata in 13px Colors.textSecondary.
+Right side: a small chevron (chevron-forward) in Colors.textTertiary to indicate tappability.
+Card padding: 14px. Border radius: 14px. Border: 1px solid Colors.border.
+The entire card is tappable — navigates to vehicle detail.
+
+
+Remove badge pills:
+
+Delete the "No mileage" badge and the "Manufacturer" badge. These look like placeholder tags. Instead, show mileage inline in the metadata line:
+
+If mileage exists: "13,300 mi · Last updated 3d ago"
+If no mileage (non-mileage vehicle): just show the vehicle type: "Boat" or "ATV"
+If mileage exists but is stale (7+ days): show "13,300 mi · Update needed" in Colors.dueSoon
+
+
+Remove "Update Mileage" and "Log Service" buttons from the card:
+
+These belong on the vehicle detail screen, not the list. The card should be a clean summary that you tap to enter the detail view. Delete both buttons and their styles.
+
+Add maintenance status indicator:
+
+If the vehicle has overdue or due-soon tasks, show a small colored indicator:
+
+A compact text on the right side (above the chevron area): "2 due" in Colors.dueSoon or "1 overdue" in Colors.overdue, 11px, fontWeight "500".
+If nothing is due, show nothing — don't show "0 need attention" or a green checkmark.
+
+To get this data: the vehicle cards already have access to the vehicles query. If maintenance task counts aren't currently fetched in the vehicles list query, skip this change rather than adding a new query. Don't break performance.
+
+Vehicles screen header:
+
+
+"Vehicles" title: 28px, bold, matching dashboard style.
+The orange "+" add button: keep it but make it 36×36, border radius 10px, consistent with the new design language.
+Add horizontal padding of 20px to match the dashboard.
+
+
+Empty state:
+
+If no vehicles exist, show a centered message: "No vehicles yet" in 15px Colors.textSecondary, with a "Add your first vehicle" pressable text in Colors.accent below it. No large illustrations or icons.
+VERIFICATION:
+
+Vehicle cards are compact horizontal rows, not tall blocks
+No "No mileage" or "Manufacturer" badges
+No "Update Mileage" or "Log Service" buttons on the cards
+Mileage shown as inline metadata text
+Tapping a card navigates to vehicle detail
+Add button and header look clean
+All vehicle data still displays correctly
+Zero TypeScript errors
+ Opus 4.6

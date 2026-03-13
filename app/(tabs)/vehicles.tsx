@@ -18,7 +18,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import { parseISO, isBefore, addDays, differenceInDays } from "date-fns";
+import { parseISO, isBefore, addDays, differenceInDays, formatDistanceToNowStrict } from "date-fns";
 import { vehicleLimit } from "@/lib/subscription";
 import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 
@@ -59,28 +59,6 @@ function getVehicleIcon(type: string | null): string {
     case "snowmobile": return "snow-outline";
     default:           return "car-outline";
   }
-}
-
-function getEstimatedMileage(v: Vehicle): number | null {
-  if (!v.mileage || !v.average_miles_per_month || !v.updated_at) return null;
-  const daysSince = differenceInDays(new Date(), parseISO(v.updated_at));
-  if (daysSince < 7) return null;
-
-  let activeFraction = 1;
-  if (
-    v.is_seasonal &&
-    v.season_start_month != null &&
-    v.season_end_month != null
-  ) {
-    const start = v.season_start_month;
-    const end = v.season_end_month;
-    const activeMonths = start <= end
-      ? end - start + 1
-      : (12 - start + 1) + end;
-    activeFraction = activeMonths / 12;
-  }
-
-  return Math.round(v.mileage + (daysSince / 30.44) * v.average_miles_per_month * activeFraction);
 }
 
 export default function VehiclesScreen() {
@@ -164,11 +142,35 @@ export default function VehiclesScreen() {
             const td = taskData?.[v.id];
             const worstStatus = td?.worstStatus ?? "good";
             const pendingCount = td?.pendingCount ?? 0;
-            const scheduleLabel = td?.hasMileageInterval ? "Manufacturer" : "Standard";
-            const estimatedMileage = getEstimatedMileage(v);
             const icon = getVehicleIcon(v.vehicle_type);
             const title = `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim();
             const displayName = v.nickname ?? title;
+
+            const isMileageTracked = MILEAGE_TRACKED_TYPES.has(v.vehicle_type ?? "");
+            const daysSinceUpdate = v.updated_at ? differenceInDays(new Date(), parseISO(v.updated_at)) : null;
+            const isStale = daysSinceUpdate != null && daysSinceUpdate >= 7;
+
+            let metaLine: string;
+            if (isMileageTracked && v.mileage != null) {
+              const mileStr = v.mileage.toLocaleString() + " mi";
+              metaLine = isStale
+                ? mileStr + " · Update needed"
+                : daysSinceUpdate != null
+                  ? mileStr + " · " + formatDistanceToNowStrict(parseISO(v.updated_at!), { addSuffix: true })
+                  : mileStr;
+            } else {
+              const typeLabel = v.vehicle_type
+                ? v.vehicle_type.charAt(0).toUpperCase() + v.vehicle_type.slice(1)
+                : "Vehicle";
+              metaLine = v.nickname ? title || typeLabel : typeLabel;
+            }
+
+            const statusColor = worstStatus === "overdue" ? Colors.overdue : Colors.dueSoon;
+            const statusLabel = worstStatus === "overdue"
+              ? `${pendingCount} overdue`
+              : pendingCount > 0
+                ? `${pendingCount} due`
+                : null;
 
             return (
               <Pressable
@@ -190,124 +192,30 @@ export default function VehiclesScreen() {
                   router.push(`/vehicle/${v.id}` as any);
                 }}
               >
-                <View style={styles.cardTop}>
-                  <View style={[styles.iconWrap, { backgroundColor: Colors.vehicleMuted }]}>
-                    <Ionicons name={icon as any} size={26} color={Colors.vehicle} />
-                  </View>
-                  <View style={styles.vehicleInfo}>
-                    <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
-                    {v.nickname && (
-                      <Text style={styles.vehicleSubtitle} numberOfLines={1}>{title}</Text>
-                    )}
-                    {v.trim && !v.nickname && (
-                      <Text style={styles.vehicleTrim} numberOfLines={1}>{v.trim}</Text>
-                    )}
-                    {v.trim && v.nickname && (
-                      <Text style={styles.vehicleTrim} numberOfLines={1}>{title} · {v.trim}</Text>
-                    )}
-                  </View>
-                  <View style={styles.badgesCol}>
-                    {pendingCount > 0 && (
-                      <View style={[
-                        styles.tasksBadge,
-                        { backgroundColor: worstStatus === "overdue" ? Colors.overdueMuted : Colors.dueSoonMuted },
-                      ]}>
-                        <View style={[
-                          styles.tasksBadgeDot,
-                          { backgroundColor: worstStatus === "overdue" ? Colors.overdue : Colors.dueSoon },
-                        ]} />
-                        <Text style={[
-                          styles.tasksBadgeText,
-                          { color: worstStatus === "overdue" ? Colors.overdue : Colors.dueSoon },
-                        ]}>
-                          {pendingCount}
-                        </Text>
-                      </View>
-                    )}
-                    {pendingCount === 0 && (
-                      <View style={[styles.tasksBadge, { backgroundColor: Colors.goodMuted }]}>
-                        <Ionicons name="checkmark" size={10} color={Colors.good} />
-                      </View>
-                    )}
-                  </View>
+                <View style={[styles.iconWrap, { backgroundColor: Colors.vehicleMuted }]}>
+                  <Ionicons name={icon as any} size={18} color={Colors.vehicle} />
                 </View>
-
-                {MILEAGE_TRACKED_TYPES.has(v.vehicle_type ?? "") && (
-                <View style={styles.mileageRow}>
-                  <View style={styles.mileagePill}>
-                    <Ionicons name="speedometer-outline" size={13} color={Colors.textSecondary} />
-                    {v.mileage != null ? (
-                      <Text style={styles.mileageText}>{v.mileage.toLocaleString()} mi</Text>
-                    ) : (
-                      <Text style={styles.mileageTextDim}>No mileage</Text>
-                    )}
-                  </View>
-                  {estimatedMileage != null && (
-                    <View style={styles.estimatedPill}>
-                      <Ionicons name="trending-up-outline" size={13} color={Colors.accent} />
-                      <Text style={styles.estimatedText}>~{estimatedMileage.toLocaleString()} mi est.</Text>
+                <View style={styles.vehicleInfo}>
+                  <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
+                  <Text
+                    style={[styles.vehicleMeta, isStale && isMileageTracked && v.mileage != null && { color: Colors.dueSoon }]}
+                    numberOfLines={1}
+                  >
+                    {metaLine}
+                  </Text>
+                  {isLocked && (
+                    <View style={styles.lockedRow}>
+                      <Ionicons name="lock-closed" size={11} color={Colors.textTertiary} />
+                      <Text style={styles.lockedText}>Upgrade to access</Text>
                     </View>
                   )}
                 </View>
-                )}
-
-                <View style={styles.badgesRow}>
-                  <View style={[
-                    styles.scheduleBadge,
-                    scheduleLabel === "Manufacturer"
-                      ? styles.scheduleBadgeManufacturer
-                      : styles.scheduleBadgeStandard,
-                  ]}>
-                    <View style={[
-                      styles.scheduleDot,
-                      { backgroundColor: scheduleLabel === "Manufacturer" ? Colors.blue : Colors.vehicle },
-                    ]} />
-                    <Text style={[
-                      styles.scheduleText,
-                      { color: scheduleLabel === "Manufacturer" ? Colors.blue : Colors.vehicle },
-                    ]}>
-                      {scheduleLabel}
-                    </Text>
-                  </View>
-                  {pendingCount > 0 && (
-                    <View style={styles.taskCountBadge}>
-                      <Text style={styles.taskCountText}>{pendingCount} task{pendingCount !== 1 ? "s" : ""}</Text>
-                    </View>
+                <View style={styles.cardRight}>
+                  {statusLabel != null && (
+                    <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
                   )}
+                  <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
                 </View>
-
-                {!isLocked && (
-                  <View style={styles.cardActions}>
-                    <Pressable
-                      style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.8 : 1 }]}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push(`/update-mileage/${v.id}` as any);
-                      }}
-                    >
-                      <Ionicons name="speedometer-outline" size={14} color={Colors.textSecondary} />
-                      <Text style={styles.actionBtnText}>Update Mileage</Text>
-                    </Pressable>
-                    <Pressable
-                      style={({ pressed }) => [styles.actionBtnAccent, { opacity: pressed ? 0.8 : 1 }]}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push(`/log-service/${v.id}` as any);
-                      }}
-                    >
-                      <Ionicons name="construct-outline" size={14} color={Colors.vehicle} />
-                      <Text style={styles.actionBtnAccentText}>Log Service</Text>
-                    </Pressable>
-                  </View>
-                )}
-                {isLocked && (
-                  <View style={styles.lockedRow}>
-                    <Ionicons name="lock-closed" size={12} color={Colors.textTertiary} />
-                    <Text style={styles.lockedText}>Locked. Upgrade to access.</Text>
-                  </View>
-                )}
               </Pressable>
             );
           })
@@ -319,26 +227,13 @@ export default function VehiclesScreen() {
 
 function VehicleCardSkeleton({ anim }: { anim: ReturnType<typeof usePulse> }) {
   return (
-    <View style={[styles.vehicleCard, { gap: 14 }]}>
-      <Row gap={12} align="flex-start">
-        <S anim={anim} w={54} h={54} r={15} />
-        <Col flex={1} gap={5}>
-          <S anim={anim} w="60%" h={17} r={6} />
-          <S anim={anim} w="40%" h={13} r={5} />
-        </Col>
-        <S anim={anim} w={28} h={24} r={8} />
-      </Row>
-      <Row gap={8}>
-        <S anim={anim} w={90} h={28} r={8} />
-      </Row>
-      <Row gap={8}>
-        <S anim={anim} w={80} h={24} r={8} />
-        <S anim={anim} w={64} h={24} r={8} />
-      </Row>
-      <Row gap={8}>
-        <S anim={anim} flex={1} h={44} r={11} />
-        <S anim={anim} flex={1} h={44} r={11} />
-      </Row>
+    <View style={styles.vehicleCard}>
+      <S anim={anim} w={36} h={36} r={10} />
+      <Col flex={1} gap={5}>
+        <S anim={anim} w="55%" h={16} r={5} />
+        <S anim={anim} w="75%" h={13} r={5} />
+      </Col>
+      <S anim={anim} w={16} h={16} r={4} />
     </View>
   );
 }
@@ -356,20 +251,13 @@ function VehicleListSkeleton() {
 function EmptyVehicles() {
   return (
     <View style={styles.emptyWrap}>
-      <View style={styles.emptyCard}>
-        <View style={styles.emptyIconWrap}>
-          <Ionicons name="car-outline" size={36} color={Colors.vehicle} />
-        </View>
-        <Text style={styles.emptyTitle}>No vehicles yet</Text>
-        <Text style={styles.emptyText}>Add your car, truck, or motorcycle to start tracking service intervals and costs.</Text>
-        <Pressable
-          style={({ pressed }) => [styles.emptyBtn, { opacity: pressed ? 0.85 : 1 }]}
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-vehicle"); }}
-        >
-          <Ionicons name="add" size={20} color={Colors.textInverse} />
-          <Text style={styles.emptyBtnText}>Add Vehicle</Text>
-        </Pressable>
-      </View>
+      <Text style={styles.emptyTitle}>No vehicles yet</Text>
+      <Pressable
+        style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-vehicle"); }}
+      >
+        <Text style={styles.emptyLink}>Add your first vehicle</Text>
+      </Pressable>
     </View>
   );
 }
@@ -383,169 +271,44 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: Colors.background,
   },
-  title: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
+  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
   addButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: Colors.vehicle,
     alignItems: "center",
     justifyContent: "center",
   },
-  content: { paddingHorizontal: 16, paddingTop: 8, gap: 12 },
+  content: { paddingHorizontal: 20, paddingTop: 8, gap: 10 },
 
   vehicleCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     backgroundColor: Colors.card,
-    borderRadius: 18,
-    padding: 16,
-    gap: 14,
+    borderRadius: 14,
+    padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-
-  cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   iconWrap: {
-    width: 54,
-    height: 54,
-    borderRadius: 15,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  vehicleInfo: { flex: 1, gap: 2 },
-  vehicleTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 22 },
-  vehicleSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  vehicleTrim: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  badgesCol: { alignItems: "flex-end", gap: 5, flexShrink: 0 },
-  tasksBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    minWidth: 28,
-    justifyContent: "center",
-  },
-  tasksBadgeDot: { width: 6, height: 6, borderRadius: 3 },
-  tasksBadgeText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  vehicleInfo: { flex: 1, gap: 3, minWidth: 0 },
+  vehicleTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  vehicleMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  cardRight: { alignItems: "flex-end", gap: 4, flexShrink: 0 },
+  statusText: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  lockedRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  lockedText: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
 
-  mileageRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  mileagePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  mileageText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.text },
-  mileageTextDim: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  estimatedPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: Colors.accentLight,
-    borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  estimatedText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
-  badgesRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  scheduleBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderWidth: 1,
-  },
-  scheduleBadgeManufacturer: {
-    backgroundColor: Colors.blueMuted,
-    borderColor: Colors.blue + "44",
-  },
-  scheduleBadgeStandard: {
-    backgroundColor: Colors.vehicleMuted,
-    borderColor: Colors.vehicle + "44",
-  },
-  scheduleDot: { width: 5, height: 5, borderRadius: 2.5 },
-  scheduleText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  taskCountBadge: {
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  taskCountText: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-
-  cardActions: { flexDirection: "row", gap: 8 },
-  actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    backgroundColor: Colors.surface,
-    borderRadius: 11,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    minHeight: 44,
-  },
-  actionBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  actionBtnAccent: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    backgroundColor: Colors.vehicleMuted,
-    borderRadius: 11,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: Colors.vehicle + "40",
-    minHeight: 44,
-  },
-  actionBtnAccentText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.vehicle },
-  lockedRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingTop: 4, paddingBottom: 2 },
-  lockedText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontStyle: "italic" },
-
-  emptyWrap: { flex: 1, paddingTop: 24 },
-  emptyCard: {
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderColor: Colors.vehicle + "55",
-    borderRadius: 20,
-    backgroundColor: Colors.card,
-    marginHorizontal: 4,
-    padding: 40,
-    alignItems: "center",
-    gap: 12,
-  },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor: Colors.vehicleMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyTitle: { fontSize: 20, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 21 },
-  emptyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.vehicle,
-    borderRadius: 14,
-    paddingHorizontal: 24,
-    paddingVertical: 13,
-    marginTop: 8,
-    minHeight: 44,
-  },
-  emptyBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  emptyWrap: { flex: 1, paddingTop: 60, alignItems: "center", gap: 10 },
+  emptyTitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  emptyLink: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.accent },
 });
