@@ -1,0 +1,39 @@
+CONTEXT: Code review found 4 bugs and 2 cleanup items that need fixing.
+IMPORTANT: These are surgical fixes. Do NOT refactor, reorganize, or change anything beyond what's listed below.
+
+BUG 1 — Voice log missing property_id (app/(tabs)/index.tsx):
+In the ConfirmCard handleSave function, the maintenance_logs insert is missing property_id. Currently it only passes vehicle_id. Property entries get orphaned and don't show in property history.
+Find the maintenance_logs insert object (around line 704) and add property_id:
+property_id: item.category === "property" && item.asset_id ? item.asset_id : null,
+Add this directly after the vehicle_id line.
+BUG 2 — Voice log health entries save to wrong table (app/(tabs)/index.tsx):
+Health entries currently save to maintenance_logs where they're invisible. For now, disable health saving with a user-friendly message rather than silently saving bad data.
+In the ConfirmCard handleSave function, add a check at the top:
+if (item.category === "health") {
+  setCardError("Health logging from voice is coming soon. Use the Health tab for now.");
+  return;
+}
+BUG 3 — Stale teal color in app.json:
+In app.json, find the expo-notifications plugin config:
+Change: "color": "#14B8A6"
+To: "color": "#E8943A"
+BUG 4 — Android adaptive icon old background color:
+In app.json, find android.adaptiveIcon:
+Change: "backgroundColor": "#0B0C10"
+To: "backgroundColor": "#0C111B"
+CLEANUP 1 — Duplicate MILEAGE_TRACKED_TYPES (app/add-vehicle.tsx):
+Remove the local definition on line 171:
+const MILEAGE_TRACKED_TYPES = new Set(["car", "motorcycle", "rv", "utv", "snowmobile"]);
+Add an import at the top of the file with the other imports:
+import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+CLEANUP 2 — Unused NAVY constant (constants/colors.ts):
+Remove the line: const NAVY = "#2B4C8C";
+It's declared but never used in the Colors object.
+VERIFICATION:
+
+Voice log a property entry → check maintenance_logs row has correct property_id
+Voice log a health entry → shows "coming soon" message, does NOT save
+app.json: notification color is #E8943A, android background is #0C111B
+add-vehicle.tsx imports MILEAGE_TRACKED_TYPES from lib/vehicleTypes
+colors.ts has no unused constants
+Zero TypeScript errors

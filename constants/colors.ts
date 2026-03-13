@@ -1,4 +1,3 @@
-const NAVY = "#2B4C8C";
 const ORANGE = "#E8943A";
 const RED = "#FF453A";
 const YELLOW = "#FFD60A";

@@ -695,6 +695,10 @@ function ConfirmCard({
   const catColor = item.category === "vehicle" ? Colors.blue : item.category === "property" ? Colors.good : Colors.health;
 
   async function handleSave() {
+    if (item.category === "health") {
+      setCardError("Health logging from voice is coming soon. Use the Health tab for now.");
+      return;
+    }
     if (!serviceName.trim()) { setCardError("Service name is required"); return; }
     setSaving(true);
     setCardError("");
@@ -704,6 +708,7 @@ function ConfirmCard({
       const { error: insertErr } = await supabase.from("maintenance_logs").insert({
         user_id: userId,
         vehicle_id: isVehicle && item.asset_id ? item.asset_id : null,
+        property_id: item.category === "property" && item.asset_id ? item.asset_id : null,
         service_name: serviceName.trim(),
         service_date: date || now.split("T")[0],
         mileage: mileage ? parseInt(mileage) : null,

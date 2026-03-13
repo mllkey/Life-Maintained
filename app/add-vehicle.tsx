@@ -24,6 +24,7 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import Paywall from "@/components/Paywall";
 import { vehicleLimit } from "@/lib/subscription";
+import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_ITEM_HEIGHT = 52;
@@ -168,7 +169,6 @@ const MAKE_SECTIONS_BY_TYPE: Record<string, MakeSection[]> = {
   snowmobile: SNOWMOBILE_MAKE_SECTIONS,
 };
 
-const MILEAGE_TRACKED_TYPES = new Set(["car", "motorcycle", "rv", "utv", "snowmobile"]);
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
