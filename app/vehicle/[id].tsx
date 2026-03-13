@@ -24,7 +24,7 @@ import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
-import { parseISO, isBefore, addDays, addMonths, format, differenceInDays } from "date-fns";
+import { parseISO, isBefore, addDays, addMonths, format, differenceInDays, formatDistanceToNowStrict } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
 import Paywall from "@/components/Paywall";
 import { hasPersonalOrAbove } from "@/lib/subscription";
@@ -565,22 +565,13 @@ export default function VehicleDetailScreen() {
             </View>
           )}
         </View>
-        <View style={styles.headerActions}>
-          <Pressable
-            style={({ pressed }) => [styles.deleteVehicleBtn, { opacity: pressed ? 0.7 : 1 }]}
-            onPress={handleDeleteVehicle}
-            hitSlop={4}
-          >
-            <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.logBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={() => router.push(`/log-service/${id}` as any)}
-          >
-            <Ionicons name="construct-outline" size={14} color={Colors.vehicle} />
-            <Text style={styles.logBtnText}>Log Service</Text>
-          </Pressable>
-        </View>
+        <Pressable
+          style={({ pressed }) => [styles.deleteVehicleBtn, { opacity: pressed ? 0.7 : 1 }]}
+          onPress={handleDeleteVehicle}
+          hitSlop={4}
+        >
+          <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
+        </Pressable>
       </View>
 
       {isLoading ? (
@@ -598,48 +589,40 @@ export default function VehicleDetailScreen() {
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
         >
           <View style={styles.vehicleCard}>
-            <View style={styles.vehicleCardLeft}>
-              <View style={styles.vehicleIconBig}>
-                <Ionicons name="car-outline" size={32} color={Colors.vehicle} />
-              </View>
-              <View>
-                <Text style={styles.vehicleFullName}>{vehicle.year} {vehicle.make} {vehicle.model}</Text>
-                {vehicle.trim && <Text style={styles.vehicleTrim}>{vehicle.trim}</Text>}
-              </View>
-            </View>
-            <View style={styles.vehicleStats}>
-              {vehicle.mileage != null && (
-                <View style={styles.statBox}>
-                  <Text style={styles.statValue}>{vehicle.mileage.toLocaleString()}</Text>
-                  <Text style={styles.statLabel}>miles</Text>
-                </View>
-              )}
-              <View style={styles.statBox}>
-                <Text style={[styles.statValue, { color: actionNeededTasks.some(t => t.status === "overdue") ? Colors.overdue : scheduleAttentionCount > 0 ? Colors.dueSoon : Colors.good }]}>
-                  {scheduleAttentionCount}
-                </Text>
-                <Text style={styles.statLabel}>need attention</Text>
-              </View>
-            </View>
-
-            <View style={styles.vehicleActions}>
-              {MILEAGE_TRACKED_TYPES.has(vehicle.vehicle_type ?? "") && (
-                <Pressable
-                  style={({ pressed }) => [styles.vehicleActionBtn, { opacity: pressed ? 0.8 : 1 }]}
-                  onPress={() => router.push(`/update-mileage/${id}` as any)}
-                >
-                  <Ionicons name="speedometer-outline" size={14} color={Colors.textSecondary} />
-                  <Text style={styles.vehicleActionText}>Update Mileage</Text>
-                </Pressable>
-              )}
-              <Pressable
-                style={({ pressed }) => [styles.vehicleActionBtnAccent, { opacity: pressed ? 0.8 : 1 }]}
-                onPress={() => router.push(`/log-service/${id}` as any)}
-              >
-                <Ionicons name="construct-outline" size={14} color={Colors.textInverse} />
-                <Text style={styles.vehicleActionTextAccent}>Log Service</Text>
-              </Pressable>
-            </View>
+            {(() => {
+              const tracksMileage = MILEAGE_TRACKED_TYPES.has(vehicle.vehicle_type ?? "");
+              let metaLine = "No mileage tracked";
+              if (tracksMileage && vehicle.mileage != null) {
+                const mileStr = vehicle.mileage.toLocaleString() + " mi";
+                if (vehicle.updated_at) {
+                  metaLine = mileStr + " · Updated " + formatDistanceToNowStrict(parseISO(vehicle.updated_at), { addSuffix: true });
+                } else {
+                  metaLine = mileStr;
+                }
+              }
+              return (
+                <>
+                  <View style={{ gap: 4 }}>
+                    <Text style={styles.vehicleFullName}>{vehicleName}</Text>
+                    <Text style={styles.vehicleMeta}>{metaLine}</Text>
+                  </View>
+                  <Pressable
+                    style={({ pressed }) => [styles.logServiceBtn, { opacity: pressed ? 0.85 : 1 }]}
+                    onPress={() => router.push(`/log-service/${id}` as any)}
+                  >
+                    <Text style={styles.logServiceBtnText}>Log Service</Text>
+                  </Pressable>
+                  {tracksMileage && (
+                    <Pressable
+                      style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, alignSelf: "center" }]}
+                      onPress={() => router.push(`/update-mileage/${id}` as any)}
+                    >
+                      <Text style={styles.updateMileageLink}>{"Update mileage →"}</Text>
+                    </Pressable>
+                  )}
+                </>
+              );
+            })()}
           </View>
 
           <View style={styles.tabs}>
@@ -655,6 +638,7 @@ export default function VehicleDetailScreen() {
                     : tab === "wallet" ? "Wallet"
                     : "History"}
                 </Text>
+                {activeTab === tab && <View style={styles.tabUnderline} />}
               </Pressable>
             ))}
           </View>
@@ -2129,7 +2113,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
+    paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
@@ -2141,56 +2125,38 @@ const styles = StyleSheet.create({
   headerTrim: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
   headerMileageRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 1 },
   headerMileage: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   deleteVehicleBtn: {
     width: 34, height: 34, borderRadius: 10,
     backgroundColor: Colors.overdueMuted, alignItems: "center", justifyContent: "center",
   },
-  logBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5,
-    backgroundColor: Colors.vehicleMuted, borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 8, minHeight: 36, flexShrink: 0,
-  },
-  logBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.vehicle },
-  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 16 },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 12 },
   vehicleCard: {
-    backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 12,
-    borderWidth: 1, borderColor: Colors.border,
+    gap: 12,
   },
-  vehicleCardLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  vehicleIconBig: {
-    width: 56, height: 56, borderRadius: 16, backgroundColor: Colors.vehicleMuted,
-    alignItems: "center", justifyContent: "center",
+  vehicleFullName: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
+  vehicleMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  logServiceBtn: {
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  vehicleFullName: { fontSize: 18, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  vehicleTrim: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  vehicleStats: { flexDirection: "row", gap: 12 },
-  statBox: {
-    flex: 1, backgroundColor: Colors.surface, borderRadius: 12,
-    padding: 12, alignItems: "center",
-  },
-  statValue: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text },
-  statLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  vehicleActions: { flexDirection: "row", gap: 8 },
-  vehicleActionBtn: {
-    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5,
-    backgroundColor: Colors.surface, borderRadius: 10, paddingVertical: 9,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  vehicleActionText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  vehicleActionBtnAccent: {
-    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5,
-    backgroundColor: Colors.vehicle, borderRadius: 10, paddingVertical: 9,
-  },
-  vehicleActionTextAccent: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textInverse },
+  logServiceBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#fff" },
+  updateMileageLink: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
   tabs: {
-    flexDirection: "row", backgroundColor: Colors.card, borderRadius: 12,
-    padding: 4, borderWidth: 1, borderColor: Colors.border,
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  tab: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center" },
-  tabActive: { backgroundColor: Colors.vehicleMuted },
-  tabText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  tabTextActive: { color: Colors.vehicle, fontFamily: "Inter_600SemiBold" },
+  tab: { flex: 1, paddingVertical: 12, alignItems: "center", position: "relative" },
+  tabActive: {},
+  tabUnderline: {
+    position: "absolute", bottom: 0, left: 0, right: 0,
+    height: 2, backgroundColor: Colors.accent, borderRadius: 1,
+  },
+  tabText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
+  tabTextActive: { color: Colors.text, fontFamily: "Inter_600SemiBold" },
   tasksContainer: { gap: 12 },
   taskGroup: { gap: 8 },
   taskGroupHeader: { flexDirection: "row", alignItems: "center", gap: 6 },

@@ -1,0 +1,56 @@
+CONTEXT: LifeMaintained's vehicle detail screen has a large header area with wasted space. The "0 need attention" green stat floats alone in the center. The "Update Mileage" and "Log Service" buttons look like generic AI-template buttons. The target aesthetic is Apple Health — clean, compact, information-dense without clutter.
+IMPORTANT: Only modify app/vehicle/[id].tsx. Keep all data fetching, tab logic, wallet, history, schedule task logic, and mark-complete functionality identical. Only change the header area rendering and styles (everything ABOVE the Schedule/Wallet/History tab bar).
+
+TASK: Redesign the vehicle detail header. Five changes.
+
+Compact the vehicle info header:
+
+Currently there's a large card with the vehicle name, a green "0 need attention" stat in the center, and two buttons. Redesign as:
+
+Vehicle name: 22px, fontWeight "700", Colors.text. Left-aligned.
+Below the name: a single metadata line in 13px, Colors.textSecondary showing mileage and last update. Example: "13,300 mi · Updated 3 days ago" or "No mileage tracked" for non-mileage vehicles.
+Remove the "0 need attention" / "X need attention" green/red stat bubble. This info is already visible in the schedule tab below.
+
+
+Redesign action buttons:
+
+Replace the current "Update Mileage" and "Log Service" side-by-side buttons with a cleaner layout:
+
+"Log Service" becomes the primary action: full-width button, Colors.accent background, white text, 14px border radius, 48px height, fontWeight "600". This is the most important action on the screen.
+"Update Mileage" becomes a secondary text link below the button: "Update mileage →" in 13px, Colors.accent, fontWeight "500", centered. Only shown for mileage-tracked vehicles.
+This hierarchy makes it clear what the primary action is instead of presenting two equal buttons.
+
+
+Clean up the back button and top nav:
+
+
+The back arrow and vehicle name in the top bar: keep the back arrow, show the vehicle name truncated in the top bar at 16px fontWeight "600".
+Remove the orange "Log Service" button from the top-right nav bar if it exists there AND in the body. It should only appear once (in the body as the primary button).
+
+
+Tab bar styling:
+
+The Schedule/Wallet/History tab bar should:
+
+Use a clean underline-style indicator (2px bottom border in Colors.accent for the active tab) instead of a filled pill/background.
+Tab labels: 14px, fontWeight "500". Active tab: Colors.text. Inactive tab: Colors.textTertiary.
+No background color on the tab bar container — just a subtle bottom border (1px Colors.border) to separate from content below.
+
+
+Overall header spacing:
+
+
+Remove excessive vertical padding in the header area. The flow should be: back button/nav → vehicle name → metadata line → 12px gap → Log Service button → Update mileage link → 16px gap → tab bar. Compact and purposeful.
+Content horizontal padding: 20px, matching dashboard and vehicles list.
+
+DO NOT modify the Schedule tab content, Wallet tab, History tab, mark-complete sheet, or any modal/bottom sheet functionality.
+VERIFICATION:
+
+Vehicle name is prominent, left-aligned, with metadata below
+No "X need attention" stat bubble
+Log Service is a single full-width primary button
+Update Mileage is a secondary text link below it
+Tab bar uses underline indicator, not filled pills
+Back button works, navigation works
+All three tabs still render correctly
+Zero TypeScript errors
