@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 
@@ -71,14 +70,11 @@ export default function OnboardingProfileScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
-        <LinearGradient
-          colors={["rgba(255,107,157,0.08)", "transparent"]}
-          style={styles.topGradient}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-        />
         <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 48, paddingBottom: insets.bottom + 24 }]}
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -86,14 +82,11 @@ export default function OnboardingProfileScreen() {
             <Ionicons name="arrow-back" size={22} color={Colors.text} />
           </Pressable>
 
-          <View style={styles.progress}>
-            <View style={[styles.dot, { backgroundColor: Colors.accent }]} />
-            <View style={[styles.dot, { backgroundColor: Colors.accent }]} />
-            <View style={styles.dot} />
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: "66%" }]} />
           </View>
 
           <View style={styles.header}>
-            <Text style={styles.step}>Step 2 of 3</Text>
             <Text style={styles.title}>Health profile</Text>
             <Text style={styles.subtitle}>
               Optional. Used to surface age-appropriate health screening recommendations.
@@ -149,17 +142,18 @@ export default function OnboardingProfileScreen() {
           </View>
 
           <Pressable
-            style={({ pressed }) => [styles.continueButton, { opacity: pressed ? 0.85 : 1 }]}
+            style={({ pressed }) => [
+              styles.continueButton,
+              isLoading && styles.continueDisabled,
+              { opacity: pressed ? 0.85 : 1 },
+            ]}
             onPress={handleContinue}
             disabled={isLoading}
           >
             {isLoading ? (
               <ActivityIndicator color={Colors.textInverse} />
             ) : (
-              <>
-                <Text style={styles.continueText}>Continue</Text>
-                <Ionicons name="arrow-forward" size={18} color={Colors.textInverse} />
-              </>
+              <Text style={styles.continueText}>Continue</Text>
             )}
           </Pressable>
 
@@ -174,29 +168,50 @@ export default function OnboardingProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topGradient: { position: "absolute", top: 0, left: 0, right: 0, height: 250 },
-  scroll: { paddingHorizontal: 24, gap: 24 },
+  scroll: { paddingHorizontal: 20, gap: 24 },
+
   backButton: { width: 40, height: 40, justifyContent: "center" },
-  progress: { flexDirection: "row", gap: 6 },
-  dot: { width: 24, height: 4, borderRadius: 2, backgroundColor: Colors.border },
+
+  progressBar: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: Colors.accent,
+  },
+
   header: { gap: 8 },
-  step: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent, textTransform: "uppercase", letterSpacing: 1 },
-  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
-  section: { gap: 8 },
-  label: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text },
+  subtitle: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+  },
+
+  section: { gap: 6 },
+  label: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+    marginBottom: 6,
+  },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     height: 52,
   },
   inputIcon: { marginRight: 10 },
   input: { flex: 1, fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
+
   sexGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   sexOption: {
     paddingHorizontal: 16,
@@ -209,6 +224,7 @@ const styles = StyleSheet.create({
   sexOptionSelected: { borderColor: Colors.health, backgroundColor: Colors.healthMuted },
   sexLabel: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
   sexLabelSelected: { color: Colors.health },
+
   infoBox: {
     flexDirection: "row",
     gap: 10,
@@ -217,17 +233,31 @@ const styles = StyleSheet.create({
     padding: 14,
     alignItems: "flex-start",
   },
-  infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 20 },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    lineHeight: 20,
+  },
+
   continueButton: {
     backgroundColor: Colors.accent,
     borderRadius: 14,
-    height: 54,
-    flexDirection: "row",
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
   },
-  continueText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  continueDisabled: { opacity: 0.4 },
+  continueText: {
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textInverse,
+  },
   skipButton: { alignItems: "center", paddingVertical: 4 },
-  skipText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  skipText: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textTertiary,
+  },
 });

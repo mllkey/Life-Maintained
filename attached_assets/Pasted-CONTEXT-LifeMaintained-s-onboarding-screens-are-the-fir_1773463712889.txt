@@ -1,0 +1,71 @@
+CONTEXT: LifeMaintained's onboarding screens are the first experience after signup. They currently have colored icon circles, large category cards with checkboxes, and progress dots — standard AI-template patterns. Every other screen in the app has been redesigned to a clean utility aesthetic. Onboarding must match and feel premium.
+IMPORTANT: Modify app/(onboarding)/index.tsx, app/(onboarding)/profile.tsx, and app/(onboarding)/complete.tsx. Keep all selection logic, navigation, and data saving identical. Only change rendering and styles.
+
+TASK: Redesign all three onboarding screens. Six changes.
+
+Progress indicator (index.tsx, profile.tsx):
+
+Replace the three dots with a thin horizontal progress bar:
+
+Full width, 3px tall, Colors.border background.
+Filled portion: Colors.accent. Step 1 = 33%, Step 2 = 66%, Step 3 = 100%.
+Remove "Step 1 of 3" text — the bar communicates progress visually.
+
+
+Category selection cards (index.tsx):
+
+The large cards with colored icon circles and checkboxes look like a template. Redesign as clean selectable rows:
+
+Each option: compact row, 14px padding, 14px border radius, 1px Colors.border.
+Left: 36×36 rounded square with category muted color background, icon at 18px.
+Center: category name as 16px fontWeight "600", description below as 13px Colors.textSecondary.
+Right: a simple circle outline (20px) that fills with Colors.accent when selected. No square checkbox.
+Selected state: border changes to 1px Colors.accent, background gets a very subtle accent tint (Colors.accentLight).
+Gap between rows: 10px.
+
+
+Title and subtitle styling (index.tsx):
+
+
+Title "What do you want to track?": 24px, fontWeight "700", Colors.text.
+Subtitle: 14px, Colors.textSecondary, fontWeight "400".
+20px horizontal padding throughout.
+
+
+Profile screen (profile.tsx):
+
+Apply the same form styling as add-vehicle (which already looks clean):
+
+Input fields: Colors.card background, 14px border radius, 1px Colors.border, 16px padding.
+Labels: 13px, Colors.textSecondary, fontWeight "500", marginBottom 6.
+20px horizontal padding.
+Title: 24px, fontWeight "700".
+
+
+Complete screen (complete.tsx):
+
+
+Replace any large icon or illustration with the brand logo: <Image source={require("@/assets/images/brand-logo.png")} style={{ width: 72, height: 72 }} resizeMode="contain" />
+Title: "You're all set" in 24px, fontWeight "700", Colors.text, centered.
+Subtitle: 14px, Colors.textSecondary, centered.
+CTA button: full-width, Colors.accent, white text, 48px height, 14px radius. "Get Started" or whatever the current label is.
+
+
+Continue/Next buttons (all three screens):
+
+
+Full-width, Colors.accent background, white text, 48px height, 14px border radius, fontWeight "600".
+Disabled state: opacity 0.4.
+Positioned at the bottom with 20px padding.
+
+DO NOT modify any selection logic, profile save logic, or navigation flow.
+VERIFICATION:
+
+Progress bar instead of dots
+Category cards are clean selectable rows with circle checkmarks
+No colored icon circles
+Profile form matches add-vehicle styling
+Complete screen shows brand logo
+All buttons work, navigation between steps works
+Data saves correctly on completion
+Zero TypeScript errors
