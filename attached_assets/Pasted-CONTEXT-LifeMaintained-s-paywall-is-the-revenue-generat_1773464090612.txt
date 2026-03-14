@@ -1,0 +1,64 @@
+CONTEXT: LifeMaintained's paywall is the revenue-generating screen. Stanford research shows 46% of users judge credibility on visual design. RevenueCat's 2024 report found that clear value propositions and pricing clarity drive higher trial conversions. The paywall needs to feel premium and trustworthy — not template-generated.
+IMPORTANT: Only modify components/Paywall.tsx. Keep all purchase logic, RevenueCat integration, restore purchases, promo codes, and tier configuration identical. Only change rendering and styles.
+
+TASK: Refine the paywall to feel premium. Five changes.
+
+Remove colored icon circles from tier cards:
+
+Each tier card has a colored circle with an Ionicons icon (like a shield or rocket). Remove the tierIconWrap element entirely. Replace with just the tier name displayed more prominently:
+
+Tier name: 18px, fontWeight "700", Colors.text (or tier color when selected).
+Price directly below: 22px, fontWeight "700", Colors.text.
+Price subtitle ("per month, billed annually"): 13px, Colors.textSecondary.
+This makes the price the hero element, not a decorative icon.
+
+
+Refine tier card styling:
+
+
+Border radius: 14px. Border: 1px Colors.border (or tier color when selected).
+Padding: 16px.
+The "Most Popular" badge: keep it but make it more subtle — small text above the card in 11px, fontWeight "600", tier color, no filled background. Just colored text.
+Feature checkmarks: replace colored checkmark-circle with a simple "·" bullet or a small dash in Colors.textSecondary. Feature text: 13px, Colors.textSecondary. Features shouldn't compete visually with the price.
+Radio button: keep the current circle radio, it works well.
+
+
+Billing toggle refinement:
+
+
+The Monthly/Annual toggle should be a clean segmented control: 14px radius container with 1px Colors.border, each option fills half.
+Active option: Colors.accent background, white text.
+Inactive option: transparent background, Colors.textSecondary text.
+"Save 40%" badge: keep it, but style as 10px text in Colors.accent next to "Annual", not a separate badge element.
+
+
+CTA button:
+
+
+Full width, 52px height, Colors.accent background, white text, 14px radius, fontWeight "700", 16px font size.
+"Start Free Trial" text is good.
+Below it: "Cancel anytime · Billed through App Store after trial" in 12px, Colors.textTertiary, centered.
+
+
+Overall spacing and header:
+
+
+"LifeMaintained Premium" title: 24px, fontWeight "700", centered.
+Subtitle: 14px, Colors.textSecondary, centered.
+20px horizontal padding.
+16px gap between tier cards.
+Trial callout (gift icon + "14-day free trial"): remove the gift icon, just show the text in 13px Colors.textSecondary.
+
+DO NOT modify any purchase logic, RevenueCat calls, tier configuration, promo code handling, or navigation.
+VERIFICATION:
+
+No colored icon circles on tier cards
+Price is the hero element on each card
+Billing toggle is a clean segmented control
+"Most Popular" is subtle text, not a bold badge
+Features use simple bullets, not colored checkmarks
+CTA button is prominent and clean
+All purchase flows still work
+Restore purchases still works
+Promo code still works
+Zero TypeScript errors

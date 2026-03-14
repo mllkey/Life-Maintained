@@ -347,6 +347,7 @@ export default function Paywall({
           contentContainerStyle={[styles.scroll, { paddingBottom: botPad + 32 }]}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Billing toggle — segmented control */}
           <View style={styles.billingToggle}>
             {(["monthly", "annual"] as Billing[]).map(b => (
               <Pressable
@@ -354,14 +355,16 @@ export default function Paywall({
                 style={[styles.billingOption, billing === b && styles.billingActive]}
                 onPress={() => { Haptics.selectionAsync(); setBilling(b); }}
               >
-                {b === "annual" && (
-                  <View style={styles.saveBadge}>
-                    <Text style={styles.saveBadgeText}>Save 40%</Text>
-                  </View>
-                )}
-                <Text style={[styles.billingLabel, billing === b && styles.billingLabelActive]}>
-                  {b === "monthly" ? "Monthly" : "Annual"}
-                </Text>
+                <View style={styles.billingOptionContent}>
+                  <Text style={[styles.billingLabel, billing === b && styles.billingLabelActive]}>
+                    {b === "monthly" ? "Monthly" : "Annual"}
+                  </Text>
+                  {b === "annual" && (
+                    <Text style={[styles.saveText, billing === "annual" && styles.saveTextActive]}>
+                      {"  "}Save 40%
+                    </Text>
+                  )}
+                </View>
               </Pressable>
             ))}
           </View>
@@ -370,60 +373,53 @@ export default function Paywall({
             const cfg = TIER_CONFIG[tier];
             const selected = selectedTier === tier;
             return (
-              <Pressable
-                key={tier}
-                style={[
-                  styles.tierCard,
-                  selected && { borderColor: cfg.color, backgroundColor: cfg.color + "0C" },
-                ]}
-                onPress={() => { Haptics.selectionAsync(); setSelectedTier(tier); }}
-                testID={`tier-${tier}`}
-              >
+              <View key={tier} style={styles.tierWrapper}>
                 {cfg.popular && (
-                  <View style={[styles.popularBadge, { backgroundColor: cfg.color }]}>
-                    <Text style={styles.popularBadgeText}>Most Popular</Text>
-                  </View>
+                  <Text style={[styles.popularLabel, { color: cfg.color }]}>Most Popular</Text>
                 )}
-                <View style={styles.tierTop}>
-                  <View style={[styles.tierIconWrap, { backgroundColor: cfg.color + "22" }]}>
-                    <Ionicons name={cfg.icon} size={18} color={cfg.color} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.tierName, { color: selected ? cfg.color : Colors.text }]}>
-                      {cfg.label}
-                    </Text>
-                    <Text style={styles.tierPrice}>
-                      {billing === "annual" ? cfg.annualPrice : cfg.monthlyPrice}
-                    </Text>
-                    {billing === "annual" && (
-                      <Text style={styles.tierPriceSub}>{cfg.annualMonthly} billed annually</Text>
-                    )}
-                  </View>
-                  <View style={[
-                    styles.radioOuter,
-                    selected && { borderColor: cfg.color },
-                  ]}>
-                    {selected && <View style={[styles.radioInner, { backgroundColor: cfg.color }]} />}
-                  </View>
-                </View>
-                <View style={styles.tierFeatures}>
-                  {cfg.features.map((f, i) => (
-                    <View key={i} style={styles.featureRow}>
-                      <Ionicons name="checkmark-circle" size={14} color={cfg.color} />
-                      <Text style={styles.featureText}>{f}</Text>
+                <Pressable
+                  style={[
+                    styles.tierCard,
+                    selected && { borderColor: cfg.color, backgroundColor: cfg.color + "0C" },
+                  ]}
+                  onPress={() => { Haptics.selectionAsync(); setSelectedTier(tier); }}
+                  testID={`tier-${tier}`}
+                >
+                  <View style={styles.tierTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.tierName, { color: selected ? cfg.color : Colors.text }]}>
+                        {cfg.label}
+                      </Text>
+                      <Text style={styles.tierPrice}>
+                        {billing === "annual" ? cfg.annualPrice : cfg.monthlyPrice}
+                      </Text>
+                      {billing === "annual" && (
+                        <Text style={styles.tierPriceSub}>{cfg.annualMonthly} · billed annually</Text>
+                      )}
                     </View>
-                  ))}
-                </View>
-              </Pressable>
+                    <View style={[
+                      styles.radioOuter,
+                      selected && { borderColor: cfg.color },
+                    ]}>
+                      {selected && <View style={[styles.radioInner, { backgroundColor: cfg.color }]} />}
+                    </View>
+                  </View>
+                  <View style={styles.tierFeatures}>
+                    {cfg.features.map((f, i) => (
+                      <View key={i} style={styles.featureRow}>
+                        <Text style={styles.featureBullet}>–</Text>
+                        <Text style={styles.featureText}>{f}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </Pressable>
+              </View>
             );
           })}
 
-          <View style={styles.trialCallout}>
-            <Ionicons name="gift-outline" size={16} color={Colors.accent} />
-            <Text style={styles.trialCalloutText}>
-              14-day free trial. Full access, no credit card required.
-            </Text>
-          </View>
+          <Text style={styles.trialCalloutText}>
+            14-day free trial · Full access · No credit card required
+          </Text>
 
           <Pressable
             style={({ pressed }) => [
@@ -528,68 +524,64 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   closeBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  headerCenter: { flex: 1, alignItems: "center", gap: 3 },
-  headerTitle: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.3 },
-  headerSubtitle: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  headerCenter: { flex: 1, alignItems: "center", gap: 4 },
+  headerTitle: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text },
+  headerSubtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
   errorContainer: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 },
   errorTitle: { fontSize: 18, fontFamily: "Inter_600SemiBold", color: Colors.text },
   errorSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
   retryBtn: { marginTop: 8, backgroundColor: Colors.accent, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
   retryBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  scroll: { paddingHorizontal: 16, paddingTop: 20, gap: 12 },
-  billingToggle: { flexDirection: "row", gap: 10, marginBottom: 4 },
+  scroll: { paddingHorizontal: 20, paddingTop: 20, gap: 16 },
+
+  // Billing toggle — segmented control
+  billingToggle: {
+    flexDirection: "row",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: "hidden",
+    backgroundColor: Colors.card,
+  },
   billingOption: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: 13,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.card,
-    position: "relative",
+    justifyContent: "center",
+    paddingVertical: 12,
   },
-  billingActive: { borderColor: Colors.accent, backgroundColor: Colors.accentLight },
-  billingLabel: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  billingLabelActive: { color: Colors.accent, fontFamily: "Inter_600SemiBold" },
-  saveBadge: {
-    position: "absolute",
-    top: -9,
-    backgroundColor: Colors.accent,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+  billingActive: { backgroundColor: Colors.accent },
+  billingOptionContent: { flexDirection: "row", alignItems: "center" },
+  billingLabel: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  billingLabelActive: { color: Colors.textInverse, fontFamily: "Inter_600SemiBold" },
+  saveText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.accent },
+  saveTextActive: { color: Colors.textInverse },
+
+  // Tier cards
+  tierWrapper: { gap: 4 },
+  popularLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    paddingLeft: 2,
   },
-  saveBadgeText: { fontSize: 10, fontFamily: "Inter_700Bold", color: Colors.background },
   tierCard: {
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 16,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: Colors.border,
     gap: 12,
-    position: "relative",
   },
-  popularBadge: {
-    position: "absolute",
-    top: -9,
-    left: 16,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  popularBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#fff" },
   tierTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  tierIconWrap: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  tierName: { fontSize: 16, fontFamily: "Inter_700Bold", marginBottom: 1 },
-  tierPrice: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  tierPriceSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 1 },
+  tierName: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 4 },
+  tierPrice: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 26 },
+  tierPriceSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
   radioOuter: {
     width: 20,
     height: 20,
@@ -598,39 +590,34 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 2,
-  },
-  radioInner: { width: 10, height: 10, borderRadius: 5 },
-  tierFeatures: { gap: 7 },
-  featureRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  featureText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 },
-  trialCallout: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.accentLight,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: Colors.accentMuted,
     marginTop: 4,
   },
-  trialCalloutText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent, flex: 1 },
+  radioInner: { width: 10, height: 10, borderRadius: 5 },
+  tierFeatures: { gap: 6 },
+  featureRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  featureBullet: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, width: 10 },
+  featureText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 },
+
+  trialCalloutText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    textAlign: "center",
+  },
   ctaBtn: {
     backgroundColor: Colors.accent,
     borderRadius: 14,
     height: 52,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
   },
-  ctaBtnText: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.background },
+  ctaBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.textInverse },
   legalText: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: "Inter_400Regular",
     color: Colors.textTertiary,
     textAlign: "center",
-    marginTop: -4,
+    marginTop: -8,
   },
   skipBtn: { alignItems: "center", paddingVertical: 4 },
   skipText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
