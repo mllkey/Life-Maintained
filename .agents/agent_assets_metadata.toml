@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "WzLsCVsvgLAnwYHwJH99S"
+uri = "file:///home/runner/Life-Maintained-clean.tar.gz"
+type = "unspecified"
+title = "Life-Maintained-clean.tar.gz"
