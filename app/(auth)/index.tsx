@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -68,9 +69,11 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <Ionicons name="shield-checkmark" size={40} color={Colors.accent} />
-            </View>
+            <Image
+              source={require("@/assets/images/brand-logo.png")}
+              style={{ width: 64, height: 64 }}
+              resizeMode="contain"
+            />
             <Text style={styles.appName}>LifeMaintained</Text>
             <Text style={styles.tagline}>Keep everything running smoothly</Text>
           </View>
@@ -160,23 +163,9 @@ export default function LoginScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.categories}>
-            <CategoryPill icon="car-outline" label="Vehicles" color={Colors.vehicle} />
-            <CategoryPill icon="home-outline" label="Home" color={Colors.home} />
-            <CategoryPill icon="heart-outline" label="Health" color={Colors.health} />
-          </View>
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
-  );
-}
-
-function CategoryPill({ icon, label, color }: { icon: any; label: string; color: string }) {
-  return (
-    <View style={[styles.pill, { backgroundColor: `${color}18` }]}>
-      <Ionicons name={icon} size={14} color={color} />
-      <Text style={[styles.pillText, { color }]}>{label}</Text>
-    </View>
   );
 }
 
@@ -191,16 +180,6 @@ const styles = StyleSheet.create({
   },
   scroll: { paddingHorizontal: 24, gap: 32 },
   header: { alignItems: "center", gap: 8 },
-  logoContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: Colors.accentLight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Colors.accentMuted,
-  },
   appName: {
     fontSize: 28,
     fontFamily: "Inter_700Bold",
@@ -208,7 +187,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   tagline: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Inter_400Regular",
     color: Colors.textSecondary,
   },
@@ -299,18 +278,4 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     color: Colors.text,
   },
-  categories: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 10,
-  },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-  },
-  pillText: { fontSize: 13, fontFamily: "Inter_500Medium" },
 });

@@ -1,0 +1,41 @@
+CONTEXT: LifeMaintained's login screen uses a generic Ionicons shield-checkmark as the logo instead of the actual brand logo. It also has colored category pills (Vehicles, Home, Health) at the bottom that look like AI-template filler. The signup screen likely has the same issues.
+IMPORTANT: Modify app/(auth)/index.tsx and app/(auth)/signup.tsx. Keep all auth logic, form validation, and navigation identical. Only change rendering and styles.
+
+TASK: Clean up the auth screens. Four changes across both files.
+
+Replace the shield-checkmark icon with the actual brand logo (app/(auth)/index.tsx AND signup.tsx if it has the same icon):
+
+Remove:
+<Ionicons name="shield-checkmark" size={40} color={Colors.accent} />
+Replace with an Image component using the brand logo:
+import { Image } from "react-native";
+<Image
+  source={require("@/assets/images/brand-logo.png")}
+  style={{ width: 64, height: 64 }}
+  resizeMode="contain"
+/>
+Adjust the logoContainer style: remove any circular background color or border that was wrapping the checkmark icon. The logo should sit on its own with no circle behind it.
+
+Remove CategoryPill components (app/(auth)/index.tsx):
+
+Delete the three CategoryPill elements:
+<CategoryPill icon="car-outline" label="Vehicles" color={Colors.vehicle} />
+<CategoryPill icon="home-outline" label="Home" color={Colors.home} />
+<CategoryPill icon="heart-outline" label="Health" color={Colors.health} />
+Delete the CategoryPill function and its styles. Replace with nothing — the login screen doesn't need to explain what the app does.
+
+Clean up the tagline:
+
+If there's a tagline like "Keep everything running smoothly" — keep it but style it: 14px, Colors.textSecondary, fontWeight "400". No accent color on the tagline.
+
+Apply to signup.tsx:
+
+Check app/(auth)/signup.tsx for the same shield-checkmark icon and category pills. Apply the same fixes: replace icon with brand logo Image, remove category pills if present.
+DO NOT modify any auth logic, form validation, Supabase calls, or navigation.
+VERIFICATION:
+
+Login screen shows the actual LM brand logo, not a checkmark icon
+No colored category pills at the bottom
+Signup screen also shows the brand logo
+Sign in and sign up still work correctly
+Zero TypeScript errors
