@@ -1,0 +1,69 @@
+CONTEXT: The login screen was already redesigned with the brand logo and cleaned up. The remaining auth screens (signup, forgot-password, verify) need the same treatment. The signup screen currently looks bland with no logo and generic styling.
+IMPORTANT: Modify these three files — only styles, no logic changes:
+
+app/(auth)/signup.tsx
+app/(auth)/forgot-password.tsx
+app/(auth)/verify.tsx
+
+Keep all auth logic, form validation, Supabase calls, and navigation identical.
+
+TASK: Standardize auth screens to match the login screen. Five changes across all files.
+
+Add brand logo (signup.tsx, forgot-password.tsx):
+
+Add the brand logo at the top of each screen, matching the login screen:
+import { Image } from "react-native";
+<Image
+  source={require("@/assets/images/brand-logo.png")}
+  style={{ width: 64, height: 64, alignSelf: "center", marginBottom: 16 }}
+  resizeMode="contain"
+/>
+Place it above the title text. No circle background behind it.
+If verify.tsx has any icon (like a mail icon or checkmark), replace it with the brand logo at the same size.
+
+Title and subtitle styling (all three files):
+
+
+Title ("Create account", "Reset password", "Verify email"): 24px, fontWeight "700", Colors.text.
+Subtitle: 14px, fontWeight "400", Colors.textSecondary.
+Both left-aligned, matching login screen.
+
+
+Input fields (signup.tsx, forgot-password.tsx):
+
+
+borderRadius: 14 (standardize from 12 or other values)
+backgroundColor: Colors.card
+borderWidth: 1, borderColor: Colors.border
+paddingHorizontal: 16
+Icon inside input: Colors.textTertiary (keep existing icons but ensure color matches)
+
+
+Buttons (all three files):
+
+
+Primary action button (Create Account, Send Reset Link, etc.): full-width, Colors.accent background, white text, 48px height, 14px border radius, fontWeight "600".
+Secondary links ("Already have an account? Sign In", "Back to Sign In"): 14px, Colors.textSecondary with the link portion in Colors.accent fontWeight "600".
+No outlined/bordered secondary buttons — just text links.
+
+
+Overall styling (all three files):
+
+
+Content padding: 20px horizontal.
+Background: Colors.background.
+Remove any gradient washes if present.
+Remove any colored decorative elements (category pills, icon circles, etc.) if present.
+
+DO NOT modify any auth logic, validation, Supabase calls, or navigation.
+VERIFICATION:
+
+Signup screen shows brand logo above "Create account"
+Forgot password screen shows brand logo
+Verify screen shows brand logo (or clean layout without generic icons)
+All input fields have borderRadius 14
+All primary buttons are Colors.accent, 48px height
+Creating accounts still works
+Password reset still works
+Email verification still works
+Zero TypeScript errors

@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,7 +17,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 
 export default function SignUpScreen() {
   const insets = useSafeAreaInsets();
@@ -61,13 +61,6 @@ export default function SignUpScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
-        <LinearGradient
-          colors={["rgba(0,201,167,0.08)", "transparent"]}
-          style={styles.topGradient}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-        />
-
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}
           keyboardShouldPersistTaps="handled"
@@ -78,6 +71,11 @@ export default function SignUpScreen() {
           </Pressable>
 
           <View style={styles.header}>
+            <Image
+              source={require("@/assets/images/brand-logo.png")}
+              style={{ width: 64, height: 64, alignSelf: "center", marginBottom: 16 }}
+              resizeMode="contain"
+            />
             <Text style={styles.title}>Create account</Text>
             <Text style={styles.subtitle}>Start tracking everything that matters</Text>
           </View>
@@ -178,12 +176,11 @@ export default function SignUpScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topGradient: { position: "absolute", top: 0, left: 0, right: 0, height: 200 },
-  scroll: { paddingHorizontal: 24, gap: 28 },
+  scroll: { paddingHorizontal: 20, gap: 28 },
   backButton: { width: 40, height: 40, justifyContent: "center" },
   header: { gap: 6 },
-  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text },
+  subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   form: { gap: 16 },
   errorBox: {
     flexDirection: "row",
@@ -202,10 +199,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     height: 52,
   },
   inputIcon: { marginRight: 10 },
@@ -214,7 +211,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: Colors.accent,
     borderRadius: 14,
-    height: 54,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,

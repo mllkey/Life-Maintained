@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,7 +16,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 
 export default function ForgotPasswordScreen() {
   const insets = useSafeAreaInsets();
@@ -48,13 +48,6 @@ export default function ForgotPasswordScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
-        <LinearGradient
-          colors={["rgba(0,201,167,0.08)", "transparent"]}
-          style={styles.topGradient}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-        />
-
         <View style={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 40 }]}>
           <Pressable onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={22} color={Colors.text} />
@@ -62,9 +55,11 @@ export default function ForgotPasswordScreen() {
 
           {sent ? (
             <View style={styles.successContainer}>
-              <View style={styles.successIcon}>
-                <Ionicons name="mail-outline" size={48} color={Colors.accent} />
-              </View>
+              <Image
+                source={require("@/assets/images/brand-logo.png")}
+                style={{ width: 64, height: 64, alignSelf: "center", marginBottom: 16 }}
+                resizeMode="contain"
+              />
               <Text style={styles.title}>Check your email</Text>
               <Text style={styles.subtitle}>
                 We sent a password reset link to{" "}
@@ -80,11 +75,13 @@ export default function ForgotPasswordScreen() {
             </View>
           ) : (
             <View style={styles.formContainer}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="lock-open-outline" size={36} color={Colors.accent} />
-              </View>
+              <Image
+                source={require("@/assets/images/brand-logo.png")}
+                style={{ width: 64, height: 64, alignSelf: "center", marginBottom: 4 }}
+                resizeMode="contain"
+              />
 
-              <Text style={styles.title}>Forgot password?</Text>
+              <Text style={styles.title}>Reset password</Text>
               <Text style={styles.subtitle}>
                 Enter your email and we'll send you a link to reset your password.
               </Text>
@@ -130,7 +127,10 @@ export default function ForgotPasswordScreen() {
               </Pressable>
 
               <Pressable onPress={() => router.back()} style={styles.backLink}>
-                <Text style={styles.backLinkText}>Back to Sign In</Text>
+                <Text style={styles.backLinkText}>
+                  Back to{" "}
+                  <Text style={styles.backLinkAccent}>Sign In</Text>
+                </Text>
               </Pressable>
             </View>
           )}
@@ -142,33 +142,12 @@ export default function ForgotPasswordScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topGradient: { position: "absolute", top: 0, left: 0, right: 0, height: 250 },
-  content: { flex: 1, paddingHorizontal: 24 },
+  content: { flex: 1, paddingHorizontal: 20 },
   backButton: { width: 40, height: 40, justifyContent: "center", marginBottom: 16 },
   formContainer: { gap: 20 },
-  successContainer: { flex: 1, alignItems: "center", justifyContent: "center", gap: 20 },
-  iconContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: Colors.accentLight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Colors.accentMuted,
-  },
-  successIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: 24,
-    backgroundColor: Colors.accentLight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Colors.accentMuted,
-  },
-  title: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 24, textAlign: "center" },
+  successContainer: { flex: 1, justifyContent: "center", gap: 20 },
+  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text },
+  subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
   errorBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -186,10 +165,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     height: 52,
   },
   inputIcon: { marginRight: 10 },
@@ -197,7 +176,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: Colors.accent,
     borderRadius: 14,
-    height: 54,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -206,9 +185,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     minHeight: 44,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
   },
-  backLinkText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
+  backLinkText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  backLinkAccent: { fontFamily: "Inter_600SemiBold", color: Colors.accent },
   emailHighlight: { fontFamily: "Inter_600SemiBold", color: Colors.text },
 });
