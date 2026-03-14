@@ -34,10 +34,6 @@ function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): 
   return "good";
 }
 
-function formatDueLabel(date: string | null): string {
-  if (!date) return "No date";
-  return format(parseISO(date), "MMM d");
-}
 
 export default function PropertyDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -139,17 +135,6 @@ export default function PropertyDetailScreen() {
   const isLoading = loadingProperty || loadingTasks;
   const propertyName = property ? (property.nickname ?? property.address ?? "Property") : "Property";
 
-  const estimatedAnnualCost = useMemo(() => {
-    if (!tasks || tasks.length === 0) {
-      if (property?.square_footage) return Math.round(property.square_footage * 0.01 * 100);
-      return null;
-    }
-    const sum = tasks.reduce((acc: number, t: any) => acc + (t.estimated_cost ?? 0), 0);
-    if (sum > 0) return sum;
-    if (property?.square_footage) return Math.round(property.square_footage * 0.01 * 100);
-    return null;
-  }, [tasks, property]);
-
   const groupedHistory = useMemo(() => {
     if (!logs || logs.length === 0) return [];
     const map = new Map<string, any[]>();
@@ -192,48 +177,35 @@ export default function PropertyDetailScreen() {
   const goodTasks = tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "good") ?? [];
   const allTasks = [...overdueTasks, ...dueSoonTasks, ...goodTasks];
 
+  const typeLabel: Record<string, string> = {
+    house: "Single Family Home", condo: "Condo", apartment: "Apartment",
+    townhouse: "Townhouse", commercial: "Commercial Building",
+    vacation: "Vacation Home", other: "Property",
+  };
+  const propType = property ? (typeLabel[property.property_type ?? "other"] ?? "Property") : "";
+  const metaParts: string[] = [];
+  if (propType) metaParts.push(propType);
+  if (property?.year_built) metaParts.push(`Built ${property.year_built}`);
+  const metaLine = metaParts.join(" · ");
+
   return (
     <View style={[styles.container, { backgroundColor: Colors.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={6}>
           <Ionicons name="chevron-back" size={24} color={Colors.text} />
         </Pressable>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{propertyName}</Text>
-          {property?.address && property?.nickname && (
-            <Text style={styles.headerSub} numberOfLines={1}>{property.address}</Text>
-          )}
-          {(property?.year_built || property?.square_footage) && (
-            <View style={styles.headerMetaRow}>
-              {property?.year_built && (
-                <Text style={styles.headerMeta}>Built {property.year_built}</Text>
-              )}
-              {property?.year_built && property?.square_footage && (
-                <Text style={styles.headerMetaDot}>·</Text>
-              )}
-              {property?.square_footage && (
-                <Text style={styles.headerMeta}>{property.square_footage.toLocaleString()} sqft</Text>
-              )}
-            </View>
-          )}
+          <Text style={styles.propertyName} numberOfLines={1}>{propertyName}</Text>
+          {metaLine ? <Text style={styles.propertyMeta} numberOfLines={1}>{metaLine}</Text> : null}
         </View>
-        <View style={styles.headerActions}>
-          <Pressable
-            style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.7 : 1 }]}
-            onPress={handleDelete}
-            disabled={isDeleting}
-            hitSlop={4}
-          >
-            <Ionicons name="trash-outline" size={17} color={Colors.overdue} />
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.addTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={() => router.push(`/add-property-task/${id}` as any)}
-          >
-            <Ionicons name="add" size={14} color={Colors.home} />
-            <Text style={styles.addTaskBtnText}>Add Task</Text>
-          </Pressable>
-        </View>
+        <Pressable
+          style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.7 : 1 }]}
+          onPress={handleDelete}
+          disabled={isDeleting}
+          hitSlop={4}
+        >
+          <Ionicons name="trash-outline" size={17} color={Colors.overdue} />
+        </Pressable>
       </View>
 
       {isLoading ? (
@@ -244,25 +216,13 @@ export default function PropertyDetailScreen() {
           refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} tintColor={Colors.accent} />}
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
         >
-          {estimatedAnnualCost != null && (
-            <View style={styles.costBanner}>
-              <View style={styles.costBannerLeft}>
-                <Ionicons name="wallet-outline" size={20} color={Colors.home} />
-                <View style={styles.costBannerText}>
-                  <Text style={styles.costBannerLabel}>Est. Annual Maintenance</Text>
-                  <Text style={styles.costBannerAmount}>
-                    ${estimatedAnnualCost.toLocaleString()}
-                    <Text style={styles.costBannerSuffix}>/year</Text>
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.costBannerBadge}>
-                <Text style={styles.costBannerBadgeText}>
-                  {tasks && tasks.length > 0 ? "From tasks" : "1% rule est."}
-                </Text>
-              </View>
-            </View>
-          )}
+          <Pressable
+            style={({ pressed }) => [styles.addTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
+            onPress={() => router.push(`/add-property-task/${id}` as any)}
+          >
+            <Ionicons name="add" size={18} color={Colors.textInverse} />
+            <Text style={styles.addTaskBtnText}>Add Task</Text>
+          </Pressable>
 
           <View style={styles.tabs}>
             {(["tasks", "history"] as const).map(tab => (
@@ -282,46 +242,40 @@ export default function PropertyDetailScreen() {
             <View style={styles.tasksArea}>
               {allTasks.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Ionicons name="list-outline" size={32} color={Colors.textTertiary} />
-                  <Text style={styles.emptyStateTitle}>No tasks yet</Text>
-                  <Text style={styles.emptyStateText}>Add maintenance tasks to track HVAC, roof, gutters, and more.</Text>
-                  <Pressable
-                    style={({ pressed }) => [styles.emptyAddBtn, { opacity: pressed ? 0.8 : 1 }]}
-                    onPress={() => router.push(`/add-property-task/${id}` as any)}
-                  >
-                    <Ionicons name="add" size={16} color={Colors.textInverse} />
-                    <Text style={styles.emptyAddBtnText}>Add Task</Text>
-                  </Pressable>
+                  <Text style={styles.emptyStateText}>No maintenance tasks yet</Text>
                 </View>
               ) : (
                 <>
-                  <View style={styles.sectionHeader}>
-                    {overdueTasks.length > 0 && (
-                      <View style={[styles.sectionBadge, { backgroundColor: Colors.overdueMuted }]}>
-                        <Text style={[styles.sectionBadgeText, { color: Colors.overdue }]}>
-                          {overdueTasks.length} overdue
-                        </Text>
+                  {overdueTasks.length > 0 && (
+                    <>
+                      <Text style={styles.sectionLabel}>ACTION NEEDED ({overdueTasks.length})</Text>
+                      <View style={styles.taskCard}>
+                        {overdueTasks.map((task, i) => (
+                          <TaskRow key={task.id} task={task} onComplete={markComplete} isLast={i === overdueTasks.length - 1} />
+                        ))}
                       </View>
-                    )}
-                    {dueSoonTasks.length > 0 && (
-                      <View style={[styles.sectionBadge, { backgroundColor: Colors.dueSoonMuted }]}>
-                        <Text style={[styles.sectionBadgeText, { color: Colors.dueSoon }]}>
-                          {dueSoonTasks.length} upcoming
-                        </Text>
+                    </>
+                  )}
+                  {dueSoonTasks.length > 0 && (
+                    <>
+                      <Text style={styles.sectionLabel}>UPCOMING ({dueSoonTasks.length})</Text>
+                      <View style={styles.taskCard}>
+                        {dueSoonTasks.map((task, i) => (
+                          <TaskRow key={task.id} task={task} onComplete={markComplete} isLast={i === dueSoonTasks.length - 1} />
+                        ))}
                       </View>
-                    )}
-                    {overdueTasks.length === 0 && dueSoonTasks.length === 0 && goodTasks.length > 0 && (
-                      <View style={[styles.sectionBadge, { backgroundColor: Colors.goodMuted }]}>
-                        <Ionicons name="checkmark-circle" size={12} color={Colors.good} />
-                        <Text style={[styles.sectionBadgeText, { color: Colors.good }]}>All caught up</Text>
+                    </>
+                  )}
+                  {goodTasks.length > 0 && (
+                    <>
+                      <Text style={styles.sectionLabel}>UP TO DATE ({goodTasks.length})</Text>
+                      <View style={styles.taskCard}>
+                        {goodTasks.map((task, i) => (
+                          <TaskRow key={task.id} task={task} onComplete={markComplete} isLast={i === goodTasks.length - 1} />
+                        ))}
                       </View>
-                    )}
-                  </View>
-                  <View style={styles.taskGrid}>
-                    {allTasks.map(task => (
-                      <TaskGridCell key={task.id} task={task} onComplete={markComplete} />
-                    ))}
-                  </View>
+                    </>
+                  )}
                 </>
               )}
             </View>
@@ -403,43 +357,40 @@ export default function PropertyDetailScreen() {
   );
 }
 
-function TaskGridCell({ task, onComplete }: { task: any; onComplete: (id: string, interval: string | null) => void }) {
+function TaskRow({ task, onComplete, isLast }: { task: any; onComplete: (id: string, interval: string | null) => void; isLast: boolean }) {
   const status = getStatus(task.next_due_date, task.last_completed_at);
-  const statusColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
-  const statusBg = status === "overdue" ? Colors.overdueMuted : status === "due_soon" ? Colors.dueSoonMuted : Colors.goodMuted;
-  const dueLabel = formatDueLabel(task.next_due_date);
-  const isCompleted = !!task.last_completed_at;
+  const barColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
+  const isCompleted = status === "good";
+
+  let dueText: string;
+  if (isCompleted && task.last_completed_at) {
+    dueText = `Completed ${format(parseISO(task.last_completed_at), "MMM d, yyyy")}`;
+  } else if (task.next_due_date) {
+    dueText = `Due ${format(parseISO(task.next_due_date), "MMM d, yyyy")}`;
+  } else {
+    dueText = "No date set";
+  }
 
   return (
-    <View style={[styles.gridCell, { borderTopColor: statusColor }]}>
-      <View style={styles.gridCellTop}>
-        <Text style={styles.gridCellName} numberOfLines={3}>{task.task}</Text>
+    <View style={[styles.taskRow, !isLast && styles.taskRowDivider]}>
+      <View style={[styles.taskBar, { backgroundColor: isCompleted ? barColor + "70" : barColor }]} />
+      <View style={styles.taskRowContent}>
+        <Text style={[styles.taskRowName, isCompleted && styles.taskRowNameDone]} numberOfLines={2}>
+          {task.task}
+        </Text>
+        <Text style={[styles.taskRowDue, isCompleted && styles.taskRowDueDone]}>{dueText}</Text>
       </View>
-      <View style={styles.gridCellBottom}>
-        {task.next_due_date ? (
-          <View style={[styles.gridDuePill, { backgroundColor: statusBg }]}>
-            <Text style={[styles.gridDueText, { color: statusColor }]}>{dueLabel}</Text>
-          </View>
-        ) : (
-          <View style={[styles.gridDuePill, { backgroundColor: Colors.surface }]}>
-            <Text style={[styles.gridDueText, { color: Colors.textTertiary }]}>No date</Text>
-          </View>
-        )}
-        <Pressable
-          style={({ pressed }) => [styles.gridDoneBtn, { opacity: pressed ? 0.7 : 1, backgroundColor: statusBg }]}
-          onPress={() => onComplete(task.id, task.interval)}
-          hitSlop={4}
-        >
-          <Ionicons
-            name={isCompleted ? "checkmark" : "ellipse-outline"}
-            size={isCompleted ? 16 : 14}
-            color={statusColor}
-          />
-        </Pressable>
-      </View>
-      {task.category && (
-        <Text style={styles.gridCellCat} numberOfLines={1}>{task.category}</Text>
-      )}
+      <Pressable
+        style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        onPress={() => onComplete(task.id, task.interval)}
+        hitSlop={8}
+      >
+        <Ionicons
+          name={isCompleted ? "checkmark-circle" : "ellipse-outline"}
+          size={22}
+          color={isCompleted ? Colors.good : Colors.textTertiary}
+        />
+      </Pressable>
     </View>
   );
 }
@@ -456,13 +407,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   backBtn: { width: 40, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  headerCenter: { flex: 1, alignItems: "center", gap: 1 },
-  headerTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
-  headerSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
-  headerMetaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 1 },
-  headerMeta: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  headerMetaDot: { fontSize: 11, color: Colors.textTertiary },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
+  headerCenter: { flex: 1, gap: 3 },
+  propertyName: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.3 },
+  propertyMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   deleteBtn: {
     width: 34,
     height: 34,
@@ -470,113 +417,68 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.overdueMuted,
     alignItems: "center",
     justifyContent: "center",
-  },
-  addTaskBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: Colors.homeMuted,
-    borderRadius: 9,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    minHeight: 34,
-  },
-  addTaskBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.home },
-
-  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 16 },
-
-  costBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: Colors.homeMuted,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.home + "30",
-  },
-  costBannerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  costBannerText: { gap: 1 },
-  costBannerLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.home + "CC" },
-  costBannerAmount: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.home },
-  costBannerSuffix: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.home + "99" },
-  costBannerBadge: {
-    backgroundColor: Colors.home + "20",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  costBannerBadgeText: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.home },
-
-  tabs: {
-    flexDirection: "row",
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  tab: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center" },
-  tabActive: { backgroundColor: Colors.homeMuted },
-  tabText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  tabTextActive: { color: Colors.home, fontFamily: "Inter_600SemiBold" },
-
-  tasksArea: { gap: 12 },
-
-  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  sectionBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 9,
-  },
-  sectionBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-
-  taskGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  gridCell: {
-    width: "48%",
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    padding: 12,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderTopWidth: 3,
-    justifyContent: "space-between",
-    minHeight: 110,
-  },
-  gridCellTop: { flex: 1 },
-  gridCellName: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text, lineHeight: 19 },
-  gridCellCat: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textTransform: "capitalize" },
-  gridCellBottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 },
-  gridDuePill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7, flex: 1 },
-  gridDueText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  gridDoneBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
     flexShrink: 0,
   },
 
-  emptyState: { alignItems: "center", paddingVertical: 32, gap: 8 },
-  emptyStateTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  emptyStateText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 19 },
-  emptyAddBtn: {
+  scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 16 },
+
+  addTaskBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: Colors.home,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginTop: 4,
-    minHeight: 44,
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    height: 48,
   },
-  emptyAddBtnText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textInverse },
+  addTaskBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+
+  tabs: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  tab: { flex: 1, paddingVertical: 10, alignItems: "center" },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: Colors.accent },
+  tabText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
+  tabTextActive: { color: Colors.text },
+
+  tasksArea: { gap: 10 },
+  sectionLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+  },
+  taskCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: "hidden",
+  },
+  taskRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  taskRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderSubtle,
+  },
+  taskBar: { width: 4, height: 28, borderRadius: 2, flexShrink: 0 },
+  taskRowContent: { flex: 1, gap: 3 },
+  taskRowName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  taskRowNameDone: { fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontSize: 14 },
+  taskRowDue: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  taskRowDueDone: { color: Colors.textTertiary },
+
+  emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
+  emptyStateTitle: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  emptyStateText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
 
   historySummaryBar: {
     flexDirection: "row",

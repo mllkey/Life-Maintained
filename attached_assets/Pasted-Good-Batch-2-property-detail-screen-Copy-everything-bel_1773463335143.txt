@@ -1,0 +1,65 @@
+Good. Batch 2 — property detail screen:
+
+Copy everything below and paste into Replit Agent:
+
+CONTEXT: The vehicle detail screen was redesigned with a clean header (name + metadata + primary action button + secondary text link), underline tab bar, and task rows with colored vertical bars. The property detail screen needs the same treatment — it currently has a cost banner with wallet icon, colored task badges, and inconsistent styling.
+IMPORTANT: Only modify app/property/[id].tsx. Keep all data fetching, task completion logic, delete property logic, and navigation identical. Only change rendering and styles.
+
+TASK: Redesign property detail to match vehicle detail. Five changes.
+
+Header redesign:
+
+Match the vehicle detail header pattern:
+
+Property name (nickname or address): 22px, fontWeight "700", left-aligned.
+Metadata line: 13px, Colors.textSecondary — property type and year built: "Single Family Home · Built 2005". If no year, just the type.
+Remove the colored cost banner (wallet icon + estimated annual cost + "Annual est." badge). Cost info is secondary — it doesn't need a prominent banner.
+Primary action: "Add Task" as a full-width button, Colors.accent background, white text, 14px radius, 48px height.
+Delete button stays in the top nav bar.
+
+
+Tab bar styling (if tabs exist):
+
+If the property detail has tabs (Tasks/History or similar), apply the same underline style as vehicle detail:
+
+2px bottom border in Colors.accent for active tab.
+Tab labels: 14px, fontWeight "500". Active: Colors.text. Inactive: Colors.textTertiary.
+Subtle 1px Colors.border bottom line.
+
+
+Task row redesign:
+
+Property maintenance tasks should match vehicle schedule task rows exactly:
+
+Left: 4px × 28px colored vertical bar (red overdue, yellow due soon, green completed at 50% opacity).
+Task name: 15px, fontWeight "600".
+Due info: 13px, Colors.textSecondary — "Due Mar 15, 2026" or "Completed Feb 1, 2026" for completed tasks.
+No colored badge pills, no status dots, no chevrons.
+Completed tasks: dimmed styling (14px, fontWeight "400", Colors.textTertiary).
+Rows separated by 1px Colors.borderSubtle.
+
+
+Section headers:
+
+If tasks are grouped (overdue/upcoming/completed), use small-caps labels: "ACTION NEEDED (2)", "UPCOMING (5)", "COMPLETED (3)" — 11px, fontWeight "600", letterSpacing 1.5, Colors.textTertiary, uppercase.
+
+Overall styling:
+
+
+Content padding: 20px horizontal.
+Card border radius: 14px.
+Borders: 1px Colors.border.
+No shadows, no colored icon circles.
+Empty state: "No maintenance tasks yet" in 15px Colors.textSecondary, centered.
+
+DO NOT modify task completion logic, delete property flow, or navigation.
+VERIFICATION:
+
+Property name prominent with metadata below
+No cost banner with wallet icon
+Task rows use colored vertical bars
+Section headers in small-caps with counts
+Add Task is a full-width primary button
+Completing tasks still works
+Delete property still works
+Zero TypeScript errors
