@@ -127,38 +127,17 @@ export default function HealthScreen() {
   const people = useMemo(() => familyMembers?.filter(fm => fm.member_type !== "pet") ?? [], [familyMembers]);
   const pets = useMemo(() => familyMembers?.filter(fm => fm.member_type === "pet") ?? [], [familyMembers]);
 
-  const apptCountByMember = useMemo(() => {
-    const map: Record<string, number> = {};
+  const apptStatusByMember = useMemo(() => {
+    const map: Record<string, { overdue: number; upcoming: number }> = {};
     for (const a of appointments ?? []) {
       if (a.family_member_id) {
-        map[a.family_member_id] = (map[a.family_member_id] ?? 0) + 1;
+        if (!map[a.family_member_id]) map[a.family_member_id] = { overdue: 0, upcoming: 0 };
+        const s = getStatus(a.next_due_date);
+        if (s === "overdue") map[a.family_member_id].overdue++;
+        else if (s === "due_soon") map[a.family_member_id].upcoming++;
       }
     }
     return map;
-  }, [appointments]);
-
-  const upcomingCount = useMemo(() => {
-    if (!appointments) return 0;
-    const cutoff = addDays(new Date(), 90);
-    return appointments.filter(a => {
-      if (!a.next_due_date) return false;
-      const d = parseISO(a.next_due_date);
-      return d <= cutoff;
-    }).length;
-  }, [appointments]);
-
-  const estimatedAnnualCost = useMemo(() => {
-    if (!appointments?.length) return null;
-    let total = 0;
-    let hasData = false;
-    for (const appt of appointments) {
-      if (appt.interval_months && appt.interval_months > 0) {
-        const timesPerYear = 12 / appt.interval_months;
-        total += timesPerYear * 150;
-        hasData = true;
-      }
-    }
-    return hasData ? Math.round(total) : null;
   }, [appointments]);
 
   const hasNoMembers = !familyMembers?.length;
@@ -166,30 +145,13 @@ export default function HealthScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.title}>Health</Text>
-          <Text style={styles.subtitle}>Family health tracker</Text>
-        </View>
-        <View style={styles.headerRight}>
-          {people.length > 0 && (
-            <View style={styles.countBadge}>
-              <Ionicons name="person-outline" size={12} color={Colors.health} />
-              <Text style={styles.countBadgeText}>{people.length}</Text>
-            </View>
-          )}
-          {pets.length > 0 && (
-            <View style={styles.countBadge}>
-              <Ionicons name="paw-outline" size={12} color={Colors.health} />
-              <Text style={styles.countBadgeText}>{pets.length}</Text>
-            </View>
-          )}
-          <Pressable
-            style={({ pressed }) => [styles.addBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-appointment"); }}
-          >
-            <Ionicons name="add" size={20} color={Colors.textInverse} />
-          </Pressable>
-        </View>
+        <Text style={styles.title}>Health</Text>
+        <Pressable
+          style={({ pressed }) => [styles.addBtn, { opacity: pressed ? 0.8 : 1 }]}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-appointment"); }}
+        >
+          <Ionicons name="add" size={20} color={Colors.textInverse} />
+        </Pressable>
       </View>
 
       <ScrollView
@@ -201,51 +163,6 @@ export default function HealthScreen() {
           <ActivityIndicator color={Colors.accent} style={{ marginTop: 40 }} />
         ) : (
           <>
-            <View style={styles.overviewRow}>
-              <View style={[styles.overviewCard, styles.overviewCardTall]}>
-                <View style={styles.overviewIconWrap}>
-                  <Ionicons name="calendar-outline" size={18} color={Colors.health} />
-                </View>
-                <Text style={styles.overviewNumber}>{upcomingCount}</Text>
-                <Text style={styles.overviewLabel}>Upcoming</Text>
-              </View>
-
-              <View style={[styles.overviewCard, styles.overviewCardTall]}>
-                <View style={styles.overviewIconWrap}>
-                  <Ionicons name="wallet-outline" size={18} color={Colors.health} />
-                </View>
-                {estimatedAnnualCost != null ? (
-                  <>
-                    <Text style={styles.overviewNumber}>${estimatedAnnualCost >= 1000 ? `${Math.round(estimatedAnnualCost / 100) / 10}k` : estimatedAnnualCost}</Text>
-                    <Text style={styles.overviewLabel}>Est./year</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.overviewNumber}>$0</Text>
-                    <Text style={styles.overviewLabel}>Est./year</Text>
-                  </>
-                )}
-              </View>
-
-              <View style={[styles.overviewCard, styles.overviewCardTall, styles.quickActionsCard]}>
-                <Pressable
-                  style={({ pressed }) => [styles.quickActionBtn, { opacity: pressed ? 0.8 : 1 }]}
-                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-family-member"); }}
-                >
-                  <Ionicons name="person-add-outline" size={14} color={Colors.health} />
-                  <Text style={styles.quickActionText}>Add Person</Text>
-                </Pressable>
-                <View style={styles.quickDivider} />
-                <Pressable
-                  style={({ pressed }) => [styles.quickActionBtn, { opacity: pressed ? 0.8 : 1 }]}
-                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-family-member"); }}
-                >
-                  <Ionicons name="paw-outline" size={14} color={Colors.health} />
-                  <Text style={styles.quickActionText}>Add Pet</Text>
-                </Pressable>
-              </View>
-            </View>
-
             {hasNoMembers ? (
               <EmptyMembers />
             ) : (
@@ -259,13 +176,15 @@ export default function HealthScreen() {
                       {people.map((person, personIdx) => {
                         const memberLimit = isFreeTier(profile) ? 1 : Infinity;
                         const isLocked = personIdx >= memberLimit;
+                        const status = apptStatusByMember[person.id] ?? { overdue: 0, upcoming: 0 };
                         return (
-                          <View key={person.id} style={{ position: "relative", marginHorizontal: 16 }}>
+                          <View key={person.id} style={{ position: "relative" }}>
                             <View style={{ opacity: isLocked ? 0.5 : 1 }}>
                               <MemberCard
                                 member={person}
-                                apptCount={apptCountByMember[person.id] ?? 0}
-                                onAddAppt={() => router.push("/add-appointment")}
+                                overdue={status.overdue}
+                                upcoming={status.upcoming}
+                                onPress={() => { Haptics.selectionAsync(); router.push(`/family-member/${person.id}` as any); }}
                               />
                             </View>
                             {isLocked && (
@@ -298,13 +217,15 @@ export default function HealthScreen() {
                         const memberLimit = isFreeTier(profile) ? 1 : Infinity;
                         const combinedIdx = people.length + petIdx;
                         const isLocked = combinedIdx >= memberLimit;
+                        const status = apptStatusByMember[pet.id] ?? { overdue: 0, upcoming: 0 };
                         return (
-                          <View key={pet.id} style={{ position: "relative", marginHorizontal: 16 }}>
+                          <View key={pet.id} style={{ position: "relative" }}>
                             <View style={{ opacity: isLocked ? 0.5 : 1 }}>
                               <MemberCard
                                 member={pet}
-                                apptCount={apptCountByMember[pet.id] ?? 0}
-                                onAddAppt={() => router.push("/add-appointment")}
+                                overdue={status.overdue}
+                                upcoming={status.upcoming}
+                                onPress={() => { Haptics.selectionAsync(); router.push(`/family-member/${pet.id}` as any); }}
                               />
                             </View>
                             {isLocked && (
@@ -335,24 +256,20 @@ export default function HealthScreen() {
                     <View style={styles.apptList}>
                       {appointments.map(a => {
                         const status = getStatus(a.next_due_date);
-                        const statusColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
+                        const barColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
                         const member = (a as any).family_members;
+                        const subParts: string[] = [];
+                        if (member?.name) subParts.push(member.name);
+                        if (a.provider_name) subParts.push(a.provider_name);
+                        if (a.next_due_date) subParts.push(format(parseISO(a.next_due_date), "MMM d, yyyy"));
                         return (
-                          <View key={a.id} style={[styles.apptCard, { borderLeftColor: statusColor }]}>
-                            <View style={styles.apptTop}>
-                              <View style={[styles.apptIcon, { backgroundColor: Colors.healthMuted }]}>
-                                <Ionicons name="heart-outline" size={16} color={Colors.health} />
-                              </View>
-                              <View style={styles.apptInfo}>
-                                <Text style={styles.apptType}>{a.appointment_type}</Text>
-                                {member && <Text style={styles.apptMeta}>{member.name}</Text>}
-                                {a.provider_name && <Text style={styles.apptMeta}>{a.provider_name}</Text>}
-                              </View>
-                              <View style={[styles.apptDatePill, { backgroundColor: statusColor + "22" }]}>
-                                <Text style={[styles.apptDateText, { color: statusColor }]}>
-                                  {a.next_due_date ? format(parseISO(a.next_due_date), "MMM d") : "No date"}
-                                </Text>
-                              </View>
+                          <View key={a.id} style={styles.apptCard}>
+                            <View style={[styles.apptBar, { backgroundColor: barColor }]} />
+                            <View style={styles.apptInfo}>
+                              <Text style={styles.apptType}>{a.appointment_type}</Text>
+                              {subParts.length > 0 && (
+                                <Text style={styles.apptMeta} numberOfLines={1}>{subParts.join(" · ")}</Text>
+                              )}
                             </View>
                           </View>
                         );
@@ -367,40 +284,37 @@ export default function HealthScreen() {
                     onAdd={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-medication"); }}
                   >
                     <View style={styles.medList}>
-                      {medications.map(m => (
-                        <View key={m.id} style={styles.medCard}>
-                          <View style={[styles.medIconWrap, { backgroundColor: Colors.healthMuted }]}>
-                            <Ionicons name="medical-outline" size={18} color={Colors.health} />
-                          </View>
-                          <View style={styles.medInfo}>
-                            <Text style={styles.medName}>{m.name}</Text>
-                            <View style={styles.medMeta}>
-                              {(m as any).family_members && (
-                                <Text style={styles.medMetaText}>{(m as any).family_members.name}</Text>
+                      {medications.map(m => {
+                        const metaParts: string[] = [];
+                        if ((m as any).family_members?.name) metaParts.push((m as any).family_members.name);
+                        if (m.reminder_time) metaParts.push(`Daily · ${m.reminder_time}`);
+                        return (
+                          <View key={m.id} style={styles.medCard}>
+                            <View style={styles.medInfo}>
+                              <Text style={styles.medName}>{m.name}</Text>
+                              {metaParts.length > 0 && (
+                                <Text style={styles.medMetaText} numberOfLines={1}>{metaParts.join(" · ")}</Text>
                               )}
+                            </View>
+                            <View style={styles.medRight}>
+                              <View style={[styles.reminderDot, { backgroundColor: m.reminders_enabled ? Colors.good : Colors.border }]} />
                               {m.reminder_time && (
-                                <Text style={styles.medMetaText}>Daily · {m.reminder_time}</Text>
+                                <Pressable
+                                  style={({ pressed }) => [styles.notifBtn, { opacity: pressed ? 0.7 : 1 }]}
+                                  onPress={() => handleScheduleNotification(m)}
+                                  disabled={schedulingMed === m.id}
+                                >
+                                  {schedulingMed === m.id ? (
+                                    <ActivityIndicator size="small" color={Colors.health} />
+                                  ) : (
+                                    <Ionicons name="notifications-outline" size={16} color={Colors.health} />
+                                  )}
+                                </Pressable>
                               )}
                             </View>
                           </View>
-                          <View style={styles.medRight}>
-                            <View style={[styles.reminderDot, { backgroundColor: m.reminders_enabled ? Colors.good : Colors.border }]} />
-                            {m.reminder_time && (
-                              <Pressable
-                                style={({ pressed }) => [styles.notifBtn, { opacity: pressed ? 0.7 : 1 }]}
-                                onPress={() => handleScheduleNotification(m)}
-                                disabled={schedulingMed === m.id}
-                              >
-                                {schedulingMed === m.id ? (
-                                  <ActivityIndicator size="small" color={Colors.health} />
-                                ) : (
-                                  <Ionicons name="notifications-outline" size={16} color={Colors.health} />
-                                )}
-                              </Pressable>
-                            )}
-                          </View>
-                        </View>
-                      ))}
+                        );
+                      })}
                     </View>
                   </SectionBlock>
                 )}
@@ -417,12 +331,13 @@ function SectionBlock({ title, onAdd, children }: { title: string; onAdd: () => 
   return (
     <View style={styles.sectionBlock}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={styles.sectionLabel}>{title}</Text>
         <Pressable
-          style={({ pressed }) => [styles.sectionAddBtn, { opacity: pressed ? 0.7 : 1 }]}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
           onPress={onAdd}
+          hitSlop={8}
         >
-          <Ionicons name="add" size={16} color={Colors.health} />
+          <Ionicons name="add" size={18} color={Colors.textTertiary} />
         </Pressable>
       </View>
       {children}
@@ -430,7 +345,7 @@ function SectionBlock({ title, onAdd, children }: { title: string; onAdd: () => 
   );
 }
 
-function MemberCard({ member, apptCount, onAddAppt }: { member: any; apptCount: number; onAddAppt: () => void }) {
+function MemberCard({ member, overdue, upcoming, onPress }: { member: any; overdue: number; upcoming: number; onPress: () => void }) {
   const isPet = member.member_type === "pet";
   const label = isPet
     ? (member.pet_type ?? "Pet")
@@ -439,25 +354,20 @@ function MemberCard({ member, apptCount, onAddAppt }: { member: any; apptCount: 
   return (
     <Pressable
       style={({ pressed }) => [styles.memberCard, { opacity: pressed ? 0.88 : 1 }]}
-      onPress={() => { Haptics.selectionAsync(); router.push(`/family-member/${member.id}` as any); }}
+      onPress={onPress}
     >
       <View style={[styles.memberIconWrap, { backgroundColor: Colors.healthMuted }]}>
-        <Ionicons name={isPet ? "paw-outline" : "person-outline"} size={24} color={Colors.health} />
+        <Ionicons name={isPet ? "paw-outline" : "person-outline"} size={18} color={Colors.health} />
       </View>
-      <View style={styles.memberTextBlock}>
+      <View style={styles.memberInfo}>
         <Text style={styles.memberName}>{member.name}</Text>
-        <Text style={styles.memberType} numberOfLines={1}>{label}</Text>
-        <Text style={styles.memberApptCount}>
-          {apptCount === 0 ? "No appointments" : `${apptCount} appointment${apptCount !== 1 ? "s" : ""}`}
-        </Text>
+        <Text style={styles.memberMeta} numberOfLines={1}>{label}</Text>
       </View>
-      <Pressable
-        style={({ pressed }) => [styles.memberApptBtn, { opacity: pressed ? 0.7 : 1 }]}
-        onPress={onAddAppt}
-        hitSlop={4}
-      >
-        <Ionicons name="add" size={16} color={Colors.health} />
-      </Pressable>
+      <View style={styles.memberRight}>
+        {overdue > 0 && <Text style={styles.memberStatusOverdue}>{overdue} overdue</Text>}
+        {overdue === 0 && upcoming > 0 && <Text style={styles.memberStatusUpcoming}>{upcoming} upcoming</Text>}
+        <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+      </View>
     </Pressable>
   );
 }
@@ -465,29 +375,8 @@ function MemberCard({ member, apptCount, onAddAppt }: { member: any; apptCount: 
 function EmptyMembers() {
   return (
     <View style={styles.emptyWrap}>
-      <View style={styles.emptyCard}>
-        <View style={styles.emptyIconWrap}>
-          <Ionicons name="people-outline" size={36} color={Colors.health} />
-        </View>
-        <Text style={styles.emptyTitle}>Track family health</Text>
-        <Text style={styles.emptyText}>Add family members and pets to track appointments, medications, and more.</Text>
-        <View style={styles.emptyActions}>
-          <Pressable
-            style={({ pressed }) => [styles.emptyBtn, { opacity: pressed ? 0.85 : 1 }]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-family-member"); }}
-          >
-            <Ionicons name="person-add-outline" size={18} color={Colors.textInverse} />
-            <Text style={styles.emptyBtnText}>Add Person</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.emptyBtnSecondary, { opacity: pressed ? 0.85 : 1 }]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-family-member"); }}
-          >
-            <Ionicons name="paw-outline" size={18} color={Colors.health} />
-            <Text style={styles.emptyBtnSecondaryText}>Add Pet</Text>
-          </Pressable>
-        </View>
-      </View>
+      <Text style={styles.emptyTitle}>No family members yet</Text>
+      <Text style={styles.emptyText}>Add a person or pet to start tracking health</Text>
     </View>
   );
 }
@@ -496,132 +385,74 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end",
+    alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 14,
+    paddingBottom: 12,
     backgroundColor: Colors.background,
   },
-  headerLeft: { gap: 2 },
-  title: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  countBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: Colors.healthMuted,
-    borderRadius: 9,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  countBadgeText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.health },
+  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
   addBtn: {
     width: 36,
     height: 36,
-    borderRadius: 11,
+    borderRadius: 10,
     backgroundColor: Colors.health,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  content: { paddingHorizontal: 16, paddingTop: 8, gap: 20 },
+  content: { paddingHorizontal: 20, paddingTop: 8, gap: 20 },
 
-  overviewRow: { flexDirection: "row", gap: 8 },
-  overviewCard: {
-    flex: 1,
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 4,
-  },
-  overviewCardTall: { minHeight: 120, justifyContent: "center" },
-  overviewIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    backgroundColor: Colors.healthMuted,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  overviewNumber: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  overviewDash: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.textTertiary },
-  overviewLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  quickActionsCard: { gap: 0, justifyContent: "space-between" },
-  quickActionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-  },
-  quickActionText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.health },
-  quickDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: -12 },
-
-  sectionBlock: { gap: 12 },
+  sectionBlock: { gap: 10 },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sectionTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.8 },
-  sectionAddBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: Colors.healthMuted,
-    alignItems: "center",
-    justifyContent: "center",
+  sectionLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
   },
 
-  memberGrid: { flexDirection: "column", gap: 10 },
+  memberGrid: { gap: 10 },
   memberCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   memberIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  memberTextBlock: { flex: 1, gap: 2 },
-  memberApptBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    backgroundColor: Colors.healthMuted,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
+  memberInfo: { flex: 1, gap: 3 },
   memberName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  memberType: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textTransform: "capitalize" },
-  memberApptCount: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  memberMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textTransform: "capitalize" },
+  memberRight: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
+  memberStatusOverdue: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.overdue },
+  memberStatusUpcoming: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.dueSoon },
 
   apptList: { gap: 8 },
   apptCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     backgroundColor: Colors.card,
     borderRadius: 14,
-    padding: 12,
+    padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderLeftWidth: 3,
   },
-  apptTop: { flexDirection: "row", alignItems: "center", gap: 10 },
-  apptIcon: { width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center" },
-  apptInfo: { flex: 1 },
-  apptType: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text },
-  apptMeta: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  apptDatePill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  apptDateText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  apptBar: { width: 4, height: 28, borderRadius: 2, flexShrink: 0 },
+  apptInfo: { flex: 1, gap: 3 },
+  apptType: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  apptMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
 
   medList: { gap: 8 },
   medCard: {
@@ -634,11 +465,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  medIconWrap: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   medInfo: { flex: 1, gap: 3 },
-  medName: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
-  medMeta: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
-  medMetaText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  medName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  medMetaText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   medRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   reminderDot: { width: 8, height: 8, borderRadius: 4 },
   notifBtn: {
@@ -650,49 +479,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  emptyWrap: { paddingTop: 8 },
-  emptyCard: {
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderColor: Colors.health + "55",
-    borderRadius: 20,
-    backgroundColor: Colors.card,
-    marginHorizontal: 4,
-    padding: 40,
-    alignItems: "center",
-    gap: 12,
-  },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor: Colors.healthMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyTitle: { fontSize: 20, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 21 },
-  emptyActions: { flexDirection: "row", gap: 10, marginTop: 8 },
-  emptyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.health,
-    borderRadius: 14,
-    paddingHorizontal: 20,
-    paddingVertical: 13,
-    minHeight: 44,
-  },
-  emptyBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  emptyBtnSecondary: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.healthMuted,
-    borderRadius: 14,
-    paddingHorizontal: 20,
-    paddingVertical: 13,
-    minHeight: 44,
-  },
-  emptyBtnSecondaryText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.health },
+  emptyWrap: { paddingTop: 60, alignItems: "center", gap: 6 },
+  emptyTitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.accent },
 });

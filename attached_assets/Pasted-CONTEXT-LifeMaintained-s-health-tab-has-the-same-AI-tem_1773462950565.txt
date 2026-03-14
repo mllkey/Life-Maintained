@@ -1,0 +1,62 @@
+CONTEXT: LifeMaintained's health tab has the same AI-template issues as the other screens before redesign: colored icon circles in overview cards, badge pills, and inconsistent styling. Every other tab (dashboard, vehicles, properties) has been redesigned to use clean utility aesthetics — compact rows, small-caps section labels, colored vertical bars, no icon circles, 14px radius cards, 20px padding. The health tab needs to match.
+IMPORTANT: Only modify app/(tabs)/health.tsx. Keep all data fetching, medication scheduling, notification logic, and navigation identical. Only change rendering and styles.
+
+TASK: Redesign the health tab to match the rest of the app. Six changes.
+
+Header cleanup:
+
+
+"Health" title: 28px, bold. Remove the "Family health tracker" subtitle — the tab name is self-explanatory.
+Remove the count badges (person icon + number, paw icon + number) from the header. This info is visible in the list below.
+Add button: 36×36, borderRadius 10, matching other screens.
+Padding: 20px horizontal.
+
+
+Remove overview stat cards:
+
+The "Upcoming" and "Est./year" overview cards with colored icon circles are the AI-template pattern. Delete them entirely. If the user needs upcoming count, they see it in the list below. If they need cost estimates, that belongs in settings.
+
+Redesign family member / pet rows:
+
+Each person or pet should be a compact horizontal row matching the vehicle/property card pattern:
+
+Left: 36×36 rounded square with Colors.healthMuted background, person-outline or paw-outline icon at 18px in Colors.health.
+Center: name as 16px fontWeight "600". Below it: metadata in 13px Colors.textSecondary — age, or relationship, or pet type.
+Right: status text if applicable ("1 upcoming" in Colors.dueSoon, "1 overdue" in Colors.overdue) + chevron.
+Card: 14px radius, 1px Colors.border, 14px padding.
+
+
+Redesign appointment rows:
+
+If appointments are listed on this screen, they should use the same task-row pattern as the vehicle schedule:
+
+Left: 4px colored vertical bar (red overdue, yellow due soon, green completed).
+Title: 15px fontWeight "600".
+Subtitle: provider name and date in 13px Colors.textSecondary.
+No colored badge pills, no icon circles.
+
+
+Redesign medication rows:
+
+Medications should be compact rows:
+
+Name: 15px fontWeight "600".
+Dosage/frequency below in 13px Colors.textSecondary.
+Reminder toggle or status on the right.
+No colored pill badges.
+
+
+Section headers:
+
+Use the same small-caps labels as the rest of the app: "FAMILY MEMBERS", "APPOINTMENTS", "MEDICATIONS" — 11px, fontWeight "600", letterSpacing 1.5, Colors.textTertiary, uppercase.
+DO NOT modify any medication scheduling logic, notification handlers, or navigation.
+VERIFICATION:
+
+No colored overview stat cards
+No count badges in the header
+Family member rows are compact horizontal cards
+Appointment rows use vertical status bars
+Section headers in small-caps
+All navigation still works (tapping members, adding appointments)
+Medication reminders still function
+Zero TypeScript errors
