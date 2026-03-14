@@ -1,0 +1,50 @@
+CONTEXT: The dashboard feels empty and doesn't communicate value. Apple Health drives daily engagement through circular progress rings — users open the app to "close their rings." NNGroup research confirms data visualizations using preattentive visual processing help users understand status at a glance. The dashboard needs three additions: a health score ring, a spending chart, and quick action buttons.
+IMPORTANT: Only modify app/(tabs)/index.tsx. Keep all data fetching identical. Install react-native-svg (npx expo install react-native-svg) for the progress ring.
+
+TASK: Add three visual elements to the dashboard. Place them in this order after QuickMileageCard: (1) Health Score, (2) NEEDS ATTENTION tasks (already exists), (3) Spending chart, (4) Quick actions, (5) Health Screenings (already exists).
+ELEMENT 1 — Maintenance Health Score card:
+Install react-native-svg: npx expo install react-native-svg
+Score calculation from existing dashboardItems:
+
+total = all items, overdue = status "overdue", dueSoon = status "due_soon"
+score = Math.round(((total - overdue - (dueSoon * 0.5)) / Math.max(total, 1)) * 100), clamped 0-100
+Color: Colors.good >= 80, Colors.dueSoon 50-79, Colors.overdue < 50
+
+Card: full width, 14px radius, 1px Colors.border, 16px padding, flexDirection "row", gap 16.
+Left — circular ring using Svg/Circle from react-native-svg:
+
+72px Svg, background Circle stroke Colors.border strokeWidth 6, progress Circle with strokeDasharray/strokeDashoffset, strokeLinecap "round", rotated -90 degrees. Score number (22px/700) + "%" (12px) centered inside via absolute-positioned View. Color matches score.
+
+Right:
+
+"Maintenance Score" 16px/600
+Message 13px/textSecondary: "Everything is on track" (>=90), "A few items need attention" (70-89), "Several items are overdue" (50-69), "Maintenance is falling behind" (<50)
+"X on track · Y due soon · Z overdue" 12px/textTertiary
+
+Don't show if zero total tasks.
+ELEMENT 2 — Spending chart (place below NEEDS ATTENTION):
+Section label: "SPENDING" in small-caps (11px/600/1.5 letterSpacing/textTertiary/uppercase).
+Card: 14px radius, 1px border, 16px padding.
+
+Top row: "This month" 13px/textSecondary left, "$X" 18px/700 right
+Below: horizontal bar chart of last 6 months. Each bar is a simple View with height 24px, width proportional to max month's spending, Colors.accent at 60% opacity (current month 100%). Month label below each bar: 10px/textTertiary. Build with flex Views, no charting library.
+No data: "No spending recorded yet" 13px/textTertiary
+
+ELEMENT 3 — Quick actions row (place below spending):
+Three items in a horizontal row, flex 1 each, 8px gap:
+
+"Log Service" mic-outline icon → setLogSheetVisible(true)
+"Add Vehicle" car-outline icon → router.push("/add-vehicle")
+"Add Property" home-outline icon → router.push("/add-property")
+
+Each: icon 20px Colors.accent above 11px/textSecondary label, centered. Background Colors.card, 14px radius, 1px Colors.border, 12px vertical padding.
+VERIFICATION:
+
+Progress ring renders with correct fill and color
+Score number centered inside ring
+Spending chart shows 6 month bars
+Quick actions navigate correctly
+Dashboard feels information-rich, not empty
+All existing features still work
+New user with no data sees appropriate empty states
+Zero TypeScript errors

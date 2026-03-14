@@ -14,6 +14,7 @@ import {
   Modal,
   KeyboardAvoidingView,
 } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -293,17 +294,39 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
+  const { data: totalTasksData, refetch: refetchTotalTasks } = useQuery({
+    queryKey: ["total_tasks_count", user?.id],
+    queryFn: async () => {
+      if (!user) return 0;
+      const [veh, prop, health] = await Promise.all([
+        supabase.from("user_vehicle_maintenance_tasks").select("vehicles!inner(user_id)", { count: "exact", head: true }).eq("vehicles.user_id", user.id),
+        supabase.from("property_maintenance_tasks").select("properties!inner(user_id)", { count: "exact", head: true }).eq("properties.user_id", user.id),
+        supabase.from("health_appointments").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      ]);
+      return (veh.count ?? 0) + (prop.count ?? 0) + (health.count ?? 0);
+    },
+    enabled: !!user,
+  });
+
   function refetch() {
     refetchCounts();
     refetchDash();
     refetchSpending();
     refetchMileage();
+    refetchTotalTasks();
   }
 
   const isLoading = countsLoading || dashLoading;
   const isNewUser = !isLoading && counts != null && counts.vehicles === 0 && counts.properties === 0 && counts.health === 0;
   const screenings = healthProfile ? getAgeScreenings(healthProfile.date_of_birth, healthProfile.sex_at_birth) : [];
   const upcomingItems = dashboardItems?.slice(0, 6) ?? [];
+
+  const overdueCnt = dashboardItems?.filter(i => i.status === "overdue").length ?? 0;
+  const dueSoonCnt = dashboardItems?.filter(i => i.status === "due_soon").length ?? 0;
+  const totalTasks = totalTasksData ?? 0;
+  const rawScore = totalTasks === 0 ? 100 : Math.round(((totalTasks - overdueCnt - dueSoonCnt * 0.5) / totalTasks) * 100);
+  const healthScore = Math.max(0, Math.min(100, rawScore));
+  const onTrackCnt = Math.max(0, totalTasks - overdueCnt - dueSoonCnt);
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -372,10 +395,20 @@ export default function DashboardScreen() {
               <QuickMileageCard vehicles={mileageVehicles!} userId={user!.id} />
             )}
 
+            {totalTasks > 0 && (
+              <HealthScoreCard
+                score={healthScore}
+                overdue={overdueCnt}
+                dueSoon={dueSoonCnt}
+                onTrack={onTrackCnt}
+              />
+            )}
+
             <UpcomingTasksCard items={upcomingItems} />
-            <Text style={styles.spendingSummary}>
-              {"This month: $"}{((spending ?? {})[format(new Date(), "yyyy-MM")] ?? 0).toFixed(0)}{" spent on maintenance"}
-            </Text>
+
+            <SpendingChartCard spending={spending} />
+
+            <QuickActionsRow onLogService={() => setLogSheetVisible(true)} />
 
             {screenings.length > 0 && (familyMembers?.length ?? 0) > 0 && (
               <View style={styles.section}>
@@ -1053,6 +1086,120 @@ function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
   );
 }
 
+function HealthScoreCard({ score, overdue, dueSoon, onTrack }: { score: number; overdue: number; dueSoon: number; onTrack: number }) {
+  const scoreColor = score >= 80 ? Colors.good : score >= 50 ? Colors.dueSoon : Colors.overdue;
+  const r = 30;
+  const cx = 36;
+  const cy = 36;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference * (1 - score / 100);
+  const message =
+    score >= 90 ? "Everything is on track" :
+    score >= 70 ? "A few items need attention" :
+    score >= 50 ? "Several items are overdue" :
+    "Maintenance is falling behind";
+
+  return (
+    <View style={styles.scoreCard}>
+      <View style={{ width: 72, height: 72 }}>
+        <Svg width={72} height={72} style={{ transform: [{ rotate: "-90deg" }] }}>
+          <Circle cx={cx} cy={cy} r={r} stroke={Colors.border} strokeWidth={6} fill="none" />
+          <Circle
+            cx={cx} cy={cy} r={r}
+            stroke={scoreColor}
+            strokeWidth={6}
+            fill="none"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+          />
+        </Svg>
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: scoreColor, lineHeight: 24 }}>
+            {score}<Text style={{ fontSize: 11 }}>%</Text>
+          </Text>
+        </View>
+      </View>
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text style={styles.scoreTitle}>Maintenance Score</Text>
+        <Text style={styles.scoreMessage}>{message}</Text>
+        <Text style={styles.scoreDetail}>{onTrack} on track · {dueSoon} due soon · {overdue} overdue</Text>
+      </View>
+    </View>
+  );
+}
+
+function SpendingChartCard({ spending }: { spending: Record<string, number> | undefined }) {
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = subMonths(new Date(), 5 - i);
+    return { key: format(d, "yyyy-MM"), label: format(d, "MMM") };
+  });
+  const currentMonthKey = format(new Date(), "yyyy-MM");
+  const amounts = months.map(m => (spending ?? {})[m.key] ?? 0);
+  const maxAmount = Math.max(...amounts, 1);
+  const currentMonthTotal = (spending ?? {})[currentMonthKey] ?? 0;
+  const hasData = amounts.some(a => a > 0);
+
+  return (
+    <>
+      <Text style={styles.sectionLabel}>SPENDING</Text>
+      <View style={styles.panelCard}>
+        <View style={styles.spendingTopRow}>
+          <Text style={styles.spendingThisMonth}>This month</Text>
+          <Text style={styles.spendingAmount}>${currentMonthTotal.toFixed(0)}</Text>
+        </View>
+        {!hasData ? (
+          <Text style={styles.spendingEmpty}>No spending recorded yet</Text>
+        ) : (
+          <View style={styles.spendingBars}>
+            {months.map((m, i) => {
+              const amount = amounts[i];
+              const isCurrent = m.key === currentMonthKey;
+              const widthPercent = (amount / maxAmount) * 100;
+              return (
+                <View key={m.key} style={styles.spendingBarRow}>
+                  <View style={styles.spendingBarTrack}>
+                    <View style={[styles.spendingBarFill, { width: `${widthPercent}%` as any, opacity: isCurrent ? 1 : 0.5 }]} />
+                  </View>
+                  <Text style={styles.spendingBarLabel}>{m.label}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </View>
+    </>
+  );
+}
+
+function QuickActionsRow({ onLogService }: { onLogService: () => void }) {
+  return (
+    <View style={styles.quickActionsRow}>
+      <Pressable
+        style={({ pressed }) => [styles.quickActionBtn, { opacity: pressed ? 0.75 : 1 }]}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onLogService(); }}
+      >
+        <Ionicons name="mic-outline" size={20} color={Colors.accent} />
+        <Text style={styles.quickActionLabel}>Log Service</Text>
+      </Pressable>
+      <Pressable
+        style={({ pressed }) => [styles.quickActionBtn, { opacity: pressed ? 0.75 : 1 }]}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-vehicle"); }}
+      >
+        <Ionicons name="car-outline" size={20} color={Colors.accent} />
+        <Text style={styles.quickActionLabel}>Add Vehicle</Text>
+      </Pressable>
+      <Pressable
+        style={({ pressed }) => [styles.quickActionBtn, { opacity: pressed ? 0.75 : 1 }]}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-property"); }}
+      >
+        <Ionicons name="home-outline" size={20} color={Colors.accent} />
+        <Text style={styles.quickActionLabel}>Add Property</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function WelcomeView() {
   const cats: (keyof typeof CAT)[] = ["vehicles", "properties", "health"];
   return (
@@ -1138,7 +1285,6 @@ const styles = StyleSheet.create({
   seeAllText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
 
   headerSummary: { fontSize: 13, fontFamily: "Inter_400Regular", fontWeight: "300" as const, color: Colors.textTertiary, marginTop: 4 },
-  spendingSummary: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: -4, marginBottom: 4 },
 
   section: { gap: 10 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
@@ -1533,4 +1679,52 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     flexShrink: 0,
   },
+
+  scoreCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+  },
+  scoreTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  scoreMessage: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  scoreDetail: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+
+  spendingTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  spendingThisMonth: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  spendingAmount: { fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.text },
+  spendingEmpty: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", paddingVertical: 12 },
+  spendingBars: { gap: 8 },
+  spendingBarRow: { gap: 3 },
+  spendingBarTrack: { height: 24, backgroundColor: Colors.borderSubtle, borderRadius: 4, overflow: "hidden" },
+  spendingBarFill: { height: 24, backgroundColor: Colors.accent, borderRadius: 4 },
+  spendingBarLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+
+  catCard: {
+    flex: 1,
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+    alignItems: "center",
+  },
+
+  quickActionsRow: { flexDirection: "row", gap: 8 },
+  quickActionBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: 12,
+  },
+  quickActionLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
 });
