@@ -346,55 +346,47 @@ export default function SettingsScreen() {
         ]}
       >
         <View style={styles.maxWidth}>
+          {/* Banners */}
           {userIsInTrial && (
-            <View style={[styles.banner, { backgroundColor: Colors.dueSoonMuted, borderColor: Colors.dueSoon + "44" }]}>
-              <View style={[styles.bannerIconWrap, { backgroundColor: Colors.dueSoon + "30" }]}>
-                <Ionicons name="time-outline" size={20} color={Colors.dueSoon} />
-              </View>
+            <View style={styles.banner}>
               <View style={styles.bannerText}>
-                <Text style={[styles.bannerTitle, { color: Colors.dueSoon }]}>
-                  {"Free Trial: "}{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining
-                </Text>
-                <Text style={styles.bannerSub}>Upgrade now to keep full access</Text>
+                <Text style={styles.bannerTitle}>Free Trial</Text>
+                <Text style={styles.bannerSub}>{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining</Text>
               </View>
               <Pressable
                 style={({ pressed }) => [styles.bannerBtn, { opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => router.push("/subscription" as any)}
               >
-                <Text style={styles.bannerBtnText}>Upgrade Now</Text>
+                <Text style={styles.bannerBtnText}>Upgrade</Text>
               </Pressable>
             </View>
           )}
 
           {userIsFreeTier && !userIsInTrial && (
-            <View style={[styles.banner, { backgroundColor: Colors.accentLight, borderColor: Colors.accent + "44" }]}>
-              <View style={[styles.bannerIconWrap, { backgroundColor: Colors.accent + "20" }]}>
-                <Ionicons name="star-outline" size={20} color={Colors.accent} />
-              </View>
+            <View style={styles.banner}>
               <View style={styles.bannerText}>
-                <Text style={[styles.bannerTitle, { color: Colors.accent }]}>You are on the free plan</Text>
+                <Text style={styles.bannerTitle}>Free Plan</Text>
                 <Text style={styles.bannerSub}>Upgrade to unlock vehicles, scans & exports</Text>
               </View>
               <Pressable
-                style={({ pressed }) => [styles.bannerBtn, { backgroundColor: Colors.accent, opacity: pressed ? 0.8 : 1 }]}
+                style={({ pressed }) => [styles.bannerBtn, { opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => router.push("/subscription" as any)}
               >
-                <Text style={[styles.bannerBtnText, { color: Colors.textInverse }]}>Upgrade</Text>
+                <Text style={styles.bannerBtnText}>Upgrade</Text>
               </Pressable>
             </View>
           )}
 
           {isPremium && !userIsInTrial && (
-            <View style={[styles.banner, { backgroundColor: Colors.goodMuted, borderColor: Colors.good + "44" }]}>
-              <View style={[styles.bannerIconWrap, { backgroundColor: Colors.good + "30" }]}>
-                <Ionicons name="checkmark-circle" size={20} color={Colors.good} />
-              </View>
+            <View style={styles.banner}>
               <View style={styles.bannerText}>
-                <Text style={[styles.bannerTitle, { color: Colors.good }]}>{tierLabel} · Active</Text>
-                {tierExpiry && <Text style={styles.bannerSub}>Renews {tierExpiry}</Text>}
+                <Text style={styles.bannerTitle}>{tierLabel} Plan</Text>
+                {tierExpiry
+                  ? <Text style={styles.bannerSub}>Renews {tierExpiry}</Text>
+                  : <Text style={styles.bannerSub}>Active subscription</Text>}
               </View>
               <Pressable
-                style={({ pressed }) => [styles.bannerBtn, { backgroundColor: Colors.good + "22", opacity: pressed ? 0.8 : 1 }]}
+                style={({ pressed }) => [styles.bannerBtn, { opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => {
                   if (Platform.OS === "ios") {
                     const { Linking } = require("react-native");
@@ -404,88 +396,56 @@ export default function SettingsScreen() {
                   }
                 }}
               >
-                <Text style={[styles.bannerBtnText, { color: Colors.good }]}>Manage</Text>
+                <Text style={styles.bannerBtnText}>Manage</Text>
               </Pressable>
             </View>
           )}
 
-          <SectionCard
-            icon="person-circle-outline"
-            iconColor={Colors.blue}
-            title="Profile"
-            subtitle={user?.email ?? ""}
-          >
-            <View style={styles.profileEmailRow}>
-              <Ionicons name="mail-outline" size={16} color={Colors.textTertiary} />
-              <Text style={styles.profileEmail} numberOfLines={1}>{user?.email}</Text>
-              <View style={[
-                styles.tierPill,
-                userIsInTrial ? { backgroundColor: Colors.dueSoon + "22" } : isPremium ? styles.tierPillPremium : styles.tierPillFree,
-              ]}>
-                {isPremium && !userIsInTrial && <Ionicons name="star" size={10} color={Colors.vehicle} />}
-                <Text style={[styles.tierPillText, { color: userIsInTrial ? Colors.dueSoon : isPremium ? Colors.vehicle : Colors.textTertiary }]}>
-                  {tierLabel}
-                </Text>
-              </View>
+          {/* ACCOUNT */}
+          <Text style={styles.sectionLabel}>Account</Text>
+          <View style={styles.groupCard}>
+            <View style={styles.accountEmailRow}>
+              <Text style={styles.accountEmail} numberOfLines={1}>{user?.email}</Text>
+              <Text style={styles.accountTierLabel}>{tierLabel}</Text>
             </View>
-            <View style={styles.profileActions}>
-              <Pressable
-                style={({ pressed }) => [styles.profileActionBtn, { opacity: pressed ? 0.8 : 1 }]}
-                onPress={handleSignOut}
-              >
-                <Ionicons name="log-out-outline" size={16} color={Colors.textSecondary} />
-                <Text style={styles.profileActionText}>Sign Out</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.profileActionBtn, styles.profileActionBtnDestructive, { opacity: pressed ? 0.8 : 1 }]}
-                onPress={handleDeleteAccount}
-              >
-                <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
-                <Text style={[styles.profileActionText, { color: Colors.overdue }]}>Delete Account</Text>
-              </Pressable>
-            </View>
-          </SectionCard>
+            <View style={styles.groupDivider} />
+            <Pressable
+              style={({ pressed }) => [styles.signOutRow, { opacity: pressed ? 0.7 : 1 }]}
+              onPress={handleSignOut}
+              hitSlop={4}
+            >
+              <Text style={styles.signOutText}>Sign Out</Text>
+            </Pressable>
+          </View>
 
-          <SectionCard
-            icon="notifications-outline"
-            iconColor={Colors.accent}
-            title="Notification Channels"
-            subtitle="Choose how you receive alerts"
-          >
+          {/* NOTIFICATIONS */}
+          <Text style={styles.sectionLabel}>Notifications</Text>
+          <View style={styles.groupCard}>
             <ToggleRow
-              icon="phone-portrait-outline"
-              iconColor={Colors.accent}
               label="Push Notifications"
               sublabel="In-app alerts and banners"
               value={settings.pushEnabled}
               onToggle={() => togglePush(!settings.pushEnabled)}
-              accentColor={Colors.accent}
             />
-            <View style={styles.rowDivider} />
+            <View style={styles.groupDivider} />
             <ToggleRow
-              icon="mail-outline"
-              iconColor={Colors.blue}
               label="Email"
               sublabel="Sent to your registered email"
               value={settings.emailEnabled}
               onToggle={() => { Haptics.selectionAsync(); updateSetting("emailEnabled", !settings.emailEnabled); }}
-              accentColor={Colors.blue}
             />
-            <View style={styles.rowDivider} />
+            <View style={styles.groupDivider} />
             <ToggleRow
-              icon="chatbubble-outline"
-              iconColor={Colors.home}
               label="SMS"
               sublabel="Text message reminders"
               value={settings.smsEnabled}
               onToggle={() => { Haptics.selectionAsync(); updateSetting("smsEnabled", !settings.smsEnabled); }}
-              accentColor={Colors.home}
             />
-          </SectionCard>
+          </View>
 
+          {/* BUDGET */}
+          <Text style={styles.sectionLabel}>Budget Notifications</Text>
           <SectionCard
-            icon="wallet-outline"
-            iconColor={Colors.good}
             title="Budget Notifications"
             subtitle="Get alerted when costs exceed your threshold"
           >
@@ -516,9 +476,8 @@ export default function SettingsScreen() {
             </View>
           </SectionCard>
 
+          <Text style={styles.sectionLabel}>Service Prediction</Text>
           <SectionCard
-            icon="car-outline"
-            iconColor={Colors.vehicle}
             title="Service Prediction"
             subtitle={selectedVehicle
               ? (selectedVehicle.nickname ?? `${selectedVehicle.year ?? ""} ${selectedVehicle.make ?? ""} ${selectedVehicle.model ?? ""}`.trim())
@@ -683,6 +642,15 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={styles.version}>LifeMaintained v1.0.0</Text>
+
+          <View style={{ height: 32 }} />
+          <Pressable
+            style={({ pressed }) => [styles.deleteAccountBtn, { opacity: pressed ? 0.7 : 1 }]}
+            onPress={handleDeleteAccount}
+            hitSlop={8}
+          >
+            <Text style={styles.deleteAccountText}>Delete Account</Text>
+          </Pressable>
         </View>
       </ScrollView>
 
@@ -711,49 +679,32 @@ export default function SettingsScreen() {
   );
 }
 
-function SectionCard({ icon, iconColor, title, subtitle, children }: {
-  icon: any;
-  iconColor: string;
+function SectionCard({ title, subtitle, children }: {
   title: string;
   subtitle: string;
   children: React.ReactNode;
 }) {
   return (
     <View style={styles.sectionCard}>
-      <View style={styles.sectionCardHeader}>
-        <View style={[styles.sectionCardIcon, { backgroundColor: iconColor + "22" }]}>
-          <Ionicons name={icon} size={18} color={iconColor} />
-        </View>
-        <View style={styles.sectionCardHeaderText}>
-          <Text style={styles.sectionCardTitle}>{title}</Text>
-          <Text style={styles.sectionCardSubtitle} numberOfLines={1}>{subtitle}</Text>
-        </View>
-      </View>
       <View style={styles.sectionCardBody}>{children}</View>
     </View>
   );
 }
 
-function ToggleRow({ icon, iconColor, label, sublabel, value, onToggle, accentColor }: {
-  icon: any;
-  iconColor: string;
+function ToggleRow({ label, sublabel, value, onToggle }: {
   label: string;
   sublabel: string;
   value: boolean;
   onToggle: () => void;
-  accentColor: string;
 }) {
   return (
     <Pressable style={styles.toggleRow} onPress={onToggle} hitSlop={4}>
-      <View style={[styles.toggleRowIcon, { backgroundColor: iconColor + "18" }]}>
-        <Ionicons name={icon} size={16} color={iconColor} />
-      </View>
       <View style={styles.toggleRowInfo}>
         <Text style={styles.toggleRowLabel}>{label}</Text>
         <Text style={styles.toggleRowSub}>{sublabel}</Text>
       </View>
       <Pressable onPress={onToggle} style={styles.toggleHitArea} hitSlop={8}>
-        <View style={[styles.toggle, value && [styles.toggleOn, { backgroundColor: accentColor }]]}>
+        <View style={[styles.toggle, value && styles.toggleOn]}>
           <View style={[styles.toggleThumb, value && styles.toggleThumbOn]} />
         </View>
       </Pressable>
@@ -768,8 +719,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: Colors.background,
   },
-  title: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  content: { paddingHorizontal: 16, paddingTop: 8, gap: 16 },
+  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
+  content: { paddingHorizontal: 20, paddingTop: 8, gap: 16 },
   maxWidth: {
     maxWidth: 768,
     alignSelf: "center",
@@ -777,110 +728,87 @@ const styles = StyleSheet.create({
     gap: 16,
   },
 
+  sectionLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    marginBottom: -4,
+  },
+
   banner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 14,
+    padding: 16,
     borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
   },
-  bannerIconWrap: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   bannerText: { flex: 1 },
-  bannerTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  bannerSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 1 },
+  bannerTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  bannerSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
   bannerBtn: {
-    backgroundColor: Colors.dueSoon + "22",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    minHeight: 34,
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
-  bannerBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.dueSoon },
+  bannerBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 
-  upgradeCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.vehicleMuted,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.vehicle + "44",
-    gap: 12,
-  },
-  upgradeCardLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12 },
-  upgradeIcon: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  upgradeCardText: { flex: 1 },
-  upgradeCardTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.vehicle },
-  upgradeCardSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 1 },
-
-  sectionCard: {
+  groupCard: {
     backgroundColor: Colors.card,
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
   },
-  sectionCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  sectionCardIcon: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  sectionCardHeaderText: { flex: 1 },
-  sectionCardTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  sectionCardSubtitle: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 1 },
-  sectionCardBody: { padding: 16, gap: 0 },
+  groupDivider: { height: 1, backgroundColor: Colors.borderSubtle },
 
-  profileEmailRow: {
+  accountEmailRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
   },
-  profileEmail: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  tierPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  tierPillPremium: { backgroundColor: Colors.vehicleMuted },
-  tierPillFree: { backgroundColor: Colors.surface },
-  tierPillText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  profileActions: { flexDirection: "row", gap: 10 },
-  profileActionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
+  accountEmail: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.text },
+  accountTierLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.accent },
+
+  signOutRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 48,
     justifyContent: "center",
-    gap: 7,
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    paddingVertical: 12,
-    minHeight: 44,
+  },
+  signOutText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+
+  sectionCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
+    overflow: "hidden",
   },
-  profileActionBtnDestructive: { borderColor: Colors.overdueMuted, backgroundColor: Colors.overdueMuted },
-  profileActionText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-
-  rowDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: -16, marginVertical: 0 },
+  sectionCardBody: { padding: 16, gap: 0 },
 
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     minHeight: 56,
-    paddingVertical: 8,
   },
-  toggleRowIcon: { width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   toggleRowInfo: { flex: 1 },
   toggleRowLabel: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
-  toggleRowSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 1 },
+  toggleRowSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
   toggleHitArea: { padding: 5 },
   toggle: {
     width: 50,
@@ -890,9 +818,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 2,
   },
-  toggleOn: {},
+  toggleOn: { backgroundColor: Colors.accent },
   toggleThumb: { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.text, alignSelf: "flex-start" },
   toggleThumbOn: { alignSelf: "flex-end" },
+
+  deleteAccountBtn: { alignItems: "center", paddingVertical: 12, minHeight: 44, justifyContent: "center" },
+  deleteAccountText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.overdue },
+
+  rowDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: -16, marginVertical: 0 },
 
   budgetContent: { gap: 10 },
   budgetHint: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 19 },

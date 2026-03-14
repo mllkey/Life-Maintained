@@ -1,0 +1,65 @@
+CONTEXT: LifeMaintained's settings screen looks like an AI-generated template. The green "Free Trial" banner looks like a default component, Sign Out and Delete Account are side by side (dangerous UX — NNGroup research says destructive actions should be far from benign ones), and the notification rows are generic icon+toggle layouts. The target aesthetic is Apple Health / iOS Settings — grouped sections with clear labels, no colored icon circles.
+IMPORTANT: Only modify app/(tabs)/settings.tsx. Keep all data fetching, navigation, sign out, delete account, and notification toggle logic identical. Only change rendering and styles.
+
+TASK: Redesign the settings screen. Six changes.
+
+Trial banner redesign:
+
+The green banner with "Free Trial: 7 days remaining" looks like a template. Redesign:
+
+Subtle card with 1px Colors.border, 14px radius, 16px padding.
+Left side: "Free Trial" in 15px fontWeight "600", Colors.text. Below it: "7 days remaining" in 13px Colors.textSecondary.
+Right side: "Upgrade" button — compact pill, Colors.accent background, white text, 13px fontWeight "600", 28px height, 14px horizontal padding, 14px border radius.
+No green background, no clock icon. Clean and understated.
+
+
+Separate Sign Out from Delete Account:
+
+Currently these are side by side as equal buttons. This violates NNGroup's guideline that destructive actions should be far from benign ones. Redesign:
+
+"Sign Out" appears as a normal row in the account section — plain text, 15px, Colors.textSecondary, tappable. No icon needed.
+"Delete Account" moves to the very bottom of the entire settings scroll, isolated with 32px of space above it. Style: 14px, Colors.overdue, fontWeight "400", centered. No button styling — just a red text link. It should feel intentional to reach, not accidental.
+
+
+Clean up notification section:
+
+The colored icon circles (red bell, green envelope, purple phone) next to each toggle are visual noise. Redesign:
+
+Remove all colored icon circles from notification rows.
+Each row: label text on the left (15px, Colors.text), subtitle below it (13px, Colors.textSecondary), toggle switch on the right.
+Rows separated by 1px Colors.borderSubtle dividers.
+Section header: "NOTIFICATIONS" in 11px, fontWeight "600", letterSpacing 1.5, Colors.textTertiary, textTransform uppercase. Same small-caps style as dashboard sections.
+
+
+Profile section cleanup:
+
+
+Remove the colored person icon circle next to "Profile".
+Show email as 15px Colors.text, with the subscription tier badge ("Trial", "Personal", etc.) as a small text label in Colors.accent, 11px, fontWeight "600" — not a colored pill.
+Section header: "ACCOUNT" in small-caps style.
+
+
+All section headers:
+
+Every section on the settings page should use the same small-caps label style: 11px, fontWeight "600", letterSpacing 1.5, Colors.textTertiary, textTransform uppercase, marginBottom 8.
+Apply to: Account, Notifications, and any other section headers (Action Button setup, etc.).
+
+Overall styling:
+
+
+Screen title: 28px, bold, matching dashboard.
+Content padding: 20px horizontal.
+Card/group styling: 14px border radius, 1px Colors.border, 16px padding.
+No shadows, no colored icon circles anywhere.
+
+DO NOT modify any toggle logic, sign out flow, delete account flow, or navigation.
+VERIFICATION:
+
+Trial banner is subtle card — no green background
+Sign Out is a normal row, Delete Account is isolated at bottom in red text
+No colored icon circles on notification rows
+Section headers in small-caps style
+All toggle switches still work
+Sign out and delete account still function correctly
+Upgrade button still navigates to subscription screen
+Zero TypeScript errors
