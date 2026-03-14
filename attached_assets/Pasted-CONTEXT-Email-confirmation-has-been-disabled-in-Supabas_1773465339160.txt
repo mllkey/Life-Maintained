@@ -1,0 +1,77 @@
+CONTEXT: Email confirmation has been disabled in Supabase. Users now go directly into the app after signup. The verify.tsx screen is no longer needed in the signup flow. Additionally, the remaining auth screens (signup, forgot-password) need visual polish to match the login screen, which already has the brand logo and clean styling.
+IMPORTANT: Modify app/(auth)/signup.tsx, app/(auth)/forgot-password.tsx, and app/(auth)/verify.tsx. Keep all auth logic, validation, and Supabase calls identical except where noted.
+
+TASK: Seven changes across three files.
+
+Remove verify redirect from signup (signup.tsx):
+
+Find the line after successful signup that routes to verify:
+router.push("/(auth)/verify");
+Change it to route directly to onboarding:
+router.replace("/(onboarding)");
+The user should land in onboarding immediately after creating their account — zero friction.
+
+Add brand logo to signup (signup.tsx):
+
+Add the brand logo above the title, matching login screen:
+import { Image } from "react-native";
+<Image
+  source={require("@/assets/images/brand-logo.png")}
+  style={{ width: 64, height: 64, alignSelf: "center", marginBottom: 16 }}
+  resizeMode="contain"
+/>
+Remove any existing icon (shield, checkmark, etc.) and its container styling.
+
+Style signup screen (signup.tsx):
+
+
+Title "Create account": 24px, fontWeight "700", Colors.text.
+Subtitle "Start tracking everything that matters": 14px, fontWeight "400", Colors.textSecondary.
+Input fields: borderRadius 14, backgroundColor Colors.card, 1px Colors.border.
+"Create Account" button: full-width, Colors.accent, white text, 48px height, 14px radius, fontWeight "600".
+"Already have an account? Sign In" link: 14px, Colors.textSecondary, with "Sign In" in Colors.accent fontWeight "600".
+Content padding: 20px horizontal.
+Remove any gradient washes if present.
+
+
+Add brand logo to forgot-password (forgot-password.tsx):
+
+Same brand logo treatment as signup. Add Image import and the logo above the title. Remove any existing icons.
+
+Style forgot-password screen (forgot-password.tsx):
+
+
+Title "Reset password": 24px, fontWeight "700".
+Subtitle: 14px, Colors.textSecondary.
+Input: borderRadius 14.
+Button: full-width, Colors.accent, 48px height, 14px radius.
+Back link: 14px, "Back to Sign In" in Colors.accent.
+Padding: 20px horizontal.
+Remove any gradient washes.
+
+
+Simplify verify screen (verify.tsx):
+
+Keep the screen functional (users who signed up before the change may still need it) but simplify:
+
+Replace the mail icon with the brand logo (64×64).
+Remove the three-step instruction list (Open email, Click link, Come back) — too verbose.
+Title "Check your email": 24px, fontWeight "700".
+Body text: 14px, Colors.textSecondary, one sentence: "We sent a verification link to your email. Click it to activate your account."
+"Go to Sign In" button: full-width, Colors.accent, 48px height, 14px radius.
+Remove the LinearGradient wash.
+Padding: 20px horizontal.
+
+
+Remove confirm password field from signup (signup.tsx):
+
+Research shows each additional form field drops conversion 8-50%. The confirm password field adds friction with minimal benefit. Remove it. Keep only Email and Password fields. Remove the confirmPassword state variable and its validation check.
+DO NOT modify any Supabase auth calls (signUp, signIn) or the AuthContext.
+VERIFICATION:
+
+Signup → creates account → goes directly to onboarding (not verify screen)
+Signup screen shows brand logo, no confirm password field
+Forgot password screen shows brand logo
+Verify screen is simplified but still functional
+All auth flows still work
+Zero TypeScript errors

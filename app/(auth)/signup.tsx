@@ -23,19 +23,13 @@ export default function SignUpScreen() {
   const { signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSignUp() {
-    if (!email.trim() || !password || !confirmPassword) {
+    if (!email.trim() || !password) {
       setError("Please fill in all fields");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
     if (password.length < 6) {
@@ -51,7 +45,7 @@ export default function SignUpScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.push("/(auth)/verify");
+      router.replace("/(onboarding)");
     }
   }
 
@@ -119,7 +113,8 @@ export default function SignUpScreen() {
                   placeholderTextColor={Colors.textTertiary}
                   secureTextEntry={!showPassword}
                   textContentType="newPassword"
-                  returnKeyType="next"
+                  returnKeyType="done"
+                  onSubmitEditing={handleSignUp}
                 />
                 <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
                   <Ionicons
@@ -128,24 +123,6 @@ export default function SignUpScreen() {
                     color={Colors.textTertiary}
                   />
                 </Pressable>
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  placeholder="Repeat password"
-                  placeholderTextColor={Colors.textTertiary}
-                  secureTextEntry={!showPassword}
-                  textContentType="newPassword"
-                  returnKeyType="done"
-                  onSubmitEditing={handleSignUp}
-                />
               </View>
             </View>
 
