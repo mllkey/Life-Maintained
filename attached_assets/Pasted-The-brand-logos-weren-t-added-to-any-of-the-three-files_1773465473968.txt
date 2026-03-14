@@ -1,0 +1,47 @@
+The brand logos weren't added to any of the three files, and the styling updates (borderRadius 14, 48px buttons, gradient removal) weren't applied either. Those are critical — the signup screen was the one you called "beyond bland." Send this follow-up:
+
+Copy everything below and paste into Replit Agent:
+
+CONTEXT: The previous prompt successfully removed the confirm password field, updated the signup-to-onboarding redirect, and simplified the verify screen. But the visual styling updates were missed: brand logos, input border radius, button sizing, and gradient removal. These are needed to match the login screen which already has the brand logo and clean styling.
+IMPORTANT: Modify app/(auth)/signup.tsx, app/(auth)/forgot-password.tsx, and app/(auth)/verify.tsx. Only change rendering and styles — do NOT modify any auth logic.
+
+TASK: Apply visual polish to all three auth screens.
+
+Add brand logo to signup.tsx and forgot-password.tsx:
+
+Both files need this import added:
+import { Image } from "react-native";
+And this element placed above the title text:
+<Image
+  source={require("@/assets/images/brand-logo.png")}
+  style={{ width: 64, height: 64, alignSelf: "center", marginBottom: 16 }}
+  resizeMode="contain"
+/>
+Remove any existing icon (Ionicons shield, checkmark, mail, etc.) and its wrapping container from both files.
+
+Replace brand logo on verify.tsx:
+
+Replace the mail-unread-outline icon and its iconContainer with the same brand logo Image as above.
+
+Standardize styling across all three files:
+
+Apply to signup.tsx, forgot-password.tsx, and verify.tsx:
+
+Title: 24px, fontWeight "700", Colors.text
+Subtitle/body: 14px, fontWeight "400", Colors.textSecondary
+Input fields: borderRadius 14, backgroundColor Colors.card, borderWidth 1, borderColor Colors.border, paddingHorizontal 16
+Primary button: full-width, backgroundColor Colors.accent, height 48, borderRadius 14, fontWeight "600", color white
+Content paddingHorizontal: 20
+Remove any LinearGradient washes (verify.tsx has one)
+Remove any icon containers with colored backgrounds (accentLight, accentMuted borders, etc.)
+
+VERIFICATION:
+
+Signup screen shows brand logo above "Create account"
+Forgot password screen shows brand logo
+Verify screen shows brand logo instead of mail icon
+All inputs have borderRadius 14
+All primary buttons are accent colored, 48px height
+No gradient washes on any auth screen
+All auth flows still work
+Zero TypeScript errors
