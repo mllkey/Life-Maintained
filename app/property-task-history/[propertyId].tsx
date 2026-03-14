@@ -99,7 +99,6 @@ export default function PropertyTaskHistoryScreen() {
           <Ionicons name="chevron-back" size={24} color={Colors.text} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={2}>{taskName}</Text>
-        <View style={styles.backBtn} />
       </View>
 
       {isLoading ? (
@@ -111,9 +110,7 @@ export default function PropertyTaskHistoryScreen() {
         >
           {visitCount === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="document-outline" size={40} color={Colors.textTertiary} />
-              <Text style={styles.emptyTitle}>No records yet</Text>
-              <Text style={styles.emptyText}>No service history logged for this task.</Text>
+              <Text style={styles.emptyText}>No service history yet</Text>
             </View>
           ) : (
             <>
@@ -151,18 +148,14 @@ export default function PropertyTaskHistoryScreen() {
                         accessibilityRole="button"
                         accessibilityLabel={`${formattedDate ?? "Service"}, ${log.cost != null ? "$" + log.cost.toFixed(2) : ""}`}
                       >
+                        <View style={styles.verticalBar} />
                         <View style={styles.logCardLeft}>
-                          {formattedDate && (
-                            <Text style={styles.logDate}>{formattedDate}</Text>
-                          )}
-                          {log.provider_name && (
-                            <Text style={styles.logProvider} numberOfLines={1}>{log.provider_name}</Text>
-                          )}
+                          <Text style={styles.logTitle}>{log.service_name ?? taskName}</Text>
+                          <Text style={styles.logSubtitle} numberOfLines={1}>
+                            {[formattedDate, log.cost != null ? `$${log.cost.toFixed(2)}` : null, log.provider_name].filter(Boolean).join(" · ")}
+                          </Text>
                         </View>
                         <View style={styles.logCardRight}>
-                          {log.cost != null && (
-                            <Text style={styles.logCost}>${log.cost.toFixed(2)}</Text>
-                          )}
                           {log.receipt_url ? (
                             <Pressable
                               onPress={() => openReceipt(log.receipt_url, log.id)}
@@ -291,7 +284,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
@@ -300,23 +293,20 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   headerTitle: {
     flex: 1,
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
     color: Colors.text,
-    textAlign: "center",
-    lineHeight: 22,
   },
 
-  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 16 },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 16 },
 
-  emptyState: { alignItems: "center", paddingTop: 60, gap: 10 },
-  emptyTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 20 },
+  emptyState: { alignItems: "center", paddingTop: 80 },
+  emptyText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
 
   summaryBar: {
     flexDirection: "row",
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 16,
@@ -330,7 +320,7 @@ const styles = StyleSheet.create({
 
   logList: {
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -345,13 +335,13 @@ const styles = StyleSheet.create({
     minHeight: 64,
     gap: 12,
   },
+  verticalBar: { width: 4, height: 28, borderRadius: 2, backgroundColor: Colors.accent, flexShrink: 0 },
   logCardLeft: { flex: 1, gap: 3 },
-  logDate: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 21 },
-  logProvider: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  logTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  logSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   logCardRight: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
-  logCost: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.home },
   receiptIconBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  logDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 16 },
+  logDivider: { height: 1, backgroundColor: Colors.borderSubtle, marginHorizontal: 16 },
 
   expandedSection: {
     paddingHorizontal: 16,

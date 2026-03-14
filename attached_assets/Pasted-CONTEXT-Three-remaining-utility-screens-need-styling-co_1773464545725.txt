@@ -1,0 +1,57 @@
+CONTEXT: Three remaining utility screens need styling consistency: vehicle task history, property task history, and notification settings. Every other screen in the app now uses 14px border radius, 20px padding, small-caps section labels, colored vertical bars for status, and no colored icon circles.
+IMPORTANT: Modify these three files — only styles, no logic changes:
+
+app/vehicle-task-history/[vehicleId].tsx
+app/property-task-history/[propertyId].tsx
+app/notifications-settings.tsx
+
+Keep all data fetching, delete logic, and toggle logic identical.
+
+TASK: Standardize styling across all three files. Four changes.
+
+History list rows (both history files):
+
+Each maintenance log entry should match the vehicle schedule task row pattern:
+
+Left: 4px × 28px colored vertical bar. Use Colors.accent for completed entries (they're historical, not status-based). If entries have no color distinction, use Colors.border for a neutral bar.
+Title (service name): 15px, fontWeight "600", Colors.text.
+Subtitle (date + cost + provider on one line): 13px, Colors.textSecondary. Example: "Mar 1, 2026 · $45 · Cycle Gear"
+No colored icon circles, no badge pills.
+Rows separated by 1px Colors.borderSubtle.
+Card container: 14px border radius, 1px Colors.border, 16px padding.
+
+
+History screen headers:
+
+
+Title: 22px, fontWeight "700" (these are sub-screens, slightly smaller than tab titles).
+Content padding: 20px horizontal.
+Back button styling should match vehicle detail.
+
+
+Notification settings (notifications-settings.tsx):
+
+Apply the same treatment as the main settings screen:
+
+Remove any colored icon circles next to notification options.
+Each option row: label (15px, Colors.text), subtitle (13px, Colors.textSecondary), toggle on the right.
+Section headers: small-caps style (11px, fontWeight "600", letterSpacing 1.5, Colors.textTertiary, uppercase).
+Group card: 14px border radius, 1px Colors.border.
+Content padding: 20px horizontal.
+Screen title: 22px, fontWeight "700".
+
+
+Empty states:
+
+Both history screens should use the same clean empty state: centered text "No service history yet" in 15px Colors.textSecondary. No large icons or illustrations.
+DO NOT modify any data fetching, delete functionality, or toggle logic.
+VERIFICATION:
+
+History rows use vertical bars and clean typography
+No colored icon circles anywhere
+Notification settings match main settings screen style
+All section headers in small-caps
+Content padding is 20px throughout
+Delete history entries still works
+Notification toggles still work
+Zero TypeScript errors
