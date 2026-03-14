@@ -1,0 +1,55 @@
+CONTEXT: LifeMaintained's form screens have inconsistent styling — mixed border radii (12, 14, 20), save buttons as small colored pills in the nav bar, and chips with 20px radius when the app standard is 14px. Every main screen now uses: 14px border radius, 20px horizontal padding, full-width 48px accent buttons, and the clean utility aesthetic. Forms need to match.
+IMPORTANT: Modify these five files — only styles, no logic changes:
+
+app/add-property.tsx
+app/add-appointment.tsx
+app/add-medication.tsx
+app/add-family-member.tsx
+app/log-service/[vehicleId].tsx
+
+Keep all form validation, data saving, navigation, and picker logic identical.
+
+TASK: Standardize form styling across all five files. Four changes per file.
+
+Border radius consistency:
+
+Find all borderRadius values and standardize:
+
+Input fields: borderRadius 14 (not 12 or 10)
+Cards/containers: borderRadius 14
+Chips/pills (selectable options like relationship types, frequency, etc.): borderRadius 10 (not 20 — 20 is too rounded)
+Buttons: borderRadius 14
+Toggles: keep existing radius (they're circular by nature)
+
+
+Save button standardization:
+
+Several forms have small pill-shaped save buttons in the top nav bar (e.g., borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7 with a category color like Colors.health). Replace with a consistent pattern:
+
+Keep the save button in the nav bar BUT style it as: Colors.accent background (not category-specific colors like Colors.health), borderRadius 10, paddingHorizontal 14, paddingVertical 6, fontWeight "600", 14px text, color white.
+This makes all save buttons look the same regardless of which form the user is on.
+
+
+Content padding:
+
+All form content areas: paddingHorizontal 20 (not 16 or 14). Match the rest of the app.
+
+Section labels:
+
+If forms have section headers or group labels (like "BASIC INFO", "POWERTRAIN", etc. on add-vehicle), apply the small-caps style if not already present: 11px, fontWeight "600", letterSpacing 1.5, Colors.textTertiary, uppercase.
+SPECIFIC NOTES PER FILE:
+add-property.tsx: Has a borderRadius: 20 on the save button — change to 10. Has mixed 10/12 radii on inputs.
+add-appointment.tsx: Save button uses Colors.health — change to Colors.accent. Chips use borderRadius 20 — change to 10. Input borderRadius 12 — change to 14.
+add-medication.tsx: Save button uses Colors.health — change to Colors.accent. Chips use borderRadius 20 — change to 10. Input borderRadius 12 — change to 14.
+add-family-member.tsx: Check save button color and radius. Relationship selector chips likely have borderRadius 20 — change to 10.
+log-service/[vehicleId].tsx: Check all radii and padding. This screen is heavily used — make sure it feels clean and consistent.
+DO NOT modify any form validation, data saving, Supabase calls, or navigation.
+VERIFICATION:
+
+All input fields have borderRadius 14
+All chips/pills have borderRadius 10
+All save buttons are Colors.accent with borderRadius 10
+Content padding is 20px on all forms
+All forms still save data correctly
+All pickers and selectors still work
+Zero TypeScript errors

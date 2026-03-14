@@ -696,7 +696,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
@@ -704,14 +704,14 @@ const styles = StyleSheet.create({
   closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   title: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
   saveBtn: {
-    backgroundColor: Colors.home,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
+    backgroundColor: Colors.accent,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
   },
-  saveBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  saveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 
-  scroll: { paddingHorizontal: 16, paddingTop: 24, gap: 20 },
+  scroll: { paddingHorizontal: 20, paddingTop: 24, gap: 20 },
   errorBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -724,18 +724,18 @@ const styles = StyleSheet.create({
 
   fieldGroup: { gap: 10 },
   groupLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     color: Colors.textTertiary,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 1.5,
   },
   fieldGroupContent: { gap: 10 },
   row: { flexDirection: "row", gap: 10 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
   input: {
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 14,
@@ -774,7 +774,7 @@ const styles = StyleSheet.create({
 
   suggestionsCard: {
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
