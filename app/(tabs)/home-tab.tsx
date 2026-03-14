@@ -140,15 +140,28 @@ export default function HomeTabScreen() {
             const counts = taskCounts?.[p.id];
             const overdue = counts?.overdue ?? 0;
             const dueSoon = counts?.due_soon ?? 0;
-            const total = counts?.total ?? 0;
-            const isMyHome = !!p.is_primary_residence;
             const icon = getPropertyIcon(p.property_type);
             const label = getPropertyLabel(p);
+
+            const metaParts: string[] = [];
+            if (p.year_built) metaParts.push(`Built ${p.year_built}`);
+            if (p.square_footage) metaParts.push(`${p.square_footage.toLocaleString()} sqft`);
+            const typeLabel: Record<string, string> = {
+              house: "Single Family Home", condo: "Condo", apartment: "Apartment",
+              townhouse: "Townhouse", commercial: "Commercial Building",
+              vacation: "Vacation Home", other: "Property",
+            };
+            const metaLine = metaParts.length > 0
+              ? metaParts.join(" · ")
+              : (typeLabel[p.property_type ?? "other"] ?? "Property");
 
             return (
               <Pressable
                 key={p.id}
-                style={({ pressed }) => [styles.propertyCard, { opacity: pressed ? 0.88 : isLocked ? 0.55 : 1 }]}
+                style={({ pressed }) => [
+                  styles.propertyCard,
+                  { opacity: pressed ? 0.88 : isLocked ? 0.5 : 1 },
+                ]}
                 onPress={() => {
                   if (isLocked) {
                     Alert.alert(
@@ -165,92 +178,24 @@ export default function HomeTabScreen() {
                   router.push(`/property/${p.id}` as any);
                 }}
               >
-                <View style={styles.cardTop}>
-                  <View style={[styles.iconWrap, { backgroundColor: Colors.homeMuted }]}>
-                    <Ionicons name={icon as any} size={26} color={Colors.home} />
-                  </View>
-
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>{label}</Text>
-                    {p.address && (
-                      <Text style={styles.cardAddress} numberOfLines={1}>{p.address}</Text>
-                    )}
-                  </View>
-
-                  {isMyHome && (
-                    <View style={styles.myHomeBadge}>
-                      <Ionicons name="home" size={10} color={Colors.home} />
-                      <Text style={styles.myHomeBadgeText}>My Home</Text>
-                    </View>
-                  )}
+                <View style={[styles.iconWrap, { backgroundColor: Colors.homeMuted }]}>
+                  <Ionicons name={icon as any} size={18} color={Colors.home} />
                 </View>
 
-                {(p.year_built || p.square_footage) && (
-                  <View style={styles.metaRow}>
-                    {p.year_built && (
-                      <View style={styles.metaPill}>
-                        <Ionicons name="calendar-outline" size={11} color={Colors.textTertiary} />
-                        <Text style={styles.metaPillText}>Built {p.year_built}</Text>
-                      </View>
-                    )}
-                    {p.square_footage && (
-                      <View style={styles.metaPill}>
-                        <Ionicons name="resize-outline" size={11} color={Colors.textTertiary} />
-                        <Text style={styles.metaPillText}>{p.square_footage.toLocaleString()} sqft</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>{label}</Text>
+                  <Text style={styles.cardMeta} numberOfLines={1}>{metaLine}</Text>
+                </View>
 
-                <View style={styles.statusRow}>
+                <View style={styles.cardRight}>
                   {overdue > 0 && (
-                    <View style={[styles.statusBadge, { backgroundColor: Colors.overdueMuted }]}>
-                      <View style={[styles.statusDot, { backgroundColor: Colors.overdue }]} />
-                      <Text style={[styles.statusBadgeText, { color: Colors.overdue }]}>
-                        {overdue} overdue
-                      </Text>
-                    </View>
+                    <Text style={styles.statusOverdue}>{overdue} overdue</Text>
                   )}
-                  {dueSoon > 0 && (
-                    <View style={[styles.statusBadge, { backgroundColor: Colors.dueSoonMuted }]}>
-                      <View style={[styles.statusDot, { backgroundColor: Colors.dueSoon }]} />
-                      <Text style={[styles.statusBadgeText, { color: Colors.dueSoon }]}>
-                        {dueSoon} upcoming
-                      </Text>
-                    </View>
+                  {overdue === 0 && dueSoon > 0 && (
+                    <Text style={styles.statusDueSoon}>{dueSoon} upcoming</Text>
                   )}
-                  {overdue === 0 && dueSoon === 0 && total > 0 && (
-                    <View style={[styles.statusBadge, { backgroundColor: Colors.goodMuted }]}>
-                      <Ionicons name="checkmark-circle" size={11} color={Colors.good} />
-                      <Text style={[styles.statusBadgeText, { color: Colors.good }]}>All caught up</Text>
-                    </View>
-                  )}
-                  {total === 0 && (
-                    <View style={[styles.statusBadge, { backgroundColor: Colors.surface }]}>
-                      <Text style={[styles.statusBadgeText, { color: Colors.textTertiary }]}>No tasks yet</Text>
-                    </View>
-                  )}
-                  <View style={{ flex: 1 }} />
-                  {!isLocked && (
-                    <Pressable
-                      style={({ pressed }) => [styles.addTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push(`/add-property-task/${p.id}` as any);
-                      }}
-                    >
-                      <Ionicons name="add" size={14} color={Colors.home} />
-                      <Text style={styles.addTaskBtnText}>Add Task</Text>
-                    </Pressable>
-                  )}
+                  <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
                 </View>
-                {isLocked && (
-                  <View style={styles.lockedRow}>
-                    <Ionicons name="lock-closed" size={12} color={Colors.textTertiary} />
-                    <Text style={styles.lockedText}>Locked. Upgrade to access.</Text>
-                  </View>
-                )}
               </Pressable>
             );
           })
@@ -262,24 +207,13 @@ export default function HomeTabScreen() {
 
 function PropertyCardSkeleton({ anim }: { anim: ReturnType<typeof usePulse> }) {
   return (
-    <View style={[styles.propertyCard, { gap: 12 }]}>
-      <Row gap={12} align="flex-start">
-        <S anim={anim} w={54} h={54} r={15} />
-        <Col flex={1} gap={5}>
-          <S anim={anim} w="55%" h={17} r={6} />
-          <S anim={anim} w="75%" h={13} r={5} />
-        </Col>
-        <S anim={anim} w={60} h={24} r={8} />
-      </Row>
-      <Row gap={6}>
-        <S anim={anim} w={80} h={24} r={8} />
-        <S anim={anim} w={80} h={24} r={8} />
-      </Row>
-      <Row gap={6}>
-        <S anim={anim} w={88} h={28} r={9} />
-        <View style={{ flex: 1 }} />
-        <S anim={anim} w={72} h={30} r={8} />
-      </Row>
+    <View style={styles.propertyCard}>
+      <S anim={anim} w={36} h={36} r={10} />
+      <Col flex={1} gap={6}>
+        <S anim={anim} w="55%" h={16} r={5} />
+        <S anim={anim} w="70%" h={13} r={5} />
+      </Col>
+      <S anim={anim} w={16} h={16} r={4} />
     </View>
   );
 }
@@ -290,6 +224,7 @@ function PropertyListSkeleton() {
     <>
       <PropertyCardSkeleton anim={anim} />
       <PropertyCardSkeleton anim={anim} />
+      <PropertyCardSkeleton anim={anim} />
     </>
   );
 }
@@ -297,20 +232,8 @@ function PropertyListSkeleton() {
 function EmptyProperties() {
   return (
     <View style={styles.emptyWrap}>
-      <View style={styles.emptyCard}>
-        <View style={styles.emptyIconWrap}>
-          <Ionicons name="home-outline" size={36} color={Colors.home} />
-        </View>
-        <Text style={styles.emptyTitle}>No properties yet</Text>
-        <Text style={styles.emptyText}>Add your home or other properties to track HVAC, roof, appliances, and more.</Text>
-        <Pressable
-          style={({ pressed }) => [styles.emptyBtn, { opacity: pressed ? 0.85 : 1 }]}
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-property"); }}
-        >
-          <Ionicons name="add" size={20} color={Colors.textInverse} />
-          <Text style={styles.emptyBtnText}>Add Property</Text>
-        </Pressable>
-      </View>
+      <Text style={styles.emptyTitle}>No properties yet</Text>
+      <Text style={styles.emptyText}>Add your first property</Text>
     </View>
   );
 }
@@ -324,118 +247,43 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: Colors.background,
   },
-  title: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
+  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
   addButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: Colors.home,
     alignItems: "center",
     justifyContent: "center",
   },
-  content: { paddingHorizontal: 16, paddingTop: 8, gap: 12 },
+  content: { paddingHorizontal: 20, paddingTop: 8, gap: 10 },
 
   propertyCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
     backgroundColor: Colors.card,
-    borderRadius: 18,
-    padding: 16,
-    gap: 12,
+    borderRadius: 14,
+    padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   iconWrap: {
-    width: 54,
-    height: 54,
-    borderRadius: 15,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  cardInfo: { flex: 1, gap: 2 },
-  cardTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 22 },
-  cardAddress: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  myHomeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: Colors.homeMuted,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    flexShrink: 0,
-  },
-  myHomeBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.home },
+  cardInfo: { flex: 1, gap: 3 },
+  cardTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  cardMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  cardRight: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
+  statusOverdue: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.overdue },
+  statusDueSoon: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.dueSoon },
 
-  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  metaPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  metaPillText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-
-  statusRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 9,
-  },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusBadgeText: { fontSize: 12, fontFamily: "Inter_500Medium" },
-  addTaskBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: Colors.homeMuted,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    minHeight: 30,
-  },
-  addTaskBtnText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.home },
-  lockedRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingTop: 4, paddingBottom: 2 },
-  lockedText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontStyle: "italic" },
-
-  emptyWrap: { paddingTop: 24 },
-  emptyCard: {
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderColor: Colors.home + "55",
-    borderRadius: 20,
-    backgroundColor: Colors.card,
-    marginHorizontal: 4,
-    padding: 40,
-    alignItems: "center",
-    gap: 12,
-  },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor: Colors.homeMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyTitle: { fontSize: 20, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 21 },
-  emptyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.home,
-    borderRadius: 14,
-    paddingHorizontal: 24,
-    paddingVertical: 13,
-    marginTop: 8,
-    minHeight: 44,
-  },
-  emptyBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  emptyWrap: { paddingTop: 60, alignItems: "center", gap: 6 },
+  emptyTitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.accent },
 });

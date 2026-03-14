@@ -1,0 +1,60 @@
+Got it. The properties list has the same problems — large cards, colored icon circles, badge pills, status dots. Here's the prompt:
+
+Copy everything below and paste into Replit Agent:
+
+CONTEXT: LifeMaintained's properties list has the same AI-template look as the vehicles list before it was redesigned. Large cards with colored icon circles, "My Home" badges, metadata pills, and status dot badges. The vehicles list was already redesigned as compact horizontal rows with vertical status bars. Properties should match.
+IMPORTANT: Only modify app/(tabs)/home-tab.tsx. Keep all data fetching, navigation, locked property logic, and task count logic identical. Only change rendering and styles.
+
+TASK: Redesign property cards to match the vehicles list style. Five changes.
+
+Compact horizontal card layout:
+
+Replace the tall card with a compact row matching the vehicles list pattern:
+
+Left side: property type icon in a 36×36 rounded square with Colors.homeMuted background. Keep the existing getPropertyIcon function.
+Center: property name (nickname or address) as 16px fontWeight "600", Colors.text. Below it: metadata in 13px Colors.textSecondary — combine year built and sqft on one line: "Built 2005 · 2,400 sqft". If neither exists, show the property type: "Single Family Home".
+Right side: small chevron (chevron-forward) in Colors.textTertiary.
+Card padding: 14px. Border radius: 14px. Border: 1px solid Colors.border.
+Entire card tappable (keep existing navigation logic).
+
+
+Remove badge pills and status dots:
+
+Delete the "My Home" badge, the metadata pills (Built XXXX, sqft), and the colored status dot badges (overdue/upcoming/all caught up). Instead:
+
+If tasks are overdue or due soon, show compact status text above the chevron: "2 overdue" in Colors.overdue or "3 upcoming" in Colors.dueSoon, 11px fontWeight "500". Same pattern as vehicles list.
+If all caught up or no tasks, show nothing.
+
+
+Remove "Add Task" button from the card:
+
+The "Add Task" button on each card adds clutter. Users can add tasks from the property detail screen. Remove it from the list view.
+
+Locked property styling:
+
+Keep the locked property logic but simplify the visual:
+
+Locked cards: reduce opacity to 0.5.
+Remove the locked row with lock icon and text. The reduced opacity is enough to signal it's inaccessible.
+Keep the Alert dialog on tap.
+
+
+Header and empty state:
+
+
+"Properties" title: 28px, bold.
+Add button: 36×36, border radius 10px. Matching vehicles list.
+Content padding: 20px horizontal.
+Empty state: "No properties yet" in 15px Colors.textSecondary, "Add your first property" in 13px Colors.accent below it. No illustrations.
+Loading skeleton: update to match compact row layout.
+
+DO NOT modify any navigation, data fetching, or subscription/locking logic.
+VERIFICATION:
+
+Property cards are compact horizontal rows matching vehicles list
+No "My Home" badge, no metadata pills, no status dot badges
+No "Add Task" button on cards
+Locked properties show reduced opacity only
+Status text shows overdue/upcoming counts on the right
+Tapping cards navigates correctly (or shows locked alert)
+Zero TypeScript errors
