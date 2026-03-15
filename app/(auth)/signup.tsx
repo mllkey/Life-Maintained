@@ -67,14 +67,15 @@ export default function SignUpScreen() {
           <View style={styles.header}>
             <Image
               source={require("@/assets/images/brand-logo.png")}
-              style={{ width: 64, height: 64, alignSelf: "center", marginBottom: 16 }}
+              style={{ width: 64, height: 64 }}
               resizeMode="contain"
             />
-            <Text style={styles.title}>Create account</Text>
-            <Text style={styles.subtitle}>Start tracking everything that matters</Text>
+            <Text style={styles.appName}>LifeMaintained</Text>
+            <Text style={styles.tagline}>The app that remembers so you don't have to.</Text>
           </View>
 
           <View style={styles.form}>
+            <Text style={styles.formTitle}>Create account</Text>
             {error && (
               <View style={styles.errorBox}>
                 <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
@@ -155,9 +156,10 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { paddingHorizontal: 20, gap: 28 },
   backButton: { width: 40, height: 40, justifyContent: "center" },
-  header: { gap: 6 },
-  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text },
-  subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  header: { alignItems: "center", gap: 8 },
+  appName: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5, textAlign: "center" },
+  tagline: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  formTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
   form: { gap: 16 },
   errorBox: {
     flexDirection: "row",
