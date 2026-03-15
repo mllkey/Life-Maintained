@@ -1,0 +1,19 @@
+
+BUG — CRITICAL: The Save button on add-vehicle.tsx STILL does not respond to taps. The previous fix addressed a silent return when user is null, but that's not the issue. The button is physically not receiving touch events.
+This is a touch interception bug, not a logic bug. Something is overlapping the button and stealing touches. To prove this, add a temporary test: put a console.log("BUTTON PRESSED") as the very first line inside the Save button's onPress handler. If it doesn't log when tapped, the button is not receiving the touch event at all.
+SYSTEMATIC DEBUG APPROACH:
+
+Check if add-vehicle.tsx is presented as a modal (check the Stack.Screen options in _layout.tsx for add-vehicle). If it uses presentation: "modal", the modal might not extend to the full screen height, causing the top portion (where the Save button is in the header) to be outside the modal's interactive area.
+Check the header area of add-vehicle.tsx. The Save button is in the top nav bar. If the header has a fixed height and the Save button extends beyond it, or if there's a View overlapping it, touches won't register.
+Check for any View with pointerEvents: "none" or pointerEvents: "box-none" in the component tree above the Save button.
+Check if there's a KeyboardAvoidingView or SafeAreaView that's clipping the button area.
+Try temporarily moving the Save button from the header to inside the ScrollView at the very bottom of the form. If it works there, the issue is specifically with the header area touch handling.
+
+THE FIX: Once you identify what's blocking touches, fix it. If the modal presentation is the issue, try changing it to presentation: "card" or fullScreenModal. If a View is overlapping, add pointerEvents: "box-none" to the overlapping element so touches pass through to the button.
+Test the fix on add-vehicle, then verify the same fix resolves button issues on add-property, add-appointment, add-medication, and add-family-member.
+VERIFICATION:
+
+console.log fires when Save is tapped on add-vehicle
+Vehicle saves successfully and appears in the vehicles list
+Save buttons work on add-property, add-appointment, add-medication, add-family-member
+Zero TypeScript errors

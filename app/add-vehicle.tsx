@@ -8,12 +8,12 @@ import {
   ScrollView,
   FlatList,
   SectionList,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
