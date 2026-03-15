@@ -1192,6 +1192,28 @@ export default function AddVehicleScreen() {
             {isSeasonal && (
               <View style={styles.monthPickerWrap}>
                 <Text style={styles.monthPickerLabel}>Active months — when this vehicle is in use</Text>
+
+                <View style={styles.presetRow}>
+                  {([
+                    { label: "Spring–Fall", start: 4, end: 10 },
+                    { label: "Winter",      start: 11, end: 3 },
+                    { label: "Summer",      start: 5, end: 9 },
+                  ] as { label: string; start: number; end: number }[]).map(preset => {
+                    const active = seasonStartMonth === preset.start && seasonEndMonth === preset.end;
+                    return (
+                      <Pressable
+                        key={preset.label}
+                        style={[styles.presetChip, active && styles.presetChipActive]}
+                        onPress={() => applyPreset(preset.start, preset.end)}
+                      >
+                        <Text style={[styles.presetChipText, active && styles.presetChipTextActive]}>
+                          {preset.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
                 {[0, 1, 2].map(row => (
                   <View key={row} style={styles.monthRow}>
                     {MONTHS.slice(row * 4, row * 4 + 4).map((abbr, col) => {
@@ -1217,27 +1239,6 @@ export default function AddVehicleScreen() {
                     })}
                   </View>
                 ))}
-
-                <View style={styles.presetRow}>
-                  {([
-                    { label: "Spring–Fall", start: 4, end: 10 },
-                    { label: "Winter",      start: 11, end: 3 },
-                    { label: "Summer",      start: 5, end: 9 },
-                  ] as { label: string; start: number; end: number }[]).map(preset => {
-                    const active = seasonStartMonth === preset.start && seasonEndMonth === preset.end;
-                    return (
-                      <Pressable
-                        key={preset.label}
-                        style={[styles.presetChip, active && styles.presetChipActive]}
-                        onPress={() => applyPreset(preset.start, preset.end)}
-                      >
-                        <Text style={[styles.presetChipText, active && styles.presetChipTextActive]}>
-                          {preset.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
 
                 {seasonStartMonth !== null && seasonEndMonth !== null && (
                   <Text style={styles.monthRangeSummary}>
