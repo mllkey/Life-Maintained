@@ -127,12 +127,12 @@ export default function HealthProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
   closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   title: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
   saveBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   saveBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 24 },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 24 },
   infoBox: { flexDirection: "row", gap: 10, backgroundColor: Colors.healthMuted, borderRadius: 12, padding: 14, alignItems: "flex-start" },
   infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 20 },
   section: { gap: 8 },

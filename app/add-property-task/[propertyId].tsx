@@ -184,12 +184,12 @@ export default function AddPropertyTaskScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
   closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   title: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
   saveBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   saveBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 20 },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 20 },
   errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: 10, padding: 12 },
   errorText: { flex: 1, fontSize: 13, color: Colors.overdue, fontFamily: "Inter_400Regular" },
   section: { gap: 8 },

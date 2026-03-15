@@ -413,7 +413,7 @@ export default function DashboardScreen() {
             {screenings.length > 0 && (familyMembers?.length ?? 0) > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Health Screenings</Text>
+                  <Text style={styles.sectionLabel}>HEALTH SCREENINGS</Text>
                 </View>
                 {screenings.slice(0, 3).map((s, i) => (
                   <Pressable key={i} style={({ pressed }) => [styles.screeningCard, { opacity: pressed ? 0.8 : 1 }]} onPress={() => router.push("/add-appointment" as any)}>
