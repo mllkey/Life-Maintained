@@ -12,21 +12,28 @@ export default function OnboardingCompleteScreen() {
   const [isSaving, setIsSaving] = useState(false);
 
   async function completeOnboarding() {
-    if (!user || isSaving) return;
+    if (isSaving) return;
     setIsSaving(true);
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({ onboarding_completed: true, updated_at: new Date().toISOString() })
-      .eq("user_id", user.id);
+    try {
+      if (user) {
+        const { error } = await supabase
+          .from("profiles")
+          .update({ onboarding_completed: true, updated_at: new Date().toISOString() })
+          .eq("user_id", user.id);
 
-    if (error) {
-      await supabase
-        .from("profiles")
-        .upsert({ user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() });
+        if (error) {
+          await supabase
+            .from("profiles")
+            .upsert({ user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() });
+        }
+      }
+    } catch (e) {
+      console.error(e);
     }
 
     setOnboardingCompleted(true);
+    setIsSaving(false);
     router.replace("/(tabs)");
   }
 
