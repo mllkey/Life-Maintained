@@ -169,26 +169,26 @@ function RootLayoutNav() {
       <View style={{ flex: 1 }}>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.background } }}>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(onboarding)" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="(onboarding)" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="add-vehicle" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="add-vehicle" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="vehicle/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="log-service/[vehicleId]" options={{ headerShown: false, presentation: "modal" }} />
-          <Stack.Screen name="add-property" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="log-service/[vehicleId]" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="add-property" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="property/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="add-property-task/[propertyId]" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="add-property-task/[propertyId]" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="property-task-history/[propertyId]" options={{ headerShown: false }} />
           <Stack.Screen name="vehicle-task-history/[vehicleId]" options={{ headerShown: false }} />
           <Stack.Screen name="family-member/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="add-appointment" options={{ headerShown: false, presentation: "modal" }} />
-          <Stack.Screen name="add-medication" options={{ headerShown: false, presentation: "modal" }} />
-          <Stack.Screen name="add-family-member" options={{ headerShown: false, presentation: "modal" }} />
-          <Stack.Screen name="health-profile" options={{ headerShown: false, presentation: "modal" }} />
-          <Stack.Screen name="update-mileage/[vehicleId]" options={{ headerShown: false, presentation: "modal" }} />
-          <Stack.Screen name="subscription" options={{ headerShown: false, presentation: "modal" }} />
-          <Stack.Screen name="notifications-settings" options={{ headerShown: false, presentation: "modal" }} />
-          <Stack.Screen name="terms-of-service" options={{ headerShown: false, presentation: "modal" }} />
-          <Stack.Screen name="privacy-policy" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="add-appointment" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="add-medication" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="add-family-member" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="health-profile" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="update-mileage/[vehicleId]" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="subscription" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="notifications-settings" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="terms-of-service" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="privacy-policy" options={{ headerShown: false, presentation: "fullScreenModal" }} />
         </Stack>
         {showBanner && <NotifPermissionBanner />}
       </View>

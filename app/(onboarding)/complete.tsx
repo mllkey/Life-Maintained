@@ -8,7 +8,7 @@ import { Colors } from "@/constants/colors";
 
 export default function OnboardingCompleteScreen() {
   const insets = useSafeAreaInsets();
-  const { user, setOnboardingCompleted } = useAuth();
+  const { setOnboardingCompleted } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
 
   async function completeOnboarding() {
@@ -16,6 +16,7 @@ export default function OnboardingCompleteScreen() {
     setIsSaving(true);
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { error } = await supabase
           .from("profiles")
