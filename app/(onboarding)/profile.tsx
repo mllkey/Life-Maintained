@@ -41,10 +41,9 @@ export default function OnboardingProfileScreen() {
   }
 
   async function handleContinue() {
-    if (!user) return;
     setIsLoading(true);
     try {
-      if (dob || sex) {
+      if (user && (dob || sex)) {
         let dateOfBirth: string | null = null;
         if (dob && dob.length === 10) {
           const [month, day, year] = dob.split("/");
