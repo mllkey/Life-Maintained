@@ -44,7 +44,8 @@
           "icon": "./assets/images/icon.png",
           "color": "#E8943A"
         }
-      ]
+      ],
+      "expo-image-picker"
     ],
     "experiments": {
       "typedRoutes": true,

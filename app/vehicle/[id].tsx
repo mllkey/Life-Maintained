@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import {
   View,
   Text,
+  Image,
   ScrollView,
   StyleSheet,
   Pressable,
@@ -14,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Linking,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1185,610 +1187,20 @@ function MarkCompleteSheet({
 
 // ─── Wallet Tab ───────────────────────────────────────────────────────────────
 
-const US_STATES = [
-  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
-  "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
-  "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
-  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
-  "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC",
-];
-
-const COVERAGE_TYPES = ["Liability Only", "Full Coverage", "Comprehensive"];
-
 type WalletDoc = { id: string; document_type: string; data: Record<string, any> };
 type DocType = "registration" | "insurance" | "id_card";
 
-function maskValue(value: string | null | undefined): string {
-  if (!value) return "—";
-  if (value.length <= 4) return value;
-  return "••••" + value.slice(-4);
-}
+const DOC_LABELS: Record<DocType, string> = {
+  registration: "Registration",
+  insurance: "Insurance",
+  id_card: "ID Card",
+};
 
-function ExpiryBadge({ dateStr }: { dateStr: string | null | undefined }) {
-  if (!dateStr) return null;
-  const d = parseISO(dateStr);
-  const now = new Date();
-  if (isBefore(d, now)) {
-    return (
-      <View style={walletStyles.badgeExpired}>
-        <Text style={walletStyles.badgeExpiredText}>Expired</Text>
-      </View>
-    );
-  }
-  if (differenceInDays(d, now) <= 60) {
-    return (
-      <View style={walletStyles.badgeSoon}>
-        <Text style={walletStyles.badgeSoonText}>Expiring Soon</Text>
-      </View>
-    );
-  }
-  return null;
-}
+function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string }) {
+  const [uploading, setUploading] = useState<DocType | null>(null);
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
-function MaskedRow({
-  label, value, fieldKey, revealed, onToggle,
-}: {
-  label: string; value: string | null | undefined;
-  fieldKey: string; revealed: boolean; onToggle: () => void;
-}) {
-  const display = revealed ? (value || "—") : maskValue(value);
-  return (
-    <View style={walletStyles.row}>
-      <Text style={walletStyles.rowLabel}>{label}</Text>
-      <View style={walletStyles.rowRight}>
-        <Text style={[walletStyles.rowValue, !revealed && !!value && value.length > 4 && walletStyles.rowMasked]}>
-          {display}
-        </Text>
-        {!!value && value.length > 4 && (
-          <Pressable onPress={onToggle} hitSlop={8}>
-            <Ionicons
-              name={revealed ? "eye-off-outline" : "eye-outline"}
-              size={16}
-              color={Colors.textSecondary}
-            />
-          </Pressable>
-        )}
-      </View>
-    </View>
-  );
-}
-
-function PlainRow({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <View style={walletStyles.row}>
-      <Text style={walletStyles.rowLabel}>{label}</Text>
-      <Text style={walletStyles.rowValue}>{value || "—"}</Text>
-    </View>
-  );
-}
-
-function PhoneRow({ label, phone }: { label: string; phone: string | null | undefined }) {
-  if (!phone) return <PlainRow label={label} value={null} />;
-  return (
-    <View style={walletStyles.row}>
-      <Text style={walletStyles.rowLabel}>{label}</Text>
-      <Pressable onPress={() => Linking.openURL(`tel:${phone.replace(/\D/g, "")}`)}>
-        <Text style={walletStyles.rowPhone}>{phone}</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function WalletCard({
-  title, icon, accentColor, children, onEdit,
-}: {
-  title: string; icon: string; accentColor: string;
-  children: React.ReactNode; onEdit: () => void;
-}) {
-  return (
-    <View style={[walletStyles.card, { borderTopColor: accentColor, borderTopWidth: 3 }]}>
-      <View style={walletStyles.cardHeader}>
-        <View style={walletStyles.cardHeaderLeft}>
-          <View style={[walletStyles.cardIconWrap, { backgroundColor: accentColor + "22" }]}>
-            <Ionicons name={icon as any} size={18} color={accentColor} />
-          </View>
-          <Text style={walletStyles.cardTitle}>{title}</Text>
-        </View>
-        <Pressable onPress={onEdit} hitSlop={8}>
-          <Ionicons name="pencil-outline" size={17} color={Colors.textSecondary} />
-        </Pressable>
-      </View>
-      {children}
-    </View>
-  );
-}
-
-function StatePickerModal({
-  visible, selected, onSelect, onClose,
-}: {
-  visible: boolean; selected: string; onSelect: (s: string) => void; onClose: () => void;
-}) {
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={walletStyles.pickerOverlay}>
-        <Pressable style={walletStyles.pickerBackdrop} onPress={onClose} />
-        <View style={walletStyles.pickerContainer}>
-          <View style={walletStyles.pickerHeader}>
-            <Text style={walletStyles.pickerTitle}>Select State</Text>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <Ionicons name="close" size={22} color={Colors.text} />
-            </Pressable>
-          </View>
-          <ScrollView style={walletStyles.pickerScroll} showsVerticalScrollIndicator={false}>
-            {US_STATES.map(s => (
-              <Pressable
-                key={s}
-                style={({ pressed }) => [
-                  walletStyles.pickerOption,
-                  selected === s && walletStyles.pickerOptionSelected,
-                  { opacity: pressed ? 0.7 : 1 },
-                ]}
-                onPress={() => { Haptics.selectionAsync(); onSelect(s); onClose(); }}
-              >
-                <Text style={[walletStyles.pickerOptionText, selected === s && walletStyles.pickerOptionTextSelected]}>
-                  {s}
-                </Text>
-                {selected === s && <Ionicons name="checkmark" size={16} color={Colors.accent} />}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-function WalletFormSheet({
-  visible, docType, existingDoc, vehicleId, userId, onClose, onSaved, insets,
-}: {
-  visible: boolean;
-  docType: DocType | null;
-  existingDoc: WalletDoc | null;
-  vehicleId: string;
-  userId: string;
-  onClose: () => void;
-  onSaved: () => void;
-  insets: { bottom: number };
-}) {
-  const queryClient = useQueryClient();
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showStatePicker, setShowStatePicker] = useState(false);
-
-  const [regState, setRegState] = useState("");
-  const [regPlate, setRegPlate] = useState("");
-  const [regNumber, setRegNumber] = useState("");
-  const [regExpiry, setRegExpiry] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [regOwner, setRegOwner] = useState("");
-
-  const [insProvider, setInsProvider] = useState("");
-  const [insPolicyNum, setInsPolicyNum] = useState("");
-  const [insGroupNum, setInsGroupNum] = useState("");
-  const [insCoverage, setInsCoverage] = useState("Full Coverage");
-  const [insExpiry, setInsExpiry] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [insAgent, setInsAgent] = useState("");
-  const [insAgentPhone, setInsAgentPhone] = useState("");
-  const [insClaimsPhone, setInsClaimsPhone] = useState("");
-
-  const [idcName, setIdcName] = useState("");
-  const [idcLicenseNum, setIdcLicenseNum] = useState("");
-  const [idcState, setIdcState] = useState("");
-  const [idcClass, setIdcClass] = useState("");
-  const [idcExpiry, setIdcExpiry] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [idcDob, setIdcDob] = useState("1990-01-15");
-
-  useEffect(() => {
-    if (!visible || !docType) return;
-    const d = existingDoc?.data ?? {};
-    if (docType === "registration") {
-      setRegState(d.state ?? "");
-      setRegPlate(d.plate_number ?? "");
-      setRegNumber(d.registration_number ?? "");
-      setRegExpiry(d.expiration_date ?? format(new Date(), "yyyy-MM-dd"));
-      setRegOwner(d.registered_owner ?? "");
-    } else if (docType === "insurance") {
-      setInsProvider(d.provider ?? "");
-      setInsPolicyNum(d.policy_number ?? "");
-      setInsGroupNum(d.group_number ?? "");
-      setInsCoverage(d.coverage_type ?? "Full Coverage");
-      setInsExpiry(d.expiration_date ?? format(new Date(), "yyyy-MM-dd"));
-      setInsAgent(d.agent_name ?? "");
-      setInsAgentPhone(d.agent_phone ?? "");
-      setInsClaimsPhone(d.claims_phone ?? "");
-    } else if (docType === "id_card") {
-      setIdcName(d.full_name ?? "");
-      setIdcLicenseNum(d.license_number ?? "");
-      setIdcState(d.state ?? "");
-      setIdcClass(d.class ?? "");
-      setIdcExpiry(d.expiration_date ?? format(new Date(), "yyyy-MM-dd"));
-      setIdcDob(d.date_of_birth ?? "1990-01-15");
-    }
-  }, [visible, docType, existingDoc]);
-
-  function buildData(): Record<string, any> {
-    if (docType === "registration") {
-      return {
-        state: regState, plate_number: regPlate,
-        registration_number: regNumber, expiration_date: regExpiry,
-        registered_owner: regOwner,
-      };
-    } else if (docType === "insurance") {
-      return {
-        provider: insProvider, policy_number: insPolicyNum,
-        group_number: insGroupNum || null, coverage_type: insCoverage,
-        expiration_date: insExpiry, agent_name: insAgent,
-        agent_phone: insAgentPhone || null, claims_phone: insClaimsPhone || null,
-      };
-    } else {
-      return {
-        full_name: idcName, license_number: idcLicenseNum,
-        state: idcState, class: idcClass,
-        expiration_date: idcExpiry, date_of_birth: idcDob,
-      };
-    }
-  }
-
-  function adjustDate(current: string, days: number): string {
-    return format(addDays(parseISO(current), days), "yyyy-MM-dd");
-  }
-
-  async function handleSave() {
-    if (isSaving || !docType) return;
-    setIsSaving(true);
-    try {
-      const { error } = await supabase
-        .from("vehicle_wallet_documents")
-        .upsert(
-          {
-            vehicle_id: vehicleId,
-            user_id: userId,
-            document_type: docType,
-            data: buildData(),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "vehicle_id,document_type" },
-        );
-      if (error) throw error;
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      queryClient.invalidateQueries({ queryKey: ["wallet_docs", vehicleId] });
-      onSaved();
-      onClose();
-    } catch (e: any) {
-      setIsSaving(false);
-      Alert.alert("Save Failed", e?.message ?? "Could not save. Please try again.");
-    }
-  }
-
-  function handleDelete() {
-    if (!existingDoc || isDeleting) return;
-    Alert.alert(
-      "Delete Document",
-      "This will permanently remove this document from your wallet.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setIsDeleting(true);
-            try {
-              await supabase.from("vehicle_wallet_documents").delete().eq("id", existingDoc.id);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              queryClient.invalidateQueries({ queryKey: ["wallet_docs", vehicleId] });
-              onSaved();
-              onClose();
-            } catch {
-              setIsDeleting(false);
-              Alert.alert("Error", "Could not delete document.");
-            }
-          },
-        },
-      ],
-    );
-  }
-
-  const isEditing = !!existingDoc;
-  const titleMap: Record<DocType, string> = {
-    registration: "Registration",
-    insurance: "Insurance",
-    id_card: "Driver's License",
-  };
-
-  if (!docType) return null;
-
-  const stateValue = docType === "registration" ? regState : idcState;
-  const setStateValue = docType === "registration" ? setRegState : setIdcState;
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={styles.sheetOverlay}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <Pressable style={styles.sheetBackdrop} onPress={onClose} />
-        <View style={[walletStyles.formSheet, { paddingBottom: insets.bottom + 16 }]}>
-          <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>{isEditing ? "Edit" : "Add"} {titleMap[docType]}</Text>
-
-          <ScrollView
-            style={walletStyles.formScroll}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.sheetFields}>
-
-              {docType === "registration" && (
-                <>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>State</Text>
-                    <Pressable
-                      style={[styles.sheetInput, walletStyles.pickerTrigger]}
-                      onPress={() => setShowStatePicker(true)}
-                    >
-                      <Text style={regState ? walletStyles.pickerTriggerText : walletStyles.pickerTriggerPlaceholder}>
-                        {regState || "Select state"}
-                      </Text>
-                      <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
-                    </Pressable>
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Plate Number</Text>
-                    <TextInput
-                      style={styles.sheetInput} value={regPlate} onChangeText={setRegPlate}
-                      placeholder="e.g. ABC1234" placeholderTextColor={Colors.textTertiary}
-                      autoCapitalize="characters" returnKeyType="next"
-                    />
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Registration #</Text>
-                    <TextInput
-                      style={styles.sheetInput} value={regNumber} onChangeText={setRegNumber}
-                      placeholder="e.g. REG123456" placeholderTextColor={Colors.textTertiary}
-                      secureTextEntry returnKeyType="next"
-                    />
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Expiration Date</Text>
-                    <View style={styles.dateStepper}>
-                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setRegExpiry(adjustDate(regExpiry, -1))}>
-                        <Ionicons name="chevron-back" size={18} color={Colors.text} />
-                      </Pressable>
-                      <Text style={styles.dateStepValue}>{format(parseISO(regExpiry), "MMM d, yyyy")}</Text>
-                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setRegExpiry(adjustDate(regExpiry, 1))}>
-                        <Ionicons name="chevron-forward" size={18} color={Colors.text} />
-                      </Pressable>
-                    </View>
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Registered Owner</Text>
-                    <TextInput
-                      style={styles.sheetInput} value={regOwner} onChangeText={setRegOwner}
-                      placeholder="e.g. John Doe" placeholderTextColor={Colors.textTertiary}
-                      autoCapitalize="words" returnKeyType="done"
-                    />
-                  </View>
-                </>
-              )}
-
-              {docType === "insurance" && (
-                <>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Provider</Text>
-                    <TextInput
-                      style={styles.sheetInput} value={insProvider} onChangeText={setInsProvider}
-                      placeholder="e.g. State Farm" placeholderTextColor={Colors.textTertiary}
-                      autoCapitalize="words" returnKeyType="next"
-                    />
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Policy Number</Text>
-                    <TextInput
-                      style={styles.sheetInput} value={insPolicyNum} onChangeText={setInsPolicyNum}
-                      placeholder="e.g. POL-987654" placeholderTextColor={Colors.textTertiary}
-                      secureTextEntry returnKeyType="next"
-                    />
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>
-                      Group Number{" "}
-                      <Text style={styles.sheetFieldOptional}>(optional)</Text>
-                    </Text>
-                    <TextInput
-                      style={styles.sheetInput} value={insGroupNum} onChangeText={setInsGroupNum}
-                      placeholder="e.g. GRP-001" placeholderTextColor={Colors.textTertiary}
-                      secureTextEntry returnKeyType="next"
-                    />
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Coverage Type</Text>
-                    <View style={walletStyles.segControl}>
-                      {COVERAGE_TYPES.map(ct => {
-                        const isSelected = insCoverage === ct;
-                        return (
-                          <Pressable
-                            key={ct}
-                            style={[walletStyles.segOption, isSelected && walletStyles.segOptionSelected]}
-                            onPress={() => { Haptics.selectionAsync(); setInsCoverage(ct); }}
-                          >
-                            <Text
-                              style={[walletStyles.segOptionText, isSelected && walletStyles.segOptionTextSelected]}
-                              numberOfLines={2}
-                            >
-                              {ct}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Expiration Date</Text>
-                    <View style={styles.dateStepper}>
-                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setInsExpiry(adjustDate(insExpiry, -1))}>
-                        <Ionicons name="chevron-back" size={18} color={Colors.text} />
-                      </Pressable>
-                      <Text style={styles.dateStepValue}>{format(parseISO(insExpiry), "MMM d, yyyy")}</Text>
-                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setInsExpiry(adjustDate(insExpiry, 1))}>
-                        <Ionicons name="chevron-forward" size={18} color={Colors.text} />
-                      </Pressable>
-                    </View>
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>
-                      Agent Name{" "}
-                      <Text style={styles.sheetFieldOptional}>(optional)</Text>
-                    </Text>
-                    <TextInput
-                      style={styles.sheetInput} value={insAgent} onChangeText={setInsAgent}
-                      placeholder="e.g. Jane Smith" placeholderTextColor={Colors.textTertiary}
-                      autoCapitalize="words" returnKeyType="next"
-                    />
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>
-                      Agent Phone{" "}
-                      <Text style={styles.sheetFieldOptional}>(optional)</Text>
-                    </Text>
-                    <TextInput
-                      style={styles.sheetInput} value={insAgentPhone} onChangeText={setInsAgentPhone}
-                      placeholder="e.g. 847-555-1234" placeholderTextColor={Colors.textTertiary}
-                      keyboardType="phone-pad" returnKeyType="next"
-                    />
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>
-                      Claims Phone{" "}
-                      <Text style={styles.sheetFieldOptional}>(optional)</Text>
-                    </Text>
-                    <TextInput
-                      style={styles.sheetInput} value={insClaimsPhone} onChangeText={setInsClaimsPhone}
-                      placeholder="e.g. 800-555-0000" placeholderTextColor={Colors.textTertiary}
-                      keyboardType="phone-pad" returnKeyType="done"
-                    />
-                  </View>
-                </>
-              )}
-
-              {docType === "id_card" && (
-                <>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Full Name</Text>
-                    <TextInput
-                      style={styles.sheetInput} value={idcName} onChangeText={setIdcName}
-                      placeholder="e.g. John Doe" placeholderTextColor={Colors.textTertiary}
-                      autoCapitalize="words" returnKeyType="next"
-                    />
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>License Number</Text>
-                    <TextInput
-                      style={styles.sheetInput} value={idcLicenseNum} onChangeText={setIdcLicenseNum}
-                      placeholder="e.g. D123-4567-8901" placeholderTextColor={Colors.textTertiary}
-                      secureTextEntry autoCapitalize="characters" returnKeyType="next"
-                    />
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>State</Text>
-                    <Pressable
-                      style={[styles.sheetInput, walletStyles.pickerTrigger]}
-                      onPress={() => setShowStatePicker(true)}
-                    >
-                      <Text style={idcState ? walletStyles.pickerTriggerText : walletStyles.pickerTriggerPlaceholder}>
-                        {idcState || "Select state"}
-                      </Text>
-                      <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
-                    </Pressable>
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Class</Text>
-                    <TextInput
-                      style={styles.sheetInput} value={idcClass} onChangeText={setIdcClass}
-                      placeholder="e.g. D" placeholderTextColor={Colors.textTertiary}
-                      autoCapitalize="characters" returnKeyType="next"
-                    />
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Expiration Date</Text>
-                    <View style={styles.dateStepper}>
-                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setIdcExpiry(adjustDate(idcExpiry, -1))}>
-                        <Ionicons name="chevron-back" size={18} color={Colors.text} />
-                      </Pressable>
-                      <Text style={styles.dateStepValue}>{format(parseISO(idcExpiry), "MMM d, yyyy")}</Text>
-                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setIdcExpiry(adjustDate(idcExpiry, 1))}>
-                        <Ionicons name="chevron-forward" size={18} color={Colors.text} />
-                      </Pressable>
-                    </View>
-                  </View>
-                  <View style={styles.sheetField}>
-                    <Text style={styles.sheetFieldLabel}>Date of Birth</Text>
-                    <View style={styles.dateStepper}>
-                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setIdcDob(adjustDate(idcDob, -1))}>
-                        <Ionicons name="chevron-back" size={18} color={Colors.text} />
-                      </Pressable>
-                      <Text style={styles.dateStepValue}>{format(parseISO(idcDob), "MMM d, yyyy")}</Text>
-                      <Pressable style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setIdcDob(adjustDate(idcDob, 1))}>
-                        <Ionicons name="chevron-forward" size={18} color={Colors.text} />
-                      </Pressable>
-                    </View>
-                  </View>
-                </>
-              )}
-
-            </View>
-
-            {isEditing && (
-              <Pressable
-                style={({ pressed }) => [walletStyles.deleteBtn, { opacity: pressed || isDeleting ? 0.7 : 1 }]}
-                onPress={handleDelete}
-                disabled={isDeleting}
-              >
-                {isDeleting
-                  ? <ActivityIndicator size="small" color={Colors.overdue} />
-                  : <Text style={walletStyles.deleteBtnText}>Delete Document</Text>
-                }
-              </Pressable>
-            )}
-          </ScrollView>
-
-          <View style={styles.sheetActions}>
-            <Pressable
-              style={({ pressed }) => [styles.sheetCancelBtn, { opacity: pressed ? 0.8 : 1 }]}
-              onPress={onClose}
-            >
-              <Text style={styles.sheetCancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.sheetSaveBtn, { opacity: pressed || isSaving ? 0.8 : 1 }]}
-              onPress={handleSave}
-              disabled={isSaving}
-            >
-              {isSaving
-                ? <ActivityIndicator size="small" color={Colors.textInverse} />
-                : <Text style={styles.sheetSaveText}>Save</Text>
-              }
-            </Pressable>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-
-      <StatePickerModal
-        visible={showStatePicker}
-        selected={stateValue}
-        onSelect={setStateValue}
-        onClose={() => setShowStatePicker(false)}
-      />
-    </Modal>
-  );
-}
-
-function WalletTab({
-  vehicleId, userId,
-}: {
-  vehicleId: string; userId: string;
-}) {
-  const insets = useSafeAreaInsets();
-
-  const { data: docs, isLoading } = useQuery<WalletDoc[]>({
+  const { data: docs, isLoading, refetch } = useQuery<WalletDoc[]>({
     queryKey: ["wallet_docs", vehicleId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -1801,34 +1213,128 @@ function WalletTab({
     },
   });
 
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
-  const [sheetDocType, setSheetDocType] = useState<DocType | null>(null);
-  const [editingDoc, setEditingDoc] = useState<WalletDoc | null>(null);
-
-  function toggle(key: string) {
-    Haptics.selectionAsync();
-    setRevealed(prev => ({ ...prev, [key]: !prev[key] }));
+  function getPhotoUrl(docType: DocType): string | null {
+    return docs?.find(d => d.document_type === docType)?.data?.photo_url ?? null;
   }
 
-  function openAdd(dt: DocType) {
-    setEditingDoc(null);
-    setSheetDocType(dt);
+  function getDoc(docType: DocType): WalletDoc | null {
+    return docs?.find(d => d.document_type === docType) ?? null;
   }
 
-  function openEdit(dt: DocType) {
-    const doc = docs?.find(d => d.document_type === dt) ?? null;
-    setEditingDoc(doc);
-    setSheetDocType(dt);
+  async function handlePick(docType: DocType, source: "camera" | "library") {
+    setUploading(docType);
+    try {
+      let result: ImagePicker.ImagePickerResult;
+      if (source === "camera") {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Permission needed", "Camera access is required to take photos.");
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ["images"],
+          quality: 0.85,
+          allowsEditing: false,
+        });
+      } else {
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          quality: 0.85,
+          allowsEditing: false,
+        });
+      }
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const uri = result.assets[0].uri;
+      const storagePath = `${userId}/${vehicleId}/${docType}.jpg`;
+
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from("wallet-documents")
+        .upload(storagePath, blob, { contentType: "image/jpeg", upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("wallet-documents").getPublicUrl(storagePath);
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+      const existingDoc = getDoc(docType);
+      if (existingDoc) {
+        await supabase
+          .from("vehicle_wallet_documents")
+          .update({ data: { photo_url: publicUrl }, updated_at: new Date().toISOString() })
+          .eq("id", existingDoc.id);
+      } else {
+        await supabase.from("vehicle_wallet_documents").insert({
+          user_id: userId,
+          vehicle_id: vehicleId,
+          document_type: docType,
+          data: { photo_url: publicUrl },
+        });
+      }
+
+      await refetch();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      console.error("[WalletTab] Upload error:", err);
+      Alert.alert("Upload Failed", "Could not save photo. Please try again.");
+    } finally {
+      setUploading(null);
+    }
   }
 
-  function closeSheet() {
-    setSheetDocType(null);
-    setEditingDoc(null);
+  function showPickerOptions(docType: DocType) {
+    Alert.alert(
+      DOC_LABELS[docType],
+      "Choose a photo source",
+      [
+        { text: "Take Photo", onPress: () => handlePick(docType, "camera") },
+        { text: "Choose from Library", onPress: () => handlePick(docType, "library") },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
   }
 
-  const reg = docs?.find(d => d.document_type === "registration")?.data ?? null;
-  const ins = docs?.find(d => d.document_type === "insurance")?.data ?? null;
-  const idc = docs?.find(d => d.document_type === "id_card")?.data ?? null;
+  async function handleDelete(docType: DocType) {
+    const doc = getDoc(docType);
+    if (!doc) return;
+    Alert.alert(
+      "Delete Photo",
+      `Remove the ${DOC_LABELS[docType]} photo from your wallet?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const storagePath = `${userId}/${vehicleId}/${docType}.jpg`;
+              await supabase.storage.from("wallet-documents").remove([storagePath]);
+              await supabase.from("vehicle_wallet_documents").delete().eq("id", doc.id);
+              await refetch();
+            } catch {
+              Alert.alert("Error", "Could not delete photo.");
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function handleLongPress(docType: DocType) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      DOC_LABELS[docType],
+      "",
+      [
+        { text: "Replace Photo", onPress: () => showPickerOptions(docType) },
+        { text: "Delete", style: "destructive", onPress: () => handleDelete(docType) },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
+  }
 
   if (isLoading) {
     return (
@@ -1838,231 +1344,147 @@ function WalletTab({
     );
   }
 
+  const DOC_TYPES: DocType[] = ["registration", "insurance", "id_card"];
+
   return (
     <View style={walletStyles.container}>
-      {/* ── Registration ──────────────────────────── */}
-      <WalletCard
-        title="Registration"
-        icon="document-text-outline"
-        accentColor={Colors.blue}
-        onEdit={() => openEdit("registration")}
-      >
-        {reg ? (
-          <>
-            <View style={walletStyles.badgeRow}>
-              <ExpiryBadge dateStr={reg.expiration_date} />
-            </View>
-            <PlainRow label="State" value={reg.state} />
-            <PlainRow label="Plate" value={reg.plate_number} />
-            <MaskedRow label="Reg #" value={reg.registration_number} fieldKey="reg_num" revealed={!!revealed.reg_num} onToggle={() => toggle("reg_num")} />
-            <PlainRow label="Expires" value={reg.expiration_date ? format(parseISO(reg.expiration_date), "MMM d, yyyy") : null} />
-            <PlainRow label="Owner" value={reg.registered_owner} />
-          </>
-        ) : (
-          <View style={walletStyles.emptyCard}>
-            <Text style={walletStyles.emptyCardText}>No registration saved</Text>
-            <Pressable style={walletStyles.addBtn} onPress={() => openAdd("registration")}>
-              <Ionicons name="add" size={14} color={Colors.blue} />
-              <Text style={[walletStyles.addBtnText, { color: Colors.blue }]}>Add Registration</Text>
-            </Pressable>
-          </View>
-        )}
-      </WalletCard>
+      {DOC_TYPES.map(docType => {
+        const photoUrl = getPhotoUrl(docType);
+        const isUploading = uploading === docType;
+        return (
+          <DocPhotoSlot
+            key={docType}
+            label={DOC_LABELS[docType]}
+            photoUrl={photoUrl}
+            isUploading={isUploading}
+            onTap={() => {
+              if (photoUrl) {
+                setViewingPhoto(photoUrl);
+              } else {
+                showPickerOptions(docType);
+              }
+            }}
+            onLongPress={() => handleLongPress(docType)}
+          />
+        );
+      })}
 
-      {/* ── Insurance ─────────────────────────────── */}
-      <WalletCard
-        title="Insurance"
-        icon="shield-checkmark-outline"
-        accentColor={Colors.good}
-        onEdit={() => openEdit("insurance")}
+      <Modal
+        visible={!!viewingPhoto}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewingPhoto(null)}
       >
-        {ins ? (
-          <>
-            <View style={walletStyles.badgeRow}>
-              <ExpiryBadge dateStr={ins.expiration_date} />
-            </View>
-            <PlainRow label="Provider" value={ins.provider} />
-            <MaskedRow label="Policy #" value={ins.policy_number} fieldKey="pol_num" revealed={!!revealed.pol_num} onToggle={() => toggle("pol_num")} />
-            {!!ins.group_number && (
-              <MaskedRow label="Group #" value={ins.group_number} fieldKey="grp_num" revealed={!!revealed.grp_num} onToggle={() => toggle("grp_num")} />
-            )}
-            <PlainRow label="Coverage" value={ins.coverage_type} />
-            <PlainRow label="Expires" value={ins.expiration_date ? format(parseISO(ins.expiration_date), "MMM d, yyyy") : null} />
-            <PlainRow label="Agent" value={ins.agent_name} />
-            <PhoneRow label="Agent Phone" phone={ins.agent_phone} />
-            <PhoneRow label="Claims" phone={ins.claims_phone} />
-          </>
-        ) : (
-          <View style={walletStyles.emptyCard}>
-            <Text style={walletStyles.emptyCardText}>No insurance saved</Text>
-            <Pressable style={walletStyles.addBtn} onPress={() => openAdd("insurance")}>
-              <Ionicons name="add" size={14} color={Colors.good} />
-              <Text style={[walletStyles.addBtnText, { color: Colors.good }]}>Add Insurance</Text>
-            </Pressable>
-          </View>
-        )}
-      </WalletCard>
-
-      {/* ── Driver's License ──────────────────────── */}
-      <WalletCard
-        title="Driver's License"
-        icon="card-outline"
-        accentColor={Colors.vehicle}
-        onEdit={() => openEdit("id_card")}
-      >
-        {idc ? (
-          <>
-            <View style={walletStyles.badgeRow}>
-              <ExpiryBadge dateStr={idc.expiration_date} />
-            </View>
-            <PlainRow label="Name" value={idc.full_name} />
-            <MaskedRow label="License #" value={idc.license_number} fieldKey="lic_num" revealed={!!revealed.lic_num} onToggle={() => toggle("lic_num")} />
-            <PlainRow label="State" value={idc.state} />
-            <PlainRow label="Class" value={idc.class} />
-            <PlainRow label="Expires" value={idc.expiration_date ? format(parseISO(idc.expiration_date), "MMM d, yyyy") : null} />
-            <MaskedRow label="Date of Birth" value={idc.date_of_birth} fieldKey="dob" revealed={!!revealed.dob} onToggle={() => toggle("dob")} />
-          </>
-        ) : (
-          <View style={walletStyles.emptyCard}>
-            <Text style={walletStyles.emptyCardText}>No ID saved</Text>
-            <Pressable style={walletStyles.addBtn} onPress={() => openAdd("id_card")}>
-              <Ionicons name="add" size={14} color={Colors.vehicle} />
-              <Text style={[walletStyles.addBtnText, { color: Colors.vehicle }]}>Add Driver's License</Text>
-            </Pressable>
-          </View>
-        )}
-      </WalletCard>
-
-      <WalletFormSheet
-        visible={!!sheetDocType}
-        docType={sheetDocType}
-        existingDoc={editingDoc}
-        vehicleId={vehicleId}
-        userId={userId}
-        onClose={closeSheet}
-        onSaved={closeSheet}
-        insets={insets}
-      />
+        <Pressable style={walletStyles.photoViewer} onPress={() => setViewingPhoto(null)}>
+          {viewingPhoto ? (
+            <Image
+              source={{ uri: viewingPhoto }}
+              style={walletStyles.photoViewerImage}
+              resizeMode="contain"
+            />
+          ) : null}
+        </Pressable>
+      </Modal>
     </View>
+  );
+}
+
+function DocPhotoSlot({
+  label, photoUrl, isUploading, onTap, onLongPress,
+}: {
+  label: string;
+  photoUrl: string | null;
+  isUploading: boolean;
+  onTap: () => void;
+  onLongPress: () => void;
+}) {
+  if (isUploading) {
+    return (
+      <View style={walletStyles.slotLoading}>
+        <ActivityIndicator color={Colors.accent} />
+        <Text style={walletStyles.slotLoadingText}>Uploading…</Text>
+      </View>
+    );
+  }
+
+  if (photoUrl) {
+    return (
+      <Pressable
+        style={({ pressed }) => [walletStyles.slotFilled, { opacity: pressed ? 0.9 : 1 }]}
+        onPress={onTap}
+        onLongPress={onLongPress}
+        delayLongPress={400}
+      >
+        <Image source={{ uri: photoUrl }} style={walletStyles.slotImage} resizeMode="cover" />
+        <View style={walletStyles.slotLabelRow}>
+          <Text style={walletStyles.slotLabelText}>{label}</Text>
+          <Ionicons name="ellipsis-horizontal" size={16} color={Colors.textSecondary} />
+        </View>
+      </Pressable>
+    );
+  }
+
+  return (
+    <Pressable
+      style={({ pressed }) => [walletStyles.slotEmpty, { opacity: pressed ? 0.75 : 1 }]}
+      onPress={onTap}
+    >
+      <Ionicons name="camera-outline" size={28} color={Colors.textTertiary} />
+      <Text style={walletStyles.slotName}>{label}</Text>
+      <Text style={walletStyles.slotHint}>Tap to add photo</Text>
+    </Pressable>
   );
 }
 
 const walletStyles = StyleSheet.create({
   container: { gap: 14 },
   loading: { paddingVertical: 40, alignItems: "center" },
-  card: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
+  slotEmpty: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    height: 160,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.surface,
+  },
+  slotName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  slotHint: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  slotFilled: {
+    borderRadius: 14,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
+    backgroundColor: Colors.card,
   },
-  cardHeader: {
+  slotImage: { width: "100%", height: 180 },
+  slotLabelRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  cardHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  cardIconWrap: {
-    width: 32, height: 32, borderRadius: 8,
-    alignItems: "center", justifyContent: "center",
-  },
-  cardTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  badgeRow: { paddingHorizontal: 16, paddingTop: 10, flexDirection: "row", gap: 6 },
-  badgeExpired: {
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-    backgroundColor: Colors.overdueMuted,
-  },
-  badgeExpiredText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.overdue },
-  badgeSoon: {
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-    backgroundColor: Colors.dueSoonMuted,
-  },
-  badgeSoonText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.dueSoon },
-  row: {
-    flexDirection: "row",
+  slotLabelText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  slotLoading: {
+    borderRadius: 14,
+    height: 160,
+    borderWidth: 1,
+    borderColor: Colors.border,
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderSubtle,
-  },
-  rowLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 },
-  rowRight: { flexDirection: "row", alignItems: "center", gap: 8, flex: 2, justifyContent: "flex-end" },
-  rowValue: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.text, textAlign: "right", flex: 1 },
-  rowMasked: { fontFamily: "Inter_400Regular", letterSpacing: 2, color: Colors.textTertiary },
-  rowPhone: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.blue },
-  emptyCard: { padding: 20, alignItems: "center", gap: 10 },
-  emptyCardText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  addBtn: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 10, borderWidth: 1, borderColor: Colors.border,
+    justifyContent: "center",
+    gap: 10,
     backgroundColor: Colors.surface,
   },
-  addBtnText: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  formSheet: {
-    backgroundColor: Colors.card,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingTop: 12, paddingHorizontal: 20,
-    maxHeight: "90%",
+  slotLoadingText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  photoViewer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  formScroll: { marginTop: 4 },
-  deleteBtn: {
-    marginTop: 8, marginBottom: 16,
-    paddingVertical: 14, alignItems: "center",
-    borderRadius: 12, borderWidth: 1,
-    borderColor: Colors.overdueMuted,
-  },
-  deleteBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.overdue },
-  pickerOverlay: { flex: 1, justifyContent: "flex-end" },
-  pickerBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.5)" },
-  pickerContainer: {
-    backgroundColor: Colors.card,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingTop: 12, maxHeight: "60%",
-  },
-  pickerHeader: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
-  pickerTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  pickerScroll: { paddingBottom: 32 },
-  pickerOption: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
-  },
-  pickerOptionSelected: { backgroundColor: Colors.accent + "12" },
-  pickerOptionText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.text },
-  pickerOptionTextSelected: { fontFamily: "Inter_600SemiBold", color: Colors.accent },
-  pickerTrigger: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-  },
-  pickerTriggerText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.text },
-  pickerTriggerPlaceholder: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  segControl: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  segOption: {
-    flex: 1, paddingVertical: 8, paddingHorizontal: 6,
-    borderRadius: 10, borderWidth: 1, borderColor: Colors.border,
-    backgroundColor: Colors.surface, alignItems: "center",
-  },
-  segOptionSelected: {
-    backgroundColor: Colors.accent + "22",
-    borderColor: Colors.accent,
-  },
-  segOptionText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary, textAlign: "center" },
-  segOptionTextSelected: { color: Colors.accent, fontFamily: "Inter_600SemiBold" },
+  photoViewerImage: { width: "100%", height: "80%" },
 });
 const styles = StyleSheet.create({
   container: { flex: 1 },
