@@ -75,7 +75,7 @@ export default function LoginScreen() {
               resizeMode="contain"
             />
             <Text style={styles.appName}>LifeMaintained</Text>
-            <Text style={styles.tagline}>Keep everything running smoothly</Text>
+            <Text style={styles.tagline}>The app that remembers so you don't have to.</Text>
           </View>
 
           <View style={styles.form}>
