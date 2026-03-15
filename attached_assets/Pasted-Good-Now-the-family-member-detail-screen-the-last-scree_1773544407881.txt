@@ -1,0 +1,61 @@
+Good. Now the family member detail screen — the last screen that hasn't been redesigned:
+
+Copy everything below and paste into Replit Agent:
+
+CONTEXT: Every screen in LifeMaintained has been redesigned to a consistent clean utility aesthetic except the family member detail screen (app/family-member/[id].tsx). It still has status dots, mixed border radii (11, 16, 18), and inconsistent styling. It needs to match the vehicle detail and property detail screens.
+IMPORTANT: Only modify app/family-member/[id].tsx. Keep all data fetching, appointment completion, medication logic, and delete functionality identical. Only change rendering and styles.
+
+TASK: Redesign the family member detail screen. Six changes.
+
+Header:
+
+
+Member name: 22px, fontWeight "700", left-aligned.
+Metadata line: 13px, Colors.textSecondary — relationship/type and age if available.
+Delete button stays in top nav.
+Padding: 20px horizontal.
+
+
+Replace status dots with vertical bars:
+Find all status dot elements (6px circles with status colors). Replace with 4px × 28px vertical bars matching the vehicle schedule and property detail pattern. Red for overdue, yellow for due soon, green for completed.
+Appointment rows:
+Match the task row pattern used everywhere else:
+
+
+Left: 4px × 28px colored vertical bar
+Title: 15px, fontWeight "600"
+Subtitle: 13px, Colors.textSecondary (provider, date)
+No badge pills, no chevrons, no icon circles
+Rows separated by 1px Colors.borderSubtle
+
+
+Medication rows:
+Same clean pattern:
+
+
+Name: 15px, fontWeight "600"
+Dosage/frequency: 13px, Colors.textSecondary
+Any toggles/buttons on the right stay functional
+
+
+Section headers:
+Use small-caps labels: "APPOINTMENTS", "MEDICATIONS" — 11px, fontWeight "600", letterSpacing 1.5, Colors.textTertiary, uppercase.
+Standardize all border radii:
+
+
+Cards/containers: 14
+Chips/pills: 10
+Tab elements: 10
+Remove all 11, 16, 18 values
+
+Tab bar (if present): use underline style matching vehicle detail — 2px Colors.accent bottom border on active tab, no background fills.
+DO NOT modify any appointment/medication logic, delete flows, or navigation.
+VERIFICATION:
+
+No status dots — vertical bars instead
+Appointment rows match vehicle schedule pattern
+Section headers in small-caps
+All border radii are 10 or 14
+Tab bar uses underline style if present
+All functionality still works
+Zero TypeScript errors

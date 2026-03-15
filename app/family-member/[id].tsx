@@ -187,7 +187,12 @@ export default function FamilyMemberDetailScreen() {
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
           <Ionicons name="chevron-back" size={24} color={Colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>{memberName}</Text>
+        <View style={styles.headerTextBlock}>
+          <Text style={styles.headerTitle} numberOfLines={1}>{memberName}</Text>
+          <Text style={styles.headerMeta} numberOfLines={1}>
+            {memberLabel}{memberAge != null ? ` · ${memberAge} yrs` : ""}
+          </Text>
+        </View>
         <View style={styles.headerActions}>
           <Pressable
             style={({ pressed }) => [styles.deleteMemberBtn, { opacity: pressed ? 0.7 : 1 }]}
@@ -215,23 +220,6 @@ export default function FamilyMemberDetailScreen() {
             { paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 0) + 40 },
           ]}
         >
-          <View style={styles.memberCard}>
-            <View style={[styles.memberAvatar, { backgroundColor: Colors.healthMuted }]}>
-              <Ionicons name={isPet ? "paw" : "person"} size={28} color={Colors.health} />
-            </View>
-            <View style={styles.memberInfo}>
-              <Text style={styles.memberName}>{memberName}</Text>
-              <Text style={styles.memberMeta}>
-                {memberLabel}
-                {memberAge != null ? ` · ${memberAge} yrs` : ""}
-              </Text>
-              <View style={[styles.statusPill, { backgroundColor: statusColor + "22" }]}>
-                <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-                <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
-              </View>
-            </View>
-          </View>
-
           <View style={styles.summaryBar}>
             <View style={styles.summaryStat}>
               <Text style={styles.summaryValue}>{summaryStats.total}</Text>
@@ -266,10 +254,10 @@ export default function FamilyMemberDetailScreen() {
           </View>
 
           {activeTab === "appointments" ? (
-            <View style={styles.apptSection}>
+            <>
+              <Text style={styles.sectionLabel}>APPOINTMENTS</Text>
               {apptGroups.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Ionicons name="calendar-outline" size={36} color={Colors.textTertiary} />
                   <Text style={styles.emptyTitle}>No appointments yet</Text>
                   <Text style={styles.emptyText}>Tap + to add an appointment type to track.</Text>
                   <Pressable
@@ -281,52 +269,37 @@ export default function FamilyMemberDetailScreen() {
                   </Pressable>
                 </View>
               ) : (
-                <View style={styles.apptList}>
+                <View style={styles.listCard}>
                   {apptGroups.map((appt, idx) => {
                     const isExpanded = expandedId === appt.id;
                     const isLast = idx === apptGroups.length - 1;
                     const status = getApptStatus(appt.next_due_date, appt.last_completed_at);
                     const statusColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
-                    const lastDoneText = appt.last_completed_at
-                      ? `Last done: ${format(parseISO(appt.last_completed_at), "MMM d, yyyy")}`
-                      : "Not yet completed";
+                    const subtitleParts = [
+                      appt.provider_name,
+                      appt.last_completed_at
+                        ? `Last: ${format(parseISO(appt.last_completed_at), "MMM d, yyyy")}`
+                        : "Not yet completed",
+                    ].filter(Boolean);
                     const nextDueText = appt.next_due_date
-                      ? `Due: ${format(parseISO(appt.next_due_date), "MMM d, yyyy")}`
+                      ? format(parseISO(appt.next_due_date), "MMM d")
                       : null;
 
                     return (
-                      <View key={appt.id} style={styles.apptCard}>
+                      <View key={appt.id}>
                         <Pressable
-                          style={({ pressed }) => [styles.apptCardMain, { opacity: pressed ? 0.85 : 1 }]}
-                          onPress={() => {
-                            Haptics.selectionAsync();
-                            setExpandedId(isExpanded ? null : appt.id);
-                          }}
+                          style={({ pressed }) => [styles.taskRow, { opacity: pressed ? 0.85 : 1 }]}
+                          onPress={() => { Haptics.selectionAsync(); setExpandedId(isExpanded ? null : appt.id); }}
                           accessibilityRole="button"
                         >
-                          <View style={[styles.apptStatusBar, { backgroundColor: statusColor }]} />
-                          <View style={styles.apptCardLeft}>
-                            <Text style={styles.apptType}>{appt.appointment_type}</Text>
-                            <Text style={styles.apptLastDone}>{lastDoneText}</Text>
-                            {appt.provider_name && (
-                              <Text style={styles.apptProvider} numberOfLines={1}>{appt.provider_name}</Text>
-                            )}
-                            {nextDueText && (
-                              <Text style={[styles.apptNextDue, { color: statusColor }]}>{nextDueText}</Text>
-                            )}
+                          <View style={[styles.taskBar, { backgroundColor: statusColor }]} />
+                          <View style={styles.taskInfo}>
+                            <Text style={styles.taskTitle} numberOfLines={1}>{appt.appointment_type}</Text>
+                            <Text style={styles.taskSub} numberOfLines={1}>{subtitleParts.join(" · ")}</Text>
                           </View>
-                          <View style={styles.apptCardRight}>
-                            <View style={[styles.apptStatusPill, { backgroundColor: statusColor + "22" }]}>
-                              <Text style={[styles.apptStatusText, { color: statusColor }]}>
-                                {status === "overdue" ? "Overdue" : status === "due_soon" ? "Due soon" : "Current"}
-                              </Text>
-                            </View>
-                            <Ionicons
-                              name={isExpanded ? "chevron-up" : "chevron-down"}
-                              size={15}
-                              color={Colors.textTertiary}
-                            />
-                          </View>
+                          {nextDueText && (
+                            <Text style={[styles.taskDue, { color: statusColor }]}>{nextDueText}</Text>
+                          )}
                         </Pressable>
 
                         {isExpanded && (
@@ -360,18 +333,18 @@ export default function FamilyMemberDetailScreen() {
                           </View>
                         )}
 
-                        {!isLast && <View style={styles.apptDivider} />}
+                        {!isLast && <View style={styles.rowDivider} />}
                       </View>
                     );
                   })}
                 </View>
               )}
-            </View>
+            </>
           ) : (
-            <View style={styles.medSection}>
+            <>
+              <Text style={styles.sectionLabel}>MEDICATIONS</Text>
               {!medications || medications.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Ionicons name="medical-outline" size={36} color={Colors.textTertiary} />
                   <Text style={styles.emptyTitle}>No medications</Text>
                   <Text style={styles.emptyText}>No medications tracked for {memberName}.</Text>
                   <Pressable
@@ -383,24 +356,25 @@ export default function FamilyMemberDetailScreen() {
                   </Pressable>
                 </View>
               ) : (
-                <View style={styles.medList}>
+                <View style={styles.listCard}>
                   {medications.map((med, idx) => (
-                    <View key={med.id} style={styles.medCard}>
-                      <View style={[styles.medIcon, { backgroundColor: Colors.healthMuted }]}>
-                        <Ionicons name="medical-outline" size={18} color={Colors.health} />
+                    <View key={med.id}>
+                      <View style={styles.taskRow}>
+                        <View style={[styles.taskBar, { backgroundColor: Colors.health }]} />
+                        <View style={styles.taskInfo}>
+                          <Text style={styles.taskTitle}>{med.name}</Text>
+                          {med.reminder_time && (
+                            <Text style={styles.taskSub}>Daily · {med.reminder_time}</Text>
+                          )}
+                        </View>
+                        <View style={[styles.reminderDot, { backgroundColor: med.reminders_enabled ? Colors.good : Colors.border }]} />
                       </View>
-                      <View style={styles.medInfo}>
-                        <Text style={styles.medName}>{med.name}</Text>
-                        {med.reminder_time && (
-                          <Text style={styles.medMeta}>Daily · {med.reminder_time}</Text>
-                        )}
-                      </View>
-                      <View style={[styles.reminderDot, { backgroundColor: med.reminders_enabled ? Colors.good : Colors.border }]} />
+                      {idx < medications.length - 1 && <View style={styles.rowDivider} />}
                     </View>
                   ))}
                 </View>
               )}
-            </View>
+            </>
           )}
         </ScrollView>
       )}
@@ -414,25 +388,21 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 8,
+    gap: 10,
   },
   backBtn: { width: 40, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  headerTitle: {
-    flex: 1,
-    fontSize: 17,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.text,
-    textAlign: "center",
-  },
+  headerTextBlock: { flex: 1, gap: 2 },
+  headerTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
+  headerMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textTransform: "capitalize" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   deleteMemberBtn: {
     width: 36,
     height: 36,
-    borderRadius: 11,
+    borderRadius: 10,
     backgroundColor: Colors.overdueMuted,
     alignItems: "center",
     justifyContent: "center",
@@ -440,53 +410,19 @@ const styles = StyleSheet.create({
   addApptBtn: {
     width: 36,
     height: 36,
-    borderRadius: 11,
+    borderRadius: 10,
     backgroundColor: Colors.health,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
 
-  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 16 },
-
-  memberCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 14,
-  },
-  memberAvatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  memberInfo: { flex: 1, gap: 4 },
-  memberName: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text },
-  memberMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textTransform: "capitalize" },
-  statusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    alignSelf: "flex-start",
-    marginTop: 2,
-  },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 12 },
 
   summaryBar: {
     flexDirection: "row",
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 16,
@@ -500,48 +436,50 @@ const styles = StyleSheet.create({
 
   tabs: {
     flexDirection: "row",
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  tab: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center" },
-  tabActive: { backgroundColor: Colors.healthMuted },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+    marginBottom: -1,
+  },
+  tabActive: { borderBottomColor: Colors.accent },
   tabText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  tabTextActive: { color: Colors.health, fontFamily: "Inter_600SemiBold" },
+  tabTextActive: { color: Colors.text, fontFamily: "Inter_600SemiBold" },
 
-  apptSection: { gap: 0 },
-  apptList: {
+  sectionLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textTertiary,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+  },
+
+  listCard: {
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
   },
-  apptCard: { backgroundColor: Colors.card },
-  apptCardMain: {
+
+  taskRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
+    gap: 10,
     paddingVertical: 14,
     paddingRight: 16,
-    minHeight: 64,
-    gap: 12,
   },
-  apptStatusBar: { width: 3, alignSelf: "stretch", borderRadius: 2, minHeight: 44, flexShrink: 0 },
-  apptCardLeft: { flex: 1, gap: 3 },
-  apptType: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 21 },
-  apptLastDone: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  apptProvider: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  apptNextDue: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2 },
-  apptCardRight: { alignItems: "flex-end", gap: 6, flexShrink: 0, paddingTop: 2 },
-  apptStatusPill: {
-    borderRadius: 7,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  apptStatusText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  apptDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 16 },
+  taskBar: { width: 4, height: 28, borderRadius: 2, flexShrink: 0 },
+  taskInfo: { flex: 1, gap: 2 },
+  taskTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 19 },
+  taskSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 17 },
+  taskDue: { fontSize: 12, fontFamily: "Inter_500Medium", flexShrink: 0 },
+  rowDivider: { height: 1, backgroundColor: Colors.borderSubtle },
 
   apptExpanded: {
     paddingHorizontal: 16,
@@ -560,12 +498,14 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 9,
+    borderRadius: 10,
     backgroundColor: Colors.overdueMuted,
     minHeight: 44,
     justifyContent: "center",
   },
   deleteBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue },
+
+  reminderDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
 
   emptyState: { alignItems: "center", paddingVertical: 40, gap: 10 },
   emptyTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
@@ -575,41 +515,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     backgroundColor: Colors.health,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 18,
     paddingVertical: 10,
     marginTop: 4,
   },
   emptyBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-
-  medSection: { gap: 0 },
-  medList: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: "hidden",
-  },
-  medCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-    minHeight: 64,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  medIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  medInfo: { flex: 1, gap: 3 },
-  medName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  medMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  reminderDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
 });
