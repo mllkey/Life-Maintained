@@ -23,17 +23,23 @@ export default function SignUpScreen() {
   const { signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSignUp() {
-    if (!email.trim() || !password) {
+    if (!email.trim() || !password || !confirmPassword) {
       setError("Please fill in all fields");
       return;
     }
     if (password.length < 6) {
       setError("Password must be at least 6 characters");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords don't match");
       return;
     }
     setIsLoading(true);
@@ -114,12 +120,36 @@ export default function SignUpScreen() {
                   placeholderTextColor={Colors.textTertiary}
                   secureTextEntry={!showPassword}
                   textContentType="newPassword"
-                  returnKeyType="done"
-                  onSubmitEditing={handleSignUp}
+                  returnKeyType="next"
                 />
                 <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
                   <Ionicons
                     name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={18}
+                    color={Colors.textTertiary}
+                  />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Confirm password"
+                  placeholderTextColor={Colors.textTertiary}
+                  secureTextEntry={!showConfirmPassword}
+                  textContentType="newPassword"
+                  returnKeyType="done"
+                  onSubmitEditing={handleSignUp}
+                />
+                <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeButton}>
+                  <Ionicons
+                    name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
                     size={18}
                     color={Colors.textTertiary}
                   />
