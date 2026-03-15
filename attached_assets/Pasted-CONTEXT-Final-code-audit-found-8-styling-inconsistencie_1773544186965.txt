@@ -1,0 +1,41 @@
+CONTEXT: Final code audit found 8 styling inconsistencies across screens that were missed during the redesign passes. These need to be fixed so every screen in the app is visually consistent.
+IMPORTANT: Modify only the files listed. Only change styles — no logic changes.
+
+TASK: Fix 8 styling inconsistencies.
+
+Login teal gradient (app/(auth)/index.tsx line ~60):
+Find: colors={["rgba(0,201,167,0.12)", "transparent"]}
+Replace: colors={["rgba(232,147,58,0.06)", "transparent"]}
+Settings padding (app/(tabs)/settings.tsx):
+Find all instances of paddingHorizontal: 16 and change to paddingHorizontal: 20. There are approximately 7 instances. Do NOT change paddingHorizontal inside chipScroll (that one can stay at 16 since it's a horizontal scroll inset).
+Health profile save button (app/health-profile.tsx):
+Find: saveBtn: { backgroundColor: Colors.health, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7 }
+Replace: saveBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 }
+Health profile section labels (app/health-profile.tsx):
+Find: sectionTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.8 }
+Replace: sectionTitle: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 1.5 }
+Health profile input radius (app/health-profile.tsx):
+Find: borderRadius: 12 in inputWrapper style
+Replace: borderRadius: 14
+Add-property-task save button (app/add-property-task/[propertyId].tsx):
+Find: saveBtn: { backgroundColor: Colors.home, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7 }
+Replace: saveBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 }
+Add-property-task section labels (app/add-property-task/[propertyId].tsx):
+Find: sectionTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.8 }
+Replace: sectionTitle: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 1.5 }
+Update mileage screen (app/update-mileage/[vehicleId].tsx):
+
+
+Remove the large vehicleIcon circle (72×72, borderRadius 20, vehicleMuted background with car-outline icon). Replace with just the vehicle name text, same as the vehicle detail header pattern.
+Change content paddingHorizontal from 24 to 20.
+Change header paddingHorizontal from 16 to 20.
+
+After these 8 fixes, I will write a separate prompt for the family-member detail screen redesign since it needs a full pass.
+VERIFICATION:
+
+Login gradient is orange, not teal
+Settings has 20px padding throughout
+Health profile and add-property-task save buttons are accent/10 radius
+All section labels are 11px with 1.5 letter spacing
+Update mileage has no large icon circle
+Zero TypeScript errors

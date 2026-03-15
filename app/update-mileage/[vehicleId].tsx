@@ -74,9 +74,6 @@ export default function UpdateMileageScreen() {
 
         <View style={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
           <View style={styles.vehicleInfo}>
-            <View style={styles.vehicleIcon}>
-              <Ionicons name="car-outline" size={28} color={Colors.vehicle} />
-            </View>
             <Text style={styles.vehicleName}>{vehicleName}</Text>
             {vehicle?.mileage != null && (
               <Text style={styles.currentMileage}>Current: {vehicle.mileage.toLocaleString()} miles</Text>
@@ -124,16 +121,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   title: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  content: { flex: 1, paddingHorizontal: 24, paddingTop: 40, gap: 32 },
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: 40, gap: 32 },
   vehicleInfo: { alignItems: "center", gap: 8 },
-  vehicleIcon: { width: 72, height: 72, borderRadius: 20, backgroundColor: Colors.vehicleMuted, alignItems: "center", justifyContent: "center" },
   vehicleName: { fontSize: 20, fontFamily: "Inter_600SemiBold", color: Colors.text },
   currentMileage: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   inputSection: { gap: 8 },
