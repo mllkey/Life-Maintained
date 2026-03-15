@@ -824,6 +824,7 @@ export default function AddVehicleScreen() {
           return;
         }
         try {
+          console.log("[generate-maintenance-schedule] Invoking for vehicle:", inserted.id);
           const { error: scheduleError } = await supabase.functions.invoke(
             "generate-maintenance-schedule",
             { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: vehicleType } },
@@ -831,6 +832,8 @@ export default function AddVehicleScreen() {
           if (scheduleError) {
             const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
             if (httpStatus !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
+          } else {
+            console.log("[generate-maintenance-schedule] Success for vehicle:", inserted.id);
           }
         } catch (scheduleErr) {
           console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
@@ -862,6 +865,7 @@ export default function AddVehicleScreen() {
         return;
       }
       try {
+        console.log("[generate-maintenance-schedule] Invoking for vehicle:", inserted.id);
         const { error: scheduleError } = await supabase.functions.invoke(
           "generate-maintenance-schedule",
           { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: vehicleType } },
@@ -869,6 +873,8 @@ export default function AddVehicleScreen() {
         if (scheduleError) {
           const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
           if (httpStatus !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
+        } else {
+          console.log("[generate-maintenance-schedule] Success for vehicle:", inserted.id);
         }
       } catch (scheduleErr) {
         console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
@@ -1326,15 +1332,20 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
     ? YEARS.filter(yr => String(yr).startsWith(yearInput))
     : YEARS;
 
+  const typedYear = yearInput.length === 4 ? parseInt(yearInput, 10) : null;
+  const typedYearValid = typedYear !== null && YEARS.includes(typedYear);
+
   function handleYearInput(text: string) {
     const digits = text.replace(/\D/g, "").slice(0, 4);
     setYearInput(digits);
-    if (digits.length === 4) {
-      const yr = parseInt(digits, 10);
-      if (YEARS.includes(yr)) {
-        onSelect(yr);
-        setYearInput("");
-      }
+  }
+
+  function handleDone() {
+    if (typedYearValid && typedYear !== null) {
+      onSelect(typedYear);
+      setYearInput("");
+    } else {
+      onClose();
     }
   }
 
@@ -1346,9 +1357,14 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
           <View style={styles.modalHandle} />
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Select Year</Text>
-            <Pressable onPress={onClose} style={styles.modalCancelBtn} hitSlop={8}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+              <Pressable onPress={onClose} style={styles.modalCancelBtn} hitSlop={8}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={handleDone} hitSlop={8}>
+                <Text style={[styles.modalCancelText, { color: Colors.accent, fontFamily: "Inter_600SemiBold" }]}>Done</Text>
+              </Pressable>
+            </View>
           </View>
           <View style={styles.yearSearchWrap}>
             <TextInput
@@ -1360,6 +1376,7 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
               keyboardType="number-pad"
               maxLength={4}
               returnKeyType="done"
+              onSubmitEditing={handleDone}
             />
           </View>
           <FlatList
@@ -1376,19 +1393,20 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
             keyboardShouldPersistTaps="handled"
             renderItem={({ item: yr }) => {
               const isSelected = yr === selectedYear;
+              const isHighlighted = yr === typedYear && typedYearValid;
               return (
                 <Pressable
                   style={({ pressed }) => [
                     styles.listRow,
-                    isSelected && styles.listRowSelected,
+                    (isSelected || isHighlighted) && styles.listRowSelected,
                     { opacity: pressed ? 0.7 : 1 },
                   ]}
                   onPress={() => { onSelect(yr); setYearInput(""); }}
                 >
-                  <Text style={[styles.listRowText, isSelected && styles.listRowTextSelected]}>
+                  <Text style={[styles.listRowText, (isSelected || isHighlighted) && styles.listRowTextSelected]}>
                     {yr}
                   </Text>
-                  {isSelected && <Ionicons name="checkmark" size={18} color={Colors.vehicle} />}
+                  {(isSelected || isHighlighted) && <Ionicons name="checkmark" size={18} color={Colors.vehicle} />}
                 </Pressable>
               );
             }}
