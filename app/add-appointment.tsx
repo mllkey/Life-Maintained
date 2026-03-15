@@ -73,7 +73,10 @@ export default function AddAppointmentScreen() {
 
   async function handleSave() {
     if (isLoading) return;
-    if (!user) return;
+    if (!user) {
+      setError("Session unavailable. Please close and reopen this screen.");
+      return;
+    }
     if (!appointmentType.trim()) { setError("Appointment type is required"); return; }
     setIsLoading(true);
     setError(null);

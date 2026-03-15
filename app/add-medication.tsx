@@ -45,7 +45,10 @@ export default function AddMedicationScreen() {
 
   async function handleSave() {
     if (isLoading) return;
-    if (!user) return;
+    if (!user) {
+      setError("Session unavailable. Please close and reopen this screen.");
+      return;
+    }
     if (!name.trim()) { setError("Medication name is required"); return; }
     setIsLoading(true);
     setError(null);

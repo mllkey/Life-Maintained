@@ -51,7 +51,10 @@ export default function AddFamilyMemberScreen() {
 
   async function handleSave() {
     if (isLoading) return;
-    if (!user) return;
+    if (!user) {
+      setError("Session unavailable. Please close and reopen this screen.");
+      return;
+    }
     if (!name.trim()) { setError("Name is required"); return; }
     try {
       if (isFreeTier(profile)) {

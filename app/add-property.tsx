@@ -334,7 +334,10 @@ export default function AddPropertyScreen() {
 
   async function handleSave() {
     if (isLoading) return;
-    if (!user) return;
+    if (!user) {
+      setError("Session unavailable. Please close and reopen this screen.");
+      return;
+    }
     if (!street.trim()) {
       setError("Street address is required");
       return;

@@ -1,0 +1,39 @@
+CONTEXT: Three critical issues found during device testing.
+BUG 1 — BUTTONS NOT RESPONDING (APP-WIDE):
+The Save button on add-vehicle.tsx is unresponsive, same as the onboarding buttons were. The previous fix only addressed onboarding screens but not the root cause. This is an app-wide issue where Pressable buttons at the bottom of scrollable screens are being blocked by an invisible element.
+Common causes in React Native:
+
+A View with position "absolute" that covers the full screen (like a gradient, status bar overlay, or safe area view) intercepting touches
+A ScrollView or KeyboardAvoidingView that extends over the button area
+The button is inside a ScrollView but the ScrollView's content is not tall enough, causing the button to be outside the scrollable area
+
+Search the ENTIRE codebase for any View with position "absolute" that could be covering button areas. Check _layout.tsx, the tab layout, and any screen wrapper components. The fix must work everywhere — not just on one screen.
+Also check: does the add-vehicle screen have a modal presentation? If so, the modal's content might not be sized correctly, causing the bottom button area to be outside the interactive region.
+BUG 2 — YEAR/DATE PICKERS NEED TEXT INPUT OPTION:
+NNGroup research says typing is faster than scrolling for values far from the present. Every picker in the app that currently only allows scrolling through years needs a text input option. Add a text input field at the top of each picker where users can type the value directly (4-digit numeric input). If a valid year is typed, it should auto-select. The scroll picker stays as a secondary option below.
+Apply this fix to ALL year pickers across the entire app:
+
+add-vehicle.tsx (vehicle year)
+add-property.tsx (year built)
+Any other screen that has a year picker or date scroll picker
+
+BUG 3 — EMPTY SCREENS NOT SHOWING GUIDANCE:
+The Vehicles and Properties empty states just show the title and a + button with blank space below. The empty state text that was added ("No vehicles yet" / "No properties yet") is not visible on the device.
+Check app/(tabs)/vehicles.tsx and app/(tabs)/home-tab.tsx — the empty state components exist in code but aren't rendering on screen. Likely causes:
+
+The empty state View is positioned outside the visible scroll area
+A conditional check is preventing it from showing
+The same layout/touch bug from Bug 1 is hiding the content area
+
+Make sure empty states are visible and centered in the middle of the screen for: vehicles list, properties list, and health tab.
+IMPORTANT: Fix Bug 1 first since it likely affects everything else. The root cause is probably in _layout.tsx or the tab layout.
+VERIFICATION:
+
+Save button on add-vehicle works
+Get Started on onboarding complete works
+Continue on onboarding profile works
+All buttons on ALL screens respond to taps
+Vehicle year picker has a typeable text input
+Property year built picker has a typeable text input
+Empty vehicle/property/health screens show centered guidance text
+Zero TypeScript errors

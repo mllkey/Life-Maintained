@@ -751,7 +751,10 @@ export default function AddVehicleScreen() {
 
   async function handleSave() {
     if (isLoading) return;
-    if (!user) return;
+    if (!user) {
+      setError("Session unavailable. Please close and reopen this screen.");
+      return;
+    }
 
     // 1. Validate — all existing checks unchanged
     if (!year || !make || !model) {
@@ -1316,6 +1319,24 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
   onClose: () => void;
   insets: { bottom: number };
 }) {
+  const [yearInput, setYearInput] = useState("");
+  const isSearching = yearInput.length > 0;
+  const filteredYears = isSearching
+    ? YEARS.filter(yr => String(yr).startsWith(yearInput))
+    : YEARS;
+
+  function handleYearInput(text: string) {
+    const digits = text.replace(/\D/g, "").slice(0, 4);
+    setYearInput(digits);
+    if (digits.length === 4) {
+      const yr = parseInt(digits, 10);
+      if (YEARS.includes(yr)) {
+        onSelect(yr);
+        setYearInput("");
+      }
+    }
+  }
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
@@ -1328,17 +1349,30 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
               <Text style={styles.modalCancelText}>Cancel</Text>
             </Pressable>
           </View>
+          <View style={styles.yearSearchWrap}>
+            <TextInput
+              style={styles.yearSearchInput}
+              value={yearInput}
+              onChangeText={handleYearInput}
+              placeholder="Type a year..."
+              placeholderTextColor={Colors.textTertiary}
+              keyboardType="number-pad"
+              maxLength={4}
+              returnKeyType="done"
+            />
+          </View>
           <FlatList
-            data={YEARS}
+            data={filteredYears}
             keyExtractor={yr => String(yr)}
-            getItemLayout={(_, index) => ({
+            getItemLayout={isSearching ? undefined : (_, index) => ({
               length: YEAR_ITEM_HEIGHT,
               offset: YEAR_ITEM_HEIGHT * index,
               index,
             })}
-            initialScrollIndex={selectedYear ? Math.max(0, YEARS.indexOf(selectedYear)) : 0}
+            initialScrollIndex={isSearching ? undefined : (selectedYear ? Math.max(0, YEARS.indexOf(selectedYear)) : 0)}
             showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 340 }}
+            style={{ maxHeight: 300 }}
+            keyboardShouldPersistTaps="handled"
             renderItem={({ item: yr }) => {
               const isSelected = yr === selectedYear;
               return (
@@ -1348,7 +1382,7 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
                     isSelected && styles.listRowSelected,
                     { opacity: pressed ? 0.7 : 1 },
                   ]}
-                  onPress={() => onSelect(yr)}
+                  onPress={() => { onSelect(yr); setYearInput(""); }}
                 >
                   <Text style={[styles.listRowText, isSelected && styles.listRowTextSelected]}>
                     {yr}
@@ -1935,6 +1969,21 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingVertical: 10,
     minHeight: 44,
+  },
+  yearSearchWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  yearSearchInput: {
+    backgroundColor: Colors.surface,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 16,
+    fontFamily: "Inter_400Regular",
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
 
   makeSectionHeader: {

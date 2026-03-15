@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -60,7 +61,10 @@ export default function HealthProfileScreen() {
 
   async function handleSave() {
     if (isLoading) return;
-    if (!user) return;
+    if (!user) {
+      Alert.alert("Session Error", "Session unavailable. Please close and reopen this screen.");
+      return;
+    }
     setIsLoading(true);
 
     let dateOfBirth: string | null = null;
