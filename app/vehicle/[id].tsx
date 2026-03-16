@@ -93,6 +93,7 @@ export default function VehicleDetailScreen() {
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
   const [scheduleToast, setScheduleToast] = useState("");
   const [showScheduleToast, setShowScheduleToast] = useState(false);
+  const [scheduleToastIsError, setScheduleToastIsError] = useState(false);
   const lastStatusHashRef = useRef("");
 
   const [markCompleteTask, setMarkCompleteTask] = useState<any | null>(null);
@@ -224,20 +225,22 @@ export default function VehicleDetailScreen() {
       if (error) {
         const httpStatus = ((error as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
         if (httpStatus !== 409) {
-          showToast("Failed to generate schedule. Please try again.");
+          showToast("Failed to generate schedule. Please try again.", true);
           return;
         }
       }
       await refetchSchedule();
+      showToast("Schedule generated!");
     } catch {
-      showToast("Failed to generate schedule. Please try again.");
+      showToast("Failed to generate schedule. Please try again.", true);
     } finally {
       setGeneratingSchedule(false);
     }
   }
 
-  function showToast(msg: string) {
+  function showToast(msg: string, isError = false) {
     setScheduleToast(msg);
+    setScheduleToastIsError(isError);
     setShowScheduleToast(true);
     setTimeout(() => setShowScheduleToast(false), 2800);
   }
@@ -273,7 +276,7 @@ export default function VehicleDetailScreen() {
     if (tracksMileage) {
       const parsed = parseInt(completeMileage, 10);
       if (!completeMileage.trim() || isNaN(parsed) || parsed < 0) {
-        showToast("Please enter a valid mileage.");
+        showToast("Please enter a valid mileage.", true);
         return;
       }
       mileageNum = parsed;
@@ -352,7 +355,7 @@ export default function VehicleDetailScreen() {
       showToast(toastMsg);
     } catch (e) {
       queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", id] });
-      showToast("Failed to save. Please try again.");
+      showToast("Failed to save. Please try again.", true);
     }
   }
 
@@ -814,7 +817,7 @@ export default function VehicleDetailScreen() {
         </ScrollView>
       ) : null}
 
-      <SaveToast visible={showScheduleToast} message={scheduleToast} />
+      <SaveToast visible={showScheduleToast} message={scheduleToast} isError={scheduleToastIsError} />
 
       <MarkCompleteSheet
         visible={markCompleteTask != null}

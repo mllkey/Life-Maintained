@@ -3,10 +3,14 @@ import { Tabs } from "expo-router";
 import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
 import { SymbolView } from "expo-symbols";
-import { Platform, StyleSheet, useColorScheme, View } from "react-native";
-import React from "react";
+import { Platform, Pressable, StyleSheet, useColorScheme, View } from "react-native";
+import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
+import { useAuth } from "@/context/AuthContext";
+import { LogSheet } from "@/components/LogSheet";
 
 function NativeTabLayout() {
   return (
@@ -132,8 +136,55 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
-  return <ClassicTabLayout />;
+  const [logSheetVisible, setLogSheetVisible] = useState(false);
+  const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const isNative = isLiquidGlassAvailable();
+
+  return (
+    <View style={{ flex: 1 }}>
+      {isNative ? <NativeTabLayout /> : <ClassicTabLayout />}
+
+      <Pressable
+        style={[
+          styles.fab,
+          {
+            bottom: insets.bottom + (Platform.OS === "web" ? 84 : 49) + 16,
+            right: 20,
+          },
+        ]}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          setLogSheetVisible(true);
+        }}
+        accessibilityLabel="Log maintenance"
+        accessibilityRole="button"
+      >
+        <Ionicons name="mic-outline" size={26} color="#fff" />
+      </Pressable>
+
+      <LogSheet
+        visible={logSheetVisible}
+        onClose={() => setLogSheetVisible(false)}
+        userId={user?.id ?? ""}
+      />
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  fab: {
+    position: "absolute",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.30,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+});

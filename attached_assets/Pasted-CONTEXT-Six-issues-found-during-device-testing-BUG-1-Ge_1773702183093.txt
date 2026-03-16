@@ -1,0 +1,29 @@
+CONTEXT: Six issues found during device testing.
+BUG 1 — Generate schedule fails:
+The "Generate Schedule" button on the vehicle detail screen fails. The error toast shows a green checkmark when it should show a red X. Fix both: debug why the Edge Function call fails (check the payload being sent — vehicle_id, make, year, current_mileage, vehicle_type, is_awd, vehicle_category must all be present and correct). Also fix the toast: errors should show a red/overdue colored icon, not green.
+Additionally, the schedule should auto-generate when a vehicle is added — the user should never need to tap "Generate Schedule" manually. Verify that add-vehicle.tsx handleSave calls supabase.functions.invoke("generate-maintenance-schedule") after the vehicle insert. If it exists but is failing, log the error. If it doesn't exist, add it as fire-and-forget after navigation.
+BUG 2 — Mileage save button toggles between save and checkmark:
+The dashboard QuickMileageCard save button toggles to a checkmark after saving but doesn't reset properly, or the save isn't actually updating the mileage. Debug: verify the save handler updates the vehicles table mileage field and invalidates the query cache so the card refreshes with the new value.
+BUG 3 — Keyboard "Done" should save mileage:
+When typing mileage on the dashboard QuickMileageCard, the iOS keyboard shows "Done" which just dismisses the keyboard. Users expect it to save. Change the TextInput's returnKeyType to "done" and add onSubmitEditing that triggers the same save handler as the Save button. This way both the keyboard Done and the Save button work.
+BUG 4 — Voice log FAB should be on all main tabs:
+The mic FAB currently only appears on the dashboard. Move it to the tab layout (app/(tabs)/_layout.tsx) so it floats above all five tabs. It should appear on Dashboard, Vehicles, Properties, Health, and Settings. The FAB should open the same LogSheet. Move the LogSheet and FAB rendering from app/(tabs)/index.tsx into app/(tabs)/_layout.tsx.
+If moving the LogSheet to _layout is too complex, alternatively add the FAB to each tab screen individually (vehicles.tsx, home-tab.tsx, health.tsx, settings.tsx) with onPress navigating to the dashboard and opening the sheet. The simpler approach: just add the FAB to _layout.tsx.
+BUG 5 — Voice log UI should clarify dictation:
+The voice log sheet shows a text box but users expect tapping the mic FAB to start listening. Update the UI:
+
+Change the placeholder text to: "Tap the mic on your keyboard to speak, or type here"
+Add a small hint below the text input: "Use your keyboard's microphone button to dictate" in 12px, Colors.textTertiary
+
+BUG 6 — Error toast styling:
+Any error/failure toast or banner in the app should use Colors.overdue (red) icon and text, not Colors.good (green). Search the codebase for toast/banner/snackbar components and ensure error states use red styling, success states use green.
+VERIFICATION:
+
+Adding a vehicle auto-generates the schedule — no manual button needed
+If Generate Schedule is tapped manually, it works and errors show red
+Dashboard mileage save works and resets properly
+Keyboard Done saves mileage
+Mic FAB appears on all five tabs
+Voice log placeholder mentions keyboard dictation
+Error toasts use red, success toasts use green
+Zero TypeScript errors

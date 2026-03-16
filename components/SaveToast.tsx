@@ -6,9 +6,10 @@ import { Colors } from "@/constants/colors";
 interface SaveToastProps {
   visible: boolean;
   message?: string;
+  isError?: boolean;
 }
 
-export function SaveToast({ visible, message = "Saved!" }: SaveToastProps) {
+export function SaveToast({ visible, message = "Saved!", isError = false }: SaveToastProps) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
 
@@ -29,8 +30,12 @@ export function SaveToast({ visible, message = "Saved!" }: SaveToastProps) {
   return (
     <Animated.View style={[styles.toast, { opacity, transform: [{ translateY }] }]} pointerEvents="none">
       <View style={styles.inner}>
-        <Ionicons name="checkmark-circle" size={18} color="#34C759" />
-        <Text style={styles.text}>{message}</Text>
+        <Ionicons
+          name={isError ? "alert-circle" : "checkmark-circle"}
+          size={18}
+          color={isError ? Colors.overdue : "#34C759"}
+        />
+        <Text style={[styles.text, isError && { color: Colors.overdue }]}>{message}</Text>
       </View>
     </Animated.View>
   );
