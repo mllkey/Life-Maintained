@@ -1,3 +1,65 @@
+# CRITICAL RULES — DO NOT BREAK
+
+These rules reflect fixes that have been applied and verified. Breaking any of these will cause regressions. Read this section before making ANY code changes.
+
+## Routing
+
+- The `(onboarding)` Stack.Screen in `_layout.tsx` must NOT have `presentation: "modal"` or `presentation: "fullScreenModal"`. It is a full navigation destination reached via REPLACE, not push.
+- App must NOT redirect to onboarding until BOTH session AND profile are fully loaded from database. `isLoading` must be true until profile fetch completes.
+- Signup routes to `/(onboarding)` via `router.replace`. Login routes to `/(tabs)`.
+- Email confirmation is DISABLED in Supabase. Do not add email verification gates.
+
+## Database Tables
+
+- The correct vehicle tasks table is `user_vehicle_maintenance_tasks` — NEVER use `vehicle_maintenance_tasks`.
+- The `vehicles` table mileage column is `mileage` — NOT `current_mileage`.
+- `maintenance_templates` uses `task` and `mileage_interval` columns.
+- Voice log saves must include `property_id` for property entries.
+- Voice log health entries show "coming soon" message — do not save to `maintenance_logs`.
+
+## Navigation
+
+- Use `router.back()` everywhere — NEVER use `router.dismiss()`.
+- All form screens (`add-vehicle`, `add-property`, `add-appointment`, `add-medication`, `add-family-member`, `log-service`, `health-profile`, `subscription`) use `presentation: "fullScreenModal"` in `_layout.tsx`.
+- The `(onboarding)` screens do NOT use modal presentation.
+
+## Styling Constants
+
+- Accent color: `#E8943A` (orange) — no teal (`#00C9A7` or `#14B8A6`) anywhere.
+- All gradients use `rgba(232,147,58,0.06)` — no teal rgba values.
+- Notification color in `app.json`: `#E8943A`.
+- Android adaptive icon `backgroundColor`: `#0C111B`.
+- Splash `backgroundColor`: `#0C111B`.
+
+## Design System
+
+- Cards: `borderRadius 14`, `1px Colors.border`.
+- Chips/pills: `borderRadius 10`.
+- Content padding: `20px` horizontal on all screens.
+- Section labels: `11px`, `fontWeight "600"`, `letterSpacing 1.5`, `Colors.textTertiary`, uppercase.
+- Save buttons: `Colors.accent` background, `borderRadius 10`.
+- No colored icon circles anywhere.
+- Status indicators: `4px × 28px` vertical bars (red/yellow/green), not dots.
+- Tab bars: underline style (`2px Colors.accent` bottom border), not filled pills.
+- Auth screens: `brand-logo.png` displayed, tagline `"The app that remembers so you don't have to."`.
+
+## Features
+
+- `MILEAGE_TRACKED_TYPES` is defined in `lib/vehicleTypes.ts` — import from there, never redefine locally.
+- Seasonal month picker: presets (Spring–Fall, Winter, Summer) appear ABOVE the month grid.
+- Vehicle category exclusions: motorcycles don't get tire rotation, cabin air filter, wiper blades, etc.
+- NHTSA model query fetches Passenger Car + Truck + MPV categories in parallel.
+- Maintenance schedule auto-generates when a vehicle is added — no manual button required.
+- Receipt scanner uses `session.access_token` for auth, not anon key.
+
+## Edge Functions (deployed to Supabase)
+
+- `extract-maintenance-data`: JWT auth, queries user assets, calls Claude API
+- `generate-maintenance-schedule`: accepts `vehicle_id`, `make`, `year`, `current_mileage`, `vehicle_type`, `is_awd`, `vehicle_category`
+- `scan-receipt`: Claude Vision API for receipt scanning
+
+---
+
 # LifeMaintained
 
 A native iOS / cross-platform mobile app built with Expo React Native that tracks vehicle maintenance, home/property maintenance, and health appointments/medications.
