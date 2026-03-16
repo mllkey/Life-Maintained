@@ -876,19 +876,38 @@ function LogSheet({
       const { data, error } = await supabase.functions.invoke("extract-maintenance-data", {
         body: { text: text.trim() },
       });
-      if (error) throw error;
+
+      console.log("[extract-maintenance-data] data:", JSON.stringify(data));
+      console.log("[extract-maintenance-data] error:", error);
+
+      if (error) {
+        const msg = (error as any)?.message ?? String(error);
+        console.error("[extract-maintenance-data] invoke error:", msg);
+        setErrorMsg(`Error: ${msg}`);
+        setPhase("error");
+        return;
+      }
+
+      if (data?.error) {
+        console.error("[extract-maintenance-data] function error:", data.error);
+        setErrorMsg(`Error: ${data.error}`);
+        setPhase("error");
+        return;
+      }
+
       const extracted: ExtractedItem[] = data?.items ?? [];
       if (extracted.length === 0) {
-        setErrorMsg("Couldn't understand that. Try being more specific.");
+        setErrorMsg("No maintenance items found. Try adding more detail (e.g. service type, vehicle, mileage).");
         setPhase("error");
         return;
       }
       setItems(extracted);
       setDoneCount(0);
       setPhase("results");
-    } catch (err) {
-      console.error("extract-maintenance-data error:", err);
-      setErrorMsg("Couldn't understand that. Try being more specific.");
+    } catch (err: any) {
+      const msg = err?.message ?? String(err);
+      console.error("[extract-maintenance-data] caught:", msg);
+      setErrorMsg(`Error: ${msg}`);
       setPhase("error");
     }
   }
