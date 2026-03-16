@@ -331,7 +331,7 @@ export function LogSheet({
                     style={styles.sheetTextInput}
                     value={text}
                     onChangeText={setText}
-                    placeholder={"Tap the mic on your keyboard to speak, or type here\n\ne.g. 'Oil change on my Ninja, 14k miles, $45 at Cycle Gear'"}
+                    placeholder="Tap the mic on your keyboard to speak, or type here"
                     placeholderTextColor={Colors.textTertiary}
                     multiline
                     numberOfLines={4}
@@ -444,8 +444,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     color: Colors.textTertiary,
-    marginTop: 6,
-    marginLeft: 2,
+    textAlign: "center",
+    marginTop: 8,
   },
   sheetProcessBtn: {
     flexDirection: "row",
