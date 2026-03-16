@@ -4,9 +4,9 @@ import { View, ActivityIndicator } from "react-native";
 import { Colors } from "@/constants/colors";
 
 export default function RootIndex() {
-  const { session, isLoading, onboardingCompleted } = useAuth();
+  const { session, isLoading, profileLoaded, onboardingCompleted } = useAuth();
 
-  if (isLoading) {
+  if (isLoading || (!!session && !profileLoaded)) {
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator color={Colors.accent} size="large" />

@@ -2,7 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
-import { AppState, AppStateStatus, Platform, View, ActivityIndicator } from "react-native";
+import { AppState, AppStateStatus, Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -153,14 +153,6 @@ function RootLayoutNav() {
     const sub = Linking.addEventListener("url", (e) => handleUrl(e.url));
     return () => sub.remove();
   }, [session, isLoading]);
-
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator color={Colors.accent} />
-      </View>
-    );
-  }
 
   const showBanner = !!session && onboardingCompleted === true;
 

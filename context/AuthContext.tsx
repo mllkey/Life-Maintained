@@ -9,6 +9,7 @@ interface AuthContextValue {
   session: Session | null;
   user: User | null;
   isLoading: boolean;
+  profileLoaded: boolean;
   profile: Profile | null;
   refreshProfile: () => Promise<void>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -26,6 +27,7 @@ const PROFILE_SELECT =
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const mountedRef = useRef(true);
@@ -56,9 +58,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       setProfile(fullProfile);
       setOnboardingCompleted(fullProfile.onboarding_completed === true);
+      setProfileLoaded(true);
       checkAndResetScanCount(userId, fullProfile).catch(() => {});
-    } catch {
-      if (mountedRef.current) setOnboardingCompleted(false);
+    } catch (e) {
+      console.warn("[AuthContext] fetchProfile error:", e);
+      if (mountedRef.current) {
+        setProfileLoaded(true);
+      }
     }
   }, []);
 
@@ -79,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userIdRef.current = null;
         setProfile(null);
         setOnboardingCompleted(false);
+        setProfileLoaded(false);
         setIsLoading(false);
         return;
       }
@@ -94,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           userIdRef.current = null;
           setProfile(null);
           setOnboardingCompleted(false);
+          setProfileLoaded(false);
           setIsLoading(false);
         }
       }
@@ -135,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     user: session?.user ?? null,
     isLoading,
+    profileLoaded,
     profile,
     refreshProfile,
     signUp,
@@ -142,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut,
     onboardingCompleted,
     setOnboardingCompleted,
-  }), [session, isLoading, profile, refreshProfile, onboardingCompleted]);
+  }), [session, isLoading, profileLoaded, profile, refreshProfile, onboardingCompleted]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
