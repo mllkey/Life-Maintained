@@ -60,10 +60,9 @@ type OrbProps = {
   amplitudeRef: React.MutableRefObject<number>;
   isRecording: boolean;
   phase: RecordPhase;
-  onPress: () => void;
 };
 
-function VoiceOrb({ amplitudeRef, isRecording, phase, onPress }: OrbProps) {
+function VoiceOrb({ amplitudeRef, isRecording, phase }: OrbProps) {
   // Breathing layers
   const outerScale   = useSharedValue(1.0);
   const outerOpacity = useSharedValue(0.06);
@@ -180,19 +179,12 @@ function VoiceOrb({ amplitudeRef, isRecording, phase, onPress }: OrbProps) {
         backgroundColor: Colors.accent, opacity: 0.16,
       }, midStyle]} />
 
-      {/* Inner core — pressable tap target */}
-      <Pressable
-        onPress={onPress}
-        disabled={phase === "transcribing"}
-        style={{ position: "absolute", width: 72, height: 72, alignItems: "center", justifyContent: "center" }}
-      >
-        <Reanimated.View style={[{
-          position: "absolute",
-          width: 72, height: 72, borderRadius: 36,
-          backgroundColor: isRecording ? Colors.overdue : Colors.accent, opacity: 0.88,
-        }, coreStyle]} />
-        <Ionicons name={isRecording ? "stop" : "mic"} size={28} color="#fff" />
-      </Pressable>
+      {/* Inner core — decorative only */}
+      <Reanimated.View style={[{
+        position: "absolute",
+        width: 72, height: 72, borderRadius: 36,
+        backgroundColor: Colors.accent, opacity: 0.88,
+      }, coreStyle]} />
     </View>
   );
 }
@@ -599,13 +591,12 @@ export function LogSheet({
               </Pressable>
             </View>
 
-            {/* Center: orb (pressable) + status + actions */}
+            {/* Center: orb + status text */}
             <View style={styles.recordingCenter}>
               <VoiceOrb
                 amplitudeRef={amplitudeRef}
                 isRecording={phase === "recording"}
                 phase={phase}
-                onPress={phase === "idle" ? handleStartRecording : handleStopRecording}
               />
 
               <Text style={[
@@ -618,16 +609,34 @@ export function LogSheet({
                     ? "Listening..."
                     : "Transcribing..."}
               </Text>
+            </View>
 
+            {/* Bottom: record/stop button + type-instead */}
+            <View style={styles.recordingBottom}>
               {phase === "transcribing" ? (
                 <View style={styles.transcribingRow}>
                   <ActivityIndicator size="small" color={Colors.accent} />
                   <Text style={styles.transcribingText}>Processing audio...</Text>
                 </View>
               ) : (
-                <Pressable onPress={() => setPhase("type")} hitSlop={12}>
-                  <Text style={styles.typeInsteadText}>Type instead →</Text>
-                </Pressable>
+                <>
+                  <Pressable
+                    style={[
+                      styles.recordingBtn,
+                      phase === "recording" && styles.recordingBtnStop,
+                    ]}
+                    onPress={phase === "idle" ? handleStartRecording : handleStopRecording}
+                  >
+                    <Ionicons
+                      name={phase === "idle" ? "mic" : "stop"}
+                      size={24}
+                      color="#fff"
+                    />
+                  </Pressable>
+                  <Pressable onPress={() => setPhase("type")} hitSlop={12}>
+                    <Text style={styles.typeInsteadText}>Type instead →</Text>
+                  </Pressable>
+                </>
               )}
             </View>
           </View>
@@ -751,6 +760,28 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: Colors.textSecondary,
     textAlign: "center",
+  },
+  recordingBottom: {
+    alignItems: "center",
+    gap: 16,
+    paddingHorizontal: 20,
+  },
+  recordingBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  recordingBtnStop: {
+    backgroundColor: Colors.overdue,
+    shadowColor: Colors.overdue,
   },
   typeInsteadText: {
     fontSize: 13,
