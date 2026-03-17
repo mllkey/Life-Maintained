@@ -23,6 +23,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { matchAndUpdateVehicleTask, matchAndUpdatePropertyTask } from "@/lib/maintenanceMatcher";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
+import Svg, { Circle, Defs, RadialGradient, Stop, G, Path } from "react-native-svg";
 
 type RecordPhase =
   | "idle"
@@ -101,160 +102,210 @@ function WaveBars() {
   );
 }
 
-// ─── Concentric Glowing Rings ─────────────────────────────────────────────────
+// ─── Voice Orb (SVG-based — true radial-gradient glow + shockwave pulses) ────
 
-const RING_DEFS = [
-  { radius: 50,  bw: 2.5, hexOpacity: "CC", scaleMin: 0.90, scaleMax: 1.15, delay:   0, phaseOffset: 0    },
-  { radius: 80,  bw: 2.0, hexOpacity: "99", scaleMin: 0.92, scaleMax: 1.12, delay:  60, phaseOffset: 200  },
-  { radius: 115, bw: 1.5, hexOpacity: "66", scaleMin: 0.94, scaleMax: 1.10, delay: 120, phaseOffset: 400  },
-  { radius: 155, bw: 1.0, hexOpacity: "4D", scaleMin: 0.95, scaleMax: 1.08, delay: 180, phaseOffset: 600  },
-  { radius: 200, bw: 1.0, hexOpacity: "33", scaleMin: 0.96, scaleMax: 1.05, delay: 240, phaseOffset: 800  },
-] as const;
-
-type RingsProps = { amplitudeRef: React.MutableRefObject<number>; isRecording: boolean };
-
-function ConcentricRings({ amplitudeRef, isRecording }: RingsProps) {
-  const ringScales = useRef(RING_DEFS.map(() => new Animated.Value(1.0))).current;
-  const bgScale    = useRef(new Animated.Value(1.0)).current;
-  const coreOpacity = useRef(new Animated.Value(0.5)).current;
-
-  const idleLoopRefs = useRef<(Animated.CompositeAnimation | null)[]>([null, null, null, null, null]);
-  const bgLoopRef    = useRef<Animated.CompositeAnimation | null>(null);
-  const phaseTimers  = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const ampTimers    = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const rafRef       = useRef<number | null>(null);
-  const lastAmp      = useRef(-1);
-
-  // Background glow always pulses (4s loop)
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bgScale, { toValue: 1.05, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(bgScale, { toValue: 0.95, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    );
-    bgLoopRef.current = loop;
-    loop.start();
-    return () => loop.stop();
-  }, []);
-
-  // Switch between idle breathing and live amplitude mode
-  useEffect(() => {
-    if (isRecording) {
-      stopIdleBreathing();
-      startAmplitudeTracking();
-    } else {
-      stopAmplitudeTracking();
-      startIdleBreathing();
-    }
-    return () => {
-      stopIdleBreathing();
-      stopAmplitudeTracking();
-    };
-  }, [isRecording]);
-
-  function startIdleBreathing() {
-    stopIdleBreathing();
-    Animated.timing(coreOpacity, { toValue: 0.5, duration: 300, useNativeDriver: true }).start();
-    RING_DEFS.forEach((cfg, i) => {
-      const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(ringScales[i], { toValue: cfg.scaleMax, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(ringScales[i], { toValue: cfg.scaleMin, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        ])
-      );
-      idleLoopRefs.current[i] = loop;
-      const t = setTimeout(() => loop.start(), cfg.phaseOffset);
-      phaseTimers.current.push(t);
-    });
+// Generates a slightly organic closed ring path: 12 control points evenly
+// spaced around a circle of baseRadius from center (150,150), each with a
+// ±3 px random radial offset, connected with smooth quadratic bezier curves.
+function computeOrganicPath(offsets: number[]): string {
+  const N = 12;
+  const cx = 150, cy = 150, baseR = 45;
+  const pts = offsets.map((off, i) => {
+    const angle = (i / N) * Math.PI * 2 - Math.PI / 2;
+    const r = baseR + off;
+    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+  });
+  const mid = (a: { x: number; y: number }, b: { x: number; y: number }) => ({
+    x: (a.x + b.x) / 2,
+    y: (a.y + b.y) / 2,
+  });
+  const m0 = mid(pts[N - 1], pts[0]);
+  let d = `M ${m0.x.toFixed(2)} ${m0.y.toFixed(2)} `;
+  for (let i = 0; i < N; i++) {
+    const p = pts[i];
+    const nm = mid(p, pts[(i + 1) % N]);
+    d += `Q ${p.x.toFixed(2)} ${p.y.toFixed(2)} ${nm.x.toFixed(2)} ${nm.y.toFixed(2)} `;
   }
+  return d + "Z";
+}
 
-  function stopIdleBreathing() {
-    phaseTimers.current.forEach(clearTimeout);
-    phaseTimers.current = [];
-    idleLoopRefs.current.forEach(l => l?.stop());
-    idleLoopRefs.current = [null, null, null, null, null];
-  }
+type OrbPulse = {
+  id: number;
+  startTime: number;
+  maxRadius: number;
+  basePath: string;
+};
 
-  function startAmplitudeTracking() {
-    lastAmp.current = -1;
-    function loop() {
-      const amp = amplitudeRef.current;
-      if (Math.abs(amp - lastAmp.current) > 0.01) {
-        lastAmp.current = amp;
-        ampTimers.current.forEach(clearTimeout);
-        ampTimers.current = [];
-        RING_DEFS.forEach((cfg, i) => {
-          const target = cfg.scaleMin + amp * (cfg.scaleMax - cfg.scaleMin);
-          const t = setTimeout(() => {
-            Animated.timing(ringScales[i], { toValue: target, duration: 80, useNativeDriver: true }).start();
-          }, cfg.delay);
-          ampTimers.current.push(t);
-        });
-        const opTarget = amp > 0.6 ? 0.7 : 0.5;
-        Animated.timing(coreOpacity, { toValue: opTarget, duration: 80, useNativeDriver: true }).start();
+type OrbPulseRender = {
+  id: number;
+  basePath: string;
+  transform: string;
+  glowStroke: number;
+  coreStroke: number;
+  glowOp: number;
+  coreOp: number;
+};
+
+type OrbAnimState = {
+  orbRadius: number;
+  bgScale: number;
+  pulses: OrbPulseRender[];
+};
+
+const PULSE_DURATION = 1400;
+const ORB_SVG_SIZE   = 300;
+const ORB_CENTER     = 150; // cx = cy = ORB_SVG_SIZE / 2
+
+type OrbProps = { amplitudeRef: React.MutableRefObject<number>; isRecording: boolean };
+
+function VoiceOrb({ amplitudeRef, isRecording }: OrbProps) {
+  const [anim, setAnim] = useState<OrbAnimState>({
+    orbRadius: 40,
+    bgScale: 1.0,
+    pulses: [],
+  });
+
+  const pulsesRef      = useRef<OrbPulse[]>([]);
+  const lastSpawnRef   = useRef<number>(0);
+  const lastFrameRef   = useRef<number>(0);
+  const lastStateRef   = useRef<number>(0);
+  const rafRef         = useRef<number | null>(null);
+  const mountedRef     = useRef(true);
+  const isRecordingRef = useRef(isRecording);
+
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    function frame(timestamp: number) {
+      if (!mountedRef.current) return;
+      lastFrameRef.current = timestamp;
+
+      const now       = timestamp;
+      const amp       = amplitudeRef.current;
+      const recording = isRecordingRef.current;
+
+      // ── Orb radius ──────────────────────────────────────────────────────────
+      const newOrbRadius = recording
+        ? 30 + amp * 20                                          // 30–50 live
+        : 40 + Math.sin((now / 2500) * Math.PI * 2) * 4;        // 36–44 idle
+
+      // ── Background scale (5 s, 0.97–1.03) ──────────────────────────────────
+      const newBgScale = 1.0 + Math.sin((now / 5000) * Math.PI * 2) * 0.03;
+
+      // ── Spawn pulse ─────────────────────────────────────────────────────────
+      const spawnInterval = recording ? (amp > 0.6 ? 200 : 700) : 2500;
+      if (now - lastSpawnRef.current > spawnInterval && pulsesRef.current.length < 5) {
+        const maxR    = recording && amp > 0.6 ? 150 : 100;
+        const offsets = Array.from({ length: 12 }, () => (Math.random() - 0.5) * 6);
+        pulsesRef.current = [
+          ...pulsesRef.current,
+          { id: now, startTime: now, maxRadius: maxR, basePath: computeOrganicPath(offsets) },
+        ];
+        lastSpawnRef.current = now;
       }
-      rafRef.current = requestAnimationFrame(loop);
+
+      // ── Expire pulses ────────────────────────────────────────────────────────
+      pulsesRef.current = pulsesRef.current.filter(p => now - p.startTime < PULSE_DURATION);
+
+      // ── Throttle state update to ~30 fps ────────────────────────────────────
+      if (now - lastStateRef.current >= 33) {
+        lastStateRef.current = now;
+        const C = ORB_CENTER;
+
+        const pulses: OrbPulseRender[] = pulsesRef.current.map(p => {
+          const t   = Math.min((now - p.startTime) / PULSE_DURATION, 1);
+          const tE  = 1 - Math.pow(1 - t, 2);                // quadratic ease-out
+          const scale = 1 + tE * (p.maxRadius / 45 - 1);     // 1 → maxRadius/45
+
+          // Scale the path around the SVG center: translate(cx*(1-s), cy*(1-s)) scale(s)
+          const tx        = C * (1 - scale);
+          const transform = `translate(${tx.toFixed(3)}, ${tx.toFixed(3)}) scale(${scale.toFixed(4)})`;
+
+          // Stroke widths compensate for scale so the visual weight is consistent
+          const designStroke = 3 - 2.5 * t;  // 3 → 0.5
+          return {
+            id:          p.id,
+            basePath:    p.basePath,
+            transform,
+            glowStroke:  8 / scale,
+            coreStroke:  designStroke / scale,
+            glowOp:      0.3 * (1 - tE),
+            coreOp:      0.5 * (1 - tE),
+          };
+        });
+
+        setAnim({ orbRadius: newOrbRadius, bgScale: newBgScale, pulses });
+      }
+
+      rafRef.current = requestAnimationFrame(frame);
     }
-    rafRef.current = requestAnimationFrame(loop);
-  }
 
-  function stopAmplitudeTracking() {
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    ampTimers.current.forEach(clearTimeout);
-    ampTimers.current = [];
-  }
+    rafRef.current = requestAnimationFrame(frame);
 
-  const SZ = 460;
+    return () => {
+      mountedRef.current = false;
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      pulsesRef.current   = [];
+      lastSpawnRef.current = 0;
+      lastStateRef.current = 0;
+    };
+  }, []); // intentional empty deps — reads isRecording and amplitude via refs
+
+  const C = ORB_CENTER;
+  const bgTx = C * (1 - anim.bgScale);
 
   return (
-    <View style={{ width: SZ, height: SZ, alignItems: "center", justifyContent: "center" }}>
-      {/* Background glow — behind everything */}
-      <Animated.View style={{
-        position:        "absolute",
-        width:           280,
-        height:          280,
-        borderRadius:    140,
-        backgroundColor: Colors.accent + "0A",
-        transform:       [{ scale: bgScale }],
-      }} />
+    <View style={{ width: ORB_SVG_SIZE, height: ORB_SVG_SIZE, alignItems: "center", justifyContent: "center" }}>
+      <Svg width={ORB_SVG_SIZE} height={ORB_SVG_SIZE} viewBox="0 0 300 300">
+        <Defs>
+          {/* Orb: accent at center, fully transparent at edge → true glow */}
+          <RadialGradient id="orbGrad" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <Stop offset="0%"   stopColor={Colors.accent} stopOpacity={1} />
+            <Stop offset="100%" stopColor={Colors.accent} stopOpacity={0} />
+          </RadialGradient>
+          {/* Background: very faint accent halo */}
+          <RadialGradient id="bgGlow" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <Stop offset="0%"   stopColor={Colors.accent} stopOpacity={0.05} />
+            <Stop offset="100%" stopColor={Colors.accent} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
 
-      {/* 5 concentric rings */}
-      {RING_DEFS.map((cfg, i) => (
-        <Animated.View
-          key={i}
-          style={{
-            position:    "absolute",
-            width:       cfg.radius * 2,
-            height:      cfg.radius * 2,
-            borderRadius: cfg.radius,
-            borderWidth:  cfg.bw,
-            borderColor:  Colors.accent + cfg.hexOpacity,
-            transform:   [{ scale: ringScales[i] }],
-          }}
+        {/* Background glow — slowly scales 0.97–1.03 on 5 s loop */}
+        <Circle
+          cx={C} cy={C} r={130}
+          fill="url(#bgGlow)"
+          transform={`translate(${bgTx.toFixed(3)}, ${bgTx.toFixed(3)}) scale(${anim.bgScale.toFixed(4)})`}
         />
-      ))}
 
-      {/* Center: outer glow disc */}
-      <View style={{
-        position:        "absolute",
-        width:           80,
-        height:          80,
-        borderRadius:    40,
-        backgroundColor: Colors.accent + "26",
-      }} />
+        {/* Shockwave pulses — glow layer behind core layer */}
+        {anim.pulses.map(p => (
+          <G key={p.id} transform={p.transform}>
+            {/* Glow: thick, very faint stroke for bloom effect */}
+            <Path
+              d={p.basePath}
+              fill="none"
+              stroke={Colors.accent}
+              strokeWidth={p.glowStroke}
+              strokeOpacity={p.glowOp}
+            />
+            {/* Core: thin, bright stroke */}
+            <Path
+              d={p.basePath}
+              fill="none"
+              stroke={Colors.accent}
+              strokeWidth={p.coreStroke}
+              strokeOpacity={p.coreOp}
+            />
+          </G>
+        ))}
 
-      {/* Center: solid core (opacity-animated) */}
-      <Animated.View style={{
-        position:        "absolute",
-        width:           56,
-        height:          56,
-        borderRadius:    28,
-        backgroundColor: Colors.accent,
-        opacity:         coreOpacity,
-      }} />
+        {/* Center orb — radial gradient fills a softly breathing circle */}
+        <Circle cx={C} cy={C} r={anim.orbRadius} fill="url(#orbGrad)" />
+      </Svg>
 
-      {/* Mic icon — always on top */}
+      {/* Mic icon — native View floating over the SVG */}
       <View style={{ position: "absolute", alignItems: "center", justifyContent: "center" }}>
         <Ionicons name="mic" size={24} color="#fff" />
       </View>
@@ -666,7 +717,7 @@ export function LogSheet({
 
             {/* Center: waveform + status text */}
             <View style={styles.recordingCenter}>
-              <ConcentricRings amplitudeRef={amplitudeRef} isRecording={phase === "recording"} />
+              <VoiceOrb amplitudeRef={amplitudeRef} isRecording={phase === "recording"} />
 
               <Text style={[
                 styles.recordingStatus,

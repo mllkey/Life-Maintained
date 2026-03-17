@@ -1,0 +1,64 @@
+CONTEXT: Building a voice recording visualization with REAL glowing effects. React Native Views cannot glow — we need react-native-svg (already installed) to achieve actual blur/glow using SVG filters. The visualization is a center orb that emits shockwave pulses.
+IMPORTANT: Only modify the visualization in components/LogSheet.tsx. Do NOT modify any other code. Do NOT touch routing, onboarding, or auth logic. Import from react-native-svg as needed (Svg, Circle, Defs, RadialGradient, Stop, G are available).
+
+TASK: Render the visualization using react-native-svg for real glow effects.
+CENTER ORB using SVG radial gradient:
+
+Svg viewBox centered, 300x300
+Defs with RadialGradient: center is Colors.accent at 100% opacity, fading to Colors.accent at 0% opacity at the edges
+One filled Circle using this gradient, r=40 — this creates a true soft glowing orb, not a flat circle
+Mic icon overlaid on top (regular React Native View positioned absolutely over the SVG)
+When idle: orb radius gently animates between 36-44 on a 2.5s loop
+When recording: radius responds to amplitude (30-50 range)
+
+SHOCKWAVE PULSES using SVG circles:
+
+Each pulse is an SVG Circle with no fill, stroke only (Colors.accent)
+strokeWidth starts at 3 and decreases to 0.5 as the circle expands
+strokeOpacity starts at 0.5 and fades to 0
+Circle radius starts at 45 (orb edge), expands to 130
+Duration: 1400ms, ease-out easing
+Since SVG doesn't support Animated directly, use requestAnimationFrame to update circle props via state or refs. Keep a pulses array in useRef, each pulse with {id, startTime, randomOffsets}. On each frame, calculate current radius and opacity based on elapsed time.
+
+ORGANIC SHAPE for pulses:
+
+Instead of perfect circles, draw each pulse as an SVG Path that approximates a wobbly circle. Generate the path once per pulse on spawn:
+12 control points evenly spaced around a circle, each with ±3px random radial offset
+Connect with smooth bezier curves (SVG C commands) to form a slightly irregular closed ring
+Scale this path outward as the pulse expands
+This makes each pulse unique and organic
+
+SPAWN TIMING:
+
+Idle: one pulse every 2500ms
+Recording quiet: every 700ms
+Recording loud: every 200ms
+Max 5 active pulses
+Amplitude affects max expansion: quiet 100px, loud 150px
+
+GLOW ON PULSES:
+
+Render each pulse circle TWICE: once with strokeWidth 8 and strokeOpacity at 30% of the pulse opacity (the glow), and once with normal strokeWidth (the core line). The thick faint stroke behind the thin bright stroke creates bloom.
+
+BACKGROUND GLOW:
+
+Large SVG Circle, r=130, filled with RadialGradient from Colors.accent at 5% to transparent
+Pulses scale 0.97-1.03 on 5-second loop
+
+ANIMATION APPROACH:
+
+Use a single requestAnimationFrame loop for all animations
+Track time with useRef for deltaTime calculations
+Update SVG elements by setting state with the current pulse array each frame (throttle to 30fps to avoid excessive re-renders: only update state every 33ms)
+
+Keep all text, record/stop button, and "Type instead" link unchanged.
+VERIFICATION:
+
+Center orb genuinely GLOWS with radial gradient — not flat circles
+Pulses have visible glow/bloom effect
+Each pulse is slightly irregular, not a perfect circle
+Idle: orb breathes, occasional pulse
+Recording: pulses respond to voice
+Smooth 30fps animation without jank
+All recording/transcription/processing works
+Zero TypeScript errors
