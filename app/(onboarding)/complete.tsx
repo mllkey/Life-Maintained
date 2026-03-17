@@ -10,37 +10,62 @@ export default function OnboardingCompleteScreen() {
   const insets = useSafeAreaInsets();
   const { setOnboardingCompleted } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
+  const [writeError, setWriteError] = useState<string | null>(null);
+
+  async function tryUpsert(userId: string): Promise<boolean> {
+    const { error } = await supabase
+      .from("profiles")
+      .upsert(
+        { user_id: userId, onboarding_completed: true, updated_at: new Date().toISOString() },
+        { onConflict: "user_id" }
+      );
+    if (error) {
+      console.error("[complete] DB write error:", error.message);
+      return false;
+    }
+    console.log("[complete] DB write succeeded — onboarding_completed=true");
+    return true;
+  }
 
   async function completeOnboarding() {
     if (isSaving) return;
     setIsSaving(true);
+    setWriteError(null);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        console.log("[complete] Writing onboarding_completed=true for user:", user.id);
-        // upsert (not update) so the row is created if it doesn't exist yet
-        const { error } = await supabase
-          .from("profiles")
-          .upsert(
-            { user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() },
-            { onConflict: "user_id" }
-          );
-        if (error) {
-          console.error("[complete] DB write error:", error.message);
-        } else {
-          console.log("[complete] DB write succeeded — onboarding_completed=true");
-        }
-      } else {
+      if (!user) {
         console.warn("[complete] No user found when trying to write onboarding_completed");
+        setWriteError("Could not verify your account. Please try again.");
+        setIsSaving(false);
+        return;
       }
+
+      console.log("[complete] Writing onboarding_completed=true for user:", user.id);
+
+      let success = await tryUpsert(user.id);
+
+      if (!success) {
+        console.warn("[complete] First upsert failed, retrying in 1.5 seconds...");
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        success = await tryUpsert(user.id);
+      }
+
+      if (!success) {
+        setWriteError("Failed to save your progress. Please check your connection and try again.");
+        setIsSaving(false);
+        return;
+      }
+
+      // Only proceed to the app once the DB write is confirmed.
+      setOnboardingCompleted(true);
+      setIsSaving(false);
+      router.replace("/(tabs)");
     } catch (e) {
       console.error("[complete] Unexpected error:", e);
+      setWriteError("Something went wrong. Please try again.");
+      setIsSaving(false);
     }
-
-    setOnboardingCompleted(true);
-    setIsSaving(false);
-    router.replace("/(tabs)");
   }
 
   return (
@@ -59,6 +84,9 @@ export default function OnboardingCompleteScreen() {
         <Text style={styles.subtitle}>
           Your maintenance hub is ready. Start tracking vehicles, home tasks, and health appointments.
         </Text>
+        {writeError ? (
+          <Text style={styles.errorText}>{writeError}</Text>
+        ) : null}
       </View>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
@@ -74,7 +102,7 @@ export default function OnboardingCompleteScreen() {
           {isSaving ? (
             <ActivityIndicator color={Colors.textInverse} />
           ) : (
-            <Text style={styles.ctaText}>Get Started</Text>
+            <Text style={styles.ctaText}>{writeError ? "Try Again" : "Get Started"}</Text>
           )}
         </Pressable>
       </View>
@@ -117,6 +145,13 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: "center",
     lineHeight: 22,
+  },
+  errorText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: "#FF453A",
+    textAlign: "center",
+    lineHeight: 20,
   },
 
   footer: { paddingTop: 16 },

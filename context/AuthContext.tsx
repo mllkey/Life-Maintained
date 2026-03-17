@@ -34,14 +34,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const userIdRef = useRef<string | null>(null);
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string, attempt = 0) => {
     try {
       const { data, error } = await supabase
         .from("profiles")
         .select(PROFILE_SELECT)
         .eq("user_id", userId)
         .single();
-      if (error) throw error;
+
+      if (error) {
+        // PGRST116 = no rows returned. Expected for brand-new users who haven't
+        // completed onboarding yet — the profile row is created by complete.tsx upsert.
+        // For any other error (network, auth, RLS), retry once before giving up.
+        const isNoRows = (error as any)?.code === "PGRST116";
+        if (!isNoRows && attempt === 0 && mountedRef.current) {
+          console.warn("[AUTH] fetchProfile transient error (attempt 0), retrying in 1.5s...", error.message);
+          await new Promise(r => setTimeout(r, 1500));
+          if (mountedRef.current) return fetchProfile(userId, 1);
+          return;
+        }
+        throw error;
+      }
+
       if (!mountedRef.current) return;
       console.log("[AUTH] fetchProfile result:", JSON.stringify(data));
       console.log("[AUTH] onboarding_completed from DB:", (data as any)?.onboarding_completed);
@@ -63,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileLoaded(true);
       checkAndResetScanCount(userId, fullProfile).catch(() => {});
     } catch (e) {
-      console.error("[AUTH] fetchProfile error:", e);
+      console.error("[AUTH] fetchProfile error (attempt", attempt, "):", e);
       if (mountedRef.current) {
         // Do NOT reset onboardingCompleted here — preserve whatever value it already has.
         // For the initial load this means it stays false, which safely redirects to /(auth).
