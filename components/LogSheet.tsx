@@ -14,6 +14,8 @@ import {
   Easing,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
+import * as FileSystem from "expo-file-system";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
@@ -21,6 +23,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { matchAndUpdateVehicleTask, matchAndUpdatePropertyTask } from "@/lib/maintenanceMatcher";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
+
+type RecordPhase =
+  | "idle"
+  | "recording"
+  | "transcribing"
+  | "type"
+  | "processing"
+  | "results"
+  | "error";
 
 type ExtractedItem = {
   category: "vehicle" | "property" | "health";
@@ -34,6 +45,8 @@ type ExtractedItem = {
   notes: string | null;
   confidence: "high" | "medium" | "low";
 };
+
+// ─── Wave Bars (ambient decoration for text input mode) ─────────────────────
 
 const BAR_DURATIONS = [420, 620, 370, 700, 310, 530, 460];
 const BAR_DELAYS    = [0,   120, 240, 60,  180, 320, 80 ];
@@ -88,6 +101,8 @@ function WaveBars() {
   );
 }
 
+// ─── Field Row ───────────────────────────────────────────────────────────────
+
 function FieldRow({
   label, value, onChange, placeholder, keyboard, prefix, suffix,
 }: {
@@ -117,6 +132,8 @@ function FieldRow({
     </View>
   );
 }
+
+// ─── Confirm Card ────────────────────────────────────────────────────────────
 
 function ConfirmCard({
   item, userId, onDone,
@@ -277,6 +294,8 @@ function ConfirmCard({
   );
 }
 
+// ─── LogSheet ────────────────────────────────────────────────────────────────
+
 export function LogSheet({
   visible, onClose, userId,
 }: {
@@ -285,15 +304,194 @@ export function LogSheet({
   userId: string;
 }) {
   const insets = useSafeAreaInsets();
-  const [phase, setPhase] = useState<"input" | "processing" | "results" | "error">("input");
+  const [phase, setPhase] = useState<RecordPhase>("idle");
   const [text, setText] = useState("");
   const [items, setItems] = useState<ExtractedItem[]>([]);
   const [doneCount, setDoneCount] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Ring animation values (scale, native driver OK)
+  const ring1 = useRef(new Animated.Value(0.5)).current;
+  const ring2 = useRef(new Animated.Value(0.5)).current;
+  const ring3 = useRef(new Animated.Value(0.5)).current;
+  const idleAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  const r2TimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const r3TimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+
+  // Reset + start idle pulse when sheet becomes visible
+  useEffect(() => {
+    if (visible) {
+      setPhase("idle");
+      setText("");
+      setItems([]);
+      setDoneCount(0);
+      setErrorMsg("");
+      startIdlePulse();
+    } else {
+      stopIdlePulse();
+      safeStopRecording();
+    }
+  }, [visible]);
+
+  // Manage idle pulse based on phase
+  useEffect(() => {
+    if (phase === "idle") {
+      startIdlePulse();
+    } else {
+      stopIdlePulse();
+    }
+  }, [phase]);
+
+  function startIdlePulse() {
+    stopIdlePulse();
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(ring1, { toValue: 0.55, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+          Animated.timing(ring2, { toValue: 0.55, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+          Animated.timing(ring3, { toValue: 0.55, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        ]),
+        Animated.parallel([
+          Animated.timing(ring1, { toValue: 0.45, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+          Animated.timing(ring2, { toValue: 0.45, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+          Animated.timing(ring3, { toValue: 0.45, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        ]),
+      ])
+    );
+    idleAnimRef.current = anim;
+    anim.start();
+  }
+
+  function stopIdlePulse() {
+    idleAnimRef.current?.stop();
+    idleAnimRef.current = null;
+  }
+
+  function updateRings(metering: number) {
+    const amp = Math.max(0, (metering + 60) / 60);
+    const s1 = 0.5 + amp * 0.7;
+    const s2 = 0.5 + amp * 0.7 * 0.8;
+    const s3 = 0.5 + amp * 0.7 * 0.6;
+
+    Animated.timing(ring1, { toValue: s1, duration: 100, useNativeDriver: true }).start();
+
+    if (r2TimerRef.current) clearTimeout(r2TimerRef.current);
+    r2TimerRef.current = setTimeout(() => {
+      Animated.timing(ring2, { toValue: s2, duration: 100, useNativeDriver: true }).start();
+    }, 100);
+
+    if (r3TimerRef.current) clearTimeout(r3TimerRef.current);
+    r3TimerRef.current = setTimeout(() => {
+      Animated.timing(ring3, { toValue: s3, duration: 100, useNativeDriver: true }).start();
+    }, 200);
+  }
+
+  async function safeStopRecording() {
+    const rec = recordingRef.current;
+    if (!rec) return;
+    recordingRef.current = null;
+    try {
+      await rec.stopAndUnloadAsync();
+    } catch (_) {}
+    try {
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+    } catch (_) {}
+  }
+
+  async function handleStartRecording() {
+    try {
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted) {
+        setPhase("type");
+        return;
+      }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+
+      const rec = new Audio.Recording();
+      await rec.prepareToRecordAsync({
+        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        isMeteringEnabled: true,
+      });
+      rec.setOnRecordingStatusUpdate((status) => {
+        if (status.isRecording && status.metering !== undefined) {
+          updateRings(status.metering);
+        }
+      });
+      rec.setProgressUpdateInterval(100);
+      await rec.startAsync();
+
+      recordingRef.current = rec;
+      setPhase("recording");
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (err) {
+      console.error("[LogSheet] Start recording error:", err);
+      setPhase("type");
+    }
+  }
+
+  async function handleStopRecording() {
+    const rec = recordingRef.current;
+    if (!rec) { setPhase("type"); return; }
+
+    try {
+      await rec.stopAndUnloadAsync();
+      const uri = rec.getURI();
+      recordingRef.current = null;
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+
+      ring1.setValue(0.5);
+      ring2.setValue(0.5);
+      ring3.setValue(0.5);
+
+      setPhase("transcribing");
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await handleTranscribe(uri);
+    } catch (err) {
+      console.error("[LogSheet] Stop recording error:", err);
+      recordingRef.current = null;
+      setPhase("type");
+    }
+  }
+
+  async function handleTranscribe(uri: string | null) {
+    if (!uri) {
+      setPhase("type");
+      return;
+    }
+    try {
+      const fileContent = await FileSystem.readAsStringAsync(uri, {
+        encoding: "base64" as any,
+      });
+      const { data, error } = await supabase.functions.invoke("transcribe-audio", {
+        body: { audio: fileContent, mimeType: "audio/m4a" },
+      });
+      if (error || data?.error) {
+        console.error("[transcribe] error:", error ?? data?.error);
+        setErrorMsg("Transcription failed. You can type your log below.");
+        setText("");
+        setPhase("type");
+        return;
+      }
+      const transcribed: string = data?.text ?? "";
+      setText(transcribed);
+      setPhase("type");
+    } catch (err) {
+      console.error("[transcribe] caught:", err);
+      setErrorMsg("Transcription failed. You can type your log below.");
+      setText("");
+      setPhase("type");
+    }
+  }
+
   function handleClose() {
+    safeStopRecording();
+    stopIdlePulse();
+    ring1.setValue(0.5);
+    ring2.setValue(0.5);
+    ring3.setValue(0.5);
     setText("");
-    setPhase("input");
+    setPhase("idle");
     setItems([]);
     setDoneCount(0);
     setErrorMsg("");
@@ -352,84 +550,272 @@ export function LogSheet({
     }
   }
 
+  const isRecordingPhase = phase === "idle" || phase === "recording" || phase === "transcribing";
+  const isTextPhase = phase === "type" || phase === "error";
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <View style={{ flex: 1 }}>
-        <Pressable style={styles.sheetOverlay} onPress={handleClose} />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.sheetKAV}
-        >
-          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
-            <View style={styles.sheetHandleBar} />
 
-            <View style={styles.sheetHeader}>
-              <View style={styles.sheetIconWrap}>
-                <Ionicons name="mic-outline" size={17} color={Colors.accent} />
-              </View>
-              <Text style={styles.sheetTitle}>Log Maintenance</Text>
-              <Pressable onPress={handleClose} hitSlop={10} style={styles.sheetCloseBtn}>
-                <Ionicons name="close" size={20} color={Colors.textTertiary} />
+        {/* ── Recording overlay (idle / recording / transcribing) ── */}
+        {isRecordingPhase && (
+          <View style={[styles.recordingScreen, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]}>
+            {/* Close button */}
+            <View style={styles.recordingTopBar}>
+              <Pressable onPress={handleClose} hitSlop={12} style={styles.recordingCloseBtn}>
+                <Ionicons name="close" size={22} color={Colors.textTertiary} />
               </Pressable>
             </View>
 
-            {(phase === "input" || phase === "error") && (
-              <View style={{ gap: 12 }}>
-                {phase === "error" && (
-                  <View style={styles.sheetErrorBanner}>
-                    <Ionicons name="alert-circle-outline" size={14} color={Colors.overdue} />
-                    <Text style={styles.sheetErrorText}>{errorMsg}</Text>
+            {/* Center: rings + status text */}
+            <View style={styles.recordingCenter}>
+              <View style={styles.ringsContainer}>
+                <Animated.View style={[styles.ring3, { transform: [{ scale: ring3 }] }]} />
+                <Animated.View style={[styles.ring2, { transform: [{ scale: ring2 }] }]} />
+                <Animated.View style={[styles.ring1, { transform: [{ scale: ring1 }] }]} />
+                <View style={styles.ringMicCenter}>
+                  <Ionicons name="mic" size={32} color="#fff" />
+                </View>
+              </View>
+
+              <Text style={[
+                styles.recordingStatus,
+                phase === "recording" && { color: "#fff" },
+              ]}>
+                {phase === "idle"
+                  ? "Tap to start"
+                  : phase === "recording"
+                    ? "Listening..."
+                    : "Transcribing..."}
+              </Text>
+            </View>
+
+            {/* Bottom: mic button + type-instead */}
+            <View style={styles.recordingBottom}>
+              {phase === "transcribing" ? (
+                <View style={styles.transcribingRow}>
+                  <ActivityIndicator size="small" color={Colors.accent} />
+                  <Text style={styles.transcribingText}>Processing audio...</Text>
+                </View>
+              ) : (
+                <>
+                  <Pressable
+                    style={[
+                      styles.recordingBtn,
+                      phase === "recording" && styles.recordingBtnStop,
+                    ]}
+                    onPress={phase === "idle" ? handleStartRecording : handleStopRecording}
+                  >
+                    <Ionicons
+                      name={phase === "idle" ? "mic" : "stop"}
+                      size={28}
+                      color="#fff"
+                    />
+                  </Pressable>
+                  <Pressable onPress={() => { stopIdlePulse(); setPhase("type"); }} hitSlop={8}>
+                    <Text style={styles.typeInsteadText}>Type instead →</Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* ── Text / Processing / Results (bottom sheet) ── */}
+        {!isRecordingPhase && (
+          <>
+            <Pressable style={styles.sheetOverlay} onPress={handleClose} />
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              style={styles.sheetKAV}
+            >
+              <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
+                <View style={styles.sheetHandleBar} />
+
+                <View style={styles.sheetHeader}>
+                  <View style={styles.sheetIconWrap}>
+                    <Ionicons name="mic-outline" size={17} color={Colors.accent} />
+                  </View>
+                  <Text style={styles.sheetTitle}>Log Maintenance</Text>
+                  <Pressable onPress={handleClose} hitSlop={10} style={styles.sheetCloseBtn}>
+                    <Ionicons name="close" size={20} color={Colors.textTertiary} />
+                  </Pressable>
+                </View>
+
+                {isTextPhase && (
+                  <View style={{ gap: 12 }}>
+                    {phase === "error" && (
+                      <View style={styles.sheetErrorBanner}>
+                        <Ionicons name="alert-circle-outline" size={14} color={Colors.overdue} />
+                        <Text style={styles.sheetErrorText}>{errorMsg}</Text>
+                      </View>
+                    )}
+                    {errorMsg !== "" && phase === "type" && (
+                      <View style={styles.sheetErrorBanner}>
+                        <Ionicons name="alert-circle-outline" size={14} color={Colors.overdue} />
+                        <Text style={styles.sheetErrorText}>{errorMsg}</Text>
+                      </View>
+                    )}
+                    <View>
+                      <WaveBars />
+                      <TextInput
+                        style={styles.sheetTextInput}
+                        value={text}
+                        onChangeText={setText}
+                        placeholder="Tap 🎤 on keyboard to dictate, or type here"
+                        placeholderTextColor={Colors.textTertiary}
+                        multiline
+                        numberOfLines={4}
+                        autoFocus
+                        textAlignVertical="top"
+                        returnKeyType="default"
+                      />
+                      <Text style={styles.sheetHint}>Use your keyboard{"'"}s microphone button to speak</Text>
+                    </View>
+                    <Pressable
+                      style={[styles.sheetProcessBtn, !text.trim() && { opacity: 0.45 }]}
+                      onPress={handleProcess}
+                      disabled={!text.trim()}
+                    >
+                      <Ionicons name="sparkles-outline" size={15} color="#fff" />
+                      <Text style={styles.sheetProcessBtnText}>Process</Text>
+                    </Pressable>
                   </View>
                 )}
-                <View>
-                  <WaveBars />
-                  <TextInput
-                    style={styles.sheetTextInput}
-                    value={text}
-                    onChangeText={setText}
-                    placeholder="Tap 🎤 on keyboard to dictate, or type here"
-                    placeholderTextColor={Colors.textTertiary}
-                    multiline
-                    numberOfLines={4}
-                    autoFocus
-                    textAlignVertical="top"
-                    returnKeyType="default"
-                  />
-                  <Text style={styles.sheetHint}>Use your keyboard{"'"}s microphone button to speak</Text>
-                </View>
-                <Pressable
-                  style={[styles.sheetProcessBtn, !text.trim() && { opacity: 0.45 }]}
-                  onPress={handleProcess}
-                  disabled={!text.trim()}
-                >
-                  <Ionicons name="sparkles-outline" size={15} color="#fff" />
-                  <Text style={styles.sheetProcessBtnText}>Process</Text>
-                </Pressable>
-              </View>
-            )}
 
-            {phase === "processing" && (
-              <View style={styles.sheetProcessing}>
-                <ActivityIndicator size="small" color={Colors.accent} />
-                <Text style={styles.sheetProcessingText}>Analyzing...</Text>
-              </View>
-            )}
+                {phase === "processing" && (
+                  <View style={styles.sheetProcessing}>
+                    <ActivityIndicator size="small" color={Colors.accent} />
+                    <Text style={styles.sheetProcessingText}>Analyzing...</Text>
+                  </View>
+                )}
 
-            {phase === "results" && (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }}>
-                {items.map((item, idx) => (
-                  <ConfirmCard key={idx} item={item} userId={userId} onDone={markDone} />
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        </KeyboardAvoidingView>
+                {phase === "results" && (
+                  <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }}>
+                    {items.map((item, idx) => (
+                      <ConfirmCard key={idx} item={item} userId={userId} onDone={markDone} />
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            </KeyboardAvoidingView>
+          </>
+        )}
       </View>
     </Modal>
   );
 }
 
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
+  // Recording overlay
+  recordingScreen: {
+    flex: 1,
+    backgroundColor: "rgba(12,17,27,0.97)",
+    justifyContent: "space-between",
+  },
+  recordingTopBar: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 20,
+    paddingTop: 4,
+  },
+  recordingCloseBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+  },
+  recordingCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 32,
+  },
+  ringsContainer: {
+    width: 240,
+    height: 240,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ring3: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    borderWidth: 2,
+    borderColor: Colors.accent + "44",
+  },
+  ring2: {
+    position: "absolute",
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    borderWidth: 2,
+    borderColor: Colors.accent + "88",
+  },
+  ring1: {
+    position: "absolute",
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 2,
+    borderColor: Colors.accent,
+  },
+  ringMicCenter: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recordingStatus: {
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textSecondary,
+    textAlign: "center",
+  },
+  recordingBottom: {
+    alignItems: "center",
+    gap: 16,
+    paddingHorizontal: 20,
+  },
+  recordingBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  recordingBtnStop: {
+    backgroundColor: Colors.overdue,
+    shadowColor: Colors.overdue,
+  },
+  typeInsteadText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+  },
+  transcribingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 20,
+  },
+  transcribingText: {
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+  },
+
+  // Bottom sheet
   sheetOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.55)",
@@ -554,6 +940,8 @@ const styles = StyleSheet.create({
     color: Colors.overdue,
     lineHeight: 18,
   },
+
+  // Confirm card
   confirmCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -637,6 +1025,8 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: Colors.overdue,
   },
+
+  // Field row
   fieldRow: {
     flexDirection: "row",
     alignItems: "center",

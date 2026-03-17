@@ -1,0 +1,70 @@
+CONTEXT: Building a premium voice recording experience with real transcription. The user taps the mic FAB, sees a full-screen overlay with audio-reactive rings, speaks, the recording is sent to OpenAI Whisper for transcription, and the transcribed text appears for review before processing.
+IMPORTANT: This requires two parts — a new Supabase Edge Function for transcription, and a redesigned LogSheet. Install expo-av if not present (npx expo install expo-av). Add "expo-av" to plugins in app.json. OPENAI_API_KEY is already set in Supabase secrets.
+
+PART 1 — Create Edge Function "transcribe-audio":
+Create supabase/functions/transcribe-audio/index.ts following the same pattern as scan-receipt (same CORS headers, same JWT auth).
+The function:
+
+Receives a base64-encoded audio file in the request body: { audio: "base64string", mimeType: "audio/m4a" }
+Validates JWT auth
+Converts base64 to a blob/file
+Sends it to OpenAI Whisper API: POST https://api.openai.com/v1/audio/transcriptions with model "whisper-1", the audio file, and Authorization header using OPENAI_API_KEY from env
+Returns { text: "transcribed text" } on success
+Returns { error: "message" } on failure
+
+Deploy note: after creating the file, deploy with cd ~/Life-Maintained/supabase && supabase functions deploy transcribe-audio
+PART 2 — Redesign LogSheet (components/LogSheet.tsx):
+Replace the current text-input-first interface with a recording-first experience.
+PHASE 1 — Recording overlay:
+When LogSheet opens, show a full-screen view (backgroundColor Colors.background at 95% opacity):
+Center: 3 concentric ring circles, Colors.accent (orange), borderWidth 2, borderRadius 9999.
+The rings REACT TO VOICE:
+
+Use expo-av Audio.Recording with isMeteringEnabled: true
+onRecordingStatusUpdate provides metering (dB, typically -160 to 0)
+Normalize: Math.max(0, (metering + 60) / 60) gives 0-1 scale
+Map to ring scale: idle = 0.5, loud = 1.2
+Ring 1: direct response. Ring 2: 80% amplitude, 100ms delayed. Ring 3: 60% amplitude, 200ms delayed.
+Use Animated.timing with 100ms duration for responsive feel
+When idle (not recording), rings pulse gently: scale 0.45-0.55, 2000ms Animated.loop
+Mic icon (32px, white) centered inside the rings, static
+
+Below rings:
+
+"Tap to start" 18px/600/Colors.textSecondary when idle
+"Listening..." 18px/600/white when recording
+
+Bottom:
+
+72px circular button: Colors.accent + mic icon when idle, Colors.overdue + stop icon when recording
+"Type instead →" 13px/Colors.textSecondary below — opens text input mode
+
+Request Audio.requestPermissionsAsync() before recording. If denied, go directly to text input mode.
+PHASE 2 — After recording stops:
+
+Show a brief "Transcribing..." state with a subtle spinner
+Send the audio to supabase.functions.invoke("transcribe-audio") with the recorded file as base64
+On success: display the transcribed text in an editable TextInput so the user can review/fix it
+Below the text: "Process" button (same as current)
+On transcription failure: show error and fall back to empty text input
+
+PHASE 3 — Text input mode (fallback):
+If user taps "Type instead" or mic permission is denied:
+
+Show the text input with animated wave bars (7 bars, 4px wide, Colors.accent, continuous subtle animation as ambient decoration)
+Placeholder: "Describe what you did..."
+Process button below
+This is the current experience but with the wave bars added for visual polish
+
+All existing Process, confirmation card, and save logic stays identical — the only change is how the text gets into the input field (voice recording + Whisper vs typing/dictation).
+VERIFICATION:
+
+Tap mic FAB → recording overlay with orange rings
+Tap record → rings respond to actual voice volume
+Stop recording → "Transcribing..." → text appears in editable field
+Edit text if needed → tap Process → confirmation cards appear
+"Type instead" opens text input with animated wave bars
+Mic permission denied → falls back gracefully to text input
+Transcription error → falls back to empty text input with error message
+All save/confirmation logic unchanged
+Zero TypeScript errors

@@ -45,7 +45,8 @@
           "color": "#E8943A"
         }
       ],
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-av"
     ],
     "experiments": {
       "typedRoutes": true,
