@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     height: 52,
   },
   inputIcon: { marginRight: 10 },
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
 
   sexGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   sexOption: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,

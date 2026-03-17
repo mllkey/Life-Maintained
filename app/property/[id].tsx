@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
   historySummaryBar: {
     flexDirection: "row",
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 16,
@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 16,

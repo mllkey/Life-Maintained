@@ -954,7 +954,7 @@ const styles = StyleSheet.create({
   screeningDesc: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
 
   welcomeWrap: { gap: 16 },
-  welcomeBanner: { flexDirection: "row", gap: 14, backgroundColor: Colors.accentLight, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: Colors.accent + "30", alignItems: "flex-start" },
+  welcomeBanner: { flexDirection: "row", gap: 14, backgroundColor: Colors.accentLight, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.accent + "30", alignItems: "flex-start" },
   welcomeIconWrap: { width: 48, height: 48, borderRadius: 14, backgroundColor: Colors.accentMuted, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   welcomeText: { flex: 1, gap: 4 },
   welcomeTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
@@ -964,7 +964,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1.5,
     borderStyle: "dashed",
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 14,
     alignItems: "center",
     gap: 8,

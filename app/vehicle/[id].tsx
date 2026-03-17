@@ -1563,7 +1563,7 @@ const styles = StyleSheet.create({
   taskGroupDot: { width: 6, height: 6, borderRadius: 3 },
   taskGroupTitle: {
     fontSize: 12, fontFamily: "Inter_600SemiBold",
-    textTransform: "uppercase", letterSpacing: 0.8,
+    textTransform: "uppercase", letterSpacing: 1.5,
   },
   taskCard: {
     flexDirection: "row", alignItems: "center", backgroundColor: Colors.card,
@@ -1591,7 +1591,7 @@ const styles = StyleSheet.create({
   exportBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
   historyContainer: { gap: 16 },
   historySummaryBar: {
-    flexDirection: "row", backgroundColor: Colors.card, borderRadius: 16,
+    flexDirection: "row", backgroundColor: Colors.card, borderRadius: 14,
     borderWidth: 1, borderColor: Colors.border, padding: 16,
     alignItems: "center", justifyContent: "space-around",
   },
@@ -1602,7 +1602,7 @@ const styles = StyleSheet.create({
   historyGroupList: { gap: 10 },
   historyGroupCard: {
     flexDirection: "row", alignItems: "center", backgroundColor: Colors.card,
-    borderRadius: 16, borderWidth: 1, borderColor: Colors.border,
+    borderRadius: 14, borderWidth: 1, borderColor: Colors.border,
     padding: 16, minHeight: 44, gap: 12,
   },
   historyGroupCardLeft: { flex: 1, gap: 3 },
@@ -1635,7 +1635,7 @@ const styles = StyleSheet.create({
   },
   scheduleCard: {
     flexDirection: "row", alignItems: "center", gap: 14,
-    paddingHorizontal: 16, paddingVertical: 14,
+    paddingHorizontal: 20, paddingVertical: 14,
   },
   scheduleCardBorder: {
     borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
@@ -1660,7 +1660,7 @@ const styles = StyleSheet.create({
     fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 4,
   },
   scheduleEmpty: {
-    alignItems: "center", paddingVertical: 40, paddingHorizontal: 16, gap: 8,
+    alignItems: "center", paddingVertical: 40, paddingHorizontal: 20, gap: 8,
   },
   scheduleEmptyTitle: {
     fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary, textAlign: "center",
@@ -1723,7 +1723,7 @@ const styles = StyleSheet.create({
   sheetField: { gap: 6 },
   sheetFieldLabel: {
     fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary,
-    textTransform: "uppercase", letterSpacing: 0.5,
+    textTransform: "uppercase", letterSpacing: 1.5,
   },
   sheetFieldOptional: {
     fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary,

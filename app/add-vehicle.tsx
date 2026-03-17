@@ -1833,7 +1833,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: Colors.textTertiary,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 1.5,
   },
   fieldGroupContent: { gap: 10 },
   row: { flexDirection: "row", gap: 10 },
@@ -2016,7 +2016,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     color: Colors.textTertiary,
-    letterSpacing: 0.8,
+    letterSpacing: 1.5,
   },
 
   listRow: {

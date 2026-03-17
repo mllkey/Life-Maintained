@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
   logCardMain: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 14,
     minHeight: 64,
     gap: 12,
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
   logDivider: { height: 1, backgroundColor: Colors.borderSubtle, marginHorizontal: 16 },
 
   expandedSection: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 14,
     paddingTop: 4,
     gap: 10,

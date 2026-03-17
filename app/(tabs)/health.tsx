@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
   notifBtn: {
     width: 34,
     height: 34,
-    borderRadius: 9,
+    borderRadius: 10,
     backgroundColor: Colors.healthMuted,
     alignItems: "center",
     justifyContent: "center",

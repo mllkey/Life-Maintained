@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     height: 52,
   },
   inputIcon: { marginRight: 10 },

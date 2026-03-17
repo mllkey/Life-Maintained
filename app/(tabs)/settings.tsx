@@ -813,7 +813,7 @@ const styles = StyleSheet.create({
   toggle: {
     width: 50,
     height: 30,
-    borderRadius: 15,
+    borderRadius: 14,
     backgroundColor: Colors.border,
     justifyContent: "center",
     paddingHorizontal: 2,
@@ -976,7 +976,7 @@ const styles = StyleSheet.create({
 
   actionBtnCard: {
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.accent + "33",
     marginBottom: 12,
