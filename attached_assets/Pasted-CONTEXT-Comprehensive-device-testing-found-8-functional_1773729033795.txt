@@ -1,0 +1,39 @@
+CONTEXT: Comprehensive device testing found 8 functional bugs. Fix all of them.
+BUG 1 — Health + button adds appointment when no family members exist:
+In app/(tabs)/health.tsx line ~151, the + button always routes to /add-appointment. When there are zero family members, this is wrong — the user needs to add a person first.
+Fix: If the family members list is empty, the + button should route to /add-family-member instead of /add-appointment. Change the onPress:
+onPress={() => {
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  router.push(people.length === 0 && pets.length === 0 ? "/add-family-member" : "/add-appointment");
+}}
+Also change the + button backgroundColor from Colors.health (pink) to Colors.accent (orange) to match every other add button in the app.
+BUG 2 — Wallet photos don't display:
+In app/vehicle/[id].tsx, photos upload to Supabase Storage and the public URL is saved to vehicle_wallet_documents.data.photo_url. The Image component at line ~1436 uses { uri: photoUrl }. The issue is likely that the getPhotoUrl function at line ~1235 isn't finding the document because the docs data hasn't refreshed, or the photo_url field path is wrong.
+Debug: Add console.log to getPhotoUrl to see what docs contains and what it returns. Also check if the vehicle_wallet_documents query selects the data column (which contains { photo_url: "..." }).
+BUG 3 — "ID Card" should say "Driver's License":
+In app/vehicle/[id].tsx, find the DOC_TYPE_LABELS object:
+Change: id_card: "ID Card"
+To: id_card: "Driver's License"
+BUG 4 — Keyboard not dismissing after VIN Look Up:
+In app/add-vehicle.tsx, find the Look Up button's onPress handler. Add Keyboard.dismiss() as the first line. Import Keyboard from react-native if not already imported.
+BUG 5 — Scan Receipt button is purple:
+In components/ReceiptScanButton.tsx, replace all instances of #4F46E5 with Colors.accent. There are 3 instances: the button backgroundColor, the ActivityIndicator color, and the scanningText color. Import Colors if not already imported.
+BUG 6 — Paywall CTA text when already on trial:
+In components/Paywall.tsx, the CTA button always says "Start Free Trial". If the user is already on a trial (check the profile's subscription_tier === "trial"), the text should say "Choose Plan" instead.
+Add a prop or check inside the Paywall component. If the user already has an active trial, change the CTA text from "Start Free Trial" to "Choose Plan".
+BUG 7 — Receipt scan not populating all fields:
+In app/log-service/[vehicleId].tsx, the scan result handler at lines 164-176 sets fields from the scan result. The issue is likely that the scan-receipt Edge Function returns field names that don't match what the handler expects. Add console.log("Scan result:", JSON.stringify(result)) before the field population to see exactly what's being returned. If fields are named differently (e.g., service_type vs serviceType), map them correctly.
+BUG 8 — SMS toggle popup behind tab bar:
+In app/(tabs)/settings.tsx, when toggling SMS or other notification switches, if there's a confirmation popup or toast, it's rendering behind the tab bar. Check if there's a toast, alert, or banner that appears when toggles change. If it uses absolute positioning, ensure it has a zIndex higher than the tab bar, or use React Native's Alert.alert() instead of a custom positioned element.
+VERIFICATION:
+
+Health + button routes to add-family-member when no members exist
+Health + button is orange
+Wallet photos display after upload
+"Driver's License" shows instead of "ID Card"
+Keyboard dismisses after VIN Look Up
+Scan Receipt button is orange
+Paywall says "Choose Plan" for users already on trial
+Receipt scan logs show full scan result data
+SMS toggle popup doesn't render behind tab bar
+Zero TypeScript errors

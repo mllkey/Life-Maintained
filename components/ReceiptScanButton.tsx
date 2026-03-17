@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { TouchableOpacity, Text, Alert, ActivityIndicator, StyleSheet, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
+import { Colors } from "@/constants/colors";
 import { scanReceipt, ReceiptScanResult } from "../lib/receiptScanner";
 
 interface Props {
@@ -62,7 +63,7 @@ export default function ReceiptScanButton({ onScanComplete }: Props) {
   if (scanning) {
     return (
       <View style={styles.scanningContainer}>
-        <ActivityIndicator size="small" color="#4F46E5" />
+        <ActivityIndicator size="small" color={Colors.accent} />
         <Text style={styles.scanningText}>Scanning receipt...</Text>
       </View>
     );
@@ -76,8 +77,8 @@ export default function ReceiptScanButton({ onScanComplete }: Props) {
 }
 
 const styles = StyleSheet.create({
-  button: { backgroundColor: "#4F46E5", paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, alignItems: "center", marginVertical: 8 },
+  button: { backgroundColor: Colors.accent, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, alignItems: "center", marginVertical: 8 },
   buttonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
   scanningContainer: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 12, gap: 8 },
-  scanningText: { color: "#4F46E5", fontSize: 14 },
+  scanningText: { color: Colors.accent, fontSize: 14 },
 });

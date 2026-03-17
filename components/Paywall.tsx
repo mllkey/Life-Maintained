@@ -94,7 +94,7 @@ export default function Paywall({
   subtitle = "Choose the plan that fits your life",
 }: PaywallProps) {
   const insets = useSafeAreaInsets();
-  const { user, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
 
   const [billing, setBilling] = useState<Billing>("annual");
   const [selectedTier, setSelectedTier] = useState<TierKey>("personal");
@@ -433,7 +433,7 @@ export default function Paywall({
             {isPurchasing ? (
               <ActivityIndicator color={Colors.background} />
             ) : (
-              <Text style={styles.ctaBtnText}>Start Free Trial</Text>
+              <Text style={styles.ctaBtnText}>{profile?.subscription_tier === "trial" ? "Choose Plan" : "Start Free Trial"}</Text>
             )}
           </Pressable>
 

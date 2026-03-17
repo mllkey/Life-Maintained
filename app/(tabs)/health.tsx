@@ -148,7 +148,7 @@ export default function HealthScreen() {
         <Text style={styles.title}>Health</Text>
         <Pressable
           style={({ pressed }) => [styles.addBtn, { opacity: pressed ? 0.8 : 1 }]}
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-appointment"); }}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(people.length === 0 && pets.length === 0 ? "/add-family-member" : "/add-appointment"); }}
         >
           <Ionicons name="add" size={20} color={Colors.textInverse} />
         </Pressable>
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: Colors.health,
+    backgroundColor: Colors.accent,
     alignItems: "center",
     justifyContent: "center",
   },

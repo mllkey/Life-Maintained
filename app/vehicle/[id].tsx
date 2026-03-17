@@ -1211,7 +1211,7 @@ type DocType = "registration" | "insurance" | "id_card";
 const DOC_LABELS: Record<DocType, string> = {
   registration: "Registration",
   insurance: "Insurance",
-  id_card: "ID Card",
+  id_card: "Driver's License",
 };
 
 function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string }) {
@@ -1232,7 +1232,10 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
   });
 
   function getPhotoUrl(docType: DocType): string | null {
-    return docs?.find(d => d.document_type === docType)?.data?.photo_url ?? null;
+    const found = docs?.find(d => d.document_type === docType);
+    const url = found?.data?.photo_url ?? null;
+    console.log("[getPhotoUrl]", docType, "docs count:", docs?.length, "found:", !!found, "url:", url?.substring(0, 60));
+    return url;
   }
 
   function getDoc(docType: DocType): WalletDoc | null {

@@ -12,6 +12,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Keyboard,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
@@ -673,6 +674,7 @@ export default function AddVehicleScreen() {
   }, [vehicleType]);
 
   async function handleVinLookup() {
+    Keyboard.dismiss();
     const cleanVin = vin.trim().toUpperCase();
     if (cleanVin.length !== 17) {
       setVinError("VIN must be exactly 17 characters");

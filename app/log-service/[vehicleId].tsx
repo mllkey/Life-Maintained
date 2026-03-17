@@ -161,6 +161,7 @@ export default function LogServiceScreen() {
   }
 
   function handleScanComplete(result: ReceiptScanResult) {
+    console.log("Scan result:", JSON.stringify(result));
     if (result.date) setDate(result.date);
     if (result.mileage != null) setMileage(String(result.mileage));
     if (result.provider) setProvider(result.provider);
