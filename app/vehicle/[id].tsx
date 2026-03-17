@@ -924,6 +924,16 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast }: {
   isLast?: boolean;
 }) {
   const isCompleted = task.status === "completed";
+  const [showCompletedInfo, setShowCompletedInfo] = useState(false);
+
+  function handlePress() {
+    if (isCompleted) {
+      setShowCompletedInfo(true);
+      setTimeout(() => setShowCompletedInfo(false), 2500);
+    } else {
+      onMarkComplete(task);
+    }
+  }
 
   const barColor = task.status === "overdue"
     ? Colors.overdue
@@ -945,13 +955,13 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast }: {
 
   return (
     <Pressable
-      onPress={!isCompleted ? () => onMarkComplete(task) : undefined}
+      onPress={handlePress}
       style={({ pressed }) => [
         styles.scheduleCard,
         !isLast && styles.scheduleCardBorder,
         !isCompleted && pressed && { opacity: 0.7 },
       ]}
-      accessibilityRole={!isCompleted ? "button" : undefined}
+      accessibilityRole="button"
       accessibilityLabel={isCompleted ? `${task.name} — completed` : `${task.name} — tap to mark complete`}
     >
       <View style={[styles.scheduleCardBar, { backgroundColor: barColor, opacity: isCompleted ? 0.5 : 1 }]} />
@@ -965,6 +975,11 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast }: {
         {!!dueText && (
           <Text style={[styles.scheduleCardDue, isCompleted && styles.scheduleCardDueDone]}>
             {dueText}
+          </Text>
+        )}
+        {showCompletedInfo && (
+          <Text style={styles.scheduleCardCompletedInfo}>
+            Already completed. To undo, delete the entry from the History tab.
           </Text>
         )}
       </View>
@@ -1637,6 +1652,9 @@ const styles = StyleSheet.create({
   },
   scheduleCardDueDone: {
     fontSize: 12, color: Colors.textTertiary,
+  },
+  scheduleCardCompletedInfo: {
+    fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 4,
   },
   scheduleEmpty: {
     alignItems: "center", paddingVertical: 40, paddingHorizontal: 16, gap: 8,

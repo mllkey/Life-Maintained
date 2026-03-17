@@ -361,6 +361,7 @@ function TaskRow({ task, onComplete, isLast }: { task: any; onComplete: (id: str
   const status = getStatus(task.next_due_date, task.last_completed_at);
   const barColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
   const isCompleted = status === "good";
+  const [showCompletedInfo, setShowCompletedInfo] = useState(false);
 
   let dueText: string;
   if (isCompleted && task.last_completed_at) {
@@ -371,6 +372,15 @@ function TaskRow({ task, onComplete, isLast }: { task: any; onComplete: (id: str
     dueText = "No date set";
   }
 
+  function handleCheckPress() {
+    if (isCompleted) {
+      setShowCompletedInfo(true);
+      setTimeout(() => setShowCompletedInfo(false), 2500);
+    } else {
+      onComplete(task.id, task.interval);
+    }
+  }
+
   return (
     <View style={[styles.taskRow, !isLast && styles.taskRowDivider]}>
       <View style={[styles.taskBar, { backgroundColor: isCompleted ? barColor + "70" : barColor }]} />
@@ -379,10 +389,15 @@ function TaskRow({ task, onComplete, isLast }: { task: any; onComplete: (id: str
           {task.task}
         </Text>
         <Text style={[styles.taskRowDue, isCompleted && styles.taskRowDueDone]}>{dueText}</Text>
+        {showCompletedInfo && (
+          <Text style={styles.taskRowCompletedInfo}>
+            Already completed. To undo, delete the entry from the History tab.
+          </Text>
+        )}
       </View>
       <Pressable
         style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-        onPress={() => onComplete(task.id, task.interval)}
+        onPress={handleCheckPress}
         hitSlop={8}
       >
         <Ionicons
@@ -475,6 +490,7 @@ const styles = StyleSheet.create({
   taskRowNameDone: { fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontSize: 14 },
   taskRowDue: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   taskRowDueDone: { color: Colors.textTertiary },
+  taskRowCompletedInfo: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 4 },
 
   emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
   emptyStateTitle: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
