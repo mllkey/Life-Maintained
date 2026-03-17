@@ -12,3 +12,9 @@ id = "FFkueSG_K9gq054gN9gQ5"
 uri = "file://Life-Maintained-clean.tar.gz"
 type = "unspecified"
 title = "Life-Maintained-clean.tar.gz"
+
+[[outputs]]
+id = "z2cLMphZ8HY-gKmyx9z-c"
+uri = "file:///home/runner/LM-clean.tar.gz"
+type = "unspecified"
+title = "LM-clean.tar.gz"
