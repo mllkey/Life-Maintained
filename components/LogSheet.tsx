@@ -101,85 +101,162 @@ function WaveBars() {
   );
 }
 
-// ─── Circular Waveform ───────────────────────────────────────────────────────
+// ─── Concentric Glowing Rings ─────────────────────────────────────────────────
 
-const DOT_COUNT   = 40;
-const WF_SIZE     = 220;
-const WF_CENTER   = WF_SIZE / 2;
-const BASE_RADIUS = 70;
-const DOT_SIZE    = 4;
+const RING_DEFS = [
+  { radius: 50,  bw: 2.5, hexOpacity: "CC", scaleMin: 0.90, scaleMax: 1.15, delay:   0, phaseOffset: 0    },
+  { radius: 80,  bw: 2.0, hexOpacity: "99", scaleMin: 0.92, scaleMax: 1.12, delay:  60, phaseOffset: 200  },
+  { radius: 115, bw: 1.5, hexOpacity: "66", scaleMin: 0.94, scaleMax: 1.10, delay: 120, phaseOffset: 400  },
+  { radius: 155, bw: 1.0, hexOpacity: "4D", scaleMin: 0.95, scaleMax: 1.08, delay: 180, phaseOffset: 600  },
+  { radius: 200, bw: 1.0, hexOpacity: "33", scaleMin: 0.96, scaleMax: 1.05, delay: 240, phaseOffset: 800  },
+] as const;
 
-type WaveformCircleProps = {
-  amplitudeRef: React.MutableRefObject<number>;
-  isRecording: boolean;
-};
+type RingsProps = { amplitudeRef: React.MutableRefObject<number>; isRecording: boolean };
 
-function WaveformCircle({ amplitudeRef, isRecording }: WaveformCircleProps) {
-  const [, setTick] = useState(0);
+function ConcentricRings({ amplitudeRef, isRecording }: RingsProps) {
+  const ringScales = useRef(RING_DEFS.map(() => new Animated.Value(1.0))).current;
+  const bgScale    = useRef(new Animated.Value(1.0)).current;
+  const coreOpacity = useRef(new Animated.Value(0.5)).current;
 
+  const idleLoopRefs = useRef<(Animated.CompositeAnimation | null)[]>([null, null, null, null, null]);
+  const bgLoopRef    = useRef<Animated.CompositeAnimation | null>(null);
+  const phaseTimers  = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const ampTimers    = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const rafRef       = useRef<number | null>(null);
+  const lastAmp      = useRef(-1);
+
+  // Background glow always pulses (4s loop)
   useEffect(() => {
-    let rafId: number;
-    function loop() {
-      setTick(t => t + 1);
-      rafId = requestAnimationFrame(loop);
-    }
-    rafId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafId);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bgScale, { toValue: 1.05, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(bgScale, { toValue: 0.95, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    bgLoopRef.current = loop;
+    loop.start();
+    return () => loop.stop();
   }, []);
 
-  const now = Date.now();
-  // Idle: gentle 0.15 amplitude; Recording: live metering value
-  const amp = isRecording ? amplitudeRef.current : 0.15;
+  // Switch between idle breathing and live amplitude mode
+  useEffect(() => {
+    if (isRecording) {
+      stopIdleBreathing();
+      startAmplitudeTracking();
+    } else {
+      stopAmplitudeTracking();
+      startIdleBreathing();
+    }
+    return () => {
+      stopIdleBreathing();
+      stopAmplitudeTracking();
+    };
+  }, [isRecording]);
 
-  const dots: { x: number; y: number }[] = [];
-  for (let i = 0; i < DOT_COUNT; i++) {
-    const angle = (i / DOT_COUNT) * Math.PI * 2;
-    const wave  = amp * 30 * (0.5 + 0.5 * Math.sin(i * 0.7 + now * 0.003));
-    const r     = BASE_RADIUS + wave;
-    dots.push({
-      x: WF_CENTER + r * Math.cos(angle) - DOT_SIZE / 2,
-      y: WF_CENTER + r * Math.sin(angle) - DOT_SIZE / 2,
+  function startIdleBreathing() {
+    stopIdleBreathing();
+    Animated.timing(coreOpacity, { toValue: 0.5, duration: 300, useNativeDriver: true }).start();
+    RING_DEFS.forEach((cfg, i) => {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(ringScales[i], { toValue: cfg.scaleMax, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(ringScales[i], { toValue: cfg.scaleMin, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])
+      );
+      idleLoopRefs.current[i] = loop;
+      const t = setTimeout(() => loop.start(), cfg.phaseOffset);
+      phaseTimers.current.push(t);
     });
   }
 
+  function stopIdleBreathing() {
+    phaseTimers.current.forEach(clearTimeout);
+    phaseTimers.current = [];
+    idleLoopRefs.current.forEach(l => l?.stop());
+    idleLoopRefs.current = [null, null, null, null, null];
+  }
+
+  function startAmplitudeTracking() {
+    lastAmp.current = -1;
+    function loop() {
+      const amp = amplitudeRef.current;
+      if (Math.abs(amp - lastAmp.current) > 0.01) {
+        lastAmp.current = amp;
+        ampTimers.current.forEach(clearTimeout);
+        ampTimers.current = [];
+        RING_DEFS.forEach((cfg, i) => {
+          const target = cfg.scaleMin + amp * (cfg.scaleMax - cfg.scaleMin);
+          const t = setTimeout(() => {
+            Animated.timing(ringScales[i], { toValue: target, duration: 80, useNativeDriver: true }).start();
+          }, cfg.delay);
+          ampTimers.current.push(t);
+        });
+        const opTarget = amp > 0.6 ? 0.7 : 0.5;
+        Animated.timing(coreOpacity, { toValue: opTarget, duration: 80, useNativeDriver: true }).start();
+      }
+      rafRef.current = requestAnimationFrame(loop);
+    }
+    rafRef.current = requestAnimationFrame(loop);
+  }
+
+  function stopAmplitudeTracking() {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    ampTimers.current.forEach(clearTimeout);
+    ampTimers.current = [];
+  }
+
+  const SZ = 460;
+
   return (
-    <View style={{ width: WF_SIZE, height: WF_SIZE }}>
-      {/* Subtle inner fill */}
-      <View style={{
+    <View style={{ width: SZ, height: SZ, alignItems: "center", justifyContent: "center" }}>
+      {/* Background glow — behind everything */}
+      <Animated.View style={{
         position:        "absolute",
-        width:           BASE_RADIUS * 2,
-        height:          BASE_RADIUS * 2,
-        borderRadius:    BASE_RADIUS,
-        backgroundColor: Colors.accent + "0D",
-        left:            WF_CENTER - BASE_RADIUS,
-        top:             WF_CENTER - BASE_RADIUS,
+        width:           280,
+        height:          280,
+        borderRadius:    140,
+        backgroundColor: Colors.accent + "0A",
+        transform:       [{ scale: bgScale }],
       }} />
-      {/* Dots */}
-      {dots.map((dot, i) => (
-        <View
+
+      {/* 5 concentric rings */}
+      {RING_DEFS.map((cfg, i) => (
+        <Animated.View
           key={i}
           style={{
-            position:        "absolute",
-            width:           DOT_SIZE,
-            height:          DOT_SIZE,
-            borderRadius:    DOT_SIZE / 2,
-            backgroundColor: Colors.accent,
-            left:            dot.x,
-            top:             dot.y,
+            position:    "absolute",
+            width:       cfg.radius * 2,
+            height:      cfg.radius * 2,
+            borderRadius: cfg.radius,
+            borderWidth:  cfg.bw,
+            borderColor:  Colors.accent + cfg.hexOpacity,
+            transform:   [{ scale: ringScales[i] }],
           }}
         />
       ))}
-      {/* Mic icon — centered, always on top */}
+
+      {/* Center: outer glow disc */}
       <View style={{
-        position:       "absolute",
-        left:           WF_CENTER - 14,
-        top:            WF_CENTER - 14,
-        width:          28,
-        height:         28,
-        alignItems:     "center",
-        justifyContent: "center",
-      }}>
-        <Ionicons name="mic" size={28} color="#fff" />
+        position:        "absolute",
+        width:           80,
+        height:          80,
+        borderRadius:    40,
+        backgroundColor: Colors.accent + "26",
+      }} />
+
+      {/* Center: solid core (opacity-animated) */}
+      <Animated.View style={{
+        position:        "absolute",
+        width:           56,
+        height:          56,
+        borderRadius:    28,
+        backgroundColor: Colors.accent,
+        opacity:         coreOpacity,
+      }} />
+
+      {/* Mic icon — always on top */}
+      <View style={{ position: "absolute", alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name="mic" size={24} color="#fff" />
       </View>
     </View>
   );
@@ -589,7 +666,7 @@ export function LogSheet({
 
             {/* Center: waveform + status text */}
             <View style={styles.recordingCenter}>
-              <WaveformCircle amplitudeRef={amplitudeRef} isRecording={phase === "recording"} />
+              <ConcentricRings amplitudeRef={amplitudeRef} isRecording={phase === "recording"} />
 
               <Text style={[
                 styles.recordingStatus,
