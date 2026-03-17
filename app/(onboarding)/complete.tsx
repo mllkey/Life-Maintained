@@ -18,19 +18,24 @@ export default function OnboardingCompleteScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        console.log("[complete] Writing onboarding_completed=true for user:", user.id);
+        // upsert (not update) so the row is created if it doesn't exist yet
         const { error } = await supabase
           .from("profiles")
-          .update({ onboarding_completed: true, updated_at: new Date().toISOString() })
-          .eq("user_id", user.id);
-
+          .upsert(
+            { user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() },
+            { onConflict: "user_id" }
+          );
         if (error) {
-          await supabase
-            .from("profiles")
-            .upsert({ user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() });
+          console.error("[complete] DB write error:", error.message);
+        } else {
+          console.log("[complete] DB write succeeded — onboarding_completed=true");
         }
+      } else {
+        console.warn("[complete] No user found when trying to write onboarding_completed");
       }
     } catch (e) {
-      console.error(e);
+      console.error("[complete] Unexpected error:", e);
     }
 
     setOnboardingCompleted(true);

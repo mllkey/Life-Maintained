@@ -43,6 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
       if (error) throw error;
       if (!mountedRef.current) return;
+      console.log("[AUTH] fetchProfile result:", JSON.stringify(data));
+      console.log("[AUTH] onboarding_completed from DB:", (data as any)?.onboarding_completed);
       const p = data as any;
       const fullProfile: Profile = {
         user_id: userId,
@@ -61,8 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileLoaded(true);
       checkAndResetScanCount(userId, fullProfile).catch(() => {});
     } catch (e) {
-      console.warn("[AuthContext] fetchProfile error:", e);
+      console.error("[AUTH] fetchProfile error:", e);
       if (mountedRef.current) {
+        // Do NOT reset onboardingCompleted here — preserve whatever value it already has.
+        // For the initial load this means it stays false, which safely redirects to /(auth).
         setProfileLoaded(true);
       }
     }

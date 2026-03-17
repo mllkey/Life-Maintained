@@ -1,0 +1,35 @@
+CRITICAL BUG — RECURRING: The app sends users back to onboarding on every relaunch, even for users who already completed onboarding. This has been reported and "fixed" twice before but keeps recurring. This time, diagnose the ACTUAL root cause with logging.
+STEP 1 — Add diagnostic logging to the routing logic:
+In app/index.tsx (or wherever the initial redirect logic lives), add these logs BEFORE the redirect decision:
+console.log("[ROUTING] session:", !!session);
+console.log("[ROUTING] isLoading:", isLoading);
+console.log("[ROUTING] profile:", JSON.stringify(profile));
+console.log("[ROUTING] onboardingCompleted:", onboardingCompleted);
+In context/AuthContext.tsx, add logging to the profile fetch:
+console.log("[AUTH] fetchProfile result:", JSON.stringify(data));
+console.log("[AUTH] onboarding_completed from DB:", data?.onboarding_completed);
+STEP 2 — Check the database:
+The profiles table must have an onboarding_completed column that is set to true after onboarding. Check:
+
+Does the column exist?
+After completing onboarding, is it actually being set to true in the database?
+When the app loads, is the profile query returning onboarding_completed = true?
+
+STEP 3 — Check the timing:
+The most likely cause: the app redirects to onboarding BEFORE the profile fetch completes. The flow should be:
+
+App launches → show splash/loading screen
+Supabase session restored → fetch profile from database
+WAIT for profile fetch to complete
+ONLY THEN check: if onboarding_completed === true → go to (tabs). If false → go to (onboarding). If no session → go to (auth).
+
+If the redirect happens while isLoading is still true (before the profile fetch completes), onboardingCompleted will be its default value (false), and the user gets sent to onboarding every time.
+FIX: Ensure the redirect logic in app/index.tsx does NOT execute until isLoading is false. If isLoading is true, render nothing (or a splash screen). Only redirect after the profile has been fully loaded.
+REMINDER FROM replit.md CRITICAL RULES: "App must NOT redirect to onboarding until BOTH session AND profile are fully loaded from database. isLoading must be true until profile fetch completes."
+VERIFICATION:
+
+Complete onboarding with a new account → land on dashboard
+Close Expo Go completely → reopen → land on dashboard (NOT onboarding)
+Force refresh the app → still on dashboard
+Console logs show onboarding_completed = true after profile fetch
+Zero TypeScript errors
