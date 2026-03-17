@@ -60,9 +60,10 @@ type OrbProps = {
   amplitudeRef: React.MutableRefObject<number>;
   isRecording: boolean;
   phase: RecordPhase;
+  onPress: () => void;
 };
 
-function VoiceOrb({ amplitudeRef, isRecording, phase }: OrbProps) {
+function VoiceOrb({ amplitudeRef, isRecording, phase, onPress }: OrbProps) {
   // Breathing layers
   const outerScale   = useSharedValue(1.0);
   const outerOpacity = useSharedValue(0.06);
@@ -70,10 +71,10 @@ function VoiceOrb({ amplitudeRef, isRecording, phase }: OrbProps) {
   const coreScale    = useSharedValue(1.0);
 
   // Sonar pulse rings (4 rings × scale + opacity)
-  const r1s = useSharedValue(0.3); const r1o = useSharedValue(0.5);
-  const r2s = useSharedValue(0.3); const r2o = useSharedValue(0.5);
-  const r3s = useSharedValue(0.3); const r3o = useSharedValue(0.5);
-  const r4s = useSharedValue(0.3); const r4o = useSharedValue(0.5);
+  const r1s = useSharedValue(0.3); const r1o = useSharedValue(0.35);
+  const r2s = useSharedValue(0.3); const r2o = useSharedValue(0.35);
+  const r3s = useSharedValue(0.3); const r3o = useSharedValue(0.35);
+  const r4s = useSharedValue(0.3); const r4o = useSharedValue(0.35);
 
   // Start ambient breathing + sonar pulses on mount
   useEffect(() => {
@@ -90,18 +91,18 @@ function VoiceOrb({ amplitudeRef, isRecording, phase }: OrbProps) {
     const rOpacities = [r1o, r2o, r3o, r4o];
     rScales.forEach((sv, i) => {
       sv.value = withDelay(
-        i * 500,
+        i * 750,
         withRepeat(
-          withTiming(1.4, { duration: 2000, easing: ReaEasing.out(ReaEasing.ease) }),
+          withTiming(1.4, { duration: 3000, easing: ReaEasing.out(ReaEasing.ease) }),
           -1,
         ),
       );
     });
     rOpacities.forEach((sv, i) => {
       sv.value = withDelay(
-        i * 500,
+        i * 750,
         withRepeat(
-          withTiming(0, { duration: 2000, easing: ReaEasing.out(ReaEasing.ease) }),
+          withTiming(0, { duration: 3000, easing: ReaEasing.out(ReaEasing.ease) }),
           -1,
         ),
       );
@@ -179,17 +180,19 @@ function VoiceOrb({ amplitudeRef, isRecording, phase }: OrbProps) {
         backgroundColor: Colors.accent, opacity: 0.16,
       }, midStyle]} />
 
-      {/* Inner core */}
-      <Reanimated.View style={[{
-        position: "absolute",
-        width: 72, height: 72, borderRadius: 36,
-        backgroundColor: Colors.accent, opacity: 0.88,
-      }, coreStyle]} />
-
-      {/* Mic icon */}
-      <View style={{ position: "absolute", alignItems: "center", justifyContent: "center" }}>
-        <Ionicons name="mic" size={28} color="#fff" />
-      </View>
+      {/* Inner core — pressable tap target */}
+      <Pressable
+        onPress={onPress}
+        disabled={phase === "transcribing"}
+        style={{ position: "absolute", width: 72, height: 72, alignItems: "center", justifyContent: "center" }}
+      >
+        <Reanimated.View style={[{
+          position: "absolute",
+          width: 72, height: 72, borderRadius: 36,
+          backgroundColor: isRecording ? Colors.overdue : Colors.accent, opacity: 0.88,
+        }, coreStyle]} />
+        <Ionicons name={isRecording ? "stop" : "mic"} size={28} color="#fff" />
+      </Pressable>
     </View>
   );
 }
@@ -596,9 +599,14 @@ export function LogSheet({
               </Pressable>
             </View>
 
-            {/* Center: waveform + status text */}
+            {/* Center: orb (pressable) + status + actions */}
             <View style={styles.recordingCenter}>
-              <VoiceOrb amplitudeRef={amplitudeRef} isRecording={phase === "recording"} phase={phase} />
+              <VoiceOrb
+                amplitudeRef={amplitudeRef}
+                isRecording={phase === "recording"}
+                phase={phase}
+                onPress={phase === "idle" ? handleStartRecording : handleStopRecording}
+              />
 
               <Text style={[
                 styles.recordingStatus,
@@ -610,34 +618,16 @@ export function LogSheet({
                     ? "Listening..."
                     : "Transcribing..."}
               </Text>
-            </View>
 
-            {/* Bottom: mic button + type-instead */}
-            <View style={styles.recordingBottom}>
               {phase === "transcribing" ? (
                 <View style={styles.transcribingRow}>
                   <ActivityIndicator size="small" color={Colors.accent} />
                   <Text style={styles.transcribingText}>Processing audio...</Text>
                 </View>
               ) : (
-                <>
-                  <Pressable
-                    style={[
-                      styles.recordingBtn,
-                      phase === "recording" && styles.recordingBtnStop,
-                    ]}
-                    onPress={phase === "idle" ? handleStartRecording : handleStopRecording}
-                  >
-                    <Ionicons
-                      name={phase === "idle" ? "mic" : "stop"}
-                      size={28}
-                      color="#fff"
-                    />
-                  </Pressable>
-                  <Pressable onPress={() => setPhase("type")} hitSlop={8}>
-                    <Text style={styles.typeInsteadText}>Type instead →</Text>
-                  </Pressable>
-                </>
+                <Pressable onPress={() => setPhase("type")} hitSlop={12}>
+                  <Text style={styles.typeInsteadText}>Type instead →</Text>
+                </Pressable>
               )}
             </View>
           </View>
@@ -733,7 +723,7 @@ const styles = StyleSheet.create({
   // Recording overlay
   recordingScreen: {
     flex: 1,
-    backgroundColor: "rgba(12,17,27,0.97)",
+    backgroundColor: Colors.background,
     justifyContent: "space-between",
   },
   recordingTopBar: {
@@ -762,28 +752,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: "center",
   },
-  recordingBottom: {
-    alignItems: "center",
-    gap: 16,
-    paddingHorizontal: 20,
-  },
-  recordingBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: Colors.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  recordingBtnStop: {
-    backgroundColor: Colors.overdue,
-    shadowColor: Colors.overdue,
-  },
   typeInsteadText: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
@@ -807,6 +775,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.55)",
   },
   sheetKAV: {
+    flex: 1,
     justifyContent: "flex-end",
   },
   sheet: {
