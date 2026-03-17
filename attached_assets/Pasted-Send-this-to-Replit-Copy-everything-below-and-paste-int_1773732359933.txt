@@ -1,0 +1,33 @@
+Send this to Replit:
+
+Copy everything below and paste into Replit Agent:
+
+CONTEXT: The voice recording overlay currently shows 3 concentric circle rings. This looks flat and basic. Replace with a fluid, wavy sound wave visualization that feels premium.
+IMPORTANT: Only modify components/LogSheet.tsx. Keep all recording, transcription, and processing logic identical. Only change the visual animation.
+
+TASK: Replace the 3 concentric ring circles with a circular waveform visualization.
+Replace the rings with a single circular waveform made of ~40 small dots/points arranged in a circle. Each point's distance from center varies based on audio amplitude, creating a fluid blob-like shape that morphs as the user speaks.
+Implementation:
+
+40 points arranged in a circle (evenly spaced at 9-degree intervals)
+Base radius: 60px (the circle they sit on when idle)
+Each point is a small circle (4px diameter, Colors.accent)
+Each point's radial offset from the base circle responds to metering amplitude with a per-point variation: baseRadius + (amplitude * 30 * (0.5 + 0.5 * Math.sin(index * 0.7 + Date.now() * 0.003))) — this creates an organic, wavy blob shape that morphs over time
+When idle (not recording): points gently undulate with a slow sine wave, creating a subtle breathing circle
+When recording: the amplitude from metering drives the size and waviness — louder = more distortion from the perfect circle
+Render using absolute-positioned Views for each dot inside a container, calculating x/y position from angle and radius
+Update at 60fps using requestAnimationFrame or Animated with useNativeDriver where possible
+Colors.accent for the dots, with the innermost area slightly filled with Colors.accent at 5% opacity to create depth
+
+Center of the waveform: mic icon (28px, white) static
+Keep the "Tap to start" / "Listening..." text, the record/stop button, and "Type instead" link exactly as they are.
+VERIFICATION:
+
+Idle state shows a gently undulating circular waveform
+Recording state: waveform morphs and expands with voice amplitude
+Louder voice = more distortion and expansion
+Quiet = waveform settles back toward a circle
+Looks fluid and organic, not rigid or mechanical
+All recording/transcription/processing still works
+Zero TypeScript errors
+\ Opus 4.6

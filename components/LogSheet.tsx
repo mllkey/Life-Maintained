@@ -101,6 +101,90 @@ function WaveBars() {
   );
 }
 
+// ─── Circular Waveform ───────────────────────────────────────────────────────
+
+const DOT_COUNT   = 40;
+const WF_SIZE     = 220;
+const WF_CENTER   = WF_SIZE / 2;
+const BASE_RADIUS = 70;
+const DOT_SIZE    = 4;
+
+type WaveformCircleProps = {
+  amplitudeRef: React.MutableRefObject<number>;
+  isRecording: boolean;
+};
+
+function WaveformCircle({ amplitudeRef, isRecording }: WaveformCircleProps) {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    let rafId: number;
+    function loop() {
+      setTick(t => t + 1);
+      rafId = requestAnimationFrame(loop);
+    }
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  const now = Date.now();
+  // Idle: gentle 0.15 amplitude; Recording: live metering value
+  const amp = isRecording ? amplitudeRef.current : 0.15;
+
+  const dots: { x: number; y: number }[] = [];
+  for (let i = 0; i < DOT_COUNT; i++) {
+    const angle = (i / DOT_COUNT) * Math.PI * 2;
+    const wave  = amp * 30 * (0.5 + 0.5 * Math.sin(i * 0.7 + now * 0.003));
+    const r     = BASE_RADIUS + wave;
+    dots.push({
+      x: WF_CENTER + r * Math.cos(angle) - DOT_SIZE / 2,
+      y: WF_CENTER + r * Math.sin(angle) - DOT_SIZE / 2,
+    });
+  }
+
+  return (
+    <View style={{ width: WF_SIZE, height: WF_SIZE }}>
+      {/* Subtle inner fill */}
+      <View style={{
+        position:        "absolute",
+        width:           BASE_RADIUS * 2,
+        height:          BASE_RADIUS * 2,
+        borderRadius:    BASE_RADIUS,
+        backgroundColor: Colors.accent + "0D",
+        left:            WF_CENTER - BASE_RADIUS,
+        top:             WF_CENTER - BASE_RADIUS,
+      }} />
+      {/* Dots */}
+      {dots.map((dot, i) => (
+        <View
+          key={i}
+          style={{
+            position:        "absolute",
+            width:           DOT_SIZE,
+            height:          DOT_SIZE,
+            borderRadius:    DOT_SIZE / 2,
+            backgroundColor: Colors.accent,
+            left:            dot.x,
+            top:             dot.y,
+          }}
+        />
+      ))}
+      {/* Mic icon — centered, always on top */}
+      <View style={{
+        position:       "absolute",
+        left:           WF_CENTER - 14,
+        top:            WF_CENTER - 14,
+        width:          28,
+        height:         28,
+        alignItems:     "center",
+        justifyContent: "center",
+      }}>
+        <Ionicons name="mic" size={28} color="#fff" />
+      </View>
+    </View>
+  );
+}
+
 // ─── Field Row ───────────────────────────────────────────────────────────────
 
 function FieldRow({
@@ -310,16 +394,11 @@ export function LogSheet({
   const [doneCount, setDoneCount] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Ring animation values (scale, native driver OK)
-  const ring1 = useRef(new Animated.Value(0.5)).current;
-  const ring2 = useRef(new Animated.Value(0.5)).current;
-  const ring3 = useRef(new Animated.Value(0.5)).current;
-  const idleAnimRef = useRef<Animated.CompositeAnimation | null>(null);
-  const r2TimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const r3TimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Normalized 0-1 amplitude written by metering updates, read by WaveformCircle each RAF frame
+  const amplitudeRef = useRef<number>(0);
   const recordingRef = useRef<Audio.Recording | null>(null);
 
-  // Reset + start idle pulse when sheet becomes visible
+  // Reset when sheet becomes visible or hidden
   useEffect(() => {
     if (visible) {
       setPhase("idle");
@@ -327,65 +406,12 @@ export function LogSheet({
       setItems([]);
       setDoneCount(0);
       setErrorMsg("");
-      startIdlePulse();
+      amplitudeRef.current = 0;
     } else {
-      stopIdlePulse();
       safeStopRecording();
+      amplitudeRef.current = 0;
     }
   }, [visible]);
-
-  // Manage idle pulse based on phase
-  useEffect(() => {
-    if (phase === "idle") {
-      startIdlePulse();
-    } else {
-      stopIdlePulse();
-    }
-  }, [phase]);
-
-  function startIdlePulse() {
-    stopIdlePulse();
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(ring1, { toValue: 0.55, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-          Animated.timing(ring2, { toValue: 0.55, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-          Animated.timing(ring3, { toValue: 0.55, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        ]),
-        Animated.parallel([
-          Animated.timing(ring1, { toValue: 0.45, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-          Animated.timing(ring2, { toValue: 0.45, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-          Animated.timing(ring3, { toValue: 0.45, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        ]),
-      ])
-    );
-    idleAnimRef.current = anim;
-    anim.start();
-  }
-
-  function stopIdlePulse() {
-    idleAnimRef.current?.stop();
-    idleAnimRef.current = null;
-  }
-
-  function updateRings(metering: number) {
-    const amp = Math.max(0, (metering + 60) / 60);
-    const s1 = 0.5 + amp * 0.7;
-    const s2 = 0.5 + amp * 0.7 * 0.8;
-    const s3 = 0.5 + amp * 0.7 * 0.6;
-
-    Animated.timing(ring1, { toValue: s1, duration: 100, useNativeDriver: true }).start();
-
-    if (r2TimerRef.current) clearTimeout(r2TimerRef.current);
-    r2TimerRef.current = setTimeout(() => {
-      Animated.timing(ring2, { toValue: s2, duration: 100, useNativeDriver: true }).start();
-    }, 100);
-
-    if (r3TimerRef.current) clearTimeout(r3TimerRef.current);
-    r3TimerRef.current = setTimeout(() => {
-      Animated.timing(ring3, { toValue: s3, duration: 100, useNativeDriver: true }).start();
-    }, 200);
-  }
 
   async function safeStopRecording() {
     const rec = recordingRef.current;
@@ -415,7 +441,7 @@ export function LogSheet({
       });
       rec.setOnRecordingStatusUpdate((status) => {
         if (status.isRecording && status.metering !== undefined) {
-          updateRings(status.metering);
+          amplitudeRef.current = Math.max(0, (status.metering + 60) / 60);
         }
       });
       rec.setProgressUpdateInterval(100);
@@ -439,10 +465,7 @@ export function LogSheet({
       const uri = rec.getURI();
       recordingRef.current = null;
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-
-      ring1.setValue(0.5);
-      ring2.setValue(0.5);
-      ring3.setValue(0.5);
+      amplitudeRef.current = 0;
 
       setPhase("transcribing");
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -486,10 +509,7 @@ export function LogSheet({
 
   function handleClose() {
     safeStopRecording();
-    stopIdlePulse();
-    ring1.setValue(0.5);
-    ring2.setValue(0.5);
-    ring3.setValue(0.5);
+    amplitudeRef.current = 0;
     setText("");
     setPhase("idle");
     setItems([]);
@@ -567,16 +587,9 @@ export function LogSheet({
               </Pressable>
             </View>
 
-            {/* Center: rings + status text */}
+            {/* Center: waveform + status text */}
             <View style={styles.recordingCenter}>
-              <View style={styles.ringsContainer}>
-                <Animated.View style={[styles.ring3, { transform: [{ scale: ring3 }] }]} />
-                <Animated.View style={[styles.ring2, { transform: [{ scale: ring2 }] }]} />
-                <Animated.View style={[styles.ring1, { transform: [{ scale: ring1 }] }]} />
-                <View style={styles.ringMicCenter}>
-                  <Ionicons name="mic" size={32} color="#fff" />
-                </View>
-              </View>
+              <WaveformCircle amplitudeRef={amplitudeRef} isRecording={phase === "recording"} />
 
               <Text style={[
                 styles.recordingStatus,
@@ -612,7 +625,7 @@ export function LogSheet({
                       color="#fff"
                     />
                   </Pressable>
-                  <Pressable onPress={() => { stopIdlePulse(); setPhase("type"); }} hitSlop={8}>
+                  <Pressable onPress={() => setPhase("type")} hitSlop={8}>
                     <Text style={styles.typeInsteadText}>Type instead →</Text>
                   </Pressable>
                 </>
@@ -734,41 +747,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 32,
-  },
-  ringsContainer: {
-    width: 240,
-    height: 240,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ring3: {
-    position: "absolute",
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    borderWidth: 2,
-    borderColor: Colors.accent + "44",
-  },
-  ring2: {
-    position: "absolute",
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    borderWidth: 2,
-    borderColor: Colors.accent + "88",
-  },
-  ring1: {
-    position: "absolute",
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 2,
-    borderColor: Colors.accent,
-  },
-  ringMicCenter: {
-    position: "absolute",
-    alignItems: "center",
-    justifyContent: "center",
   },
   recordingStatus: {
     fontSize: 18,
