@@ -10,8 +10,6 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
-  Animated,
-  Easing,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
@@ -56,61 +54,6 @@ type ExtractedItem = {
   confidence: "high" | "medium" | "low";
 };
 
-// ─── Wave Bars (ambient decoration for text input mode) ─────────────────────
-
-const BAR_DURATIONS = [420, 620, 370, 700, 310, 530, 460];
-const BAR_DELAYS    = [0,   120, 240, 60,  180, 320, 80 ];
-
-function WaveBar({ index }: { index: number }) {
-  const anim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const duration = BAR_DURATIONS[index] ?? 400;
-    const delay    = BAR_DELAYS[index]    ?? 0;
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, {
-          toValue: 1,
-          duration,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: false,
-        }),
-        Animated.timing(anim, {
-          toValue: 0,
-          duration,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: false,
-        }),
-      ])
-    );
-
-    const timeout = setTimeout(() => loop.start(), delay);
-    return () => {
-      clearTimeout(timeout);
-      loop.stop();
-    };
-  }, []);
-
-  const height = anim.interpolate({ inputRange: [0, 1], outputRange: [8, 32] });
-
-  return (
-    <Animated.View
-      style={{ width: 4, height, borderRadius: 2, backgroundColor: Colors.accent }}
-    />
-  );
-}
-
-function WaveBars() {
-  return (
-    <View style={styles.waveContainer}>
-      {[0, 1, 2, 3, 4, 5, 6].map(i => (
-        <WaveBar key={i} index={i} />
-      ))}
-    </View>
-  );
-}
-
 // ─── Voice Orb (Reanimated — sonar pulse rings + breathing glow layers) ──────
 
 type OrbProps = {
@@ -127,10 +70,10 @@ function VoiceOrb({ amplitudeRef, isRecording, phase }: OrbProps) {
   const coreScale    = useSharedValue(1.0);
 
   // Sonar pulse rings (4 rings × scale + opacity)
-  const r1s = useSharedValue(0.3); const r1o = useSharedValue(0.4);
-  const r2s = useSharedValue(0.3); const r2o = useSharedValue(0.4);
-  const r3s = useSharedValue(0.3); const r3o = useSharedValue(0.4);
-  const r4s = useSharedValue(0.3); const r4o = useSharedValue(0.4);
+  const r1s = useSharedValue(0.3); const r1o = useSharedValue(0.5);
+  const r2s = useSharedValue(0.3); const r2o = useSharedValue(0.5);
+  const r3s = useSharedValue(0.3); const r3o = useSharedValue(0.5);
+  const r4s = useSharedValue(0.3); const r4o = useSharedValue(0.5);
 
   // Start ambient breathing + sonar pulses on mount
   useEffect(() => {
@@ -207,15 +150,15 @@ function VoiceOrb({ amplitudeRef, isRecording, phase }: OrbProps) {
   const ring3Style = useAnimatedStyle(() => ({ transform: [{ scale: r3s.value }], opacity: r3o.value }));
   const ring4Style = useAnimatedStyle(() => ({ transform: [{ scale: r4s.value }], opacity: r4o.value }));
 
-  const RING_SIZE = 180;
+  const RING_SIZE = 280;
   const ringBase = {
     position: "absolute" as const,
     width: RING_SIZE, height: RING_SIZE, borderRadius: RING_SIZE / 2,
-    borderWidth: 1.5, borderColor: Colors.accent,
+    borderWidth: 2.5, borderColor: Colors.accent,
   };
 
   return (
-    <View style={{ width: 240, height: 240, alignItems: "center", justifyContent: "center" }}>
+    <View style={{ width: 300, height: 300, alignItems: "center", justifyContent: "center" }}>
       {/* Sonar pulse rings */}
       <Reanimated.View style={[ringBase, ring1Style]} />
       <Reanimated.View style={[ringBase, ring2Style]} />
@@ -225,27 +168,27 @@ function VoiceOrb({ amplitudeRef, isRecording, phase }: OrbProps) {
       {/* Outer glow layer */}
       <Reanimated.View style={[{
         position: "absolute",
-        width: 110, height: 110, borderRadius: 55,
+        width: 160, height: 160, borderRadius: 80,
         backgroundColor: Colors.accent,
       }, outerStyle]} />
 
       {/* Mid glow layer */}
       <Reanimated.View style={[{
         position: "absolute",
-        width: 72, height: 72, borderRadius: 36,
+        width: 110, height: 110, borderRadius: 55,
         backgroundColor: Colors.accent, opacity: 0.16,
       }, midStyle]} />
 
       {/* Inner core */}
       <Reanimated.View style={[{
         position: "absolute",
-        width: 50, height: 50, borderRadius: 25,
+        width: 72, height: 72, borderRadius: 36,
         backgroundColor: Colors.accent, opacity: 0.88,
       }, coreStyle]} />
 
       {/* Mic icon */}
       <View style={{ position: "absolute", alignItems: "center", justifyContent: "center" }}>
-        <Ionicons name="mic" size={22} color="#fff" />
+        <Ionicons name="mic" size={28} color="#fff" />
       </View>
     </View>
   );
@@ -736,7 +679,6 @@ export function LogSheet({
                       </View>
                     )}
                     <View>
-                      <WaveBars />
                       <TextInput
                         style={styles.sheetTextInput}
                         value={text}
@@ -912,13 +854,6 @@ const styles = StyleSheet.create({
     height: 32,
     alignItems: "center",
     justifyContent: "center",
-  },
-  waveContainer: {
-    height: 120,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
   },
   sheetTextInput: {
     backgroundColor: Colors.surface,
