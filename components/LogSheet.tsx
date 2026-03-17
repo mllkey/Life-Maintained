@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Animated,
+  Easing,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -32,6 +34,59 @@ type ExtractedItem = {
   notes: string | null;
   confidence: "high" | "medium" | "low";
 };
+
+const BAR_DURATIONS = [420, 620, 370, 700, 310, 530, 460];
+const BAR_DELAYS    = [0,   120, 240, 60,  180, 320, 80 ];
+
+function WaveBar({ index }: { index: number }) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const duration = BAR_DURATIONS[index] ?? 400;
+    const delay    = BAR_DELAYS[index]    ?? 0;
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, {
+          toValue: 1,
+          duration,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: false,
+        }),
+        Animated.timing(anim, {
+          toValue: 0,
+          duration,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: false,
+        }),
+      ])
+    );
+
+    const timeout = setTimeout(() => loop.start(), delay);
+    return () => {
+      clearTimeout(timeout);
+      loop.stop();
+    };
+  }, []);
+
+  const height = anim.interpolate({ inputRange: [0, 1], outputRange: [8, 32] });
+
+  return (
+    <Animated.View
+      style={{ width: 4, height, borderRadius: 2, backgroundColor: Colors.accent }}
+    />
+  );
+}
+
+function WaveBars() {
+  return (
+    <View style={styles.waveContainer}>
+      {[0, 1, 2, 3, 4, 5, 6].map(i => (
+        <WaveBar key={i} index={i} />
+      ))}
+    </View>
+  );
+}
 
 function FieldRow({
   label, value, onChange, placeholder, keyboard, prefix, suffix,
@@ -327,11 +382,12 @@ export function LogSheet({
                   </View>
                 )}
                 <View>
+                  <WaveBars />
                   <TextInput
                     style={styles.sheetTextInput}
                     value={text}
                     onChangeText={setText}
-                    placeholder="Tap the mic on your keyboard to speak, or type here"
+                    placeholder="Tap 🎤 on keyboard to dictate, or type here"
                     placeholderTextColor={Colors.textTertiary}
                     multiline
                     numberOfLines={4}
@@ -339,7 +395,7 @@ export function LogSheet({
                     textAlignVertical="top"
                     returnKeyType="default"
                   />
-                  <Text style={styles.sheetHint}>Use your keyboard{"'"}s microphone button to dictate</Text>
+                  <Text style={styles.sheetHint}>Use your keyboard{"'"}s microphone button to speak</Text>
                 </View>
                 <Pressable
                   style={[styles.sheetProcessBtn, !text.trim() && { opacity: 0.45 }]}
@@ -426,6 +482,13 @@ const styles = StyleSheet.create({
     height: 32,
     alignItems: "center",
     justifyContent: "center",
+  },
+  waveContainer: {
+    height: 120,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
   },
   sheetTextInput: {
     backgroundColor: Colors.surface,
