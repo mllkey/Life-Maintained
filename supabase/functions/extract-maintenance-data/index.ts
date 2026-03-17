@@ -44,21 +44,32 @@ serve(async (req: Request) => {
   }
 
   // --- Authenticate JWT ---
-  const authHeader = req.headers.get("Authorization");
+  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+  console.log("[AUTH] Authorization header present:", !!authHeader);
+  console.log("[AUTH] Token prefix:", authHeader?.substring(0, 20));
+
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    console.error("[AUTH] Missing or invalid Authorization header");
     return json({ error: "Missing or invalid Authorization header" }, 401);
   }
   const jwt = authHeader.replace("Bearer ", "").trim();
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  console.log("[AUTH] SUPABASE_URL set:", !!supabaseUrl);
+  console.log("[AUTH] SUPABASE_ANON_KEY set:", !!supabaseAnonKey);
+
+  // Use getUser() (no jwt arg) — the Authorization header in global.headers does the work.
+  // This matches the pattern used in generate-maintenance-schedule.
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   });
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  console.log("[AUTH] getUser result:", user?.id, "error:", authError?.message);
+
   if (authError || !user) {
-    console.error("Auth error:", authError);
+    console.error("[AUTH] Auth failed — authError:", authError?.message, "user:", user?.id);
     return json({ error: "Unauthorized" }, 401);
   }
   const userId = user.id;

@@ -160,22 +160,31 @@ serve(async (req: Request) => {
     };
 
     // ── 2. Authenticate user from JWT ──────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
+    const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+    console.log("[AUTH] Authorization header present:", !!authHeader);
+    console.log("[AUTH] Token prefix:", authHeader?.substring(0, 20));
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.error("[AUTH] Missing or invalid Authorization header");
       return json({ error: "Missing or invalid Authorization header" }, 401);
     }
-    const jwt = authHeader.replace("Bearer ", "");
+    const jwt = authHeader.replace("Bearer ", "").trim();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    console.log("[AUTH] SUPABASE_URL set:", !!supabaseUrl);
+    console.log("[AUTH] SUPABASE_ANON_KEY set:", !!supabaseAnonKey);
 
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: `Bearer ${jwt}` } },
     });
 
     const { data: { user }, error: authError } = await userClient.auth.getUser();
+    console.log("[AUTH] getUser result:", user?.id, "error:", authError?.message);
+
     if (authError || !user) {
+      console.error("[AUTH] Auth failed — authError:", authError?.message, "user:", user?.id);
       return json({ error: "Unauthorized: invalid or expired token" }, 401);
     }
     const authUserId = user.id;
