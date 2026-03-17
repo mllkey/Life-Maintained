@@ -1,0 +1,68 @@
+CONTEXT: Two bugs to fix and a simplified voice recording visualization. Only modify components/LogSheet.tsx. Do NOT modify any other files. Do NOT touch routing, onboarding, or auth logic.
+BUG 1 — Transcription fails with "readAsStringAsync from expo-file-system is deprecated":
+Change: import * as FileSystem from "expo-file-system";
+To: import * as FileSystem from "expo-file-system/legacy";
+If that import doesn't resolve, replace the readAsStringAsync call with:
+const response = await fetch(recordingUri);
+const blob = await response.blob();
+const base64 = await new Promise<string>((resolve) => {
+  const reader = new FileReader();
+  reader.onloadend = () => resolve((reader.result as string).split(",")[1]);
+  reader.readAsDataURL(blob);
+});
+BUG 2 — After recording stops, animation keeps playing:
+When recording stops and phase changes to "transcribing", the animation must stop. Ensure the requestAnimationFrame loop or any Animated.loop checks the current phase and stops when phase is not "recording" or "idle".
+VISUAL REDESIGN — Simple glowing orb with smooth pulse rings:
+Delete ALL current visualization code. Replace with this clean implementation using react-native-reanimated (install if needed: npx expo install react-native-reanimated). Add "react-native-reanimated" to babel.config.js plugins if not already there.
+CENTER ORB:
+
+3 nested View circles stacked with position absolute, all centered:
+
+Outer glow: 120px, borderRadius 60, backgroundColor Colors.accent, opacity 0.06
+Mid glow: 80px, borderRadius 40, backgroundColor Colors.accent, opacity 0.15
+Inner core: 52px, borderRadius 26, backgroundColor Colors.accent, opacity 0.85
+
+
+Mic icon (22px, white) centered on top of inner core
+The mid glow animates scale 0.9-1.1 on a 2.5s loop using reanimated withRepeat + withTiming
+The outer glow animates scale 0.95-1.05 on a 3.5s loop (different speed = organic parallax)
+
+PULSE RINGS — 4 rings that continuously cycle:
+
+Each ring is a View: width 200, height 200, borderRadius 100, borderWidth 2, borderColor Colors.accent, position absolute, centered
+Each ring runs this loop using reanimated: scale from 0.3 to 1.4, opacity from 0.4 to 0, duration 2000ms, easing Easing.out(Easing.cubic)
+The 4 rings are staggered 500ms apart (ring 1 starts at 0ms, ring 2 at 500ms, ring 3 at 1000ms, ring 4 at 1500ms) using withDelay
+Each ring uses withRepeat to loop infinitely
+This creates a continuous sonar/ripple effect with 4 rings always visible at different stages
+
+RECORDING REACTIVITY:
+
+When recording, adjust the pulse ring animation speed based on amplitude:
+
+Use a reanimated shared value for amplitude (updated from onRecordingStatusUpdate)
+The inner core's scale also responds: 0.85-1.15 based on amplitude using withSpring for bouncy feel
+The outer glow opacity increases from 0.06 to 0.12 when amplitude is high
+
+
+When idle, everything runs at the base gentle speed
+
+PHASE TRANSITIONS:
+
+idle: orb breathes, pulse rings animate slowly
+recording: orb responds to voice, pulse rings continue
+transcribing: pulse rings stop (set opacity to 0 with withTiming 300ms), show ActivityIndicator and "Processing audio..." text
+type: hide the whole visualization, show text input with Process button
+
+Keep the record/stop button (72px circle), "Tap to start" / "Listening..." text, and "Type instead" link exactly as they are.
+VERIFICATION:
+
+Transcription works — no expo-file-system error
+Center orb glows with 3 layered circles creating depth
+4 pulse rings continuously ripple outward from center
+Rings are staggered so multiple are always visible
+Recording: orb bounces with voice amplitude
+Transcribing: rings fade out, spinner shows
+After transcription: text appears in editable input
+"Type instead" goes directly to text input
+All processing/save logic works
+Zero TypeScript errors
