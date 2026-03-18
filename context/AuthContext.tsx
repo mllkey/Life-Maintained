@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     mountedRef.current = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mountedRef.current) return;
       setSession(session);
 
@@ -120,12 +120,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsLoading(true);
 
           // Fast local check — prevents onboarding redirect if network fails
-          try {
-            const cached = await AsyncStorage.getItem("@onboarding_completed");
-            if (cached === "true" && mountedRef.current) {
-              setOnboardingCompleted(true);
-            }
-          } catch {}
+          // Uses .then() to avoid async/await inside non-async callback
+          AsyncStorage.getItem("@onboarding_completed")
+            .then((cached) => {
+              if (cached === "true" && mountedRef.current) {
+                setOnboardingCompleted(true);
+              }
+            })
+            .catch(() => {});
 
           fetchProfile(session.user.id).finally(() => {
             if (mountedRef.current) setIsLoading(false);
