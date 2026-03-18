@@ -1,0 +1,59 @@
+CONTEXT: CRITICAL BUG — The onboarding loop keeps returning. This is the third time. The root cause is that onboarding_completed is only stored in Supabase and never cached locally. If the profile fetch fails for ANY reason (network, timeout, hot reload), the app defaults to onboardingCompleted=false and redirects to onboarding. This is a PERMANENT fix using AsyncStorage as a local cache.
+IMPORTANT: Only modify context/AuthContext.tsx and app/(onboarding)/complete.tsx. Do NOT modify any other files.
+
+FILE 1 — app/(onboarding)/complete.tsx
+After the successful upsert and before calling setOnboardingCompleted(true), add a line to cache the flag locally:
+import AsyncStorage from "@react-native-async-storage/async-storage";
+After the line if (!success) { ... return; } and before setOnboardingCompleted(true), add:
+await AsyncStorage.setItem("@onboarding_completed", "true");
+The full sequence after confirmed DB write should be:
+
+await AsyncStorage.setItem("@onboarding_completed", "true");
+setOnboardingCompleted(true);
+setIsSaving(false);
+router.replace("/(tabs)");
+
+FILE 2 — context/AuthContext.tsx
+Three changes:
+CHANGE A — On app startup, read the cached value BEFORE the profile fetch:
+In the onAuthStateChange handler, inside the INITIAL_SESSION / SIGNED_IN block, BEFORE calling fetchProfile, add a fast local check:
+if (session?.user) {
+  userIdRef.current = session.user.id;
+  setIsLoading(true);
+  
+  // Fast local check — prevents onboarding redirect if network fails
+  try {
+    const cached = await AsyncStorage.getItem("@onboarding_completed");
+    if (cached === "true" && mountedRef.current) {
+      setOnboardingCompleted(true);
+    }
+  } catch {}
+  
+  fetchProfile(session.user.id).finally(() => {
+    if (mountedRef.current) setIsLoading(false);
+  });
+}
+This means: even if fetchProfile fails completely, onboardingCompleted is already set to true from the local cache, so the router will send the user to /(tabs) instead of /(onboarding).
+CHANGE B — In fetchProfile success path, also update the cache:
+After setOnboardingCompleted(fullProfile.onboarding_completed === true); add:
+if (fullProfile.onboarding_completed) {
+  AsyncStorage.setItem("@onboarding_completed", "true").catch(() => {});
+} else {
+  AsyncStorage.removeItem("@onboarding_completed").catch(() => {});
+}
+This keeps the cache in sync with the database.
+CHANGE C — In signOut, clear the cache:
+In the signOut function, add before the existing lines:
+await AsyncStorage.removeItem("@onboarding_completed");
+This ensures signing out properly resets the state.
+Import AsyncStorage at the top of AuthContext.tsx if not already imported:
+import AsyncStorage from "@react-native-async-storage/async-storage";
+WHY THIS IS PERMANENT: The onboarding state now has TWO sources of truth — Supabase (canonical) and AsyncStorage (local cache). The local cache is checked FIRST on every app launch. The Supabase fetch updates the cache when it succeeds. Even if Supabase is completely unreachable, the app will still know the user completed onboarding. The only way to get sent to onboarding is if BOTH the local cache AND the database say onboarding is not completed.
+VERIFICATION:
+
+Complete onboarding → confirm "@onboarding_completed" is in AsyncStorage
+Kill app → reopen → lands on dashboard (NOT onboarding)
+Kill app → enable airplane mode → reopen → still lands on dashboard
+Sign out → sign back in → if profile has onboarding_completed=true, lands on dashboard
+Brand new user with no profile → correctly goes to onboarding
+Zero TypeScript errors

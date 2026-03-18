@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, Text, Pressable, StyleSheet, Image, ActivityIndicator } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { Colors } from "@/constants/colors";
@@ -58,6 +59,7 @@ export default function OnboardingCompleteScreen() {
       }
 
       // Only proceed to the app once the DB write is confirmed.
+      await AsyncStorage.setItem("@onboarding_completed", "true");
       setOnboardingCompleted(true);
       setIsSaving(false);
       router.replace("/(tabs)");

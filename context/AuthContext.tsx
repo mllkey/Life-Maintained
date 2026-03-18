@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useMemo, ReactNode, useRef, useCallback } from "react";
 import { AppState, AppStateStatus } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
 import type { Profile } from "@/lib/subscription";
@@ -74,6 +75,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       setProfile(fullProfile);
       setOnboardingCompleted(fullProfile.onboarding_completed === true);
+      if (fullProfile.onboarding_completed) {
+        AsyncStorage.setItem("@onboarding_completed", "true").catch(() => {});
+      } else {
+        AsyncStorage.removeItem("@onboarding_completed").catch(() => {});
+      }
       setProfileLoaded(true);
       checkAndResetScanCount(userId, fullProfile).catch(() => {});
     } catch (e) {
@@ -95,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     mountedRef.current = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mountedRef.current) return;
       setSession(session);
 
@@ -112,6 +118,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           userIdRef.current = session.user.id;
           setIsLoading(true);
+
+          // Fast local check — prevents onboarding redirect if network fails
+          try {
+            const cached = await AsyncStorage.getItem("@onboarding_completed");
+            if (cached === "true" && mountedRef.current) {
+              setOnboardingCompleted(true);
+            }
+          } catch {}
+
           fetchProfile(session.user.id).finally(() => {
             if (mountedRef.current) setIsLoading(false);
           });
@@ -151,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    await AsyncStorage.removeItem("@onboarding_completed");
     userIdRef.current = null;
     setProfile(null);
     await supabase.auth.signOut();
