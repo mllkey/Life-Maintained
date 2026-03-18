@@ -388,8 +388,6 @@ export default function DashboardScreen() {
 
             <SpendingChartCard spending={spending} />
 
-            <QuickActionsRow onLogService={() => setLogSheetVisible(true)} />
-
             {screenings.length > 0 && (familyMembers?.length ?? 0) > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
@@ -779,6 +777,8 @@ function SpendingChartCard({ spending }: { spending: Record<string, number> | un
   const maxAmount = Math.max(...amounts, 1);
   const currentMonthTotal = (spending ?? {})[currentMonthKey] ?? 0;
   const hasData = amounts.some(a => a > 0);
+  const activeMonths = months.filter((_, i) => amounts[i] > 0);
+  const activeAmounts = amounts.filter(a => a > 0);
 
   return (
     <View style={{ gap: 8 }}>
@@ -792,8 +792,8 @@ function SpendingChartCard({ spending }: { spending: Record<string, number> | un
           <Text style={styles.spendingEmpty}>No spending recorded yet</Text>
         ) : (
           <View style={styles.spendingBars}>
-            {months.map((m, i) => {
-              const amount = amounts[i];
+            {activeMonths.map((m, i) => {
+              const amount = activeAmounts[i];
               const isCurrent = m.key === currentMonthKey;
               const widthPercent = (amount / maxAmount) * 100;
               return (
@@ -812,33 +812,6 @@ function SpendingChartCard({ spending }: { spending: Record<string, number> | un
   );
 }
 
-function QuickActionsRow({ onLogService }: { onLogService: () => void }) {
-  return (
-    <View style={styles.quickActionsRow}>
-      <Pressable
-        style={({ pressed }) => [styles.quickActionItem, { opacity: pressed ? 0.75 : 1 }]}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onLogService(); }}
-      >
-        <Ionicons name="mic-outline" size={16} color={Colors.textSecondary} />
-        <Text style={styles.quickActionLabel}>Log Service</Text>
-      </Pressable>
-      <Pressable
-        style={({ pressed }) => [styles.quickActionItem, { opacity: pressed ? 0.75 : 1 }]}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-vehicle"); }}
-      >
-        <Ionicons name="car-outline" size={16} color={Colors.textSecondary} />
-        <Text style={styles.quickActionLabel}>Add Vehicle</Text>
-      </Pressable>
-      <Pressable
-        style={({ pressed }) => [styles.quickActionItem, { opacity: pressed ? 0.75 : 1 }]}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-property"); }}
-      >
-        <Ionicons name="home-outline" size={16} color={Colors.textSecondary} />
-        <Text style={styles.quickActionLabel}>Add Property</Text>
-      </Pressable>
-    </View>
-  );
-}
 
 function WelcomeView() {
   const cats: (keyof typeof CAT)[] = ["vehicles", "properties", "health"];
@@ -1317,8 +1290,8 @@ const styles = StyleSheet.create({
   spendingEmpty: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", paddingVertical: 12 },
   spendingBars: { gap: 8 },
   spendingBarRow: { gap: 3 },
-  spendingBarTrack: { height: 24, backgroundColor: Colors.borderSubtle, borderRadius: 4, overflow: "hidden" },
-  spendingBarFill: { height: 24, backgroundColor: Colors.accent, borderRadius: 4 },
+  spendingBarTrack: { height: 16, backgroundColor: Colors.borderSubtle, borderRadius: 3, overflow: "hidden" },
+  spendingBarFill: { height: 16, backgroundColor: Colors.accent, borderRadius: 3 },
   spendingBarLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
 
   catCard: {
@@ -1331,13 +1304,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  quickActionsRow: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 8 },
-  quickActionItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-  },
-  quickActionLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
 });
