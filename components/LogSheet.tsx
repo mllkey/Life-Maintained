@@ -591,27 +591,16 @@ export function LogSheet({
               </Pressable>
             </View>
 
-            {/* Center: orb + status text */}
+            {/* Orb — centered in upper portion */}
             <View style={styles.recordingCenter}>
               <VoiceOrb
                 amplitudeRef={amplitudeRef}
                 isRecording={phase === "recording"}
                 phase={phase}
               />
-
-              <Text style={[
-                styles.recordingStatus,
-                phase === "recording" && { color: "#fff" },
-              ]}>
-                {phase === "idle"
-                  ? "Tap to start"
-                  : phase === "recording"
-                    ? "Listening..."
-                    : "Transcribing..."}
-              </Text>
             </View>
 
-            {/* Bottom: record/stop button + type-instead */}
+            {/* Bottom group: button → status text → type-instead */}
             <View style={styles.recordingBottom}>
               {phase === "transcribing" ? (
                 <View style={styles.transcribingRow}>
@@ -633,7 +622,14 @@ export function LogSheet({
                       color="#fff"
                     />
                   </Pressable>
-                  <Pressable onPress={() => setPhase("type")} hitSlop={12}>
+                  <Text style={[
+                    styles.recordingStatus,
+                    { marginTop: 12 },
+                    phase === "recording" && { color: "#fff" },
+                  ]}>
+                    {phase === "idle" ? "Tap to start" : "Listening..."}
+                  </Text>
+                  <Pressable onPress={() => setPhase("type")} hitSlop={12} style={{ marginTop: 16 }}>
                     <Text style={styles.typeInsteadText}>Type instead →</Text>
                   </Pressable>
                 </>
@@ -753,7 +749,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 32,
   },
   recordingStatus: {
     fontSize: 18,
@@ -763,7 +758,6 @@ const styles = StyleSheet.create({
   },
   recordingBottom: {
     alignItems: "center",
-    gap: 16,
     paddingHorizontal: 20,
   },
   recordingBtn: {
