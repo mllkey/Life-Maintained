@@ -1,0 +1,66 @@
+CONTEXT: The dashboard looks AI-generated because every element uses the same card style with identical borders, padding, and icon treatments. This redesign makes it look human-designed by creating visual hierarchy and variation. Only modify app/(tabs)/index.tsx. Do NOT modify any other files.
+
+CHANGES TO DASHBOARD:
+
+REMOVE the greeting text ("Good afternoon") — delete the getGreeting function and the greeting Text element entirely. The "Dashboard" title is sufficient.
+MAINTENANCE SCORE — Make it the visual hero:
+
+
+Remove the card wrapper (scoreCard style). The score ring + text should sit directly on the background with no card, no border.
+Increase the SVG ring size from 72px to 96px
+Increase the score number font size from 20 to 28
+The "Maintenance Score" title stays at 16px
+Add 24px of space above and below this section
+This creates a bold, breathing focal point at the top
+
+
+MILEAGE CARD — Remove the section label "Mileage" above it (the card header already says "Mileage" inside). Keep the card itself as-is.
+NEEDS ATTENTION SECTION — Remove the card wrapper:
+
+
+Remove the panelCard wrapper from UpcomingTasksCard
+Tasks should render as a flat list directly on the background
+Keep the status bars (4px colored vertical bars) on each task row
+Add a subtle 1px divider (Colors.border) between rows instead of card containment
+Keep the "See all X items" link at the bottom
+
+
+SPENDING SECTION — Keep the card. It's fine as a contained element.
+QUICK ACTIONS ROW — Replace the 3 card buttons with simple text links:
+
+
+Remove the card styling (backgroundColor, border, borderRadius)
+Each action becomes: icon (16px, Colors.textSecondary) + label (13px, Colors.textSecondary)
+Arranged in a row with even spacing
+No background, no border — just icon + text
+
+
+WELCOME VIEW (empty state) — Remove the icon-in-colored-circle pattern:
+
+
+The emptyCardIcon wraps (colored background circles around icons) should be removed
+Just show the icon directly at 28px in the category color
+Keep the dashed border cards
+
+
+STATUS BADGES in header — Keep as-is. They work well.
+SPACING RHYTHM:
+
+
+Gap between major sections: 24px (was 12px)
+Gap within a section (between items): 8px
+Space above section labels: 28px
+Space below section labels: 8px
+
+This creates asymmetric whitespace — more breathing room between sections, tight grouping within sections.
+VERIFICATION:
+
+No greeting text visible
+Maintenance score ring is larger and has no card wrapper
+No "Mileage" label above the mileage card
+Needs Attention tasks are a flat list, not in a card
+Quick actions are simple text links, not cards
+More space between major sections
+Dashboard feels airy and has clear visual hierarchy
+All data still displays correctly
+Zero TypeScript errors

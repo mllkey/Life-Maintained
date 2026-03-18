@@ -101,12 +101,6 @@ function getAgeScreenings(dob: string | null, sex: string | null): { title: stri
   return screenings;
 }
 
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
-}
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -331,7 +325,6 @@ export default function DashboardScreen() {
       >
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>{getGreeting()}</Text>
             <Text style={styles.headerTitle}>Dashboard</Text>
             {!isLoading && !isNewUser && (
               <Text style={styles.headerSummary}>
@@ -378,10 +371,6 @@ export default function DashboardScreen() {
                 <Ionicons name="close" size={14} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
               </Pressable>
             )}
-            {(mileageVehicles?.length ?? 0) > 0 && (
-              <QuickMileageCard vehicles={mileageVehicles!} userId={user!.id} />
-            )}
-
             {totalTasks > 0 && (
               <HealthScoreCard
                 score={healthScore}
@@ -389,6 +378,10 @@ export default function DashboardScreen() {
                 dueSoon={dueSoonCnt}
                 onTrack={onTrackCnt}
               />
+            )}
+
+            {(mileageVehicles?.length ?? 0) > 0 && (
+              <QuickMileageCard vehicles={mileageVehicles!} userId={user!.id} />
             )}
 
             <UpcomingTasksCard items={upcomingItems} />
@@ -690,65 +683,56 @@ function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
     else router.push("/(tabs)/health");
   }
 
+  if (items.length === 0) return null;
+
   const visibleItems = items.slice(0, 4);
   const hasMore = items.length > 4;
   const firstNavItem = items.find(i => i.category === "vehicles" || i.category === "properties");
   const seeAllRoute: any = firstNavItem?.category === "vehicles" ? "/(tabs)/vehicles" : "/(tabs)/home-tab";
 
   return (
-    <>
-      {items.length > 0 && (
-        <Text style={styles.sectionLabel}>NEEDS ATTENTION</Text>
-      )}
-      <View style={styles.panelCard}>
-        {items.length === 0 ? (
-          <View style={styles.panelEmpty}>
-            <Ionicons name="checkmark-circle-outline" size={24} color={Colors.good} />
-            <Text style={styles.panelEmptyText}>All good</Text>
-          </View>
-        ) : (
-          <View style={styles.taskList}>
-            {visibleItems.map((item, idx) => {
-              const statusColor = item.status === "overdue" ? Colors.overdue : Colors.dueSoon;
-              return (
-                <Pressable
-                  key={item.id}
-                  style={({ pressed }) => [
-                    styles.taskRow,
-                    (idx < visibleItems.length - 1 || hasMore) && styles.taskRowBorder,
-                    { opacity: pressed ? 0.75 : 1 },
-                  ]}
-                  onPress={() => handlePress(item)}
-                >
-                  <View style={[styles.taskBar, { backgroundColor: statusColor }]} />
-                  <View style={styles.taskInfo}>
-                    <Text style={styles.taskTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={styles.taskSub} numberOfLines={1}>{item.subtitle}</Text>
-                  </View>
-                  <Text style={[styles.taskDue, { color: statusColor }]}>{formatDueDate(item.dueDate)}</Text>
-                </Pressable>
-              );
-            })}
-            {hasMore && (
-              <Pressable
-                style={({ pressed }) => [styles.seeAllRow, { opacity: pressed ? 0.7 : 1 }]}
-                onPress={() => { Haptics.selectionAsync(); router.push(seeAllRoute); }}
-              >
-                <Text style={styles.seeAllText}>{"See all "}{items.length}{" items →"}</Text>
-              </Pressable>
-            )}
-          </View>
+    <View style={{ gap: 8 }}>
+      <Text style={styles.sectionLabel}>NEEDS ATTENTION</Text>
+      <View style={styles.taskList}>
+        {visibleItems.map((item, idx) => {
+          const statusColor = item.status === "overdue" ? Colors.overdue : Colors.dueSoon;
+          return (
+            <Pressable
+              key={item.id}
+              style={({ pressed }) => [
+                styles.taskRow,
+                (idx < visibleItems.length - 1 || hasMore) && styles.taskRowBorder,
+                { opacity: pressed ? 0.75 : 1 },
+              ]}
+              onPress={() => handlePress(item)}
+            >
+              <View style={[styles.taskBar, { backgroundColor: statusColor }]} />
+              <View style={styles.taskInfo}>
+                <Text style={styles.taskTitle} numberOfLines={1}>{item.title}</Text>
+                <Text style={styles.taskSub} numberOfLines={1}>{item.subtitle}</Text>
+              </View>
+              <Text style={[styles.taskDue, { color: statusColor }]}>{formatDueDate(item.dueDate)}</Text>
+            </Pressable>
+          );
+        })}
+        {hasMore && (
+          <Pressable
+            style={({ pressed }) => [styles.seeAllRow, { opacity: pressed ? 0.7 : 1 }]}
+            onPress={() => { Haptics.selectionAsync(); router.push(seeAllRoute); }}
+          >
+            <Text style={styles.seeAllText}>{"See all "}{items.length}{" items →"}</Text>
+          </Pressable>
         )}
       </View>
-    </>
+    </View>
   );
 }
 
 function HealthScoreCard({ score, overdue, dueSoon, onTrack }: { score: number; overdue: number; dueSoon: number; onTrack: number }) {
   const scoreColor = score >= 80 ? Colors.good : score >= 50 ? Colors.dueSoon : Colors.overdue;
-  const r = 30;
-  const cx = 36;
-  const cy = 36;
+  const r = 40;
+  const cx = 48;
+  const cy = 48;
   const circumference = 2 * Math.PI * r;
   const offset = circumference * (1 - score / 100);
   const message =
@@ -758,9 +742,9 @@ function HealthScoreCard({ score, overdue, dueSoon, onTrack }: { score: number; 
     "Maintenance is falling behind";
 
   return (
-    <View style={styles.scoreCard}>
-      <View style={{ width: 72, height: 72 }}>
-        <Svg width={72} height={72} style={{ transform: [{ rotate: "-90deg" }] }}>
+    <View style={styles.scoreHero}>
+      <View style={{ width: 96, height: 96 }}>
+        <Svg width={96} height={96} style={{ transform: [{ rotate: "-90deg" }] }}>
           <Circle cx={cx} cy={cy} r={r} stroke={Colors.border} strokeWidth={6} fill="none" />
           <Circle
             cx={cx} cy={cy} r={r}
@@ -773,16 +757,14 @@ function HealthScoreCard({ score, overdue, dueSoon, onTrack }: { score: number; 
           />
         </Svg>
         <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: scoreColor, lineHeight: 24 }}>
-            {score}<Text style={{ fontSize: 11 }}>%</Text>
+          <Text style={{ fontSize: 28, fontFamily: "Inter_700Bold", color: scoreColor, lineHeight: 34 }}>
+            {score}<Text style={{ fontSize: 13 }}>%</Text>
           </Text>
         </View>
       </View>
-      <View style={{ flex: 1, gap: 4 }}>
-        <Text style={styles.scoreTitle}>Maintenance Score</Text>
-        <Text style={styles.scoreMessage}>{message}</Text>
-        <Text style={styles.scoreDetail}>{onTrack} on track · {dueSoon} due soon · {overdue} overdue</Text>
-      </View>
+      <Text style={styles.scoreTitle}>Maintenance Score</Text>
+      <Text style={styles.scoreMessage}>{message}</Text>
+      <Text style={styles.scoreDetail}>{onTrack} on track · {dueSoon} due soon · {overdue} overdue</Text>
     </View>
   );
 }
@@ -799,7 +781,7 @@ function SpendingChartCard({ spending }: { spending: Record<string, number> | un
   const hasData = amounts.some(a => a > 0);
 
   return (
-    <>
+    <View style={{ gap: 8 }}>
       <Text style={styles.sectionLabel}>SPENDING</Text>
       <View style={styles.panelCard}>
         <View style={styles.spendingTopRow}>
@@ -826,7 +808,7 @@ function SpendingChartCard({ spending }: { spending: Record<string, number> | un
           </View>
         )}
       </View>
-    </>
+    </View>
   );
 }
 
@@ -834,24 +816,24 @@ function QuickActionsRow({ onLogService }: { onLogService: () => void }) {
   return (
     <View style={styles.quickActionsRow}>
       <Pressable
-        style={({ pressed }) => [styles.quickActionBtn, { opacity: pressed ? 0.75 : 1 }]}
+        style={({ pressed }) => [styles.quickActionItem, { opacity: pressed ? 0.75 : 1 }]}
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onLogService(); }}
       >
-        <Ionicons name="mic-outline" size={20} color={Colors.accent} />
+        <Ionicons name="mic-outline" size={16} color={Colors.textSecondary} />
         <Text style={styles.quickActionLabel}>Log Service</Text>
       </Pressable>
       <Pressable
-        style={({ pressed }) => [styles.quickActionBtn, { opacity: pressed ? 0.75 : 1 }]}
+        style={({ pressed }) => [styles.quickActionItem, { opacity: pressed ? 0.75 : 1 }]}
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-vehicle"); }}
       >
-        <Ionicons name="car-outline" size={20} color={Colors.accent} />
+        <Ionicons name="car-outline" size={16} color={Colors.textSecondary} />
         <Text style={styles.quickActionLabel}>Add Vehicle</Text>
       </Pressable>
       <Pressable
-        style={({ pressed }) => [styles.quickActionBtn, { opacity: pressed ? 0.75 : 1 }]}
+        style={({ pressed }) => [styles.quickActionItem, { opacity: pressed ? 0.75 : 1 }]}
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-property"); }}
       >
-        <Ionicons name="home-outline" size={20} color={Colors.accent} />
+        <Ionicons name="home-outline" size={16} color={Colors.textSecondary} />
         <Text style={styles.quickActionLabel}>Add Property</Text>
       </Pressable>
     </View>
@@ -876,9 +858,7 @@ function WelcomeView() {
           const cat = CAT[key];
           return (
             <View key={key} style={[styles.emptyCard, { borderColor: cat.color + "55" }]}>
-              <View style={[styles.emptyCardIcon, { backgroundColor: cat.muted }]}>
-                <Ionicons name={cat.icon} size={24} color={cat.color} />
-              </View>
+              <Ionicons name={cat.icon} size={28} color={cat.color} />
               <Text style={styles.emptyCardLabel}>{cat.label}</Text>
               <Text style={styles.emptyCardDesc}>{cat.desc}</Text>
               <Pressable
@@ -898,13 +878,12 @@ function WelcomeView() {
 const styles = StyleSheet.create({
   headerGradient: { paddingBottom: 20 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", paddingHorizontal: 20, paddingTop: 16 },
-  greeting: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   headerTitle: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
   statusBadges: { flexDirection: "column", gap: 6, alignItems: "flex-end" },
   badge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10 },
   badgeDot: { width: 6, height: 6, borderRadius: 3 },
   badgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  content: { paddingHorizontal: 20, paddingTop: 4, gap: 12 },
+  content: { paddingHorizontal: 20, paddingTop: 4, gap: 24 },
   budgetBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1323,19 +1302,14 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
 
-  scoreCard: {
-    flexDirection: "row",
+  scoreHero: {
     alignItems: "center",
-    gap: 16,
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
+    paddingVertical: 24,
+    gap: 8,
   },
-  scoreTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  scoreMessage: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  scoreDetail: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  scoreTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
+  scoreMessage: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  scoreDetail: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
 
   spendingTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   spendingThisMonth: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
@@ -1357,17 +1331,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  quickActionsRow: { flexDirection: "row", gap: 8 },
-  quickActionBtn: {
+  quickActionsRow: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 8 },
+  quickActionItem: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingVertical: 12,
+    paddingVertical: 8,
   },
-  quickActionLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  quickActionLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
 });
