@@ -117,13 +117,13 @@ export default function VehiclesScreen() {
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
         <Text style={styles.title}>Vehicles</Text>
         <Pressable
-          style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.8 : 1 }]}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             router.push("/add-vehicle");
           }}
         >
-          <Ionicons name="add" size={22} color={Colors.textInverse} />
+          <Text style={styles.addText}>Add</Text>
         </Pressable>
       </View>
 
@@ -192,9 +192,7 @@ export default function VehiclesScreen() {
                   router.push(`/vehicle/${v.id}` as any);
                 }}
               >
-                <View style={[styles.iconWrap, { backgroundColor: Colors.vehicleMuted }]}>
-                  <Ionicons name={icon as any} size={18} color={Colors.vehicle} />
-                </View>
+                <Ionicons name={icon as any} size={18} color={Colors.vehicle} />
                 <View style={styles.vehicleInfo}>
                   <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
                   <Text
@@ -272,14 +270,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: Colors.vehicle,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  addText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.accent },
   content: { paddingHorizontal: 20, paddingTop: 8, gap: 10 },
 
   vehicleCard: {
@@ -291,14 +282,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-  },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
   },
   vehicleInfo: { flex: 1, gap: 3, minWidth: 0 },
   vehicleTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },

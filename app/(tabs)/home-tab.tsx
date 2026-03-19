@@ -115,13 +115,13 @@ export default function HomeTabScreen() {
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
         <Text style={styles.title}>Properties</Text>
         <Pressable
-          style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.8 : 1 }]}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             router.push("/add-property");
           }}
         >
-          <Ionicons name="add" size={22} color={Colors.textInverse} />
+          <Text style={styles.addText}>Add</Text>
         </Pressable>
       </View>
 
@@ -178,9 +178,7 @@ export default function HomeTabScreen() {
                   router.push(`/property/${p.id}` as any);
                 }}
               >
-                <View style={[styles.iconWrap, { backgroundColor: Colors.homeMuted }]}>
-                  <Ionicons name={icon as any} size={18} color={Colors.home} />
-                </View>
+                <Ionicons name={icon as any} size={18} color={Colors.home} />
 
                 <View style={styles.cardInfo}>
                   <Text style={styles.cardTitle} numberOfLines={1}>{label}</Text>
@@ -248,14 +246,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: Colors.home,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  addText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.accent },
   content: { paddingHorizontal: 20, paddingTop: 8, gap: 10 },
 
   propertyCard: {
@@ -267,14 +258,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-  },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
   },
   cardInfo: { flex: 1, gap: 3 },
   cardTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
