@@ -24,3 +24,9 @@ id = "M0_yvdTOvBwS-qhMJRUDj"
 uri = "file://LM-clean.tar.gz"
 type = "unspecified"
 title = "LM-clean.tar.gz"
+
+[[outputs]]
+id = "FYCYnvDCCK-iCt9OHKXrv"
+uri = "file://LifeMaintained.tar.gz"
+type = "unspecified"
+title = "LifeMaintained.tar.gz"
