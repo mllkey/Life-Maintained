@@ -310,6 +310,8 @@ export default function VehicleDetailScreen() {
 
     handleCloseMarkComplete();
 
+    console.log("[markComplete] Inserting log: service_name=", task.name, "vehicle_id=", id, "date=", completeDate);
+
     try {
       const [taskRes, vehicleRes, logRes] = await Promise.all([
         supabase.from("user_vehicle_maintenance_tasks").update({
@@ -1280,6 +1282,7 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
 
       const { data: urlData } = supabase.storage.from("wallet-documents").getPublicUrl(storagePath);
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+      console.log("[WalletTab] Public URL:", publicUrl);
 
       const existingDoc = getDoc(docType);
       if (existingDoc) {
@@ -1436,7 +1439,12 @@ function DocPhotoSlot({
         onLongPress={onLongPress}
         delayLongPress={400}
       >
-        <Image source={{ uri: photoUrl }} style={walletStyles.slotImage} resizeMode="cover" />
+        <Image
+          source={{ uri: photoUrl }}
+          style={walletStyles.slotImage}
+          resizeMode="cover"
+          onError={(e) => console.error("[WalletTab] Image load error:", e.nativeEvent.error, "URL:", photoUrl)}
+        />
         <View style={walletStyles.slotLabelRow}>
           <Text style={walletStyles.slotLabelText}>{label}</Text>
           <Ionicons name="ellipsis-horizontal" size={16} color={Colors.textSecondary} />

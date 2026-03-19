@@ -1,0 +1,49 @@
+CONTEXT: Three functional bugs to fix. These are the final blockers before the app works end to end.
+BUG 1 — Receipt scan not populating all fields:
+The scan-receipt Edge Function only extracts date, cost, provider, and serviceType. It does NOT extract mileage. The client expects a mileage field.
+Fix the Edge Function at supabase/functions/scan-receipt/index.ts:
+A) Update the prompt to also extract mileage:
+Add to the prompt: "5. mileage — The vehicle mileage/odometer reading if shown on the receipt as a number. Return null if not found."
+B) Update the JSON format in the prompt to include mileage:
+{
+  "date": "YYYY-MM-DD or null",
+  "cost": number or null,
+  "provider": "string or null",
+  "serviceType": "string or null",
+  "mileage": number or null,
+  "rawText": "brief summary"
+}
+C) Update the parsed result to include mileage:
+mileage: obj.mileage != null && obj.mileage !== "null" ? Number(obj.mileage) : null,
+D) Also add a "task" field that maps from serviceType for client compatibility:
+Add to the response: task: parsed.serviceType, so the client gets it directly.
+After editing, deploy: cd ~/Life-Maintained/supabase && supabase functions deploy scan-receipt
+BUG 2 — Wallet photos upload but don't display:
+The upload code and display code look correct. The issue is the Supabase Storage bucket configuration. The wallet-documents bucket must be set to PUBLIC for getPublicUrl to work.
+Check if there's a programmatic way to verify this. Add a console.log after getPublicUrl to print the full URL:
+console.log("[WalletTab] Public URL:", publicUrl);
+If the URL is correct but images still don't load, the issue is the bucket's public setting in Supabase Dashboard. Tell me the URL that gets logged and I will verify.
+ALSO: Add an onError handler to the Image component to catch load failures:
+<Image
+  source={{ uri: photoUrl }}
+  style={walletStyles.slotImage}
+  resizeMode="cover"
+  onError={(e) => console.error("[WalletTab] Image load error:", e.nativeEvent.error, "URL:", photoUrl)}
+/>
+BUG 3 — Completed task should show in History tab:
+The mark complete handler DOES insert into maintenance_logs with service_name = task.name. The history screen filters by service_name = task (URL param). Verify these match by adding a console.log:
+In handleSaveMarkComplete, before the Promise.all, add:
+console.log("[markComplete] Inserting log: service_name=", task.name, "vehicle_id=", id, "date=", completeDate);
+In the vehicle-task-history screen, add a log in the query:
+console.log("[taskHistory] Querying: vehicle_id=", vehicleId, "service_name=", task);
+If the service_name values don't match (e.g., one has extra whitespace or different casing), that's the bug. The log will tell us.
+ALSO check: the History tab on the vehicle detail screen — does it navigate to vehicle-task-history with the correct task name parameter? Find where the History tab links to the history screen and log what parameters it passes.
+VERIFICATION:
+
+Scan a receipt → all fields populate including mileage if on receipt
+Wallet photo upload → console shows the public URL
+Wallet photo display → Image onError logs any load failures
+Mark task complete → console shows the inserted service_name
+History screen → console shows the queried service_name
+Deploy scan-receipt Edge Function succeeds
+Zero TypeScript errors

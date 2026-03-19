@@ -37,6 +37,7 @@ export default function VehicleTaskHistoryScreen() {
   const { data: logs, isLoading } = useQuery({
     queryKey: ["vehicle_task_logs", vehicleId, task],
     queryFn: async () => {
+      console.log("[taskHistory] Querying: vehicle_id=", vehicleId, "service_name=", task);
       const { data } = await supabase
         .from("maintenance_logs")
         .select("*")

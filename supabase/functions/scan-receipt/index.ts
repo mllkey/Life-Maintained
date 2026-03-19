@@ -13,6 +13,8 @@ interface ReceiptData {
   cost: number | null;
   provider: string | null;
   serviceType: string | null;
+  mileage: number | null;
+  task: string | null;
   rawText: string;
   error?: string;
 }
@@ -93,6 +95,7 @@ serve(async (req: Request) => {
 2. cost — The total amount charged as a number (no currency symbol). Use the final total/amount due. Return null if not found.
 3. provider — The business or service provider name (e.g. "Jiffy Lube", "AutoNation", "Dr. Smith's Clinic"). Return null if not found.
 4. serviceType — A short description of the service performed (e.g. "Oil Change", "Tire Rotation", "Brake Inspection"). Return null if not found.
+5. mileage — The vehicle mileage/odometer reading if shown on the receipt as a number. Return null if not found.
 
 Respond ONLY with a valid JSON object in this exact format, no extra text:
 {
@@ -100,6 +103,7 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
   "cost": number or null,
   "provider": "string or null",
   "serviceType": "string or null",
+  "mileage": number or null,
   "rawText": "a brief summary of what you can read on the receipt"
 }`;
 
@@ -160,17 +164,20 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
       const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("No JSON found in response: " + rawContent);
       const obj = JSON.parse(jsonMatch[0]);
+      const serviceType = obj.serviceType && obj.serviceType !== "null" ? String(obj.serviceType) : null;
       parsed = {
         date: obj.date && obj.date !== "null" ? String(obj.date) : null,
         cost: obj.cost != null && obj.cost !== "null" ? Number(obj.cost) : null,
         provider: obj.provider && obj.provider !== "null" ? String(obj.provider) : null,
-        serviceType: obj.serviceType && obj.serviceType !== "null" ? String(obj.serviceType) : null,
+        serviceType,
+        mileage: obj.mileage != null && obj.mileage !== "null" ? Number(obj.mileage) : null,
+        task: serviceType,
         rawText: typeof obj.rawText === "string" ? obj.rawText : rawContent.slice(0, 300),
       };
     } catch (parseErr) {
       console.error("Failed to parse Anthropic JSON response:", parseErr, "Raw:", rawContent);
       parsed = {
-        date: null, cost: null, provider: null, serviceType: null,
+        date: null, cost: null, provider: null, serviceType: null, mileage: null, task: null,
         rawText: rawContent.slice(0, 300),
         error: "Could not parse receipt fields",
       };
@@ -183,7 +190,7 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
   } catch (err) {
     console.error("scan-receipt unexpected error:", err);
     return new Response(
-      JSON.stringify({ error: "Internal server error", date: null, cost: null, provider: null, serviceType: null, rawText: "" }),
+      JSON.stringify({ error: "Internal server error", date: null, cost: null, provider: null, serviceType: null, mileage: null, task: null, rawText: "" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
