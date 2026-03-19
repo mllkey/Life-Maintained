@@ -1,0 +1,65 @@
+CRITICAL BUG FIX — ONBOARDING LOOP. Only modify context/AuthContext.tsx. Do NOT modify any other files. Do NOT modify LogSheet, dashboard, or any visual code.
+There are TWO bugs causing the onboarding loop:
+BUG 1: AsyncStorage.getItem runs as fire-and-forget (.then) while fetchProfile controls isLoading. If fetchProfile resolves before AsyncStorage, the router sees onboardingCompleted=false and redirects to onboarding before the cache is read.
+BUG 2: fetchProfile's success handler overwrites the cached onboardingCompleted value. If the DB returns onboarding_completed as null, it sets onboardingCompleted=false AND deletes the AsyncStorage cache.
+FIX — Replace the entire INITIAL_SESSION/SIGNED_IN block with this logic:
+if (session?.user) {
+  userIdRef.current = session.user.id;
+  setIsLoading(true);
+
+  // STEP 1: Read AsyncStorage FIRST and WAIT for it before proceeding
+  let cachedOnboarding = false;
+  try {
+    const cached = await AsyncStorage.getItem("@onboarding_completed");
+    cachedOnboarding = cached === "true";
+    if (cachedOnboarding && mountedRef.current) {
+      setOnboardingCompleted(true);
+    }
+  } catch {}
+
+  // STEP 2: Fetch profile from DB
+  await fetchProfile(session.user.id);
+
+  // STEP 3: Only NOW set isLoading to false
+  if (mountedRef.current) setIsLoading(false);
+}
+This requires making the onAuthStateChange callback async. Since Supabase's onAuthStateChange accepts async callbacks, change the callback to be async:
+const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+ALSO FIX fetchProfile — line 77 must NEVER downgrade onboarding from true to false:
+Replace this:
+setOnboardingCompleted(fullProfile.onboarding_completed === true);
+if (fullProfile.onboarding_completed) {
+  AsyncStorage.setItem("@onboarding_completed", "true").catch(() => {});
+} else {
+  AsyncStorage.removeItem("@onboarding_completed").catch(() => {});
+}
+With this:
+if (fullProfile.onboarding_completed === true) {
+  setOnboardingCompleted(true);
+  AsyncStorage.setItem("@onboarding_completed", "true").catch(() => {});
+} else {
+  // ONLY set to false if the local cache also says false.
+  // This prevents a DB null/false from overriding a valid local cache.
+  const cached = await AsyncStorage.getItem("@onboarding_completed");
+  if (cached !== "true") {
+    setOnboardingCompleted(false);
+    AsyncStorage.removeItem("@onboarding_completed").catch(() => {});
+  }
+  // If cache says true but DB says false, trust the cache.
+  // The user completed onboarding — the DB is wrong or stale.
+}
+Since fetchProfile now uses await inside, it's already async — no changes needed there.
+SUMMARY OF WHAT THIS FIXES:
+
+AsyncStorage is read BEFORE isLoading becomes false — no race condition
+If DB says onboarding_completed=false but cache says true, the cache wins
+The only way to reset onboarding is signOut (which clears the cache)
+This makes the onboarding state PERMANENT once set, surviving network failures, DB issues, and hot reloads
+
+VERIFICATION:
+
+Kill Expo Go → reopen → lands on dashboard, NOT onboarding
+Kill Expo Go → enable airplane mode → reopen → lands on dashboard
+Repeat 5 times — must NEVER go to onboarding
+Sign out → sign back in → should go to dashboard (profile has onboarding_completed=true)
+Zero TypeScript errors

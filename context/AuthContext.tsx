@@ -74,11 +74,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         scan_count_reset_at: p?.scan_count_reset_at ?? null,
       };
       setProfile(fullProfile);
-      setOnboardingCompleted(fullProfile.onboarding_completed === true);
-      if (fullProfile.onboarding_completed) {
+      if (fullProfile.onboarding_completed === true) {
+        setOnboardingCompleted(true);
         AsyncStorage.setItem("@onboarding_completed", "true").catch(() => {});
       } else {
-        AsyncStorage.removeItem("@onboarding_completed").catch(() => {});
+        const cached = await AsyncStorage.getItem("@onboarding_completed");
+        if (cached !== "true") {
+          setOnboardingCompleted(false);
+          AsyncStorage.removeItem("@onboarding_completed").catch(() => {});
+        }
       }
       setProfileLoaded(true);
       checkAndResetScanCount(userId, fullProfile).catch(() => {});
@@ -101,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     mountedRef.current = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mountedRef.current) return;
       setSession(session);
 
@@ -119,19 +123,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           userIdRef.current = session.user.id;
           setIsLoading(true);
 
-          // Fast local check — prevents onboarding redirect if network fails
-          // Uses .then() to avoid async/await inside non-async callback
-          AsyncStorage.getItem("@onboarding_completed")
-            .then((cached) => {
-              if (cached === "true" && mountedRef.current) {
-                setOnboardingCompleted(true);
-              }
-            })
-            .catch(() => {});
+          // STEP 1: Read AsyncStorage FIRST — blocks until resolved
+          try {
+            const cached = await AsyncStorage.getItem("@onboarding_completed");
+            if (cached === "true" && mountedRef.current) {
+              setOnboardingCompleted(true);
+            }
+          } catch {}
 
-          fetchProfile(session.user.id).finally(() => {
-            if (mountedRef.current) setIsLoading(false);
-          });
+          // STEP 2: Fetch profile from DB (may reinforce or preserve cached value)
+          await fetchProfile(session.user.id);
+
+          // STEP 3: Only now unblock routing
+          if (mountedRef.current) setIsLoading(false);
         } else {
           userIdRef.current = null;
           setProfile(null);
