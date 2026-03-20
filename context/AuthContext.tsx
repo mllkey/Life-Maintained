@@ -123,19 +123,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           userIdRef.current = session.user.id;
           setIsLoading(true);
 
-          // STEP 1: Read AsyncStorage FIRST — blocks until resolved
-          try {
-            const cached = await AsyncStorage.getItem("@onboarding_completed");
-            if (cached === "true" && mountedRef.current) {
-              setOnboardingCompleted(true);
-            }
-          } catch {}
+          // Sequential: read cache FIRST, then fetch profile, then allow routing
+          (async () => {
+            try {
+              const cached = await AsyncStorage.getItem("@onboarding_completed");
+              if (cached === "true" && mountedRef.current) {
+                setOnboardingCompleted(true);
+              }
+            } catch {}
 
-          // STEP 2: Fetch profile from DB (may reinforce or preserve cached value)
-          await fetchProfile(session.user.id);
+            await fetchProfile(session.user.id);
 
-          // STEP 3: Only now unblock routing
-          if (mountedRef.current) setIsLoading(false);
+            if (mountedRef.current) setIsLoading(false);
+          })();
         } else {
           userIdRef.current = null;
           setProfile(null);
