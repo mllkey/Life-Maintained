@@ -8,43 +8,51 @@ import { Colors } from "@/constants/colors";
 const SECTIONS = [
   {
     title: "1. Acceptance of Terms",
-    body: "By downloading, installing, or using LifeMaintained (\"the App\"), you agree to be bound by these Terms of Service. If you do not agree, do not use the App.",
+    body: "By downloading, accessing, or using LifeMaintained, you agree to be legally bound by these Terms of Service. If you do not agree to these terms, do not use the service.",
   },
   {
     title: "2. Description of Service",
-    body: "LifeMaintained provides tools to track vehicle maintenance, home property maintenance, and health appointments. The App is provided for informational and organizational purposes only and does not constitute professional automotive, home inspection, or medical advice.",
+    body: "LifeMaintained provides digital tools for tracking and managing maintenance across vehicles, property, and health-related appointments. Features may include reminders, recordkeeping, AI-assisted extraction, and reporting.",
   },
   {
     title: "3. User Accounts",
-    body: "You are responsible for maintaining the confidentiality of your account credentials. You agree to notify us immediately of any unauthorized use of your account. We reserve the right to terminate accounts that violate these terms.",
+    body: "You are responsible for safeguarding your login credentials and for all activity under your account. One account is intended for one individual user. You must provide accurate account information and promptly update it when necessary.",
   },
   {
     title: "4. Subscription & Billing",
-    body: "LifeMaintained offers Free and Premium subscription tiers. Premium subscriptions begin with a 14-day free trial. After the trial period, your chosen plan will be billed automatically. You may cancel at any time through account settings. Refunds are not provided for partial billing periods.",
+    body: "LifeMaintained offers a free tier and paid subscription tiers. Paid subscriptions are billed through the Apple App Store, may renew automatically unless canceled, and are governed by the billing terms of the relevant app marketplace. You are responsible for managing cancellation through your marketplace account settings.",
   },
   {
-    title: "5. Data & Privacy",
-    body: "We collect and store the data you provide within the App. We do not sell your personal data to third parties. Please review our Privacy Policy for full details on data collection, storage, and usage.",
+    title: "5. User Content and License",
+    body: "You retain ownership of the content and data you submit. You grant LifeMaintained a limited, non-exclusive, worldwide license to host, store, reproduce, process, and display your content solely for operating, maintaining, and improving the service.",
   },
   {
-    title: "6. Intellectual Property",
-    body: "All content, features, and functionality of the App are owned by LifeMaintained and protected by intellectual property laws. You may not copy, modify, or distribute any part of the App without express written consent.",
+    title: "6. Prohibited Uses",
+    body: "You agree not to use the service for unlawful activity, abuse, fraud, scraping, automated extraction, unauthorized access, reverse engineering, decompilation, or attempts to interfere with service availability or security.",
   },
   {
     title: "7. Disclaimers",
-    body: "The App is provided \"as is\" without warranties of any kind. Maintenance schedules and health screening recommendations are general guidelines only. Always consult qualified professionals for vehicle, home, and medical decisions.",
+    body: "The service is provided \"as is\" and \"as available\" without warranties of any kind. Reminders, schedules, and AI outputs are informational only and are not professional automotive, property, legal, or medical advice. You remain responsible for maintenance decisions and outcomes.",
   },
   {
     title: "8. Limitation of Liability",
-    body: "LifeMaintained shall not be liable for any indirect, incidental, or consequential damages arising from your use of the App. Our total liability shall not exceed the amount you paid for the App in the preceding 12 months.",
+    body: "To the maximum extent permitted by law, LifeMaintained and its affiliates will not be liable for indirect, incidental, special, consequential, or punitive damages, or for lost profits, data, or goodwill arising from your use of the service.",
   },
   {
-    title: "9. Changes to Terms",
-    body: "We may update these Terms of Service at any time. Continued use of the App after changes constitutes acceptance of the new terms. We will notify you of material changes via the App or email.",
+    title: "9. Termination",
+    body: "You may stop using the service and terminate your account at any time. We may suspend or terminate access for violations of these terms, abuse, fraud, or legal or security reasons.",
   },
   {
-    title: "10. Contact",
-    body: "For questions about these Terms of Service, contact us at legal@lifemaintained.app",
+    title: "10. Changes to Terms",
+    body: "We may update these Terms of Service from time to time. Updated terms become effective when posted in the app or website unless otherwise stated. Continued use after the effective date constitutes acceptance.",
+  },
+  {
+    title: "11. Governing Law",
+    body: "These Terms of Service are governed by the laws of the State of Illinois, without regard to conflict-of-law principles.",
+  },
+  {
+    title: "12. Contact",
+    body: "For questions about these Terms of Service, contact support@lifemaintained.com.",
   },
 ];
 
@@ -65,9 +73,9 @@ export default function TermsOfServiceScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
       >
-        <Text style={styles.lastUpdated}>Last updated: January 1, 2026</Text>
+        <Text style={styles.lastUpdated}>Effective date: March 2026</Text>
         <Text style={styles.intro}>
-          Welcome to LifeMaintained. These Terms of Service govern your use of our mobile application and related services.
+          These Terms of Service govern your access to and use of the LifeMaintained application and related services.
         </Text>
 
         {SECTIONS.map(section => (

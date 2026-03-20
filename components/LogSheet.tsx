@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
@@ -487,6 +488,14 @@ export function LogSheet({
       return;
     }
     try {
+      const canTranscribe = await checkVoiceTranscriptionLimit();
+      if (!canTranscribe) {
+        setErrorMsg("Daily voice transcription limit reached. Try again tomorrow.");
+        setText("");
+        setPhase("type");
+        return;
+      }
+
       const fileContent = await FileSystem.readAsStringAsync(uri, {
         encoding: "base64" as any,
       });
@@ -501,6 +510,7 @@ export function LogSheet({
         return;
       }
       const transcribed: string = data?.text ?? "";
+      await incrementVoiceTranscriptionCount();
       setText(transcribed);
       setPhase("type");
     } catch (err) {
@@ -1039,3 +1049,28 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
 });
+
+const VOICE_TRANSCRIPTION_COUNT_KEY = "@daily_voice_transcription_count";
+const VOICE_TRANSCRIPTION_DATE_KEY = "@daily_voice_transcription_date";
+const MAX_DAILY_VOICE_TRANSCRIPTIONS = 30;
+
+async function checkVoiceTranscriptionLimit(): Promise<boolean> {
+  const today = new Date().toISOString().split("T")[0];
+  const savedDate = await AsyncStorage.getItem(VOICE_TRANSCRIPTION_DATE_KEY);
+  let count = 0;
+  if (savedDate === today) {
+    count = parseInt(await AsyncStorage.getItem(VOICE_TRANSCRIPTION_COUNT_KEY) ?? "0", 10);
+  }
+  return count < MAX_DAILY_VOICE_TRANSCRIPTIONS;
+}
+
+async function incrementVoiceTranscriptionCount(): Promise<void> {
+  const today = new Date().toISOString().split("T")[0];
+  const savedDate = await AsyncStorage.getItem(VOICE_TRANSCRIPTION_DATE_KEY);
+  let count = 0;
+  if (savedDate === today) {
+    count = parseInt(await AsyncStorage.getItem(VOICE_TRANSCRIPTION_COUNT_KEY) ?? "0", 10);
+  }
+  await AsyncStorage.setItem(VOICE_TRANSCRIPTION_DATE_KEY, today);
+  await AsyncStorage.setItem(VOICE_TRANSCRIPTION_COUNT_KEY, String(count + 1));
+}

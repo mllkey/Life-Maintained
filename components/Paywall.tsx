@@ -417,6 +417,14 @@ export default function Paywall({
             );
           })}
 
+          <View style={styles.scanLimitsBox}>
+            <Text style={styles.scanLimitsTitle}>AI scan limits</Text>
+            <Text style={styles.scanLimitsText}>Free: 3 AI scans/month</Text>
+            <Text style={styles.scanLimitsText}>Personal: 15 AI scans/month</Text>
+            <Text style={styles.scanLimitsText}>Pro: 30 AI scans/month</Text>
+            <Text style={styles.scanLimitsText}>Business: 100 AI scans/month</Text>
+          </View>
+
           <Text style={styles.trialCalloutText}>
             14-day free trial · Full access · No credit card required
           </Text>
@@ -601,6 +609,25 @@ const styles = StyleSheet.create({
   featureRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   featureBullet: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, width: 10 },
   featureText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 },
+
+  scanLimitsBox: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+  },
+  scanLimitsTitle: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.text,
+    marginBottom: 2,
+  },
+  scanLimitsText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+  },
 
   trialCalloutText: {
     fontSize: 13,

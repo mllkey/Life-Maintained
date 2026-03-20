@@ -1234,6 +1234,7 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
         .eq("vehicle_id", vehicleId)
         .eq("user_id", userId);
       if (error) throw error;
+      console.log("[Wallet] Fetched docs:", JSON.stringify(data));
       return (data ?? []) as WalletDoc[];
     },
   });
@@ -1242,6 +1243,9 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
     const found = docs?.find(d => d.document_type === docType);
     const url = found?.data?.photo_url ?? null;
     console.log("[getPhotoUrl]", docType, "docs count:", docs?.length, "found:", !!found, "url:", url?.substring(0, 60));
+    if (url && !url.includes("storage")) {
+      console.warn("[Wallet] Suspicious URL (no 'storage' in path):", url);
+    }
     return url;
   }
 
@@ -1288,6 +1292,10 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
       const { data: urlData } = supabase.storage.from("wallet-documents").getPublicUrl(storagePath);
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
       console.log("[WalletTab] Public URL:", publicUrl);
+      if (!publicUrl.startsWith("http")) {
+        console.error("[WalletTab] Malformed public URL:", publicUrl);
+        throw new Error("Malformed wallet document URL");
+      }
 
       const existingDoc = getDoc(docType);
       if (existingDoc) {

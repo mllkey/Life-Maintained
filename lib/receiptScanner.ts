@@ -1,4 +1,30 @@
 import { supabase } from "./supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const SCAN_COUNT_KEY = "@daily_scan_count";
+const SCAN_DATE_KEY = "@daily_scan_date";
+const MAX_DAILY_SCANS = 20;
+
+async function checkScanLimit(): Promise<boolean> {
+  const today = new Date().toISOString().split("T")[0];
+  const savedDate = await AsyncStorage.getItem(SCAN_DATE_KEY);
+  let count = 0;
+  if (savedDate === today) {
+    count = parseInt(await AsyncStorage.getItem(SCAN_COUNT_KEY) ?? "0", 10);
+  }
+  return count < MAX_DAILY_SCANS;
+}
+
+async function incrementScanCount(): Promise<void> {
+  const today = new Date().toISOString().split("T")[0];
+  const savedDate = await AsyncStorage.getItem(SCAN_DATE_KEY);
+  let count = 0;
+  if (savedDate === today) {
+    count = parseInt(await AsyncStorage.getItem(SCAN_COUNT_KEY) ?? "0", 10);
+  }
+  await AsyncStorage.setItem(SCAN_DATE_KEY, today);
+  await AsyncStorage.setItem(SCAN_COUNT_KEY, String(count + 1));
+}
 
 export interface ReceiptScanResult {
   date: string | null;
@@ -15,6 +41,21 @@ export interface ReceiptScanResult {
 
 export async function scanReceipt(base64Image: string): Promise<ReceiptScanResult> {
   try {
+    const canScan = await checkScanLimit();
+    if (!canScan) {
+      return {
+        date: null,
+        cost: null,
+        provider: null,
+        serviceType: null,
+        mileage: null,
+        task: null,
+        items: [],
+        rawText: "",
+        error: "Daily scan limit reached. Try again tomorrow.",
+      };
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       throw new Error("You must be logged in to scan receipts.");
@@ -51,6 +92,7 @@ export async function scanReceipt(base64Image: string): Promise<ReceiptScanResul
       rawText: data.rawText || "",
       error: data.error || undefined,
     };
+    await incrementScanCount();
     console.log("RETURNING:", JSON.stringify(result));
     return result;
   } catch (err) {
