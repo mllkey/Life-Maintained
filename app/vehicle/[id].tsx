@@ -1529,10 +1529,10 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 40, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   headerCenter: { flex: 1, alignItems: "center", gap: 1 },
-  headerTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
+  headerTitle: { fontSize: 22, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
   headerTrim: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
   headerMileageRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 1 },
-  headerMileage: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  headerMileage: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
   deleteVehicleBtn: {
     width: 34, height: 34, borderRadius: 10,
     backgroundColor: Colors.overdueMuted, alignItems: "center", justifyContent: "center",
@@ -1554,8 +1554,6 @@ const styles = StyleSheet.create({
   updateMileageLink: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
   tabs: {
     flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
   tab: { flex: 1, paddingVertical: 12, alignItems: "center", position: "relative" },
   tabActive: {},

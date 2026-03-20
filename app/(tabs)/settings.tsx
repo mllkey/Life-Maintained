@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
 
   groupCard: {
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",

@@ -141,7 +141,6 @@ export default function VehiclesScreen() {
             const isLocked = idx >= vehicleLimit(profile);
             const td = taskData?.[v.id];
             const worstStatus = td?.worstStatus ?? "good";
-            const pendingCount = td?.pendingCount ?? 0;
             const icon = getVehicleIcon(v.vehicle_type);
             const title = `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim();
             const displayName = v.nickname ?? title;
@@ -165,11 +164,10 @@ export default function VehiclesScreen() {
               metaLine = v.nickname ? title || typeLabel : typeLabel;
             }
 
-            const statusColor = worstStatus === "overdue" ? Colors.overdue : Colors.dueSoon;
-            const statusLabel = worstStatus === "overdue"
-              ? `${pendingCount} overdue`
-              : pendingCount > 0
-                ? `${pendingCount} due`
+            const statusDotColor = worstStatus === "overdue"
+              ? Colors.overdue
+              : worstStatus === "due_soon"
+                ? Colors.dueSoon
                 : null;
 
             return (
@@ -194,7 +192,10 @@ export default function VehiclesScreen() {
               >
                 <Ionicons name={icon as any} size={18} color={Colors.vehicle} />
                 <View style={styles.vehicleInfo}>
-                  <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
+                  <View style={styles.vehicleTitleRow}>
+                    {statusDotColor && <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />}
+                    <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
+                  </View>
                   <Text
                     style={[styles.vehicleMeta, isStale && isMileageTracked && v.mileage != null && { color: Colors.dueSoon }]}
                     numberOfLines={1}
@@ -209,9 +210,6 @@ export default function VehiclesScreen() {
                   )}
                 </View>
                 <View style={styles.cardRight}>
-                  {statusLabel != null && (
-                    <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
-                  )}
                   <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
                 </View>
               </Pressable>
@@ -279,15 +277,19 @@ const styles = StyleSheet.create({
     gap: 12,
     backgroundColor: Colors.card,
     borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   vehicleInfo: { flex: 1, gap: 3, minWidth: 0 },
+  vehicleTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   vehicleTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
   vehicleMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   cardRight: { alignItems: "flex-end", gap: 4, flexShrink: 0 },
-  statusText: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
   lockedRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   lockedText: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
 

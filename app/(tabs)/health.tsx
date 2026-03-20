@@ -350,6 +350,7 @@ function MemberCard({ member, overdue, upcoming, onPress }: { member: any; overd
   const label = isPet
     ? (member.pet_type ?? "Pet")
     : (member.relationship ?? member.member_type ?? "Person");
+  const statusDotColor = overdue > 0 ? Colors.overdue : upcoming > 0 ? Colors.dueSoon : null;
 
   return (
     <Pressable
@@ -358,12 +359,13 @@ function MemberCard({ member, overdue, upcoming, onPress }: { member: any; overd
     >
       <Ionicons name={isPet ? "paw-outline" : "person-outline"} size={18} color={Colors.health} />
       <View style={styles.memberInfo}>
-        <Text style={styles.memberName}>{member.name}</Text>
+        <View style={styles.memberTitleRow}>
+          {statusDotColor && <View style={[styles.memberStatusDot, { backgroundColor: statusDotColor }]} />}
+          <Text style={styles.memberName}>{member.name}</Text>
+        </View>
         <Text style={styles.memberMeta} numberOfLines={1}>{label}</Text>
       </View>
       <View style={styles.memberRight}>
-        {overdue > 0 && <Text style={styles.memberStatusOverdue}>{overdue} overdue</Text>}
-        {overdue === 0 && upcoming > 0 && <Text style={styles.memberStatusUpcoming}>{upcoming} upcoming</Text>}
         <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
       </View>
     </Pressable>
@@ -410,16 +412,19 @@ const styles = StyleSheet.create({
     gap: 14,
     backgroundColor: Colors.card,
     borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   memberInfo: { flex: 1, gap: 3 },
+  memberTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   memberName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
   memberMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textTransform: "capitalize" },
   memberRight: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
-  memberStatusOverdue: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.overdue },
-  memberStatusUpcoming: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.dueSoon },
+  memberStatusDot: { width: 8, height: 8, borderRadius: 4 },
 
   apptList: { gap: 8 },
   apptCard: {

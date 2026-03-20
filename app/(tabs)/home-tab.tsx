@@ -140,6 +140,7 @@ export default function HomeTabScreen() {
             const counts = taskCounts?.[p.id];
             const overdue = counts?.overdue ?? 0;
             const dueSoon = counts?.due_soon ?? 0;
+            const statusDotColor = overdue > 0 ? Colors.overdue : dueSoon > 0 ? Colors.dueSoon : null;
             const icon = getPropertyIcon(p.property_type);
             const label = getPropertyLabel(p);
 
@@ -181,17 +182,14 @@ export default function HomeTabScreen() {
                 <Ionicons name={icon as any} size={18} color={Colors.home} />
 
                 <View style={styles.cardInfo}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>{label}</Text>
+                  <View style={styles.cardTitleRow}>
+                    {statusDotColor && <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />}
+                    <Text style={styles.cardTitle} numberOfLines={1}>{label}</Text>
+                  </View>
                   <Text style={styles.cardMeta} numberOfLines={1}>{metaLine}</Text>
                 </View>
 
                 <View style={styles.cardRight}>
-                  {overdue > 0 && (
-                    <Text style={styles.statusOverdue}>{overdue} overdue</Text>
-                  )}
-                  {overdue === 0 && dueSoon > 0 && (
-                    <Text style={styles.statusDueSoon}>{dueSoon} upcoming</Text>
-                  )}
                   <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
                 </View>
               </Pressable>
@@ -255,16 +253,19 @@ const styles = StyleSheet.create({
     gap: 14,
     backgroundColor: Colors.card,
     borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   cardInfo: { flex: 1, gap: 3 },
+  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   cardTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
   cardMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   cardRight: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
-  statusOverdue: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.overdue },
-  statusDueSoon: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.dueSoon },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
 
   emptyWrap: { paddingTop: 60, alignItems: "center", gap: 6 },
   emptyTitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },

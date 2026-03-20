@@ -689,8 +689,9 @@ function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
   const seeAllRoute: any = firstNavItem?.category === "vehicles" ? "/(tabs)/vehicles" : "/(tabs)/home-tab";
 
   return (
-    <View style={{ gap: 8 }}>
-      <Text style={styles.sectionLabel}>NEEDS ATTENTION</Text>
+    <View style={{ gap: 0 }}>
+      <Text style={[styles.sectionLabel, { marginBottom: 4 }]}>NEEDS ATTENTION</Text>
+      <View style={styles.sectionDivider} />
       <View style={styles.taskList}>
         {visibleItems.map((item, idx) => {
           const statusColor = item.status === "overdue" ? Colors.overdue : Colors.dueSoon;
@@ -876,11 +877,29 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  panelCard: { backgroundColor: Colors.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.border },
+  panelCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   panelEmpty: { alignItems: "center", paddingVertical: 16, gap: 6 },
   panelEmptyText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
 
-  sectionLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, letterSpacing: 1.5, textTransform: "uppercase" },
+  sectionLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textTertiary,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  sectionDivider: { height: 1, backgroundColor: Colors.borderSubtle, width: "100%" },
 
   taskList: { gap: 0 },
   taskRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14 },
@@ -932,9 +951,12 @@ const styles = StyleSheet.create({
   qmCard: {
     backgroundColor: Colors.card,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   qmCardHeader: {
     flexDirection: "row",

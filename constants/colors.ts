@@ -11,6 +11,7 @@ export const Colors = {
   cardElevated: "#212B42",
   border: "#2A3550",
   borderSubtle: "#1A2236",
+  shadow: "rgba(0, 0, 0, 0.12)",
 
   text: "#F0F2F8",
   textSecondary: "#8B93A8",
