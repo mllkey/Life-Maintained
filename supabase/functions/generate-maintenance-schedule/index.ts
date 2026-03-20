@@ -58,7 +58,7 @@ serve(async (req: Request) => {
       return json({ error: "Invalid JSON body" }, 400);
     }
 
-    const { vehicle_id, make, year, current_mileage, vehicle_type, is_awd, vehicle_category } = body;
+    const { vehicle_id, make, year, current_mileage, vehicle_type, fuel_type, is_awd, vehicle_category } = body;
 
     if (!vehicle_id || typeof vehicle_id !== "string") {
       return json({ error: "Missing or invalid required field: vehicle_id (string)" }, 400);
@@ -73,7 +73,10 @@ serve(async (req: Request) => {
       return json({ error: "Missing or invalid required field: current_mileage (number)" }, 400);
     }
 
-    const resolvedVehicleType = typeof vehicle_type === "string" ? vehicle_type : "gas";
+    // `vehicle_type` historically carries the fuel type in this project; `fuel_type` is supported as well.
+    const resolvedVehicleType = typeof fuel_type === "string"
+      ? fuel_type
+      : (typeof vehicle_type === "string" ? vehicle_type : "gas");
     const resolvedIsAwd = typeof is_awd === "boolean" ? is_awd : false;
     const vehicleCategory = typeof vehicle_category === "string" ? vehicle_category : "car";
 
@@ -225,7 +228,18 @@ serve(async (req: Request) => {
     }
 
     // ── 5. Determine which vehicle_type values to query ────────────────────
-    const typeArray = ["all", resolvedVehicleType];
+    // Note: `maintenance_templates.vehicle_type` is used in this project for fuel-type-aware templates.
+    // We add extra fuel-type template sets when a vehicle_type (category) requires them.
+    const typeSet = new Set<string>(["all", resolvedVehicleType]);
+    if (resolvedVehicleType === "hybrid") {
+      // Hybrid schedules should behave like gas schedules, with a few targeted additions.
+      typeSet.add("gas");
+    }
+    if (vehicleCategory === "dump_truck") {
+      // Dump trucks are diesel maintenance regardless of the selected fuel type.
+      typeSet.add("diesel");
+    }
+    const typeArray = Array.from(typeSet);
     if (resolvedIsAwd) typeArray.push("awd_4wd");
 
     // ── 6. Fetch matching templates ────────────────────────────────────────
@@ -248,6 +262,101 @@ serve(async (req: Request) => {
     const filteredTemplates = excluded.length > 0
       ? templates.filter((t: Record<string, unknown>) => !excluded.includes(t.task as string))
       : templates;
+
+    type IntervalRule = {
+      miles: number | null;
+      months: number | null;
+      match: RegExp[];
+    };
+
+    const dieselRules: IntervalRule[] = [
+      { miles: 10000, months: 12, match: [/oil change/i] },
+      { miles: 10000, months: 12, match: [/oil filter/i] },
+      { miles: 15000, months: 12, match: [/fuel filter/i, /water separator/i] },
+      { miles: 30000, months: 24, match: [/air filter/i] },
+      { miles: 5000, months: 6, match: [/\bdef\b/i, /diesel exhaust fluid/i] },
+      { miles: 100000, months: null, match: [/dpf/i] },
+      { miles: 60000, months: null, match: [/glow plug/i] },
+      { miles: 60000, months: null, match: [/turbocharger/i] },
+      { miles: 60000, months: 48, match: [/coolant flush/i] },
+      { miles: 30000, months: 36, match: [/transmission fluid/i] },
+      { miles: 15000, months: 12, match: [/brake.*inspection/i] },
+      { miles: 10000, months: 12, match: [/tire rotation/i] },
+    ];
+
+    const evRules: IntervalRule[] = [
+      { miles: 7500, months: 6, match: [/tire rotation/i] },
+      { miles: 25000, months: 24, match: [/brake fluid/i] },
+      { miles: 15000, months: 12, match: [/cabin air filter/i] },
+      { miles: 50000, months: 48, match: [/battery thermal/i, /battery.*coolant/i, /coolant.*battery/i] },
+      { miles: null, months: 12, match: [/battery health check/i, /battery.*health/i] },
+      { miles: null, months: 12, match: [/wiper.*blade/i] },
+    ];
+
+    const dumpTruckRules: IntervalRule[] = [
+      { miles: 25000, months: 12, match: [/pto service/i] },
+      { miles: null, months: 12, match: [/hydraulic system service/i] },
+      { miles: null, months: 3, match: [/body hinge lubrication/i] },
+      { miles: null, months: 6, match: [/tailgate.*(chain|latch)/i] },
+      { miles: 7500, months: 3, match: [/king pin grease/i] },
+      { miles: 7500, months: 3, match: [/propshaft grease/i] },
+      { miles: 30000, months: 24, match: [/front wheel bearing repack/i, /front.*wheel bearing/i] },
+      { miles: 30000, months: 24, match: [/rear differential service/i, /rear differential/i] },
+    ];
+
+    const trailerRules: IntervalRule[] = [
+      { miles: null, months: 12, match: [/wheel bearing repack/i, /wheel bearing/i] },
+      { miles: null, months: 6, match: [/brake.*adjust/i] },
+      { miles: null, months: 1, match: [/grease.*zerk/i] },
+      { miles: null, months: 6, match: [/coupler/i] },
+      { miles: null, months: 6, match: [/safety chain/i] },
+      { miles: null, months: 6, match: [/electrical.*(connection|connections|light|lights)/i] },
+      { miles: null, months: 12, match: [/jack stand/i] },
+      { miles: null, months: 12, match: [/(floor|deck).*inspection/i] },
+      { miles: null, months: 12, match: [/suspension.*inspection/i] },
+      { miles: null, months: 3, match: [/tire inspection/i] },
+      { miles: null, months: 42, match: [/tire replacement/i] },
+      { miles: null, months: 6, match: [/breakaway/i] },
+      { miles: null, months: 3, match: [/lug nut/i] },
+    ];
+
+    const dumpTrailerRules: IntervalRule[] = [
+      { miles: null, months: 3, match: [/hydraulic fluid/i] },
+      { miles: null, months: 1, match: [/hydraulic cylinder.*grease/i, /hydraulic cylinder/i] },
+      { miles: null, months: 1, match: [/dump body.*(pivot|hinge)/i, /pivot hinge.*grease/i, /dump body.*hinge/i] },
+      { miles: null, months: 1, match: [/rear door.*hinge.*grease/i, /rear door.*hinge/i] },
+      { miles: null, months: 1, match: [/scissor/i] },
+      { miles: null, months: 6, match: [/tarp/i] },
+    ];
+
+    const isTrailer = vehicleCategory === "trailer" || vehicleCategory === "dump_trailer";
+    const isDumpTrailer = vehicleCategory === "dump_trailer";
+    const isDumpTruck = vehicleCategory === "dump_truck";
+    const isDiesel = resolvedVehicleType === "diesel";
+    const isEv = resolvedVehicleType === "ev";
+    const isHybrid = resolvedVehicleType === "hybrid";
+
+    const exclusiveRules: IntervalRule[] | null = isTrailer
+      ? (isDumpTrailer ? [...trailerRules, ...dumpTrailerRules] : trailerRules)
+      : isDumpTruck
+        ? [...dieselRules, ...dumpTruckRules]
+        : isDiesel
+          ? dieselRules
+          : isEv
+            ? evRules
+            : null;
+
+    const useExclusiveRules = exclusiveRules !== null;
+
+    function findExclusiveRule(taskName: string): IntervalRule | null {
+      if (!exclusiveRules) return null;
+      for (const rule of exclusiveRules) {
+        if (rule.match.some(re => re.test(taskName))) return rule;
+      }
+      return null;
+    }
+
+    const shouldDedupByTaskName = useExclusiveRules || isHybrid;
 
     // ── 7. Fetch all relevant overrides for this make in one query ─────────
     const templateIds = filteredTemplates.map((t: Record<string, unknown>) => t.id as string);
@@ -276,6 +385,7 @@ serve(async (req: Request) => {
     // ── 8 & 9. Resolve values and calculate due dates ──────────────────────
     const today = new Date();
     const tasksToInsert: Record<string, unknown>[] = [];
+    const insertedTaskNames = new Set<string>();
 
     for (const template of filteredTemplates) {
       const t = template as Record<string, unknown>;
@@ -302,6 +412,29 @@ serve(async (req: Request) => {
       } else {
         resolvedMiles = templateMiles;
         resolvedMonths = templateMonths;
+      }
+
+      const taskName = t.task as string;
+
+      if (useExclusiveRules) {
+        const rule = findExclusiveRule(taskName);
+        if (!rule) continue;
+        resolvedMiles = rule.miles;
+        resolvedMonths = rule.months;
+      } else if (isHybrid) {
+        // Hybrid: extend brake pad intervals and add battery health checks.
+        if (/brake.*pad/i.test(taskName)) {
+          resolvedMiles = 40000;
+        }
+        if (/hybrid.*battery.*health/i.test(taskName) || /battery.*health check/i.test(taskName) || /battery.*health/i.test(taskName)) {
+          resolvedMiles = null;
+          resolvedMonths = 12;
+        }
+      }
+
+      if (shouldDedupByTaskName) {
+        if (insertedTaskNames.has(taskName)) continue;
+        insertedTaskNames.add(taskName);
       }
 
       const nextDueMiles =

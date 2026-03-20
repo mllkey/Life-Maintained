@@ -86,6 +86,9 @@ const MAKES_BY_TYPE: Record<string, string[]> = {
   ],
   pwc: ["Sea-Doo", "Yamaha", "Kawasaki"],
   snowmobile: ["Ski-Doo", "Polaris", "Arctic Cat", "Yamaha", "Lynx", "Taiga"],
+  trailer: ["PJ", "Load Trail", "Big Tex", "MAXX-D", "Texas Pride", "Diamond C", "Sure-Trac", "BWise", "Iron Bull", "Carry-On", "Gatormade", "Norstar", "Wells Cargo", "Haulmark", "Continental Cargo", "Aluma", "Featherlite"],
+  dump_trailer: ["PJ", "Load Trail", "Big Tex", "MAXX-D", "Texas Pride", "Diamond C", "Sure-Trac", "BWise", "Iron Bull", "Carry-On", "Gatormade", "Norstar", "Wells Cargo", "Haulmark", "Continental Cargo", "Aluma", "Featherlite"],
+  dump_truck: ["Isuzu", "Hino", "Freightliner", "Peterbilt", "Kenworth", "International", "Mack", "Western Star", "Ford", "Chevrolet", "RAM"],
   other: [],
 };
 
@@ -196,6 +199,8 @@ const VEHICLE_TYPES: { value: string; label: string; icon: string }[] = [
   { value: "pwc",        label: "Personal Watercraft",   icon: "waves" },
   { value: "snowmobile", label: "Snowmobile",            icon: "snowmobile" },
   { value: "other",      label: "Other",                 icon: "wrench" },
+  { value: "trailer",    label: "Trailer",               icon: "swap-horizontal-outline" },
+  { value: "dump_truck", label: "Dump Truck",           icon: "cube-outline" },
 ];
 
 const FUEL_TYPES: { value: "gas" | "diesel" | "hybrid" | "ev"; label: string }[] = [
@@ -467,6 +472,9 @@ export default function AddVehicleScreen() {
   const [trim, setTrim] = useState("");
   const [nickname, setNickname] = useState("");
   const [vehicleType, setVehicleType] = useState("car");
+  const [trailerSubtype, setTrailerSubtype] = useState<
+    "dump_scissor" | "dump_hydraulic" | "enclosed_cargo" | "flatbed_utility" | "car_hauler" | "boat_trailer"
+  >("enclosed_cargo");
   const [mileage, setMileage] = useState("");
   const [avgMilesPerMonth, setAvgMilesPerMonth] = useState("");
   const [isSeasonal, setIsSeasonal] = useState(false);
@@ -991,14 +999,21 @@ export default function AddVehicleScreen() {
               contentContainerStyle={styles.typeScroll}
             >
               {VEHICLE_TYPES.map(t => {
-                const isSelected = vehicleType === t.value;
+                const isSelected = vehicleType === t.value || (t.value === "trailer" && vehicleType === "dump_trailer");
                 return (
                   <Pressable
                     key={t.value}
                     style={[styles.typeCard, isSelected && styles.typeCardSelected]}
                     onPress={() => {
                       Haptics.selectionAsync();
-                      setVehicleType(t.value);
+                      if (t.value === "trailer") {
+                        const nextVehicleType = (trailerSubtype === "dump_scissor" || trailerSubtype === "dump_hydraulic")
+                          ? "dump_trailer"
+                          : "trailer";
+                        setVehicleType(nextVehicleType);
+                      } else {
+                        setVehicleType(t.value);
+                      }
                       setMake("");
                       setModel("");
                     }}
@@ -1016,6 +1031,127 @@ export default function AddVehicleScreen() {
               })}
             </ScrollView>
           </FieldGroup>
+
+          {/* ── Trailer Sub-Type ─────────────────────────────── */}
+          {(vehicleType === "trailer" || vehicleType === "dump_trailer") && (
+            <FieldGroup label="Trailer Type">
+              <View style={styles.presetRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.presetChip,
+                    trailerSubtype === "dump_scissor" && styles.presetChipActive,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setTrailerSubtype("dump_scissor");
+                    setVehicleType("dump_trailer");
+                    setMake("");
+                    setModel("");
+                  }}
+                >
+                  <Text style={[styles.presetChipText, trailerSubtype === "dump_scissor" && styles.presetChipTextActive]}>
+                    Dump Trailer (Scissor Lift)
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.presetChip,
+                    trailerSubtype === "dump_hydraulic" && styles.presetChipActive,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setTrailerSubtype("dump_hydraulic");
+                    setVehicleType("dump_trailer");
+                    setMake("");
+                    setModel("");
+                  }}
+                >
+                  <Text style={[styles.presetChipText, trailerSubtype === "dump_hydraulic" && styles.presetChipTextActive]}>
+                    Dump Trailer (Hydraulic)
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.presetChip,
+                    trailerSubtype === "enclosed_cargo" && styles.presetChipActive,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setTrailerSubtype("enclosed_cargo");
+                    setVehicleType("trailer");
+                    setMake("");
+                    setModel("");
+                  }}
+                >
+                  <Text style={[styles.presetChipText, trailerSubtype === "enclosed_cargo" && styles.presetChipTextActive]}>
+                    Enclosed Cargo
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.presetChip,
+                    trailerSubtype === "flatbed_utility" && styles.presetChipActive,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setTrailerSubtype("flatbed_utility");
+                    setVehicleType("trailer");
+                    setMake("");
+                    setModel("");
+                  }}
+                >
+                  <Text style={[styles.presetChipText, trailerSubtype === "flatbed_utility" && styles.presetChipTextActive]}>
+                    Flatbed / Utility
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.presetChip,
+                    trailerSubtype === "car_hauler" && styles.presetChipActive,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setTrailerSubtype("car_hauler");
+                    setVehicleType("trailer");
+                    setMake("");
+                    setModel("");
+                  }}
+                >
+                  <Text style={[styles.presetChipText, trailerSubtype === "car_hauler" && styles.presetChipTextActive]}>
+                    Car Hauler
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.presetChip,
+                    trailerSubtype === "boat_trailer" && styles.presetChipActive,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setTrailerSubtype("boat_trailer");
+                    setVehicleType("trailer");
+                    setMake("");
+                    setModel("");
+                  }}
+                >
+                  <Text style={[styles.presetChipText, trailerSubtype === "boat_trailer" && styles.presetChipTextActive]}>
+                    Boat Trailer
+                  </Text>
+                </Pressable>
+              </View>
+            </FieldGroup>
+          )}
 
           {/* ── Basic Info ────────────────────────────────────── */}
           <FieldGroup label="Basic Info">
