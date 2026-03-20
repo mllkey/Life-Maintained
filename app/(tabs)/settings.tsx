@@ -943,7 +943,7 @@ const styles = StyleSheet.create({
 
   saveBar: {
     position: "absolute",
-    bottom: 0,
+    bottom: Platform.OS === "web" ? 84 : 80,
     left: 0,
     right: 0,
     zIndex: 100,

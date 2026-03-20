@@ -476,6 +476,7 @@ export default function AddVehicleScreen() {
   const [isAwd, setIsAwd] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [savedVehicleId, setSavedVehicleId] = useState<string | null>(null);
@@ -753,6 +754,7 @@ export default function AddVehicleScreen() {
 
   async function handleSave() {
     if (isLoading) return;
+    setSubmitted(true);
     if (!user) {
       setError("Session unavailable. Please close and reopen this screen.");
       return;
@@ -919,7 +921,7 @@ export default function AddVehicleScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {error && (
+          {submitted && error && (
             <View style={styles.alertBox}>
               <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
               <Text style={styles.alertText}>{error}</Text>
@@ -950,7 +952,10 @@ export default function AddVehicleScreen() {
                   vin.trim().length === 17 && styles.vinBtnActive,
                   { opacity: pressed ? 0.8 : 1 },
                 ]}
-                onPress={handleVinLookup}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  handleVinLookup();
+                }}
                 disabled={isVinLoading}
               >
                 {isVinLoading

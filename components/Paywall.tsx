@@ -433,7 +433,11 @@ export default function Paywall({
             {isPurchasing ? (
               <ActivityIndicator color={Colors.background} />
             ) : (
-              <Text style={styles.ctaBtnText}>{profile?.subscription_tier === "trial" ? "Choose Plan" : "Start Free Trial"}</Text>
+              <Text style={styles.ctaBtnText}>
+                {profile?.subscription_tier === "trial" && profile?.trial_expires_at && new Date(profile.trial_expires_at) > new Date()
+                  ? "Choose Plan"
+                  : "Start Free Trial"}
+              </Text>
             )}
           </Pressable>
 

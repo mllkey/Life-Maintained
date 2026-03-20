@@ -310,7 +310,12 @@ export default function VehicleDetailScreen() {
 
     handleCloseMarkComplete();
 
-    console.log("[markComplete] Inserting log: service_name=", task.name, "vehicle_id=", id, "date=", completeDate);
+    console.log("[markComplete] Inserting log:", {
+      service_name: task.name,
+      vehicle_id: id,
+      date: completeDate,
+      mileage: mileageNum,
+    });
 
     try {
       const [taskRes, vehicleRes, logRes] = await Promise.all([
