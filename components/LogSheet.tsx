@@ -627,10 +627,10 @@ export function LogSheet({
                     { marginTop: 12 },
                     phase === "recording" && { color: "#fff" },
                   ]}>
-                    {phase === "idle" ? "Tap to start" : "Listening..."}
+                    {phase === "idle" ? "Tap to record" : "Recording..."}
                   </Text>
                   <Pressable onPress={() => setPhase("type")} hitSlop={12} style={{ marginTop: 16 }}>
-                    <Text style={styles.typeInsteadText}>Type instead →</Text>
+                    <Text style={styles.typeInsteadText}>or type instead</Text>
                   </Pressable>
                 </>
               )}

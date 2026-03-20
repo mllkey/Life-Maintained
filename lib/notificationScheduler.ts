@@ -79,7 +79,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         .eq("user_id", userId),
       supabase
         .from("properties")
-        .select("id, name, nickname")
+        .select("id, address, nickname")
         .eq("user_id", userId),
     ]);
 
@@ -162,7 +162,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       if (!task.next_due_date) continue;
       const property = propertyMap.get(task.property_id);
       if (!property) continue;
-      const assetName = property.nickname ?? property.name ?? "Property";
+      const assetName = property.nickname ?? property.address ?? "Property";
       const isMuted = (prefs.mutedProperties ?? []).includes(task.property_id);
       enqueue(task.task, assetName, task.next_due_date, isMuted);
     }
