@@ -235,7 +235,7 @@ serve(async (req: Request) => {
       // Hybrid schedules should behave like gas schedules, with a few targeted additions.
       typeSet.add("gas");
     }
-    if (vehicleCategory === "dump_truck") {
+    if (vehicleCategory === "dump_truck" || vehicleCategory === "standard_dump" || vehicleCategory === "roll_off" || vehicleCategory === "hook_lift") {
       // Dump trucks are diesel maintenance regardless of the selected fuel type.
       typeSet.add("diesel");
     }
@@ -304,6 +304,15 @@ serve(async (req: Request) => {
       { miles: 30000, months: 24, match: [/rear differential service/i, /rear differential/i] },
     ];
 
+    const rollOffHookLiftRules: IntervalRule[] = [
+      { miles: null, months: 3, match: [/hook.*cable/i, /hook\/cable/i] },
+      { miles: null, months: 6, match: [/rail/i, /guide roller/i] },
+    ];
+
+    const rollOffOnlyRules: IntervalRule[] = [
+      { miles: null, months: 3, match: [/winch cable/i, /winch chain/i, /winch cable\/chain/i] },
+    ];
+
     const trailerRules: IntervalRule[] = [
       { miles: null, months: 12, match: [/wheel bearing repack/i, /wheel bearing/i] },
       { miles: null, months: 6, match: [/brake.*adjust/i] },
@@ -329,17 +338,40 @@ serve(async (req: Request) => {
       { miles: null, months: 6, match: [/tarp/i] },
     ];
 
+    const dumpsterRules: IntervalRule[] = [
+      { miles: null, months: 1, match: [/door hinge lubrication/i, /door hinge/i] },
+      { miles: null, months: 6, match: [/door seal inspection/i, /door seal/i] },
+      { miles: null, months: 6, match: [/floor inspection/i, /rust/i, /holes/i] },
+      { miles: null, months: 12, match: [/exterior rust treatment/i] },
+      { miles: null, months: 12, match: [/paint touch/i] },
+      { miles: null, months: 6, match: [/wheel/i, /caster/i] },
+      { miles: null, months: 3, match: [/drain plug/i] },
+      { miles: null, months: 12, match: [/structural weld inspection/i, /weld inspection/i] },
+      { miles: null, months: 6, match: [/latch/i, /lock mechanism/i] },
+      { miles: null, months: 3, match: [/pressure wash/i, /\bclean\b/i] },
+    ];
+
     const isTrailer = vehicleCategory === "trailer" || vehicleCategory === "dump_trailer";
     const isDumpTrailer = vehicleCategory === "dump_trailer";
-    const isDumpTruck = vehicleCategory === "dump_truck";
+    const isDumpTruck = vehicleCategory === "dump_truck" || vehicleCategory === "standard_dump" || vehicleCategory === "roll_off" || vehicleCategory === "hook_lift";
+    const isRollOff = vehicleCategory === "roll_off";
+    const isHookLift = vehicleCategory === "hook_lift";
+    const isDumpster = vehicleCategory === "dumpster";
     const isDiesel = resolvedVehicleType === "diesel";
     const isEv = resolvedVehicleType === "ev";
     const isHybrid = resolvedVehicleType === "hybrid";
 
     const exclusiveRules: IntervalRule[] | null = isTrailer
       ? (isDumpTrailer ? [...trailerRules, ...dumpTrailerRules] : trailerRules)
+      : isDumpster
+        ? dumpsterRules
       : isDumpTruck
-        ? [...dieselRules, ...dumpTruckRules]
+        ? [
+            ...dieselRules,
+            ...dumpTruckRules,
+            ...(isRollOff || isHookLift ? rollOffHookLiftRules : []),
+            ...(isRollOff ? rollOffOnlyRules : []),
+          ]
         : isDiesel
           ? dieselRules
           : isEv

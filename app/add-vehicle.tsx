@@ -89,6 +89,7 @@ const MAKES_BY_TYPE: Record<string, string[]> = {
   trailer: ["PJ", "Load Trail", "Big Tex", "MAXX-D", "Texas Pride", "Diamond C", "Sure-Trac", "BWise", "Iron Bull", "Carry-On", "Gatormade", "Norstar", "Wells Cargo", "Haulmark", "Continental Cargo", "Aluma", "Featherlite"],
   dump_trailer: ["PJ", "Load Trail", "Big Tex", "MAXX-D", "Texas Pride", "Diamond C", "Sure-Trac", "BWise", "Iron Bull", "Carry-On", "Gatormade", "Norstar", "Wells Cargo", "Haulmark", "Continental Cargo", "Aluma", "Featherlite"],
   dump_truck: ["Isuzu", "Hino", "Freightliner", "Peterbilt", "Kenworth", "International", "Mack", "Western Star", "Ford", "Chevrolet", "RAM"],
+  dumpster: ["Custom", "Wastequip", "Galbreath", "Marathon", "KPAC", "Other"],
   other: [],
 };
 
@@ -201,6 +202,7 @@ const VEHICLE_TYPES: { value: string; label: string; icon: string }[] = [
   { value: "other",      label: "Other",                 icon: "wrench" },
   { value: "trailer",    label: "Trailer",               icon: "swap-horizontal-outline" },
   { value: "dump_truck", label: "Dump Truck",           icon: "cube-outline" },
+  { value: "dumpster",   label: "Dumpster",             icon: "trash-outline" },
 ];
 
 const FUEL_TYPES: { value: "gas" | "diesel" | "hybrid" | "ev"; label: string }[] = [
@@ -475,6 +477,7 @@ export default function AddVehicleScreen() {
   const [trailerSubtype, setTrailerSubtype] = useState<
     "dump_scissor" | "dump_hydraulic" | "enclosed_cargo" | "flatbed_utility" | "car_hauler" | "boat_trailer"
   >("enclosed_cargo");
+  const [dumpTruckSubtype, setDumpTruckSubtype] = useState<"standard_dump" | "roll_off" | "hook_lift">("standard_dump");
   const [mileage, setMileage] = useState("");
   const [avgMilesPerMonth, setAvgMilesPerMonth] = useState("");
   const [isSeasonal, setIsSeasonal] = useState(false);
@@ -506,6 +509,7 @@ export default function AddVehicleScreen() {
   const [hasManufacturerSchedule, setHasManufacturerSchedule] = useState(false);
   const [manufacturerTasks, setManufacturerTasks] = useState<MfrTask[]>([]);
   const [isCheckingSchedule, setIsCheckingSchedule] = useState(false);
+  const selectedVehicleCategory = vehicleType === "dump_truck" ? dumpTruckSubtype : vehicleType;
 
   const availableMakes = MAKES_BY_TYPE[vehicleType] ?? [];
 
@@ -804,6 +808,7 @@ export default function AddVehicleScreen() {
       trim: trim.trim() || null,
       nickname: nickname.trim() || null,
       vehicle_type: vehicleType,
+      vehicle_category: selectedVehicleCategory,
       fuel_type: fuelType,
       is_awd: isAwd,
       mileage: mileage ? parseInt(mileage) : null,
@@ -839,7 +844,7 @@ export default function AddVehicleScreen() {
           console.log("[generate-maintenance-schedule] Invoking for vehicle:", inserted.id);
           const { error: scheduleError } = await supabase.functions.invoke(
             "generate-maintenance-schedule",
-            { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: vehicleType } },
+            { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
           );
           if (scheduleError) {
             const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
@@ -880,7 +885,7 @@ export default function AddVehicleScreen() {
         console.log("[generate-maintenance-schedule] Invoking for vehicle:", inserted.id);
         const { error: scheduleError } = await supabase.functions.invoke(
           "generate-maintenance-schedule",
-          { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: vehicleType } },
+          { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
         );
         if (scheduleError) {
           const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
@@ -1011,6 +1016,8 @@ export default function AddVehicleScreen() {
                           ? "dump_trailer"
                           : "trailer";
                         setVehicleType(nextVehicleType);
+                      } else if (t.value === "dump_truck") {
+                        setVehicleType("dump_truck");
                       } else {
                         setVehicleType(t.value);
                       }
@@ -1147,6 +1154,69 @@ export default function AddVehicleScreen() {
                 >
                   <Text style={[styles.presetChipText, trailerSubtype === "boat_trailer" && styles.presetChipTextActive]}>
                     Boat Trailer
+                  </Text>
+                </Pressable>
+              </View>
+            </FieldGroup>
+          )}
+
+          {vehicleType === "dump_truck" && (
+            <FieldGroup label="Dump Truck Type">
+              <View style={styles.presetRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.presetChip,
+                    dumpTruckSubtype === "standard_dump" && styles.presetChipActive,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setDumpTruckSubtype("standard_dump");
+                    setVehicleType("dump_truck");
+                    setMake("");
+                    setModel("");
+                  }}
+                >
+                  <Text style={[styles.presetChipText, dumpTruckSubtype === "standard_dump" && styles.presetChipTextActive]}>
+                    Standard Dump Truck
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.presetChip,
+                    dumpTruckSubtype === "roll_off" && styles.presetChipActive,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setDumpTruckSubtype("roll_off");
+                    setVehicleType("dump_truck");
+                    setMake("");
+                    setModel("");
+                  }}
+                >
+                  <Text style={[styles.presetChipText, dumpTruckSubtype === "roll_off" && styles.presetChipTextActive]}>
+                    Roll-Off Truck
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.presetChip,
+                    dumpTruckSubtype === "hook_lift" && styles.presetChipActive,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setDumpTruckSubtype("hook_lift");
+                    setVehicleType("dump_truck");
+                    setMake("");
+                    setModel("");
+                  }}
+                >
+                  <Text style={[styles.presetChipText, dumpTruckSubtype === "hook_lift" && styles.presetChipTextActive]}>
+                    Hook-Lift Truck
                   </Text>
                 </Pressable>
               </View>

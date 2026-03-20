@@ -149,6 +149,8 @@ export default function HealthScreen() {
         <Pressable
           style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(people.length === 0 && pets.length === 0 ? "/add-family-member" : "/add-appointment"); }}
+          accessibilityLabel="Add a family member or appointment"
+          accessibilityRole="button"
         >
           <Text style={styles.addText}>Add</Text>
         </Pressable>

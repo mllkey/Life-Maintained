@@ -437,6 +437,8 @@ export default function Paywall({
             onPress={handlePurchase}
             disabled={isPurchasing || isRestoring}
             testID="paywall-cta"
+            accessibilityLabel="Subscribe to plan"
+            accessibilityRole="button"
           >
             {isPurchasing ? (
               <ActivityIndicator color={Colors.background} />

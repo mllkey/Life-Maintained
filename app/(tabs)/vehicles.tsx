@@ -122,6 +122,8 @@ export default function VehiclesScreen() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             router.push("/add-vehicle");
           }}
+          accessibilityLabel="Add a new vehicle"
+          accessibilityRole="button"
         >
           <Text style={styles.addText}>Add</Text>
         </Pressable>

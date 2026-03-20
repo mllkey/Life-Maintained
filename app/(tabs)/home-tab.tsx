@@ -120,6 +120,8 @@ export default function HomeTabScreen() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             router.push("/add-property");
           }}
+          accessibilityLabel="Add a new property"
+          accessibilityRole="button"
         >
           <Text style={styles.addText}>Add</Text>
         </Pressable>

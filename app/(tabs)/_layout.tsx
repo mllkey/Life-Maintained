@@ -157,7 +157,7 @@ export default function TabLayout() {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           setLogSheetVisible(true);
         }}
-        accessibilityLabel="Log maintenance"
+        accessibilityLabel="Record voice maintenance log"
         accessibilityRole="button"
       >
         <Ionicons name="mic-outline" size={26} color="#fff" />

@@ -625,6 +625,8 @@ export function LogSheet({
                       phase === "recording" && styles.recordingBtnStop,
                     ]}
                     onPress={phase === "idle" ? handleStartRecording : handleStopRecording}
+                    accessibilityLabel="Start recording"
+                    accessibilityRole="button"
                   >
                     <Ionicons
                       name={phase === "idle" ? "mic" : "stop"}
@@ -702,6 +704,8 @@ export function LogSheet({
                       style={[styles.sheetProcessBtn, !text.trim() && { opacity: 0.45 }]}
                       onPress={handleProcess}
                       disabled={!text.trim()}
+                      accessibilityLabel="Process voice entry"
+                      accessibilityRole="button"
                     >
                       <Ionicons name="sparkles-outline" size={15} color="#fff" />
                       <Text style={styles.sheetProcessBtnText}>Process</Text>
