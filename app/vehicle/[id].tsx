@@ -1439,12 +1439,7 @@ function DocPhotoSlot({
         onLongPress={onLongPress}
         delayLongPress={400}
       >
-        <Image
-          source={{ uri: photoUrl }}
-          style={walletStyles.slotImage}
-          resizeMode="cover"
-          onError={(e) => console.error("[WalletTab] Image load error:", e.nativeEvent.error, "URL:", photoUrl)}
-        />
+        <Image source={{ uri: photoUrl }} style={walletStyles.slotImage} resizeMode="cover" onError={(e) => console.error("[Wallet] Image load error:", e.nativeEvent.error, "URL:", photoUrl)} />
         <View style={walletStyles.slotLabelRow}>
           <Text style={walletStyles.slotLabelText}>{label}</Text>
           <Ionicons name="ellipsis-horizontal" size={16} color={Colors.textSecondary} />

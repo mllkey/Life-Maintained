@@ -78,11 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setOnboardingCompleted(true);
         AsyncStorage.setItem("@onboarding_completed", "true").catch(() => {});
       } else {
-        const cached = await AsyncStorage.getItem("@onboarding_completed");
-        if (cached !== "true") {
-          setOnboardingCompleted(false);
-          AsyncStorage.removeItem("@onboarding_completed").catch(() => {});
-        }
+        AsyncStorage.getItem("@onboarding_completed").then((cached) => {
+          if (cached !== "true") {
+            setOnboardingCompleted(false);
+            AsyncStorage.removeItem("@onboarding_completed").catch(() => {});
+          }
+        }).catch(() => {});
       }
       setProfileLoaded(true);
       checkAndResetScanCount(userId, fullProfile).catch(() => {});
