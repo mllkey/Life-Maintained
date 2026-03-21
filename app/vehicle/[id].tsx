@@ -693,6 +693,7 @@ export default function VehicleDetailScreen() {
       ) : vehicle ? (
         <ScrollView
           showsVerticalScrollIndicator={false}
+          stickyHeaderIndices={[1]}
           refreshControl={
             <RefreshControl
               refreshing={scheduleRefreshing}
@@ -1877,6 +1878,8 @@ const styles = StyleSheet.create({
   updateMileageLink: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
   tabs: {
     flexDirection: "row",
+    backgroundColor: Colors.background,
+    paddingTop: 4,
   },
   tab: { flex: 1, paddingVertical: 12, alignItems: "center", position: "relative" },
   tabActive: {},
