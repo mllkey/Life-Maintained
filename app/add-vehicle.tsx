@@ -89,6 +89,7 @@ const MAKES_BY_TYPE: Record<string, string[]> = {
   trailer: ["PJ", "Load Trail", "Big Tex", "MAXX-D", "Texas Pride", "Diamond C", "Sure-Trac", "BWise", "Iron Bull", "Carry-On", "Gatormade", "Norstar", "Wells Cargo", "Haulmark", "Continental Cargo", "Aluma", "Featherlite"],
   dump_trailer: ["PJ", "Load Trail", "Big Tex", "MAXX-D", "Texas Pride", "Diamond C", "Sure-Trac", "BWise", "Iron Bull", "Carry-On", "Gatormade", "Norstar", "Wells Cargo", "Haulmark", "Continental Cargo", "Aluma", "Featherlite"],
   dump_truck: ["Isuzu", "Hino", "Freightliner", "Peterbilt", "Kenworth", "International", "Mack", "Western Star", "Ford", "Chevrolet", "RAM"],
+  semi_truck: ["Freightliner", "Kenworth", "Peterbilt", "Volvo", "Mack", "International", "Western Star", "Hino", "Isuzu"],
   dumpster: ["Custom", "Wastequip", "Galbreath", "Marathon", "KPAC", "Other"],
   other: [],
 };
@@ -193,6 +194,7 @@ function countMonthsInRange(start: number | null, end: number | null): number {
 const VEHICLE_TYPES: { value: string; label: string; icon: string }[] = [
   { value: "car",        label: "Car / Truck / SUV",    icon: "car" },
   { value: "motorcycle", label: "Motorcycle",            icon: "motorbike" },
+  { value: "semi_truck", label: "Semi Truck",            icon: "bus-outline" },
   { value: "rv",         label: "RV / Camper",           icon: "rv-truck" },
   { value: "boat",       label: "Boat",                  icon: "sail-boat" },
   { value: "atv",        label: "ATV",                   icon: "atv" },
@@ -216,6 +218,7 @@ const FUEL_OPTIONS_BY_TYPE: Record<string, ("gas" | "diesel" | "hybrid" | "ev")[
   car:        ["gas", "diesel", "hybrid", "ev"],
   motorcycle: ["gas", "ev"],
   rv:         ["gas", "diesel"],
+  semi_truck: ["diesel"],
   other:      ["gas", "diesel", "hybrid", "ev"],
 };
 
@@ -288,6 +291,17 @@ const HARDCODED_MODELS: Record<string, Record<string, string[]>> = {
       "Rave RE 3700 850 E-TEC",
       "Shredder RE 3700 850 E-TEC",
     ],
+  },
+  semi_truck: {
+    "Freightliner": ["Cascadia", "M2 106", "M2 112", "Columbia", "Century", "Coronado", "122SD", "114SD", "108SD", "Econic"],
+    "Kenworth": ["T680", "T880", "W900", "W990", "T370", "T270", "T180", "C500"],
+    "Peterbilt": ["579", "589", "567", "520", "535", "548", "537"],
+    "Volvo": ["VNL", "VNR", "VHD", "VNX", "FH", "FM", "FMX"],
+    "Mack": ["Anthem", "Pinnacle", "Granite", "LR", "MD", "TerraPro"],
+    "International": ["LT", "RH", "HV", "HX", "MV", "CV"],
+    "Western Star": ["4700", "4900", "5700XE", "47X", "49X", "57X"],
+    "Hino": ["L6", "L7", "XL7", "XL8"],
+    "Isuzu": ["FTR", "FVR", "NRR", "NPR", "NQR"],
   },
 };
 
@@ -571,7 +585,7 @@ export default function AddVehicleScreen() {
     if (vehicleType === "other") {
       setNhtsaModels([]);
       setIsLoadingModels(false);
-    } else if (vehicleType === "pwc" || vehicleType === "snowmobile") {
+    } else if (vehicleType === "pwc" || vehicleType === "snowmobile" || vehicleType === "semi_truck") {
       const byMake = HARDCODED_MODELS[vehicleType] ?? {};
       const models = byMake[make.trim()] ?? [];
       setNhtsaModels(models);
@@ -681,7 +695,7 @@ export default function AddVehicleScreen() {
     }
     const allowedFuels = FUEL_OPTIONS_BY_TYPE[vehicleType];
     if (allowedFuels && !allowedFuels.includes(fuelType)) {
-      setFuelType("gas");
+      setFuelType(allowedFuels[0] ?? "gas");
     }
     if (!allowedFuels) {
       setFuelType("gas");

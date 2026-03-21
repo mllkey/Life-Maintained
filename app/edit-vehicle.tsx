@@ -26,6 +26,7 @@ import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 const VEHICLE_TYPE_OPTIONS = [
   { value: "car", label: "Car / Truck / SUV" },
   { value: "motorcycle", label: "Motorcycle" },
+  { value: "semi_truck", label: "Semi Truck" },
   { value: "rv", label: "RV / Camper" },
   { value: "boat", label: "Boat" },
   { value: "atv", label: "ATV" },

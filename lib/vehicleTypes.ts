@@ -5,6 +5,7 @@ export const MILEAGE_TRACKED_TYPES = new Set([
   "utv",
   "snowmobile",
   "dump_truck",
+  "semi_truck",
   "other",
   "atv",
 ]);

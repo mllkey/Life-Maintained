@@ -60,6 +60,7 @@ function getVehicleIcon(type: string | null): string {
     case "utv":        return "trail-sign-outline";
     case "pwc":        return "water-outline";
     case "snowmobile": return "snow-outline";
+    case "semi_truck":  return "bus-outline";
     default:           return "car-outline";
   }
 }
