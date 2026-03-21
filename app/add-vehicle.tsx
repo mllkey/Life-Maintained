@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -446,6 +446,7 @@ export default function AddVehicleScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const { data: walletCandidates } = useQuery<{ id: string; year: number; make: string; model: string; nickname: string | null }[]>({
     queryKey: ["wallet_copy_candidates", user?.id],
@@ -789,15 +790,18 @@ export default function AddVehicleScreen() {
     // 1. Validate — all existing checks unchanged
     if (!year || !make || !model) {
       setError("Year, make, and model are required");
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     const yearNum = parseInt(year);
     if (isNaN(yearNum) || yearNum < 1980 || yearNum > CURRENT_YEAR + 2) {
       setError("Please select a valid year");
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (MILEAGE_TRACKED_TYPES.has(vehicleType) && !avgMilesPerMonth.trim()) {
       setError("Estimated monthly miles is required for this vehicle type");
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -928,18 +932,11 @@ export default function AddVehicleScreen() {
             <Ionicons name="close" size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.title}>Add Vehicle</Text>
-          <Pressable
-            style={({ pressed }) => [styles.saveBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={handleSave}
-            disabled={isLoading}
-          >
-            {isLoading
-              ? <ActivityIndicator size="small" color={Colors.textInverse} />
-              : <Text style={styles.saveBtnText}>Save</Text>}
-          </Pressable>
+          <View style={{ width: 44 }} />
         </View>
 
         <ScrollView
+          ref={scrollViewRef}
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -1484,6 +1481,24 @@ export default function AddVehicleScreen() {
               </View>
             )}
           </FieldGroup>
+
+      <Pressable
+        style={({ pressed }) => [{
+          backgroundColor: "#E8943A",
+          borderRadius: 14,
+          height: 52,
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: 16,
+          opacity: pressed || isLoading ? 0.85 : 1,
+        }]}
+        onPress={handleSave}
+        disabled={isLoading}
+      >
+        {isLoading
+          ? <ActivityIndicator size="small" color="#0C111B" />
+          : <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: "#0C111B" }}>Save Vehicle</Text>}
+      </Pressable>
         </ScrollView>
       </View>
 

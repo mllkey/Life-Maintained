@@ -159,13 +159,18 @@ export default function HealthScreen() {
           }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/add-appointment");
+            Alert.alert("Add to Health", "What would you like to add?", [
+              { text: "Family Member", onPress: () => router.push("/add-family-member") },
+              { text: "Appointment", onPress: () => router.push("/add-appointment") },
+              { text: "Medication", onPress: () => router.push("/add-medication") },
+              { text: "Cancel", style: "cancel" },
+            ]);
           }}
           accessibilityLabel="Add health item"
           accessibilityRole="button"
         >
           <Ionicons name="add" size={18} color="#0C111B" />
-          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#0C111B" }}>Appointment</Text>
+          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#0C111B" }}>Add</Text>
         </Pressable>
       </View>
 

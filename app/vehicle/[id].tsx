@@ -94,6 +94,7 @@ export default function VehicleDetailScreen() {
   const [completeDate, setCompleteDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [completeNotes, setCompleteNotes] = useState("");
   const [completeCost, setCompleteCost] = useState("");
+  const [completeProvider, setCompleteProvider] = useState("");
   const [completeDuration, setCompleteDuration] = useState("");
   const [isSavingComplete, setIsSavingComplete] = useState(false);
 
@@ -255,6 +256,7 @@ export default function VehicleDetailScreen() {
     setCompleteDate(format(new Date(), "yyyy-MM-dd"));
     setCompleteNotes("");
     setCompleteCost("");
+    setCompleteProvider("");
     setCompleteDuration("");
     setIsSavingComplete(false);
   }
@@ -264,6 +266,7 @@ export default function VehicleDetailScreen() {
     setCompleteMileage("");
     setCompleteNotes("");
     setCompleteCost("");
+    setCompleteProvider("");
     setCompleteDuration("");
     setIsSavingComplete(false);
   }
@@ -304,11 +307,6 @@ export default function VehicleDetailScreen() {
         if (!isNaN(dm) && dm > 0) parts.push(`Time spent: ${dm} min`);
       }
       return parts.length ? parts.join("\n\n") : null;
-    })();
-    const costForLog = (() => {
-      if (!costTrim) return null;
-      const n = parseFloat(costTrim.replace(/[^0-9.]/g, ""));
-      return isNaN(n) ? null : n;
     })();
     const task = markCompleteTask;
     setIsSavingComplete(true);
@@ -358,9 +356,9 @@ export default function VehicleDetailScreen() {
           property_id: null,
           service_name: task.name,
           service_date: completeDate,
-          cost: costForLog,
+          cost: completeCost.trim() ? parseFloat(completeCost) : null,
           mileage: mileageNum,
-          provider_name: null,
+          provider_name: completeProvider.trim() || null,
           provider_contact: null,
           receipt_url: null,
           notes: notesForLog,
@@ -968,6 +966,8 @@ export default function VehicleDetailScreen() {
         onNotesChange={setCompleteNotes}
         cost={completeCost}
         onCostChange={setCompleteCost}
+        provider={completeProvider}
+        onProviderChange={setCompleteProvider}
         durationMinutes={completeDuration}
         onDurationChange={setCompleteDuration}
         onSave={handleSaveMarkComplete}
@@ -1151,6 +1151,8 @@ function MarkCompleteSheet({
   onNotesChange,
   cost,
   onCostChange,
+  provider,
+  onProviderChange,
   durationMinutes,
   onDurationChange,
   onSave,
@@ -1170,6 +1172,8 @@ function MarkCompleteSheet({
   onNotesChange: (v: string) => void;
   cost: string;
   onCostChange: (v: string) => void;
+  provider: string;
+  onProviderChange: (v: string) => void;
   durationMinutes: string;
   onDurationChange: (v: string) => void;
   onSave: () => void;
@@ -1272,21 +1276,6 @@ function MarkCompleteSheet({
 
             <View style={styles.sheetField}>
               <Text style={styles.sheetFieldLabel}>
-                Cost <Text style={styles.sheetFieldOptional}>(optional)</Text>
-              </Text>
-              <TextInput
-                style={styles.sheetInput}
-                value={cost}
-                onChangeText={onCostChange}
-                keyboardType="decimal-pad"
-                placeholder="e.g. 89.50"
-                placeholderTextColor={Colors.textTertiary}
-                returnKeyType="done"
-              />
-            </View>
-
-            <View style={styles.sheetField}>
-              <Text style={styles.sheetFieldLabel}>
                 Time spent (minutes) <Text style={styles.sheetFieldOptional}>(optional)</Text>
               </Text>
               <TextInput
@@ -1311,6 +1300,29 @@ function MarkCompleteSheet({
                 multiline
                 numberOfLines={2}
                 returnKeyType="done"
+              />
+            </View>
+
+            <View style={styles.sheetField}>
+              <Text style={styles.sheetFieldLabel}>Cost  <Text style={styles.sheetFieldOptional}>(optional)</Text></Text>
+              <TextInput
+                style={styles.sheetInput}
+                value={cost}
+                onChangeText={onCostChange}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 89.99"
+                placeholderTextColor={Colors.textTertiary}
+              />
+            </View>
+
+            <View style={styles.sheetField}>
+              <Text style={styles.sheetFieldLabel}>Provider  <Text style={styles.sheetFieldOptional}>(optional)</Text></Text>
+              <TextInput
+                style={styles.sheetInput}
+                value={provider}
+                onChangeText={onProviderChange}
+                placeholder="e.g. Jiffy Lube"
+                placeholderTextColor={Colors.textTertiary}
               />
             </View>
           </View>
