@@ -433,11 +433,9 @@ export default function VehicleDetailScreen() {
       const blob = await response.blob();
       const arrayBuffer = await new Response(blob).arrayBuffer();
 
-      console.error("[VehiclePhoto] About to upload. Path:", storagePath, "ArrayBuffer size:", arrayBuffer.byteLength);
       const { error: uploadError } = await supabase.storage
         .from("wallet-documents")
         .upload(storagePath, arrayBuffer, { contentType: "image/jpeg", upsert: true });
-      console.error("[VehiclePhoto] Upload result. Error:", uploadError);
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from("wallet-documents").getPublicUrl(storagePath);
@@ -448,8 +446,7 @@ export default function VehicleDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: any) {
-      console.error("[VehiclePhoto] Full error:", err);
-      Alert.alert("Photo didn't save", `${err?.message ?? "Unknown"}\n\n${err?.statusCode ?? ""} ${err?.error ?? ""}\n${JSON.stringify(err).substring(0, 200)}`);
+      Alert.alert("Photo didn't save", "Something went wrong on our end. Give it another shot.");
     } finally {
       setUploadingPhoto(false);
     }
