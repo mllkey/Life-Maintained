@@ -147,7 +147,7 @@ export default function HealthScreen() {
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
         <Text style={styles.title}>Health</Text>
         <Pressable
-          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+          style={({ pressed }) => [styles.addBtn, { opacity: pressed ? 0.7 : 1 }]}
           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(people.length === 0 && pets.length === 0 ? "/add-family-member" : "/add-appointment"); }}
           accessibilityLabel="Add a family member or appointment"
           accessibilityRole="button"
@@ -393,7 +393,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  addText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.accent },
+  addBtn: {
+    backgroundColor: Colors.accent,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  addText: { fontSize: 15, fontFamily: "Inter_500Medium", color: "#fff" },
 
   content: { paddingHorizontal: 20, paddingTop: 8, gap: 20 },
 

@@ -1213,6 +1213,10 @@ function MarkCompleteSheet({
 // ─── Wallet Tab ───────────────────────────────────────────────────────────────
 
 type WalletDoc = { id: string; document_type: string; data: Record<string, any> };
+type WalletDocWithVehicle = WalletDoc & {
+  vehicle_id: string;
+  vehicles: { make: string | null; model: string | null; year: number | null; nickname: string | null } | null;
+};
 type DocType = "registration" | "insurance" | "id_card";
 
 const DOC_LABELS: Record<DocType, string> = {
@@ -1221,9 +1225,31 @@ const DOC_LABELS: Record<DocType, string> = {
   id_card: "Driver's License",
 };
 
+function walletVehicleLabel(row: WalletDocWithVehicle): string {
+  const v = row.vehicles;
+  if (!v) return "Vehicle";
+  const title = [v.year, v.make, v.model].filter(x => x != null && String(x).trim() !== "").join(" ").trim();
+  const nick = v.nickname?.trim();
+  return nick || title || "Vehicle";
+}
+
 function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string }) {
   const [uploading, setUploading] = useState<DocType | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+
+  const { data: allWalletDocs } = useQuery<(WalletDoc & { vehicle_id: string })[]>({
+    queryKey: ["all_wallet_docs", userId, vehicleId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("vehicle_wallet_documents")
+        .select("*, vehicles!inner(make, model, year, nickname)")
+        .eq("user_id", userId)
+        .neq("vehicle_id", vehicleId);
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+    enabled: !!userId,
+  });
 
   const { data: docs, isLoading, refetch } = useQuery<WalletDoc[]>({
     queryKey: ["wallet_docs", vehicleId],
@@ -1251,6 +1277,57 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
 
   function getDoc(docType: DocType): WalletDoc | null {
     return docs?.find(d => d.document_type === docType) ?? null;
+  }
+
+  const copyOptionsByDocType = useMemo(() => {
+    const empty: Record<DocType, { photoUrl: string; label: string }[]> = {
+      registration: [],
+      insurance: [],
+      id_card: [],
+    };
+    if (!allWalletDocs?.length) return empty;
+    const buildFor = (docType: "insurance" | "id_card") => {
+      const seenUrls = new Set<string>();
+      const out: { photoUrl: string; label: string }[] = [];
+      for (const row of allWalletDocs as WalletDocWithVehicle[]) {
+        if (row.document_type !== docType) continue;
+        const url = row.data?.photo_url;
+        if (!url || typeof url !== "string") continue;
+        if (seenUrls.has(url)) continue;
+        seenUrls.add(url);
+        out.push({ photoUrl: url, label: walletVehicleLabel(row) });
+      }
+      return out;
+    };
+    return {
+      registration: [],
+      insurance: buildFor("insurance"),
+      id_card: buildFor("id_card"),
+    };
+  }, [allWalletDocs]);
+
+  async function copyDocFromVehicle(docType: DocType, sourcePhotoUrl: string) {
+    try {
+      const existingDoc = getDoc(docType);
+      if (existingDoc) {
+        await supabase
+          .from("vehicle_wallet_documents")
+          .update({ data: { photo_url: sourcePhotoUrl }, updated_at: new Date().toISOString() })
+          .eq("id", existingDoc.id);
+      } else {
+        await supabase.from("vehicle_wallet_documents").insert({
+          user_id: userId,
+          vehicle_id: vehicleId,
+          document_type: docType,
+          data: { photo_url: sourcePhotoUrl },
+        });
+      }
+      await refetch();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      console.error("[WalletTab] Copy error:", err);
+      Alert.alert("Copy Failed", "Could not copy document. Please try again.");
+    }
   }
 
   async function handlePick(docType: DocType, source: "camera" | "library") {
@@ -1388,12 +1465,20 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
       {DOC_TYPES.map(docType => {
         const photoUrl = getPhotoUrl(docType);
         const isUploading = uploading === docType;
+        const copyOpts =
+          docType === "registration" ? [] : copyOptionsByDocType[docType];
         return (
           <DocPhotoSlot
             key={docType}
             label={DOC_LABELS[docType]}
             photoUrl={photoUrl}
             isUploading={isUploading}
+            copyFromOptions={!photoUrl ? copyOpts : undefined}
+            onCopyFrom={
+              !photoUrl && copyOpts.length
+                ? (url: string) => copyDocFromVehicle(docType, url)
+                : undefined
+            }
             onTap={() => {
               if (photoUrl) {
                 setViewingPhoto(photoUrl);
@@ -1427,13 +1512,21 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
 }
 
 function DocPhotoSlot({
-  label, photoUrl, isUploading, onTap, onLongPress,
+  label,
+  photoUrl,
+  isUploading,
+  onTap,
+  onLongPress,
+  copyFromOptions,
+  onCopyFrom,
 }: {
   label: string;
   photoUrl: string | null;
   isUploading: boolean;
   onTap: () => void;
   onLongPress: () => void;
+  copyFromOptions?: { photoUrl: string; label: string }[];
+  onCopyFrom?: (photoUrl: string) => void;
 }) {
   if (isUploading) {
     return (
@@ -1461,15 +1554,39 @@ function DocPhotoSlot({
     );
   }
 
+  const hasCopy = !!(copyFromOptions?.length && onCopyFrom);
+
   return (
-    <Pressable
-      style={({ pressed }) => [walletStyles.slotEmpty, { opacity: pressed ? 0.75 : 1 }]}
-      onPress={onTap}
-    >
-      <Ionicons name="camera-outline" size={28} color={Colors.textTertiary} />
-      <Text style={walletStyles.slotName}>{label}</Text>
-      <Text style={walletStyles.slotHint}>Tap to add photo</Text>
-    </Pressable>
+    <View style={walletStyles.slotEmpty}>
+      {hasCopy ? (
+        <View style={walletStyles.slotCopyBlock}>
+          {copyFromOptions!.map((opt, idx) => (
+            <Pressable
+              key={`${opt.photoUrl}-${idx}`}
+              onPress={() => onCopyFrom!(opt.photoUrl)}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Text style={walletStyles.slotCopyLink}>
+                {copyFromOptions!.length === 1
+                  ? `Same as ${opt.label}?`
+                  : `Copy from ${opt.label}`}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      <Pressable
+        style={({ pressed }) => [
+          walletStyles.slotEmptyMain,
+          { opacity: pressed ? 0.75 : 1 },
+        ]}
+        onPress={onTap}
+      >
+        <Ionicons name="camera-outline" size={28} color={Colors.textTertiary} />
+        <Text style={walletStyles.slotName}>{label}</Text>
+        <Text style={walletStyles.slotHint}>Tap to add photo</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -1480,11 +1597,29 @@ const walletStyles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    height: 160,
+    minHeight: 160,
+    backgroundColor: Colors.surface,
+    overflow: "hidden",
+  },
+  slotCopyBlock: {
+    alignSelf: "stretch",
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 4,
+    gap: 6,
+  },
+  slotCopyLink: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.accent,
+  },
+  slotEmptyMain: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: Colors.surface,
+    paddingBottom: 12,
+    minHeight: 120,
   },
   slotName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
   slotHint: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
