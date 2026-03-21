@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
@@ -108,9 +109,14 @@ export default function UpdateMileageScreen() {
               <Text style={styles.inputUnit}>mi</Text>
             </View>
             {mileageWarning && (
-              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "#E8943A", marginTop: 6, lineHeight: 18 }}>
-                {mileageWarning}
-              </Text>
+              <Pressable onPress={() => Linking.openURL("mailto:support@lifemaintained.com?subject=Mileage%20Correction%20Request")}>
+                <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "#E8943A", marginTop: 6, lineHeight: 18 }}>
+                  {mileageWarning}
+                </Text>
+                <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#E8943A", marginTop: 4 }}>
+                  Tap here to email us →
+                </Text>
+              </Pressable>
             )}
           </View>
 

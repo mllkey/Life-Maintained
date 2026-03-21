@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Linking,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
@@ -149,7 +150,16 @@ export default function EditVehicleScreen() {
                 placeholder="e.g. 67331"
                 placeholderTextColor={Colors.textTertiary}
               />
-              {mileageWarning && <Text style={styles.warning}>{mileageWarning}</Text>}
+              {mileageWarning && (
+                <Pressable onPress={() => Linking.openURL("mailto:support@lifemaintained.com?subject=Mileage%20Correction%20Request")}>
+                  <Text style={styles.warning}>
+                    {mileageWarning}
+                  </Text>
+                  <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#E8943A", marginTop: 4 }}>
+                    Tap here to email us →
+                  </Text>
+                </Pressable>
+              )}
               <Text style={styles.hint}>Mileage can be increased but cannot be lowered.</Text>
             </View>
           )}

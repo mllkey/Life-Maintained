@@ -176,7 +176,7 @@ export default function VehiclesScreen() {
               const typeLabel = v.vehicle_type
                 ? v.vehicle_type.charAt(0).toUpperCase() + v.vehicle_type.slice(1)
                 : "Vehicle";
-              metaLine = v.nickname ? title || typeLabel : typeLabel;
+              metaLine = typeLabel;
             }
 
             const statusDotColor = worstStatus === "overdue"
@@ -214,8 +214,8 @@ export default function VehiclesScreen() {
                   <View style={styles.vehicleTitleRow}>
                     {statusDotColor && <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />}
                     <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
-                    {subtitle ? <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#8B93A8" }} numberOfLines={1}>{subtitle}</Text> : null}
                   </View>
+                  {subtitle ? <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#8B93A8" }} numberOfLines={1}>{subtitle}</Text> : null}
                   <Text
                     style={[styles.vehicleMeta, isStale && isMileageTracked && v.mileage != null && { color: Colors.dueSoon }]}
                     numberOfLines={1}
