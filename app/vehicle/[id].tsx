@@ -956,6 +956,12 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast }: {
     dueParts.push(`Completed ${format(parseISO(task.last_completed_date), "MMM d, yyyy")}`);
   }
   const dueText = dueParts.join(" · ");
+  let lastServicedText: string | null = null;
+  if (!isCompleted && task.last_completed_date) {
+    const lastDate = format(parseISO(task.last_completed_date), "MMM d, yyyy");
+    const lastMiles = task.last_completed_miles != null ? ` at ${task.last_completed_miles.toLocaleString()} mi` : "";
+    lastServicedText = `Last serviced ${lastDate}${lastMiles}`;
+  }
 
   return (
     <Pressable
@@ -979,6 +985,11 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast }: {
         {!!dueText && (
           <Text style={[styles.scheduleCardDue, isCompleted && styles.scheduleCardDueDone]}>
             {dueText}
+          </Text>
+        )}
+        {!!lastServicedText && (
+          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 2 }}>
+            {lastServicedText}
           </Text>
         )}
         {showCompletedInfo && (
