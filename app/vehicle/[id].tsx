@@ -766,22 +766,24 @@ export default function VehicleDetailScreen() {
             })()}
           </View>
 
-          <View style={styles.tabs}>
-            {(["schedule", "wallet", "history"] as const).map(tab => (
-              <Pressable
-                key={tab}
-                style={[styles.tab, activeTab === tab && styles.tabActive]}
-                onPress={() => { Haptics.selectionAsync(); setActiveTab(tab); }}
-              >
-                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                  {tab === "schedule"
-                    ? (scheduleAttentionCount > 0 ? `Schedule (${scheduleAttentionCount})` : "Schedule")
-                    : tab === "wallet" ? "Glovebox"
-                    : "History"}
-                </Text>
-                {activeTab === tab && <View style={styles.tabUnderline} />}
-              </Pressable>
-            ))}
+          <View style={{ backgroundColor: Colors.background }}>
+            <View style={styles.tabs}>
+              {(["schedule", "wallet", "history"] as const).map(tab => (
+                <Pressable
+                  key={tab}
+                  style={[styles.tab, activeTab === tab && styles.tabActive]}
+                  onPress={() => { Haptics.selectionAsync(); setActiveTab(tab); }}
+                >
+                  <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                    {tab === "schedule"
+                      ? (scheduleAttentionCount > 0 ? `Schedule (${scheduleAttentionCount})` : "Schedule")
+                      : tab === "wallet" ? "Glovebox"
+                      : "History"}
+                  </Text>
+                  {activeTab === tab && <View style={styles.tabUnderline} />}
+                </Pressable>
+              ))}
+            </View>
           </View>
 
           {activeTab === "schedule" ? (
