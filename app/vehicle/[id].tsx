@@ -418,7 +418,7 @@ export default function VehicleDetailScreen() {
       if (source === "camera") {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== "granted") {
-          Alert.alert("Permission needed", "Camera access is required.");
+          Alert.alert("Camera access needed", "Turn on camera access in your Settings to take photos.");
           return;
         }
         result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [16, 9] });
@@ -446,8 +446,8 @@ export default function VehicleDetailScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       Alert.alert(
-        "Couldn't save photo",
-        "Check your connection and try again. If it keeps failing, verify LifeMaintained can access Photos in system settings.",
+        "Photo didn't save",
+        "Something went wrong on our end. Give it another shot.",
       );
     } finally {
       setUploadingPhoto(false);
@@ -463,7 +463,7 @@ export default function VehicleDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
-      Alert.alert("Error", "Could not remove photo.");
+      Alert.alert("Photo didn't remove", "Give it another shot.");
     }
   }
 
@@ -542,7 +542,7 @@ export default function VehicleDetailScreen() {
         }
       }
     } catch (e: any) {
-      Alert.alert("Export Failed", e.message ?? "Something went wrong");
+      Alert.alert("Export didn't work", e.message ?? "Try again in a moment.");
     } finally {
       setIsExporting(false);
     }
@@ -579,7 +579,7 @@ export default function VehicleDetailScreen() {
               queryClient.invalidateQueries({ queryKey: ["dashboard"] });
             } catch (err: any) {
               setIsDeletingVehicle(false);
-              Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+              Alert.alert("Couldn't delete", err?.message ?? "Try again in a moment.");
             }
           },
         },
@@ -1446,7 +1446,7 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       console.error("[WalletTab] Copy error:", err);
-      Alert.alert("Copy Failed", "Could not copy document. Please try again.");
+      Alert.alert("Copy didn't work", "Give it another shot.");
     }
   }
 
@@ -1457,7 +1457,7 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
       if (source === "camera") {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== "granted") {
-          Alert.alert("Permission needed", "Camera access is required to take photos.");
+          Alert.alert("Camera access needed", "Turn on camera access in your Settings to take photos.");
           return;
         }
         result = await ImagePicker.launchCameraAsync({
@@ -1551,7 +1551,7 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
               await supabase.from("vehicle_wallet_documents").delete().eq("id", doc.id);
               await refetch();
             } catch {
-              Alert.alert("Error", "Could not delete photo.");
+              Alert.alert("Photo didn't delete", "Try again in a moment.");
             }
           },
         },
@@ -1629,6 +1629,10 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
                 style={walletStyles.photoViewerImage}
                 resizeMode="contain"
                 pointerEvents="none"
+                onError={() => {
+                  setViewingPhoto(null);
+                  Alert.alert("Can't load photo", "The image couldn't be loaded. Try re-uploading it.");
+                }}
               />
               <Text style={walletStyles.photoViewerHint}>Tap anywhere to close</Text>
             </View>

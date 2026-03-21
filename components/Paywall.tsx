@@ -141,7 +141,7 @@ export default function Paywall({
 
     purchaseTimeoutRef.current = setTimeout(() => {
       setIsPurchasing(false);
-      Alert.alert("Something went wrong. Please try again.");
+      Alert.alert("Hmm, that didn't work", "Give it another shot.");
     }, 30000);
 
     try {
@@ -152,7 +152,7 @@ export default function Paywall({
         : loadedOfferings?.all?.[cfg.rcOffering] ?? null;
 
       if (!offering) {
-        Alert.alert("Unable to load pricing. Please try again.");
+        Alert.alert("Couldn't load pricing", "Give it another shot.");
         return;
       }
 
@@ -161,7 +161,7 @@ export default function Paywall({
         : (offering.monthly ?? offering.availablePackages[0]);
 
       if (!pkg) {
-        Alert.alert("No packages available for this plan.");
+        Alert.alert("Plan unavailable", "This plan isn't available right now. Try a different one.");
         return;
       }
 
@@ -203,7 +203,7 @@ export default function Paywall({
     } catch (err: any) {
       if (purchaseTimeoutRef.current) clearTimeout(purchaseTimeoutRef.current);
       if (!err?.userCancelled) {
-        Alert.alert("Purchase Failed", err?.message ?? "Something went wrong. Please try again.");
+        Alert.alert("Purchase didn't go through", err?.message ?? "Give it another shot.");
       }
     } finally {
       setIsPurchasing(false);
@@ -234,10 +234,10 @@ export default function Paywall({
         setToastVisible(true);
         setTimeout(() => { setToastVisible(false); onDismiss?.(); }, 1600);
       } else {
-        Alert.alert("No active purchases found. Contact support if you believe this is an error.");
+        Alert.alert("No purchases found", "If you think this is wrong, reach out to us at support@lifemaintained.com.");
       }
     } catch {
-      Alert.alert("Restore failed. Please try again.");
+      Alert.alert("Restore didn't work", "Give it another shot.");
     } finally {
       setIsRestoring(false);
     }
