@@ -164,6 +164,7 @@ function RootLayoutNav() {
           <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="add-vehicle" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="edit-vehicle" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="vehicle/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="log-service/[vehicleId]" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="add-property" options={{ headerShown: false, presentation: "fullScreenModal" }} />

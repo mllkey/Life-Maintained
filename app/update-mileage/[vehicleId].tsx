@@ -22,6 +22,7 @@ export default function UpdateMileageScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [mileage, setMileage] = useState("");
+  const [mileageWarning, setMileageWarning] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const { data: vehicle } = useQuery({
@@ -36,8 +37,15 @@ export default function UpdateMileageScreen() {
   async function handleSave() {
     if (isLoading) return;
     if (!vehicleId || !mileage) return;
-    const m = parseInt(mileage);
+    const mileageValue = mileage;
+    const m = parseInt(mileageValue);
     if (isNaN(m)) return;
+    const currentMileage = vehicle?.mileage ?? 0;
+    const newMileage = parseInt(mileageValue, 10);
+    if (currentMileage > 0 && newMileage < currentMileage) {
+      setMileageWarning(`Mileage can only go up. Current: ${currentMileage.toLocaleString()} mi. If you made a typo, contact support@lifemaintained.com.`);
+      return;
+    }
     setIsLoading(true);
 
     await supabase.from("vehicles").update({
@@ -87,7 +95,10 @@ export default function UpdateMileageScreen() {
               <TextInput
                 style={styles.input}
                 value={mileage}
-                onChangeText={setMileage}
+                onChangeText={(text) => {
+                  setMileageWarning(null);
+                  setMileage(text);
+                }}
                 placeholder={vehicle?.mileage != null ? `More than ${vehicle.mileage.toLocaleString()}` : "Enter mileage"}
                 placeholderTextColor={Colors.textTertiary}
                 keyboardType="numeric"
@@ -96,6 +107,11 @@ export default function UpdateMileageScreen() {
               />
               <Text style={styles.inputUnit}>mi</Text>
             </View>
+            {mileageWarning && (
+              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "#E8943A", marginTop: 6, lineHeight: 18 }}>
+                {mileageWarning}
+              </Text>
+            )}
           </View>
 
           <Pressable

@@ -158,6 +158,7 @@ export default function VehiclesScreen() {
             const icon = getVehicleIcon(v.vehicle_type);
             const title = `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim();
             const displayName = v.nickname ?? title;
+            const subtitle = v.nickname ? title : null;
 
             const isMileageTracked = MILEAGE_TRACKED_TYPES.has(v.vehicle_type ?? "");
             const daysSinceUpdate = v.updated_at ? differenceInDays(new Date(), parseISO(v.updated_at)) : null;
@@ -213,6 +214,7 @@ export default function VehiclesScreen() {
                   <View style={styles.vehicleTitleRow}>
                     {statusDotColor && <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />}
                     <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
+                    {subtitle ? <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#8B93A8" }} numberOfLines={1}>{subtitle}</Text> : null}
                   </View>
                   <Text
                     style={[styles.vehicleMeta, isStale && isMileageTracked && v.mileage != null && { color: Colors.dueSoon }]}

@@ -1364,6 +1364,9 @@ export default function AddVehicleScreen() {
                   keyboardType="numeric"
                   returnKeyType="next"
                 />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 4 }}>
+                  Enter your current odometer reading. You can update this later, but it cannot be lowered.
+                </Text>
               </View>
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>Estimated Monthly Miles *</Text>
