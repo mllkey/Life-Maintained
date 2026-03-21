@@ -21,6 +21,21 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 
+const VEHICLE_TYPE_OPTIONS = [
+  { value: "car", label: "Car / Truck / SUV" },
+  { value: "motorcycle", label: "Motorcycle" },
+  { value: "rv", label: "RV / Camper" },
+  { value: "boat", label: "Boat" },
+  { value: "atv", label: "ATV" },
+  { value: "utv", label: "UTV / Side-by-Side" },
+  { value: "pwc", label: "Personal Watercraft" },
+  { value: "snowmobile", label: "Snowmobile" },
+  { value: "trailer", label: "Trailer" },
+  { value: "dump_truck", label: "Dump Truck" },
+  { value: "dumpster", label: "Dumpster" },
+  { value: "other", label: "Other" },
+];
+
 export default function EditVehicleScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
   const insets = useSafeAreaInsets();
@@ -33,6 +48,7 @@ export default function EditVehicleScreen() {
   const [mileage, setMileage] = useState("");
   const [color, setColor] = useState("");
   const [trim, setTrim] = useState("");
+  const [vehicleType, setVehicleType] = useState("car");
   const [mileageWarning, setMileageWarning] = useState<string | null>(null);
 
   useEffect(() => {
@@ -49,12 +65,13 @@ export default function EditVehicleScreen() {
           setMileage(data.mileage != null ? String(data.mileage) : "");
           setColor(data.color ?? "");
           setTrim(data.trim ?? "");
+          setVehicleType(data.vehicle_type ?? "car");
         }
         setLoading(false);
       });
   }, [vehicleId]);
 
-  const tracksMileage = MILEAGE_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "");
+  const tracksMileage = MILEAGE_TRACKED_TYPES.has(vehicleType);
   const vehicleTitle = vehicle
     ? `${vehicle.year ?? ""} ${vehicle.make ?? ""} ${vehicle.model ?? ""}`.trim()
     : "Vehicle";
@@ -67,6 +84,7 @@ export default function EditVehicleScreen() {
       nickname: nickname.trim() || null,
       color: color.trim() || null,
       trim: trim.trim() || null,
+      vehicle_type: vehicleType,
     };
 
     if (tracksMileage && mileage.trim()) {
@@ -124,6 +142,24 @@ export default function EditVehicleScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.field}>
+            <Text style={styles.label}>Vehicle Type</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+              {VEHICLE_TYPE_OPTIONS.map(opt => (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => {
+                    setVehicleType(opt.value);
+                    Haptics.selectionAsync();
+                  }}
+                  style={[styles.typePill, vehicleType === opt.value && styles.typePillActive]}
+                >
+                  <Text style={[styles.typePillText, vehicleType === opt.value && styles.typePillTextActive]}>{opt.label}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={styles.field}>
             <Text style={styles.label}>
               Nickname <Text style={styles.optional}>(optional)</Text>
             </Text>
@@ -147,16 +183,14 @@ export default function EditVehicleScreen() {
                   setMileageWarning(null);
                 }}
                 keyboardType="number-pad"
-                placeholder="e.g. 67331"
+                placeholder={vehicle?.mileage != null ? String(vehicle.mileage) : "e.g. 67331"}
                 placeholderTextColor={Colors.textTertiary}
               />
               {mileageWarning && (
                 <Pressable onPress={() => Linking.openURL("mailto:support@lifemaintained.com?subject=Mileage%20Correction%20Request")}>
-                  <Text style={styles.warning}>
-                    {mileageWarning}
-                  </Text>
+                  <Text style={styles.warning}>{mileageWarning}</Text>
                   <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#E8943A", marginTop: 4 }}>
-                    Tap here to email us →
+                    Tap here to email us for a correction
                   </Text>
                 </Pressable>
               )}
@@ -189,6 +223,23 @@ export default function EditVehicleScreen() {
               placeholderTextColor={Colors.textTertiary}
             />
           </View>
+
+          {vehicle?.engine_size && (
+            <View style={styles.field}>
+              <Text style={styles.label}>Engine</Text>
+              <Text style={styles.readonlyValue}>
+                {vehicle.engine_size}
+                {vehicle.engine_cylinders ? ` / ${vehicle.engine_cylinders} cylinder` : ""}
+              </Text>
+            </View>
+          )}
+
+          {vehicle?.vin && (
+            <View style={styles.field}>
+              <Text style={styles.label}>VIN</Text>
+              <Text style={styles.readonlyValue}>{vehicle.vin}</Text>
+            </View>
+          )}
 
           <Pressable
             style={({ pressed }) => [styles.saveBtn, { opacity: pressed || saving ? 0.85 : 1 }]}
@@ -244,6 +295,11 @@ const styles = StyleSheet.create({
   },
   hint: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 2 },
   warning: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#E8943A", marginTop: 2, lineHeight: 18 },
+  readonlyValue: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, paddingVertical: 4 },
+  typePill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
+  typePillActive: { borderColor: "#E8943A", backgroundColor: "rgba(232,147,58,0.15)" },
+  typePillText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  typePillTextActive: { color: "#E8943A", fontFamily: "Inter_600SemiBold" },
   saveBtn: {
     backgroundColor: "#E8943A",
     borderRadius: 14,

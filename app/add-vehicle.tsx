@@ -314,7 +314,7 @@ function mapNhtsaVehicleType(nhtsaType: string): string {
   if (t.includes("utv") || t.includes("side-by-side") || t.includes("side by side")) return "utv";
   if (t.includes("atv") || t.includes("off-road") || t.includes("offroad") || t.includes("quad")) return "atv";
   if (t.includes("boat") || t.includes("marine") || t.includes("vessel") || t.includes("yacht")) return "boat";
-  if (t.includes("truck") || t.includes("mpv") || t.includes("multipurpose") || t.includes("passenger car") || t.includes("passenger vehicle") || t.includes("low speed")) return "car";
+  if (t.includes("truck") || t.includes("mpv") || t.includes("multipurpose") || t.includes("passenger car") || t.includes("passenger vehicle") || t.includes("low speed") || t.includes("incomplete") || t.includes("van") || t.includes("bus")) return "car";
   return "other";
 }
 
@@ -496,6 +496,8 @@ export default function AddVehicleScreen() {
   const [isVinLoading, setIsVinLoading] = useState(false);
   const [vinError, setVinError] = useState<string | null>(null);
   const [vinSuccess, setVinSuccess] = useState<string | null>(null);
+  const [engineSize, setEngineSize] = useState<string | null>(null);
+  const [engineCylinders, setEngineCylinders] = useState<number | null>(null);
 
   const [yearPickerVisible, setYearPickerVisible] = useState(false);
   const [makePickerVisible, setMakePickerVisible] = useState(false);
@@ -713,6 +715,18 @@ export default function AddVehicleScreen() {
       if (result.Model) setModel(result.Model);
       if (result.Trim) setTrim(result.Trim);
       if (result.VehicleType) setVehicleType(mapNhtsaVehicleType(result.VehicleType));
+      if (result.FuelTypePrimary) {
+        const fuel = result.FuelTypePrimary.toLowerCase();
+        if (fuel.includes("diesel")) setFuelType("diesel");
+        else if (fuel.includes("electric")) setFuelType("ev");
+        else if (fuel.includes("hybrid")) setFuelType("hybrid");
+      }
+      if (result.DriveType) {
+        const drive = result.DriveType.toLowerCase();
+        if (drive.includes("awd") || drive.includes("4wd") || drive.includes("all wheel") || drive.includes("4x4")) setIsAwd(true);
+      }
+      if (result.DisplacementL) setEngineSize(result.DisplacementL + "L");
+      if (result.EngineCylinders) setEngineCylinders(parseInt(result.EngineCylinders) || null);
       setVinSuccess("Vehicle details filled from VIN");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -818,6 +832,9 @@ export default function AddVehicleScreen() {
       season_end_month: isSeasonal ? seasonEndMonth : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      vin: vin.trim().toUpperCase() || null,
+      engine_size: engineSize,
+      engine_cylinders: engineCylinders,
     };
 
     if (!hasCandidates) {

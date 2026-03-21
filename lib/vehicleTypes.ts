@@ -5,6 +5,8 @@ export const MILEAGE_TRACKED_TYPES = new Set([
   "utv",
   "snowmobile",
   "dump_truck",
+  "other",
+  "atv",
 ]);
 
 // Vehicle types that are maintained on a time-only basis (no mileage tracking).

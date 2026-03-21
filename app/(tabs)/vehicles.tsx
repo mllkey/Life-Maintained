@@ -173,10 +173,10 @@ export default function VehiclesScreen() {
                   ? mileStr + " · " + formatDistanceToNowStrict(parseISO(v.updated_at!), { addSuffix: true })
                   : mileStr;
             } else {
-              const typeLabel = v.vehicle_type
+              const typeLabel = (v.vehicle_type && v.vehicle_type !== "other")
                 ? v.vehicle_type.charAt(0).toUpperCase() + v.vehicle_type.slice(1)
-                : "Vehicle";
-              metaLine = typeLabel;
+                : "";
+              metaLine = v.nickname ? title : (typeLabel || "Vehicle");
             }
 
             const statusDotColor = worstStatus === "overdue"
