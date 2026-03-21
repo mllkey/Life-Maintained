@@ -49,7 +49,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // For any other error (network, auth, RLS), retry once before giving up.
         const isNoRows = (error as any)?.code === "PGRST116";
         if (!isNoRows && attempt === 0 && mountedRef.current) {
-          console.warn("[AUTH] fetchProfile transient error (attempt 0), retrying in 1.5s...", error.message);
           await new Promise(r => setTimeout(r, 1500));
           if (mountedRef.current) return fetchProfile(userId, 1);
           return;
@@ -58,8 +57,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!mountedRef.current) return;
-      console.log("[AUTH] fetchProfile result:", JSON.stringify(data));
-      console.log("[AUTH] onboarding_completed from DB:", (data as any)?.onboarding_completed);
       const p = data as any;
       const fullProfile: Profile = {
         user_id: userId,

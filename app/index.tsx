@@ -15,23 +15,13 @@ export default function RootIndex() {
     );
   }
 
-  // Routing decision — log exactly what values are driving it.
-  console.log("[ROUTING] session:", !!session);
-  console.log("[ROUTING] isLoading:", isLoading);
-  console.log("[ROUTING] profileLoaded:", profileLoaded);
-  console.log("[ROUTING] profile:", JSON.stringify(profile));
-  console.log("[ROUTING] onboardingCompleted:", onboardingCompleted);
-
   if (!session) {
-    console.log("[ROUTING] → /(auth) — no session");
     return <Redirect href="/(auth)" />;
   }
 
   if (!onboardingCompleted) {
-    console.log("[ROUTING] → /(onboarding) — onboardingCompleted is false");
     return <Redirect href="/(onboarding)" />;
   }
 
-  console.log("[ROUTING] → /(tabs) — session + onboarding done");
   return <Redirect href="/(tabs)" />;
 }

@@ -24,7 +24,6 @@ export default function OnboardingCompleteScreen() {
       console.error("[complete] DB write error:", error.message);
       return false;
     }
-    console.log("[complete] DB write succeeded — onboarding_completed=true");
     return true;
   }
 
@@ -36,18 +35,14 @@ export default function OnboardingCompleteScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.warn("[complete] No user found when trying to write onboarding_completed");
         setWriteError("Could not verify your account. Please try again.");
         setIsSaving(false);
         return;
       }
 
-      console.log("[complete] Writing onboarding_completed=true for user:", user.id);
-
       let success = await tryUpsert(user.id);
 
       if (!success) {
-        console.warn("[complete] First upsert failed, retrying in 1.5 seconds...");
         await new Promise(resolve => setTimeout(resolve, 1500));
         success = await tryUpsert(user.id);
       }

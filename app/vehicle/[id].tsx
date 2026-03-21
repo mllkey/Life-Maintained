@@ -69,14 +69,6 @@ function calcStatus(
   return "upcoming";
 }
 
-function getStatus(date: string | null) {
-  if (!date) return "good";
-  const d = parseISO(date);
-  if (isBefore(d, new Date())) return "overdue";
-  if (isBefore(d, addDays(new Date(), 30))) return "due_soon";
-  return "good";
-}
-
 export default function VehicleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -311,13 +303,6 @@ export default function VehicleDetailScreen() {
 
     handleCloseMarkComplete();
 
-    console.log("[markComplete] Inserting log:", {
-      service_name: task.name,
-      vehicle_id: id,
-      date: completeDate,
-      mileage: mileageNum,
-    });
-
     try {
       const [taskRes, vehicleRes, logRes] = await Promise.all([
         supabase.from("user_vehicle_maintenance_tasks").update({
@@ -347,7 +332,6 @@ export default function VehicleDetailScreen() {
       ]);
 
       if (taskRes.error || vehicleRes.error) throw taskRes.error ?? vehicleRes.error;
-      if (logRes.error) console.warn("[maintenance_logs insert] Failed:", logRes.error.message);
 
       queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
@@ -1100,58 +1084,6 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast }: {
   );
 }
 
-function TaskGroup({ title, color, tasks, onComplete, vehicle }: {
-  title: string;
-  color: string;
-  tasks: any[];
-  onComplete: (id: string) => void;
-  vehicle: any;
-}) {
-  return (
-    <View style={styles.taskGroup}>
-      <View style={styles.taskGroupHeader}>
-        <View style={[styles.taskGroupDot, { backgroundColor: color }]} />
-        <Text style={[styles.taskGroupTitle, { color }]}>{title}</Text>
-      </View>
-      {tasks.map(task => {
-        const status = getStatus(task.next_due_date);
-        const statusColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
-        const daysLeft = task.next_due_date ? differenceInDays(parseISO(task.next_due_date), new Date()) : null;
-        return (
-          <View key={task.id} style={styles.taskCard}>
-            <View style={styles.taskCardLeft}>
-              <Text style={styles.taskName}>{task.name}</Text>
-              <View style={styles.taskMeta}>
-                {task.next_due_date && (
-                  <Text style={[styles.taskDue, { color: statusColor }]}>
-                    {daysLeft !== null && daysLeft < 0
-                      ? `${Math.abs(daysLeft)} days overdue`
-                      : daysLeft === 0 ? "Due today"
-                      : daysLeft != null ? `In ${daysLeft} days`
-                      : format(parseISO(task.next_due_date), "MMM d, yyyy")}
-                  </Text>
-                )}
-                {task.mileage_interval && vehicle?.mileage != null && (
-                  <Text style={styles.taskInterval}>{task.mileage_interval.toLocaleString()} mi interval</Text>
-                )}
-                {task.estimated_cost && (
-                  <Text style={styles.taskCost}>~${task.estimated_cost}</Text>
-                )}
-              </View>
-            </View>
-            <Pressable
-              style={({ pressed }) => [styles.completeBtn, { opacity: pressed ? 0.7 : 1 }]}
-              onPress={() => onComplete(task.id)}
-            >
-              <Ionicons name="checkmark" size={18} color={Colors.good} />
-            </Pressable>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
 function MarkCompleteSheet({
   visible,
   task,
@@ -1366,7 +1298,6 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
         .eq("vehicle_id", vehicleId)
         .eq("user_id", userId);
       if (error) throw error;
-      console.log("[Wallet] Fetched docs:", JSON.stringify(data));
       return (data ?? []) as WalletDoc[];
     },
   });
@@ -1374,10 +1305,6 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
   function getPhotoUrl(docType: DocType): string | null {
     const found = docs?.find(d => d.document_type === docType);
     const url = found?.data?.photo_url ?? null;
-    console.log("[getPhotoUrl]", docType, "docs count:", docs?.length, "found:", !!found, "url:", url?.substring(0, 60));
-    if (url && !url.includes("storage")) {
-      console.warn("[Wallet] Suspicious URL (no 'storage' in path):", url);
-    }
     return url;
   }
 
@@ -1474,7 +1401,6 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
 
       const { data: urlData } = supabase.storage.from("wallet-documents").getPublicUrl(storagePath);
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-      console.log("[WalletTab] Public URL:", publicUrl);
       if (!publicUrl.startsWith("http")) {
         console.error("[WalletTab] Malformed public URL:", publicUrl);
         throw new Error("Malformed wallet document URL");
