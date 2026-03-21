@@ -244,7 +244,7 @@ export default function Paywall({
 
   async function handleApplyPromo() {
     const code = promoCode.toUpperCase().trim();
-    if (!code) return;
+    if (!code || !user) return;
     setPromoStatus("checking");
     try {
       const { data } = await supabase
@@ -265,14 +265,31 @@ export default function Paywall({
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
-      if (data.max_uses && data.use_count >= data.max_uses) {
+      if (data.max_uses != null && data.current_uses >= data.max_uses) {
         setPromoStatus("error");
         setPromoMessage("This code has reached its usage limit");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
+
+      await supabase
+        .from("promo_codes")
+        .update({ current_uses: (data.current_uses ?? 0) + 1 })
+        .eq("id", data.id);
+
+      const expiry = new Date(Date.now() + data.duration_days * 86400000).toISOString();
+      await supabase
+        .from("profiles")
+        .update({
+          subscription_tier: data.tier,
+          subscription_expires_at: expiry,
+        })
+        .eq("user_id", user.id);
+
+      await refreshProfile();
+
       setPromoStatus("success");
-      setPromoMessage(`${data.discount_percent}% discount applied!`);
+      setPromoMessage(`Code applied! ${data.tier.charAt(0).toUpperCase() + data.tier.slice(1)} access for ${data.duration_days} days.`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
       setPromoStatus("error");

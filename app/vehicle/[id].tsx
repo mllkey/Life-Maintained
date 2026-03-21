@@ -217,7 +217,7 @@ export default function VehicleDetailScreen() {
           make: vehicle.make,
           year: parseInt(vehicle.year),
           current_mileage: vehicle.mileage ?? 0,
-          vehicle_type: vehicle.fuel_type ?? "gas",
+          fuel_type: vehicle.fuel_type ?? "gas",
           is_awd: vehicle.is_awd ?? false,
           vehicle_category: vehicle.vehicle_type ?? "car",
         },
@@ -454,7 +454,6 @@ export default function VehicleDetailScreen() {
   }
 
   function handleDeleteVehicle() {
-    console.log('DELETE: handler started');
     if (!vehicle || isDeletingVehicle) return;
     const name = vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
     Alert.alert(
@@ -466,26 +465,24 @@ export default function VehicleDetailScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            console.log('DELETE: user confirmed');
             if (isDeletingVehicle) return;
             setIsDeletingVehicle(true);
             try {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-              console.log('DELETE: calling supabase');
+              const userId = user!.id;
               const r2 = await supabase.from("user_vehicle_maintenance_tasks").delete().eq("vehicle_id", id!);
-              console.log('DELETE: supabase returned', { data: r2.data, error: r2.error });
               const r3 = await supabase.from("maintenance_logs").delete().eq("vehicle_id", id!);
-              console.log('DELETE: supabase returned', { data: r3.data, error: r3.error });
               const r4 = await supabase.from("vehicle_mileage_history").delete().eq("vehicle_id", id!);
-              console.log('DELETE: supabase returned', { data: r4.data, error: r4.error });
+              const { data: walletFiles } = await supabase.storage.from("wallet-documents").list(`${userId}/${id}`);
+              if (walletFiles?.length) {
+                await supabase.storage.from("wallet-documents").remove(walletFiles.map(f => `${userId}/${id}/${f.name}`));
+              }
+              await supabase.from("vehicle_wallet_documents").delete().eq("vehicle_id", id!);
               const r5 = await supabase.from("vehicles").delete().eq("id", id!);
-              console.log('DELETE: supabase returned', { data: r5.data, error: r5.error });
-              console.log('DELETE: navigating away');
               router.back();
               queryClient.invalidateQueries({ queryKey: ["vehicles"] });
               queryClient.invalidateQueries({ queryKey: ["dashboard"] });
             } catch (err: any) {
-              console.log('DELETE: error caught', err);
               setIsDeletingVehicle(false);
               Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
             }
