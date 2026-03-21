@@ -158,7 +158,6 @@ export default function VehiclesScreen() {
             const icon = getVehicleIcon(v.vehicle_type);
             const title = `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim();
             const displayName = v.nickname ?? title;
-            const subtitle = v.nickname ? title : null;
 
             const isMileageTracked = MILEAGE_TRACKED_TYPES.has(v.vehicle_type ?? "");
             const daysSinceUpdate = v.updated_at ? differenceInDays(new Date(), parseISO(v.updated_at)) : null;
@@ -172,11 +171,10 @@ export default function VehiclesScreen() {
                 : daysSinceUpdate != null
                   ? mileStr + " · " + formatDistanceToNowStrict(parseISO(v.updated_at!), { addSuffix: true })
                   : mileStr;
+            } else if (isMileageTracked) {
+              metaLine = "No mileage entered yet";
             } else {
-              const typeLabel = (v.vehicle_type && v.vehicle_type !== "other")
-                ? v.vehicle_type.charAt(0).toUpperCase() + v.vehicle_type.slice(1)
-                : "";
-              metaLine = v.nickname ? title : (typeLabel || "Vehicle");
+              metaLine = "";
             }
 
             const statusDotColor = worstStatus === "overdue"
@@ -215,13 +213,19 @@ export default function VehiclesScreen() {
                     {statusDotColor && <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />}
                     <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
                   </View>
-                  {subtitle ? <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#8B93A8" }} numberOfLines={1}>{subtitle}</Text> : null}
-                  <Text
-                    style={[styles.vehicleMeta, isStale && isMileageTracked && v.mileage != null && { color: Colors.dueSoon }]}
-                    numberOfLines={1}
-                  >
-                    {metaLine}
-                  </Text>
+                  {v.nickname && title ? (
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#8B93A8" }} numberOfLines={1}>
+                      {title}
+                    </Text>
+                  ) : null}
+                  {metaLine ? (
+                    <Text
+                      style={[styles.vehicleMeta, isStale && isMileageTracked && v.mileage != null && { color: Colors.dueSoon }]}
+                      numberOfLines={1}
+                    >
+                      {metaLine}
+                    </Text>
+                  ) : null}
                   {isLocked && (
                     <View style={styles.lockedRow}>
                       <Ionicons name="lock-closed" size={11} color={Colors.textTertiary} />
