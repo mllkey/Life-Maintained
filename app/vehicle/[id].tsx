@@ -94,6 +94,7 @@ export default function VehicleDetailScreen() {
   const [scheduleToast, setScheduleToast] = useState("");
   const [showScheduleToast, setShowScheduleToast] = useState(false);
   const [scheduleToastIsError, setScheduleToastIsError] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const lastStatusHashRef = useRef("");
 
   const [markCompleteTask, setMarkCompleteTask] = useState<any | null>(null);
@@ -372,6 +373,77 @@ export default function VehicleDetailScreen() {
     setScheduleRefreshing(false);
   }
 
+  async function handleVehiclePhoto() {
+    if (!vehicle || !user) return;
+    const hasPhoto = !!vehicle.photo_url;
+    const options = hasPhoto
+      ? [
+          { text: "Take New Photo", onPress: () => pickVehiclePhoto("camera") },
+          { text: "Choose from Library", onPress: () => pickVehiclePhoto("library") },
+          { text: "Remove Photo", style: "destructive" as const, onPress: removeVehiclePhoto },
+          { text: "Cancel", style: "cancel" as const },
+        ]
+      : [
+          { text: "Take Photo", onPress: () => pickVehiclePhoto("camera") },
+          { text: "Choose from Library", onPress: () => pickVehiclePhoto("library") },
+          { text: "Cancel", style: "cancel" as const },
+        ];
+    Alert.alert("Vehicle Photo", "Choose a photo source", options);
+  }
+
+  async function pickVehiclePhoto(source: "camera" | "library") {
+    setUploadingPhoto(true);
+    try {
+      let result;
+      if (source === "camera") {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Permission needed", "Camera access is required.");
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [16, 9] });
+      } else {
+        result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [16, 9] });
+      }
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const uri = result.assets[0].uri;
+      const storagePath = `vehicle-photos/${user!.id}/${id}.jpg`;
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from("wallet-documents")
+        .upload(storagePath, blob, { contentType: "image/jpeg", upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("wallet-documents").getPublicUrl(storagePath);
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+      await supabase.from("vehicles").update({ photo_url: publicUrl }).eq("id", id!);
+      queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      Alert.alert("Upload Failed", "Could not save photo. Please try again.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function removeVehiclePhoto() {
+    try {
+      const storagePath = `vehicle-photos/${user!.id}/${id}.jpg`;
+      await supabase.storage.from("wallet-documents").remove([storagePath]);
+      await supabase.from("vehicles").update({ photo_url: null }).eq("id", id!);
+      queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert("Error", "Could not remove photo.");
+    }
+  }
+
   function buildCsv(logsData: any[]) {
     const header = "Date,Service,Mileage,Cost,Provider,Notes";
     const rows = logsData.map(log => {
@@ -598,6 +670,32 @@ export default function VehicleDetailScreen() {
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
         >
           <View style={styles.vehicleCard}>
+            {vehicle.photo_url ? (
+              <Pressable onPress={handleVehiclePhoto} style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}>
+                <Image
+                  source={{ uri: vehicle.photo_url }}
+                  style={{ width: "100%", height: 180, borderRadius: 14 }}
+                  resizeMode="cover"
+                />
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={handleVehiclePhoto}
+                style={({ pressed }) => [{
+                  height: 100, borderRadius: 14, borderWidth: 1.5, borderColor: "#2A3550", borderStyle: "dashed",
+                  alignItems: "center", justifyContent: "center", gap: 6, opacity: pressed ? 0.7 : 1,
+                }]}
+              >
+                {uploadingPhoto ? (
+                  <ActivityIndicator color="#E8943A" />
+                ) : (
+                  <>
+                    <Ionicons name="camera-outline" size={24} color="#5A6480" />
+                    <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "#5A6480" }}>Add vehicle photo</Text>
+                  </>
+                )}
+              </Pressable>
+            )}
             {(() => {
               const tracksMileage = MILEAGE_TRACKED_TYPES.has(vehicle.vehicle_type ?? "");
               let metaLine = "No mileage tracked";

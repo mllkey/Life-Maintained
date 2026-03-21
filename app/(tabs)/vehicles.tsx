@@ -8,6 +8,7 @@ import {
   RefreshControl,
   Platform,
   Alert,
+  Image,
 } from "react-native";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -38,6 +39,7 @@ type Vehicle = {
   vehicle_category: string | null;
   updated_at: string | null;
   average_miles_per_month: number | null;
+  photo_url: string | null;
 };
 
 function getTaskStatus(date: string | null): "overdue" | "due_soon" | "good" {
@@ -192,7 +194,11 @@ export default function VehiclesScreen() {
                   router.push(`/vehicle/${v.id}` as any);
                 }}
               >
-                <Ionicons name={icon as any} size={18} color={Colors.vehicle} />
+                {v.photo_url ? (
+                  <Image source={{ uri: v.photo_url }} style={{ width: 36, height: 36, borderRadius: 10 }} resizeMode="cover" />
+                ) : (
+                  <Ionicons name={icon as any} size={18} color={Colors.vehicle} />
+                )}
                 <View style={styles.vehicleInfo}>
                   <View style={styles.vehicleTitleRow}>
                     {statusDotColor && <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />}
