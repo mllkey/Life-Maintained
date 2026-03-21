@@ -431,10 +431,11 @@ export default function VehicleDetailScreen() {
       const storagePath = `${user!.id}/${id}/vehicle.jpg`;
       const response = await fetch(uri);
       const blob = await response.blob();
+      const arrayBuffer = await new Response(blob).arrayBuffer();
 
       const { error: uploadError } = await supabase.storage
         .from("wallet-documents")
-        .upload(storagePath, blob, { contentType: "image/jpeg", upsert: true });
+        .upload(storagePath, arrayBuffer, { contentType: "image/jpeg", upsert: true });
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from("wallet-documents").getPublicUrl(storagePath);
@@ -1477,10 +1478,11 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
 
       const response = await fetch(uri);
       const blob = await response.blob();
+      const arrayBuffer = await new Response(blob).arrayBuffer();
 
       const { error: uploadError } = await supabase.storage
         .from("wallet-documents")
-        .upload(storagePath, blob, { contentType: "image/jpeg", upsert: true });
+        .upload(storagePath, arrayBuffer, { contentType: "image/jpeg", upsert: true });
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from("wallet-documents").getPublicUrl(storagePath);
