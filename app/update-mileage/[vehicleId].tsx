@@ -17,6 +17,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { HOURS_TRACKED_TYPES } from "@/lib/vehicleTypes";
 
 export default function UpdateMileageScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
@@ -35,31 +36,38 @@ export default function UpdateMileageScreen() {
     enabled: !!vehicleId,
   });
 
+  const tracksHours = HOURS_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "");
+
   async function handleSave() {
     if (isLoading) return;
     if (!vehicleId || !mileage) return;
     const mileageValue = mileage;
     const m = parseInt(mileageValue);
     if (isNaN(m)) return;
-    const currentMileage = vehicle?.mileage ?? 0;
+    const currentMileage = tracksHours ? vehicle?.hours ?? 0 : vehicle?.mileage ?? 0;
     const newMileage = parseInt(mileageValue, 10);
     if (currentMileage > 0 && newMileage < currentMileage) {
-      setMileageWarning(`Mileage can only go up. Current: ${currentMileage.toLocaleString()} mi. If you made a typo, contact support@lifemaintained.com.`);
+      setMileageWarning(
+        tracksHours
+          ? `Hours can only go up. Current: ${currentMileage.toLocaleString()} hrs. If you made a typo, contact support@lifemaintained.com.`
+          : `Mileage can only go up. Current: ${currentMileage.toLocaleString()} mi. If you made a typo, contact support@lifemaintained.com.`,
+      );
       return;
     }
     setIsLoading(true);
 
-    await supabase.from("vehicles").update({
-      mileage: m,
-      updated_at: new Date().toISOString(),
-    }).eq("id", vehicleId);
+    if (tracksHours) {
+      await supabase.from("vehicles").update({ hours: newMileage, updated_at: new Date().toISOString() }).eq("id", vehicleId);
+    } else {
+      await supabase.from("vehicles").update({ mileage: newMileage, updated_at: new Date().toISOString() }).eq("id", vehicleId);
 
-    await supabase.from("vehicle_mileage_history").insert({
-      vehicle_id: vehicleId,
-      mileage: m,
-      recorded_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-    });
+      await supabase.from("vehicle_mileage_history").insert({
+        vehicle_id: vehicleId,
+        mileage: newMileage,
+        recorded_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      });
+    }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
@@ -77,20 +85,26 @@ export default function UpdateMileageScreen() {
           <Pressable onPress={() => router.back()} style={styles.closeBtn}>
             <Ionicons name="close" size={22} color={Colors.text} />
           </Pressable>
-          <Text style={styles.title}>Update Mileage</Text>
+          <Text style={styles.title}>{tracksHours ? "Update Hours" : "Update Mileage"}</Text>
           <View style={{ width: 36 }} />
         </View>
 
         <View style={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
           <View style={styles.vehicleInfo}>
             <Text style={styles.vehicleName}>{vehicleName}</Text>
-            {vehicle?.mileage != null && (
-              <Text style={styles.currentMileage}>Current: {vehicle.mileage.toLocaleString()} miles</Text>
+            {tracksHours ? (
+              vehicle?.hours != null && (
+                <Text style={styles.currentMileage}>Current: {vehicle.hours.toLocaleString()} hours</Text>
+              )
+            ) : (
+              vehicle?.mileage != null && (
+                <Text style={styles.currentMileage}>Current: {vehicle.mileage.toLocaleString()} miles</Text>
+              )
             )}
           </View>
 
           <View style={styles.inputSection}>
-            <Text style={styles.inputLabel}>New Mileage</Text>
+            <Text style={styles.inputLabel}>{tracksHours ? "Current Hours" : "Current Mileage"}</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="speedometer-outline" size={22} color={Colors.textTertiary} style={styles.inputIcon} />
               <TextInput
@@ -100,13 +114,13 @@ export default function UpdateMileageScreen() {
                   setMileageWarning(null);
                   setMileage(text);
                 }}
-                placeholder={vehicle?.mileage != null ? `More than ${vehicle.mileage.toLocaleString()}` : "Enter mileage"}
+                placeholder={tracksHours ? "e.g. 1,250" : "e.g. 52,000"}
                 placeholderTextColor={Colors.textTertiary}
                 keyboardType="numeric"
                 returnKeyType="done"
                 onSubmitEditing={handleSave}
               />
-              <Text style={styles.inputUnit}>mi</Text>
+              <Text style={styles.inputUnit}>{tracksHours ? "hrs" : "mi"}</Text>
             </View>
             {mileageWarning && (
               <Pressable onPress={() => Linking.openURL("mailto:support@lifemaintained.com?subject=Mileage%20Correction%20Request")}>
@@ -118,6 +132,9 @@ export default function UpdateMileageScreen() {
                 </Text>
               </Pressable>
             )}
+            <Text style={styles.hint}>
+              {tracksHours ? "Hours can be increased but cannot be lowered." : "Mileage can be increased but cannot be lowered."}
+            </Text>
           </View>
 
           <Pressable
@@ -128,7 +145,7 @@ export default function UpdateMileageScreen() {
             {isLoading ? (
               <ActivityIndicator color={Colors.textInverse} />
             ) : (
-              <Text style={styles.saveBtnText}>Update Mileage</Text>
+              <Text style={styles.saveBtnText}>{tracksHours ? "Update Hours" : "Update Mileage"}</Text>
             )}
           </Pressable>
         </View>
@@ -169,6 +186,7 @@ const styles = StyleSheet.create({
   inputIcon: { marginRight: 10 },
   input: { flex: 1, fontSize: 24, fontFamily: "Inter_600SemiBold", color: Colors.text },
   inputUnit: { fontSize: 16, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
+  hint: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 4 },
   saveBtn: {
     backgroundColor: Colors.accent,
     borderRadius: 14,

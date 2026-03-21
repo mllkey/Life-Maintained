@@ -31,7 +31,7 @@ import { useAuth } from "@/context/AuthContext";
 import Paywall from "@/components/Paywall";
 import { hasPersonalOrAbove } from "@/lib/subscription";
 import { SaveToast } from "@/components/SaveToast";
-import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   engine:     { bg: Colors.blueMuted,      text: Colors.blue },
@@ -252,7 +252,16 @@ export default function VehicleDetailScreen() {
   function handleOpenMarkComplete(task: any) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setMarkCompleteTask(task);
-    setCompleteMileage(vehicle?.mileage != null ? String(vehicle.mileage) : "");
+    const tracksHoursOpen = HOURS_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "");
+    setCompleteMileage(
+      tracksHoursOpen
+        ? vehicle?.hours != null
+          ? String(vehicle.hours)
+          : ""
+        : vehicle?.mileage != null
+          ? String(vehicle.mileage)
+          : "",
+    );
     setCompleteDate(format(new Date(), "yyyy-MM-dd"));
     setCompleteNotes("");
     setCompleteCost("");
@@ -274,11 +283,12 @@ export default function VehicleDetailScreen() {
   async function handleSaveMarkComplete() {
     if (!markCompleteTask) return;
     const tracksMileage = MILEAGE_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "");
+    const tracksHours = HOURS_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "");
     let mileageNum: number | null = null;
-    if (tracksMileage) {
+    if (tracksMileage || tracksHours) {
       const parsed = parseInt(completeMileage, 10);
       if (!completeMileage.trim() || isNaN(parsed) || parsed < 0) {
-        showToast("Please enter a valid mileage.", true);
+        showToast(tracksHours ? "Please enter a valid hours value." : "Please enter a valid mileage.", true);
         return;
       }
       mileageNum = parsed;
@@ -348,7 +358,9 @@ export default function VehicleDetailScreen() {
           updated_at: now,
         }).eq("id", task.id),
         mileageNum != null
-          ? supabase.from("vehicles").update({ mileage: mileageNum }).eq("id", id!)
+          ? tracksHours
+            ? supabase.from("vehicles").update({ hours: mileageNum }).eq("id", id!)
+            : supabase.from("vehicles").update({ mileage: mileageNum }).eq("id", id!)
           : Promise.resolve({ error: null }),
         supabase.from("maintenance_logs").insert({
           user_id: user!.id,
@@ -732,7 +744,8 @@ export default function VehicleDetailScreen() {
             )}
             {(() => {
               const tracksMileage = MILEAGE_TRACKED_TYPES.has(vehicle.vehicle_type ?? "");
-              let metaLine = tracksMileage ? "No mileage entered yet" : "No mileage tracked";
+              const tracksHours = HOURS_TRACKED_TYPES.has(vehicle.vehicle_type ?? "");
+              let metaLine = "No mileage tracked";
               if (tracksMileage && vehicle.mileage != null) {
                 const mileStr = vehicle.mileage.toLocaleString() + " mi";
                 if (vehicle.updated_at) {
@@ -740,6 +753,17 @@ export default function VehicleDetailScreen() {
                 } else {
                   metaLine = mileStr;
                 }
+              } else if (tracksHours && vehicle.hours != null) {
+                const hourStr = vehicle.hours.toLocaleString() + " hrs";
+                if (vehicle.updated_at) {
+                  metaLine = hourStr + " · Updated " + formatDistanceToNowStrict(parseISO(vehicle.updated_at), { addSuffix: true });
+                } else {
+                  metaLine = hourStr;
+                }
+              } else if (tracksHours) {
+                metaLine = "No hours entered yet";
+              } else if (tracksMileage) {
+                metaLine = "No mileage entered yet";
               }
               return (
                 <>
@@ -753,12 +777,12 @@ export default function VehicleDetailScreen() {
                   >
                     <Text style={styles.logServiceBtnText}>Log Service</Text>
                   </Pressable>
-                  {tracksMileage && (
+                  {(tracksMileage || tracksHours) && (
                     <Pressable
                       style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, alignSelf: "center" }]}
                       onPress={() => router.push(`/update-mileage/${id}` as any)}
                     >
-                      <Text style={styles.updateMileageLink}>{"Update mileage →"}</Text>
+                      <Text style={styles.updateMileageLink}>{tracksHours ? "Update hours →" : "Update mileage →"}</Text>
                     </Pressable>
                   )}
                 </>
@@ -963,6 +987,7 @@ export default function VehicleDetailScreen() {
         mileage={completeMileage}
         onMileageChange={setCompleteMileage}
         showMileage={MILEAGE_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "")}
+        tracksHours={HOURS_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "")}
         date={completeDate}
         onDateChange={setCompleteDate}
         notes={completeNotes}
@@ -1148,6 +1173,7 @@ function MarkCompleteSheet({
   mileage,
   onMileageChange,
   showMileage = true,
+  tracksHours,
   date,
   onDateChange,
   notes,
@@ -1169,6 +1195,7 @@ function MarkCompleteSheet({
   mileage: string;
   onMileageChange: (v: string) => void;
   showMileage?: boolean;
+  tracksHours?: boolean;
   date: string;
   onDateChange: (v: string) => void;
   notes: string;
@@ -1218,15 +1245,15 @@ function MarkCompleteSheet({
             showsVerticalScrollIndicator={false}
           >
           <View style={styles.sheetFields}>
-            {showMileage && (
+            {(showMileage || tracksHours) && (
               <View style={styles.sheetField}>
-                <Text style={styles.sheetFieldLabel}>Current Mileage</Text>
+                <Text style={styles.sheetFieldLabel}>{tracksHours ? "Current Hours" : "Current Mileage"}</Text>
                 <TextInput
                   style={styles.sheetInput}
                   value={mileage}
                   onChangeText={onMileageChange}
                   keyboardType="number-pad"
-                  placeholder="e.g. 52,000"
+                  placeholder={tracksHours ? "e.g. 1,250" : "e.g. 52,000"}
                   placeholderTextColor={Colors.textTertiary}
                   returnKeyType="done"
                 />

@@ -21,7 +21,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
-import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 
 const VEHICLE_TYPE_OPTIONS = [
   { value: "car", label: "Car / Truck / SUV" },
@@ -48,6 +48,7 @@ export default function EditVehicleScreen() {
   const [vehicle, setVehicle] = useState<any>(null);
   const [nickname, setNickname] = useState("");
   const [mileage, setMileage] = useState("");
+  const [hours, setHours] = useState("");
   const [color, setColor] = useState("");
   const [trim, setTrim] = useState("");
   const [vehicleType, setVehicleType] = useState("car");
@@ -65,6 +66,7 @@ export default function EditVehicleScreen() {
           setVehicle(data);
           setNickname(data.nickname ?? "");
           setMileage(data.mileage != null ? String(data.mileage) : "");
+          setHours(data.hours != null ? String(data.hours) : "");
           setColor(data.color ?? "");
           setTrim(data.trim ?? "");
           setVehicleType(data.vehicle_type ?? "car");
@@ -74,6 +76,7 @@ export default function EditVehicleScreen() {
   }, [vehicleId]);
 
   const tracksMileage = MILEAGE_TRACKED_TYPES.has(vehicleType);
+  const tracksHours = HOURS_TRACKED_TYPES.has(vehicleType);
   const vehicleTitle = vehicle
     ? `${vehicle.year ?? ""} ${vehicle.make ?? ""} ${vehicle.model ?? ""}`.trim()
     : "Vehicle";
@@ -105,6 +108,19 @@ export default function EditVehicleScreen() {
         return;
       }
       updates.mileage = newMileage;
+    }
+
+    if (tracksHours && hours.trim()) {
+      const newHours = parseFloat(hours);
+      if (!isNaN(newHours) && newHours >= 0) {
+        const currentHours = vehicle.hours ?? 0;
+        if (currentHours > 0 && newHours < currentHours) {
+          setMileageWarning("Hours can only go up. If you made a typo, email support@lifemaintained.com.");
+          setSaving(false);
+          return;
+        }
+        updates.hours = newHours;
+      }
     }
 
     try {
@@ -207,6 +223,14 @@ export default function EditVehicleScreen() {
                 )
               )}
               <Text style={styles.hint}>Mileage can be increased but cannot be lowered.</Text>
+            </View>
+          )}
+
+          {tracksHours && (
+            <View style={styles.field}>
+              <Text style={styles.label}>Hours</Text>
+              <TextInput style={styles.input} value={hours} onChangeText={setHours} keyboardType="number-pad" placeholder="e.g. 1250" placeholderTextColor={Colors.textTertiary} />
+              <Text style={styles.hint}>Hours can be increased but cannot be lowered.</Text>
             </View>
           )}
 

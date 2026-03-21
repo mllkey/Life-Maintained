@@ -21,7 +21,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays, differenceInDays, formatDistanceToNowStrict } from "date-fns";
 import { vehicleLimit } from "@/lib/subscription";
-import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 
 type Vehicle = {
   id: string;
@@ -31,6 +31,7 @@ type Vehicle = {
   trim: string | null;
   vehicle_type: string | null;
   mileage: number | null;
+  hours: number | null;
   color: string | null;
   nickname: string | null;
   is_seasonal: boolean | null;
@@ -160,6 +161,7 @@ export default function VehiclesScreen() {
             const displayName = v.nickname ?? title;
 
             const isMileageTracked = MILEAGE_TRACKED_TYPES.has(v.vehicle_type ?? "");
+            const tracksHours = HOURS_TRACKED_TYPES.has(v.vehicle_type ?? "");
             const daysSinceUpdate = v.updated_at ? differenceInDays(new Date(), parseISO(v.updated_at)) : null;
             const isStale = daysSinceUpdate != null && daysSinceUpdate >= 7;
 
@@ -173,6 +175,15 @@ export default function VehiclesScreen() {
                   : mileStr;
             } else if (isMileageTracked) {
               metaLine = "No mileage entered yet";
+            } else if (tracksHours && v.hours != null) {
+              const hourStr = v.hours.toLocaleString() + " hrs";
+              metaLine = isStale
+                ? hourStr + " · Update needed"
+                : daysSinceUpdate != null
+                  ? hourStr + " · " + formatDistanceToNowStrict(parseISO(v.updated_at!), { addSuffix: true })
+                  : hourStr;
+            } else if (tracksHours) {
+              metaLine = "No hours entered yet";
             } else {
               metaLine = "";
             }
