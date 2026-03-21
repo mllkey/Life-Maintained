@@ -147,12 +147,25 @@ export default function HealthScreen() {
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
         <Text style={styles.title}>Health</Text>
         <Pressable
-          style={({ pressed }) => [styles.addBtn, { opacity: pressed ? 0.7 : 1 }]}
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(people.length === 0 && pets.length === 0 ? "/add-family-member" : "/add-appointment"); }}
-          accessibilityLabel="Add a family member or appointment"
+          style={({ pressed }) => [{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 5,
+            backgroundColor: "#E8943A",
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 10,
+            opacity: pressed ? 0.85 : 1,
+          }]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push("/add-appointment");
+          }}
+          accessibilityLabel="Add health item"
           accessibilityRole="button"
         >
-          <Text style={styles.addText}>Add</Text>
+          <Ionicons name="add" size={18} color="#0C111B" />
+          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#0C111B" }}>Appointment</Text>
         </Pressable>
       </View>
 

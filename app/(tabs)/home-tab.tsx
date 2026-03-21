@@ -115,7 +115,16 @@ export default function HomeTabScreen() {
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
         <Text style={styles.title}>Properties</Text>
         <Pressable
-          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+          style={({ pressed }) => [{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 5,
+            backgroundColor: "#E8943A",
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 10,
+            opacity: pressed ? 0.85 : 1,
+          }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             router.push("/add-property");
@@ -123,7 +132,8 @@ export default function HomeTabScreen() {
           accessibilityLabel="Add a new property"
           accessibilityRole="button"
         >
-          <Text style={styles.addText}>Add</Text>
+          <Ionicons name="add" size={18} color="#0C111B" />
+          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#0C111B" }}>Property</Text>
         </Pressable>
       </View>
 
