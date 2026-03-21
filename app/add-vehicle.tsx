@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -446,7 +446,6 @@ export default function AddVehicleScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
-  const scrollViewRef = useRef<ScrollView>(null);
 
   const { data: walletCandidates } = useQuery<{ id: string; year: number; make: string; model: string; nickname: string | null }[]>({
     queryKey: ["wallet_copy_candidates", user?.id],
@@ -790,18 +789,15 @@ export default function AddVehicleScreen() {
     // 1. Validate — all existing checks unchanged
     if (!year || !make || !model) {
       setError("Year, make, and model are required");
-      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     const yearNum = parseInt(year);
     if (isNaN(yearNum) || yearNum < 1980 || yearNum > CURRENT_YEAR + 2) {
       setError("Please select a valid year");
-      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (MILEAGE_TRACKED_TYPES.has(vehicleType) && !avgMilesPerMonth.trim()) {
       setError("Estimated monthly miles is required for this vehicle type");
-      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -936,18 +932,10 @@ export default function AddVehicleScreen() {
         </View>
 
         <ScrollView
-          ref={scrollViewRef}
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {submitted && error && (
-            <View style={styles.alertBox}>
-              <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
-              <Text style={styles.alertText}>{error}</Text>
-            </View>
-          )}
-
           {/* ── VIN Lookup ────────────────────────────────────── */}
           <FieldGroup label="VIN Lookup (Optional)">
             <View style={styles.vinRow}>
@@ -1481,6 +1469,13 @@ export default function AddVehicleScreen() {
               </View>
             )}
           </FieldGroup>
+
+          {error && (
+            <View style={{ backgroundColor: "rgba(255,69,58,0.15)", borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+              <Ionicons name="alert-circle" size={18} color="#FF453A" />
+              <Text style={{ flex: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: "#FF453A", lineHeight: 20 }}>{error}</Text>
+            </View>
+          )}
 
       <Pressable
         style={({ pressed }) => [{
