@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Keyboard,
+  InputAccessoryView,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
@@ -183,16 +185,26 @@ export default function EditVehicleScreen() {
                   setMileageWarning(null);
                 }}
                 keyboardType="number-pad"
+                inputAccessoryViewID="mileageToolbar"
                 placeholder={vehicle?.mileage != null ? String(vehicle.mileage) : "e.g. 67331"}
                 placeholderTextColor={Colors.textTertiary}
               />
               {mileageWarning && (
-                <Pressable onPress={() => Linking.openURL("mailto:support@lifemaintained.com?subject=Mileage%20Correction%20Request")}>
+                mileageWarning === "Enter a valid mileage." ? (
                   <Text style={styles.warning}>{mileageWarning}</Text>
-                  <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#E8943A", marginTop: 4 }}>
-                    Tap here to email us for a correction
-                  </Text>
-                </Pressable>
+                ) : (
+                  <View>
+                    <Text style={styles.warning}>
+                      Mileage can only go up. Current: {(vehicle?.mileage ?? 0).toLocaleString()} mi. If you made a typo, email{" "}
+                      <Text
+                        style={{ textDecorationLine: "underline", fontFamily: "Inter_600SemiBold" }}
+                        onPress={() => Linking.openURL("mailto:support@lifemaintained.com?subject=Mileage%20Correction%20Request")}
+                      >
+                        support@lifemaintained.com
+                      </Text>
+                    </Text>
+                  </View>
+                )
               )}
               <Text style={styles.hint}>Mileage can be increased but cannot be lowered.</Text>
             </View>
@@ -250,6 +262,13 @@ export default function EditVehicleScreen() {
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
+      <InputAccessoryView nativeID="mileageToolbar">
+        <View style={{ flexDirection: "row", justifyContent: "flex-end", backgroundColor: Colors.card, borderTopWidth: 1, borderTopColor: Colors.border, paddingHorizontal: 16, paddingVertical: 8 }}>
+          <Pressable onPress={() => Keyboard.dismiss()} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, paddingHorizontal: 12, paddingVertical: 6 }]}>
+            <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#E8943A" }}>Done</Text>
+          </Pressable>
+        </View>
+      </InputAccessoryView>
     </View>
   );
 }
