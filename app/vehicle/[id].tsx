@@ -444,11 +444,8 @@ export default function VehicleDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err) {
-      Alert.alert(
-        "Photo didn't save",
-        "Something went wrong on our end. Give it another shot.",
-      );
+    } catch (err: any) {
+      Alert.alert("Photo didn't save", err?.message ?? JSON.stringify(err) ?? "Unknown error");
     } finally {
       setUploadingPhoto(false);
     }
