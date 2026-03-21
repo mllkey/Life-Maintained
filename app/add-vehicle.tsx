@@ -821,14 +821,7 @@ export default function AddVehicleScreen() {
     };
 
     if (!hasCandidates) {
-      // 3a. No copy candidates — instant nav + background save (original flow)
       setIsLoading(true);
-      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
-      queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
-      router.back();
-
       try {
         const { data: inserted, error: err } = await supabase
           .from("vehicles")
@@ -841,7 +834,6 @@ export default function AddVehicleScreen() {
           return;
         }
         try {
-          console.log("[generate-maintenance-schedule] Invoking for vehicle:", inserted.id);
           const { error: scheduleError } = await supabase.functions.invoke(
             "generate-maintenance-schedule",
             { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
@@ -849,8 +841,6 @@ export default function AddVehicleScreen() {
           if (scheduleError) {
             const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
             if (httpStatus !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
-          } else {
-            console.log("[generate-maintenance-schedule] Success for vehicle:", inserted.id);
           }
         } catch (scheduleErr) {
           console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
@@ -860,9 +850,12 @@ export default function AddVehicleScreen() {
         queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
         queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setTimeout(() => router.back(), 150);
       } catch (saveErr) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert("Save Failed", "Failed to save vehicle. Please try again.");
+      } finally {
+        setIsLoading(false);
       }
       return;
     }
@@ -1523,7 +1516,7 @@ export default function AddVehicleScreen() {
         candidates={walletCandidates ?? []}
         onClose={() => {
           setShowCopyModal(false);
-          router.back();
+          setTimeout(() => router.back(), 150);
         }}
       />
     </KeyboardAvoidingView>

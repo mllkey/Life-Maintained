@@ -93,6 +93,8 @@ export default function VehicleDetailScreen() {
   const [completeMileage, setCompleteMileage] = useState("");
   const [completeDate, setCompleteDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [completeNotes, setCompleteNotes] = useState("");
+  const [completeCost, setCompleteCost] = useState("");
+  const [completeDuration, setCompleteDuration] = useState("");
   const [isSavingComplete, setIsSavingComplete] = useState(false);
 
   const { data: vehicle, isLoading: loadingVehicle } = useQuery({
@@ -252,6 +254,8 @@ export default function VehicleDetailScreen() {
     setCompleteMileage(vehicle?.mileage != null ? String(vehicle.mileage) : "");
     setCompleteDate(format(new Date(), "yyyy-MM-dd"));
     setCompleteNotes("");
+    setCompleteCost("");
+    setCompleteDuration("");
     setIsSavingComplete(false);
   }
 
@@ -259,6 +263,8 @@ export default function VehicleDetailScreen() {
     setMarkCompleteTask(null);
     setCompleteMileage("");
     setCompleteNotes("");
+    setCompleteCost("");
+    setCompleteDuration("");
     setIsSavingComplete(false);
   }
 
@@ -274,6 +280,36 @@ export default function VehicleDetailScreen() {
       }
       mileageNum = parsed;
     }
+    const costTrim = completeCost.trim();
+    if (costTrim) {
+      const costNum = parseFloat(costTrim.replace(/[^0-9.]/g, ""));
+      if (isNaN(costNum) || costNum < 0) {
+        showToast("Enter a valid cost or leave it blank.", true);
+        return;
+      }
+    }
+    const durTrim = completeDuration.trim();
+    if (durTrim) {
+      const dm = parseInt(durTrim, 10);
+      if (isNaN(dm) || dm < 0) {
+        showToast("Enter a valid time in minutes or leave it blank.", true);
+        return;
+      }
+    }
+    const notesForLog = (() => {
+      const parts: string[] = [];
+      if (completeNotes.trim()) parts.push(completeNotes.trim());
+      if (durTrim) {
+        const dm = parseInt(durTrim, 10);
+        if (!isNaN(dm) && dm > 0) parts.push(`Time spent: ${dm} min`);
+      }
+      return parts.length ? parts.join("\n\n") : null;
+    })();
+    const costForLog = (() => {
+      if (!costTrim) return null;
+      const n = parseFloat(costTrim.replace(/[^0-9.]/g, ""));
+      return isNaN(n) ? null : n;
+    })();
     const task = markCompleteTask;
     setIsSavingComplete(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -322,12 +358,12 @@ export default function VehicleDetailScreen() {
           property_id: null,
           service_name: task.name,
           service_date: completeDate,
-          cost: null,
+          cost: costForLog,
           mileage: mileageNum,
           provider_name: null,
           provider_contact: null,
           receipt_url: null,
-          notes: completeNotes.trim() || null,
+          notes: notesForLog,
         }),
       ]);
 
@@ -392,7 +428,7 @@ export default function VehicleDetailScreen() {
       if (result.canceled || !result.assets?.[0]) return;
 
       const uri = result.assets[0].uri;
-      const storagePath = `vehicle-photos/${user!.id}/${id}.jpg`;
+      const storagePath = `${user!.id}/${id}/vehicle.jpg`;
       const response = await fetch(uri);
       const blob = await response.blob();
 
@@ -409,7 +445,10 @@ export default function VehicleDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
-      Alert.alert("Upload Failed", "Could not save photo. Please try again.");
+      Alert.alert(
+        "Couldn't save photo",
+        "Check your connection and try again. If it keeps failing, verify LifeMaintained can access Photos in system settings.",
+      );
     } finally {
       setUploadingPhoto(false);
     }
@@ -417,7 +456,7 @@ export default function VehicleDetailScreen() {
 
   async function removeVehiclePhoto() {
     try {
-      const storagePath = `vehicle-photos/${user!.id}/${id}.jpg`;
+      const storagePath = `${user!.id}/${id}/vehicle.jpg`;
       await supabase.storage.from("wallet-documents").remove([storagePath]);
       await supabase.from("vehicles").update({ photo_url: null }).eq("id", id!);
       queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
@@ -726,7 +765,7 @@ export default function VehicleDetailScreen() {
                 <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                   {tab === "schedule"
                     ? (scheduleAttentionCount > 0 ? `Schedule (${scheduleAttentionCount})` : "Schedule")
-                    : tab === "wallet" ? "Wallet"
+                    : tab === "wallet" ? "Glovebox"
                     : "History"}
                 </Text>
                 {activeTab === tab && <View style={styles.tabUnderline} />}
@@ -915,6 +954,10 @@ export default function VehicleDetailScreen() {
         onDateChange={setCompleteDate}
         notes={completeNotes}
         onNotesChange={setCompleteNotes}
+        cost={completeCost}
+        onCostChange={setCompleteCost}
+        durationMinutes={completeDuration}
+        onDurationChange={setCompleteDuration}
         onSave={handleSaveMarkComplete}
         onClose={handleCloseMarkComplete}
         isSaving={isSavingComplete}
@@ -1070,7 +1113,7 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast }: {
           </Text>
         )}
         {!!lastServicedText && (
-          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 2 }}>
+          <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.vehicle, marginTop: 4 }}>
             {lastServicedText}
           </Text>
         )}
@@ -1094,6 +1137,10 @@ function MarkCompleteSheet({
   onDateChange,
   notes,
   onNotesChange,
+  cost,
+  onCostChange,
+  durationMinutes,
+  onDurationChange,
   onSave,
   onClose,
   isSaving,
@@ -1109,6 +1156,10 @@ function MarkCompleteSheet({
   onDateChange: (v: string) => void;
   notes: string;
   onNotesChange: (v: string) => void;
+  cost: string;
+  onCostChange: (v: string) => void;
+  durationMinutes: string;
+  onDurationChange: (v: string) => void;
   onSave: () => void;
   onClose: () => void;
   isSaving: boolean;
@@ -1142,6 +1193,11 @@ function MarkCompleteSheet({
             {task?.name ?? "Mark Complete"}
           </Text>
 
+          <ScrollView
+            style={styles.sheetScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
           <View style={styles.sheetFields}>
             {showMileage && (
               <View style={styles.sheetField}>
@@ -1203,6 +1259,36 @@ function MarkCompleteSheet({
             </View>
 
             <View style={styles.sheetField}>
+              <Text style={styles.sheetFieldLabel}>
+                Cost <Text style={styles.sheetFieldOptional}>(optional)</Text>
+              </Text>
+              <TextInput
+                style={styles.sheetInput}
+                value={cost}
+                onChangeText={onCostChange}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 89.50"
+                placeholderTextColor={Colors.textTertiary}
+                returnKeyType="done"
+              />
+            </View>
+
+            <View style={styles.sheetField}>
+              <Text style={styles.sheetFieldLabel}>
+                Time spent (minutes) <Text style={styles.sheetFieldOptional}>(optional)</Text>
+              </Text>
+              <TextInput
+                style={styles.sheetInput}
+                value={durationMinutes}
+                onChangeText={onDurationChange}
+                keyboardType="number-pad"
+                placeholder="e.g. 45"
+                placeholderTextColor={Colors.textTertiary}
+                returnKeyType="done"
+              />
+            </View>
+
+            <View style={styles.sheetField}>
               <Text style={styles.sheetFieldLabel}>Notes  <Text style={styles.sheetFieldOptional}>(optional)</Text></Text>
               <TextInput
                 style={[styles.sheetInput, styles.sheetInputMultiline]}
@@ -1216,6 +1302,7 @@ function MarkCompleteSheet({
               />
             </View>
           </View>
+          </ScrollView>
 
           <View style={styles.sheetActions}>
             <Pressable
@@ -1425,7 +1512,10 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       console.error("[WalletTab] Upload error:", err);
-      Alert.alert("Upload Failed", "Could not save photo. Please try again.");
+      Alert.alert(
+        "Couldn't save document",
+        "Check your connection and try again. You can also pick a smaller photo.",
+      );
     } finally {
       setUploading(null);
     }
@@ -1527,15 +1617,21 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
         visible={!!viewingPhoto}
         transparent
         animationType="fade"
+        presentationStyle={Platform.OS === "ios" ? "overFullScreen" : "fullScreen"}
+        statusBarTranslucent={Platform.OS === "android"}
         onRequestClose={() => setViewingPhoto(null)}
       >
         <Pressable style={walletStyles.photoViewer} onPress={() => setViewingPhoto(null)}>
           {viewingPhoto ? (
-            <Image
-              source={{ uri: viewingPhoto }}
-              style={walletStyles.photoViewerImage}
-              resizeMode="contain"
-            />
+            <View style={walletStyles.photoViewerInner} pointerEvents="box-none">
+              <Image
+                source={{ uri: viewingPhoto }}
+                style={walletStyles.photoViewerImage}
+                resizeMode="contain"
+                pointerEvents="none"
+              />
+              <Text style={walletStyles.photoViewerHint}>Tap anywhere to close</Text>
+            </View>
           ) : null}
         </Pressable>
       </Modal>
@@ -1580,7 +1676,9 @@ function DocPhotoSlot({
         <Image source={{ uri: photoUrl }} style={walletStyles.slotImage} resizeMode="cover" onError={(e) => console.error("[Wallet] Image load error:", e.nativeEvent.error, "URL:", photoUrl)} />
         <View style={walletStyles.slotLabelRow}>
           <Text style={walletStyles.slotLabelText}>{label}</Text>
-          <Ionicons name="ellipsis-horizontal" size={16} color={Colors.textSecondary} />
+          <Pressable onPress={onLongPress} hitSlop={8} style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}>
+            <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
+          </Pressable>
         </View>
       </Pressable>
     );
@@ -1596,7 +1694,7 @@ function DocPhotoSlot({
             <Pressable
               key={`${opt.photoUrl}-${idx}`}
               onPress={() => onCopyFrom!(opt.photoUrl)}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
             >
               <Text style={walletStyles.slotCopyLink}>
                 {copyFromOptions!.length === 1
@@ -1638,12 +1736,19 @@ const walletStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 4,
-    gap: 6,
+    gap: 8,
+    alignItems: "center",
   },
   slotCopyLink: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: Colors.accent,
+    fontFamily: "Inter_600SemiBold",
+    color: "#0C111B",
+    backgroundColor: "#E8943A",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    overflow: "hidden",
+    textAlign: "center",
   },
   slotEmptyMain: {
     flex: 1,
@@ -1688,7 +1793,21 @@ const walletStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  photoViewerImage: { width: "100%", height: "80%" },
+  photoViewerInner: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+  },
+  photoViewerImage: { width: "100%", flex: 1 },
+  photoViewerHint: {
+    position: "absolute",
+    bottom: 48,
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: "rgba(255,255,255,0.7)",
+  },
 });
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -1900,6 +2019,7 @@ const styles = StyleSheet.create({
     fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text,
     marginBottom: 20, textAlign: "center",
   },
+  sheetScroll: { maxHeight: 400 },
   sheetFields: { gap: 16 },
   sheetField: { gap: 6 },
   sheetFieldLabel: {

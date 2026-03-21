@@ -10,6 +10,7 @@ import {
   TextInput,
   Platform,
   Animated,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -291,6 +292,11 @@ export default function Paywall({
       setPromoStatus("success");
       setPromoMessage(`Code applied! ${data.tier.charAt(0).toUpperCase() + data.tier.slice(1)} access for ${data.duration_days} days.`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (canDismiss && onDismiss) {
+        setTimeout(() => {
+          onDismiss();
+        }, 1600);
+      }
     } catch {
       setPromoStatus("error");
       setPromoMessage("Could not validate code. Please try again.");
@@ -321,6 +327,11 @@ export default function Paywall({
   }
 
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: Colors.background }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? topPad + 8 : 0}
+    >
     <View style={[styles.container, { paddingTop: topPad }]}>
       <View style={styles.header}>
         {canDismiss ? (
@@ -547,6 +558,7 @@ export default function Paywall({
       )}
       <SaveToast visible={toastVisible} message={toastMessage} />
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -674,7 +686,7 @@ const styles = StyleSheet.create({
   restoreBtn: { alignItems: "center", paddingVertical: 8 },
   restoreText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
   promoToggle: { alignItems: "center", paddingVertical: 4 },
-  promoToggleText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  promoToggleText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
   promoSection: { gap: 8, marginTop: -4 },
   promoRow: { flexDirection: "row", gap: 8 },
   promoInput: {
@@ -684,8 +696,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
+    paddingVertical: 12,
+    fontSize: 16,
     fontFamily: "Inter_400Regular",
     color: Colors.text,
   },
@@ -697,9 +709,9 @@ const styles = StyleSheet.create({
     minWidth: 64,
     alignItems: "center",
   },
-  promoApplyText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.background },
+  promoApplyText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.background },
   promoFeedback: { flexDirection: "row", alignItems: "center", gap: 6 },
-  promoFeedbackText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  promoFeedbackText: { fontSize: 14, fontFamily: "Inter_400Regular" },
   webFallback: { flex: 1, backgroundColor: Colors.background, position: "relative" },
   webFallbackInner: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 },
   webFallbackTitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text },

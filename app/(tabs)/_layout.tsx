@@ -150,7 +150,7 @@ export default function TabLayout() {
           styles.fab,
           {
             bottom: insets.bottom + (Platform.OS === "web" ? 84 : 49) + 16,
-            right: 20,
+            left: 20,
           },
         ]}
         onPress={() => {
@@ -160,7 +160,7 @@ export default function TabLayout() {
         accessibilityLabel="Record voice maintenance log"
         accessibilityRole="button"
       >
-        <Ionicons name="mic-outline" size={26} color="#fff" />
+        <Ionicons name="mic-outline" size={22} color="#fff" />
       </Pressable>
 
       <LogSheet
@@ -175,9 +175,9 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   fab: {
     position: "absolute",
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: Colors.accent,
     alignItems: "center",
     justifyContent: "center",
