@@ -428,7 +428,7 @@ export default function VehicleDetailScreen() {
       if (result.canceled || !result.assets?.[0]) return;
 
       const uri = result.assets[0].uri;
-      const storagePath = `${user!.id}/${id}/vehicle.jpg`;
+      const storagePath = `${user!.id}/${id}/vehicle-photo.jpg`;
       const response = await fetch(uri);
       const blob = await response.blob();
       const arrayBuffer = await new Response(blob).arrayBuffer();
@@ -454,7 +454,7 @@ export default function VehicleDetailScreen() {
 
   async function removeVehiclePhoto() {
     try {
-      const storagePath = `${user!.id}/${id}/vehicle.jpg`;
+      const storagePath = `${user!.id}/${id}/vehicle-photo.jpg`;
       await supabase.storage.from("wallet-documents").remove([storagePath]);
       await supabase.from("vehicles").update({ photo_url: null }).eq("id", id!);
       queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
