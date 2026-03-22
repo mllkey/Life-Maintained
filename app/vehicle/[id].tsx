@@ -89,6 +89,10 @@ export default function VehicleDetailScreen() {
   const [scheduleToastIsError, setScheduleToastIsError] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showDifficultyInfo, setShowDifficultyInfo] = useState(false);
+  const [scheduleInsight, setScheduleInsight] = useState<string | null>(null);
+  const [insightTaskName, setInsightTaskName] = useState<string | null>(null);
+  const [highlightedTask, setHighlightedTask] = useState<string | null>(null);
+  const prevScheduleCountRef = useRef(0);
   const lastStatusHashRef = useRef("");
 
   const [markCompleteTask, setMarkCompleteTask] = useState<any | null>(null);
@@ -275,6 +279,41 @@ export default function VehicleDetailScreen() {
       }),
     [processedScheduleTasks],
   );
+
+  React.useEffect(() => {
+    if (!processedScheduleTasks || processedScheduleTasks.length === 0) { setScheduleInsight(null); setInsightTaskName(null); return; }
+    if (processedScheduleTasks.some(t => t.last_completed_date != null)) { setScheduleInsight(null); setInsightTaskName(null); return; }
+    const overdue = processedScheduleTasks.filter(t => t.status === "overdue");
+    const dueSoon = processedScheduleTasks.filter(t => t.status === "due_soon");
+    const highPri = processedScheduleTasks.filter(t => t.priority === "high");
+    let insight: string | null = null;
+    let taskName: string | null = null;
+    if (overdue.length > 0) {
+      const t = overdue[0]; taskName = t.name;
+      const short = t.name.length > 30 ? t.name.slice(0, 27) + "..." : t.name;
+      insight = `${short} is coming up.`;
+    } else if (dueSoon.length > 0) {
+      const t = dueSoon[0]; taskName = t.name;
+      if (/chain/i.test(t.name)) insight = "Chain maintenance comes up often on this bike.";
+      else if (/oil/i.test(t.name)) insight = "Oil change is coming up soon.";
+      else if (/brake/i.test(t.name)) insight = "Brake service should be your next priority.";
+      else if (/tire/i.test(t.name)) insight = "Tire condition check is due soon.";
+      else { const short = t.name.length > 30 ? t.name.slice(0, 27) + "..." : t.name; insight = `${short} is coming up soon.`; }
+    } else if (highPri.length > 0) {
+      const t = highPri[0]; taskName = t.name;
+      if (/chain/i.test(t.name)) insight = "Chain maintenance comes up often on this bike.";
+      else if (/oil/i.test(t.name)) insight = "Oil changes are one of the most important routines.";
+      else insight = "Focus on the next task below.";
+    }
+    setScheduleInsight(insight); setInsightTaskName(taskName);
+  }, [processedScheduleTasks]);
+
+  React.useEffect(() => {
+    if (processedScheduleTasks.length > 0 && prevScheduleCountRef.current === 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    prevScheduleCountRef.current = processedScheduleTasks.length;
+  }, [processedScheduleTasks.length]);
 
   const completedTasks = useMemo(
     () => processedScheduleTasks.filter(t => t.status === "completed").slice(0, 10),
@@ -914,6 +953,19 @@ export default function VehicleDetailScreen() {
                 </View>
               ) : processedScheduleTasks.length > 0 && !processedScheduleTasks.some(t => t.last_completed_date != null) ? (
                 <>
+                  {scheduleInsight && (
+                    <Pressable
+                      onPress={() => { if (insightTaskName) { setHighlightedTask(insightTaskName); setTimeout(() => setHighlightedTask(null), 2000); } }}
+                      style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}
+                    >
+                      <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary }}>
+                        {scheduleInsight}
+                      </Text>
+                      <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 }}>
+                        Based on your vehicle and mileage
+                      </Text>
+                    </Pressable>
+                  )}
                   <View style={{ backgroundColor: Colors.dueSoonMuted, borderRadius: 10, padding: 12, marginHorizontal: 16, marginTop: 8, marginBottom: 12, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
                     <Ionicons name="information-circle-outline" size={18} color={Colors.dueSoon} style={{ marginTop: 1 }} />
                     <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.dueSoon, flex: 1 }}>
@@ -931,6 +983,7 @@ export default function VehicleDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
+                      highlightedTask={highlightedTask}
                     />
                   )}
                   <ScheduleSection
@@ -943,6 +996,7 @@ export default function VehicleDetailScreen() {
                     onMarkComplete={handleOpenMarkComplete}
                     costEstimates={costEstimates}
                     onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
+                    highlightedTask={highlightedTask}
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
@@ -955,6 +1009,7 @@ export default function VehicleDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
+                      highlightedTask={highlightedTask}
                     />
                   )}
                   {Object.keys(costEstimates ?? {}).length > 0 && (
@@ -995,6 +1050,7 @@ export default function VehicleDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
+                      highlightedTask={highlightedTask}
                     />
                   )}
                   <ScheduleSection
@@ -1007,6 +1063,7 @@ export default function VehicleDetailScreen() {
                     onMarkComplete={handleOpenMarkComplete}
                     costEstimates={costEstimates}
                     onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
+                    highlightedTask={highlightedTask}
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
@@ -1019,6 +1076,7 @@ export default function VehicleDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
+                      highlightedTask={highlightedTask}
                     />
                   )}
                   {Object.keys(costEstimates ?? {}).length > 0 && (
@@ -1257,6 +1315,7 @@ function ScheduleSection({
   onMarkComplete,
   costEstimates,
   onShowDifficultyInfo,
+  highlightedTask,
 }: {
   title: string;
   titleColor?: string;
@@ -1268,6 +1327,7 @@ function ScheduleSection({
   onMarkComplete: (task: any) => void;
   costEstimates?: Record<string, any>;
   onShowDifficultyInfo?: () => void;
+  highlightedTask?: string | null;
 }) {
   return (
     <View style={styles.scheduleSection}>
@@ -1295,6 +1355,7 @@ function ScheduleSection({
                 isLast={idx === tasks.length - 1}
                 costEstimate={costEstimates?.[task.name.toLowerCase().trim()]}
                 onShowDifficultyInfo={onShowDifficultyInfo}
+                isHighlighted={task.name === highlightedTask}
               />
             ))
           )}
@@ -1304,13 +1365,14 @@ function ScheduleSection({
   );
 }
 
-function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate, onShowDifficultyInfo }: {
+function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate, onShowDifficultyInfo, isHighlighted }: {
   task: any;
   vehicle: any;
   onMarkComplete: (task: any) => void;
   isLast?: boolean;
   costEstimate?: any;
   onShowDifficultyInfo?: () => void;
+  isHighlighted?: boolean;
 }) {
   const isCompleted = task.status === "completed";
   const [showCompletedInfo, setShowCompletedInfo] = useState(false);
@@ -1355,6 +1417,7 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate,
         styles.scheduleCard,
         !isLast && styles.scheduleCardBorder,
         !isCompleted && pressed && { opacity: 0.7 },
+        isHighlighted && { backgroundColor: "rgba(255, 200, 50, 0.15)" },
       ]}
       accessibilityRole="button"
       accessibilityLabel={isCompleted ? `${task.name} — completed` : `${task.name} — tap to mark complete`}
