@@ -95,6 +95,7 @@ export default function VehicleDetailScreen() {
   const [completeNotes, setCompleteNotes] = useState("");
   const [completeCost, setCompleteCost] = useState("");
   const [completeProvider, setCompleteProvider] = useState("");
+  const [completeDiy, setCompleteDiy] = useState(false);
   const [completeDuration, setCompleteDuration] = useState("");
   const [isSavingComplete, setIsSavingComplete] = useState(false);
 
@@ -124,6 +125,52 @@ export default function VehicleDetailScreen() {
       return data ?? [];
     },
     enabled: !!user && !!id,
+  });
+
+  const { data: costEstimates } = useQuery({
+    queryKey: ["repair_costs", id, vehicle?.make],
+    queryFn: async () => {
+      if (!vehicle || !scheduleTasks?.length) return {};
+      const results: Record<string, any> = {};
+      // Check cache first for all tasks
+      const serviceNames = scheduleTasks.map(t => t.name.toLowerCase().trim());
+      const vehicleKey = `${vehicle.year ?? ""}|${vehicle.make}|${vehicle.model ?? ""}|${vehicle.vehicle_type ?? ""}`.toLowerCase();
+
+      const { data: cachedData } = await supabase
+        .from("repair_cost_cache")
+        .select("*")
+        .eq("vehicle_key", vehicleKey)
+        .in("service_name", serviceNames);
+
+      const cached = new Set<string>();
+      for (const item of cachedData ?? []) {
+        results[item.service_name] = item;
+        cached.add(item.service_name);
+      }
+
+      // For uncached items, fetch estimates one at a time (max 3 per load to avoid rate limits)
+      const uncached = serviceNames.filter(s => !cached.has(s)).slice(0, 3);
+      for (const svc of uncached) {
+        try {
+          const { data: fnData } = await supabase.functions.invoke("estimate-repair-cost", {
+            body: {
+              year: vehicle.year ? parseInt(vehicle.year) : null,
+              make: vehicle.make,
+              model: vehicle.model,
+              service_name: svc,
+              vehicle_type: vehicle.vehicle_type ?? "car",
+            },
+          });
+          if (fnData?.data) {
+            results[svc] = fnData.data;
+          }
+        } catch {}
+      }
+
+      return results;
+    },
+    enabled: !!vehicle?.make && !!scheduleTasks?.length,
+    staleTime: 1000 * 60 * 60, // 1 hour
   });
 
   const { data: logs, refetch: refetchLogs } = useQuery({
@@ -266,6 +313,7 @@ export default function VehicleDetailScreen() {
     setCompleteNotes("");
     setCompleteCost("");
     setCompleteProvider("");
+    setCompleteDiy(false);
     setCompleteDuration("");
     setIsSavingComplete(false);
   }
@@ -276,6 +324,7 @@ export default function VehicleDetailScreen() {
     setCompleteNotes("");
     setCompleteCost("");
     setCompleteProvider("");
+    setCompleteDiy(false);
     setCompleteDuration("");
     setIsSavingComplete(false);
   }
@@ -374,6 +423,7 @@ export default function VehicleDetailScreen() {
           provider_contact: null,
           receipt_url: null,
           notes: notesForLog,
+          did_it_myself: completeDiy,
         }),
       ]);
 
@@ -855,6 +905,7 @@ export default function VehicleDetailScreen() {
                       tasks={actionNeededTasks}
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}
+                      costEstimates={costEstimates}
                     />
                   )}
                   <ScheduleSection
@@ -865,6 +916,7 @@ export default function VehicleDetailScreen() {
                     vehicle={vehicle}
                     emptyMessage="No upcoming tasks"
                     onMarkComplete={handleOpenMarkComplete}
+                    costEstimates={costEstimates}
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
@@ -875,7 +927,13 @@ export default function VehicleDetailScreen() {
                       tasks={completedTasks}
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}
+                      costEstimates={costEstimates}
                     />
+                  )}
+                  {Object.keys(costEstimates ?? {}).length > 0 && (
+                    <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", marginTop: 12, paddingHorizontal: 16 }}>
+                      Cost estimates are approximate and vary by location and shop. Not a guarantee of pricing.
+                    </Text>
                   )}
                 </>
               )}
@@ -996,6 +1054,8 @@ export default function VehicleDetailScreen() {
         onCostChange={setCompleteCost}
         provider={completeProvider}
         onProviderChange={setCompleteProvider}
+        diy={completeDiy}
+        onDiyChange={setCompleteDiy}
         durationMinutes={completeDuration}
         onDurationChange={setCompleteDuration}
         onSave={handleSaveMarkComplete}
@@ -1043,6 +1103,7 @@ function ScheduleSection({
   vehicle,
   emptyMessage,
   onMarkComplete,
+  costEstimates,
 }: {
   title: string;
   titleColor?: string;
@@ -1052,6 +1113,7 @@ function ScheduleSection({
   vehicle: any;
   emptyMessage?: string;
   onMarkComplete: (task: any) => void;
+  costEstimates?: Record<string, any>;
 }) {
   return (
     <View style={styles.scheduleSection}>
@@ -1077,6 +1139,7 @@ function ScheduleSection({
                 vehicle={vehicle}
                 onMarkComplete={onMarkComplete}
                 isLast={idx === tasks.length - 1}
+                costEstimate={costEstimates?.[task.name.toLowerCase().trim()]}
               />
             ))
           )}
@@ -1086,11 +1149,12 @@ function ScheduleSection({
   );
 }
 
-function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast }: {
+function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate }: {
   task: any;
   vehicle: any;
   onMarkComplete: (task: any) => void;
   isLast?: boolean;
+  costEstimate?: any;
 }) {
   const isCompleted = task.status === "completed";
   const [showCompletedInfo, setShowCompletedInfo] = useState(false);
@@ -1157,6 +1221,20 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast }: {
             {lastServicedText}
           </Text>
         )}
+        {costEstimate && !isCompleted && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 }}>
+            <Ionicons name="cash-outline" size={12} color={Colors.good} />
+            <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
+              ${costEstimate.shop_low}-${costEstimate.shop_high} shop
+              {costEstimate.diy_low != null ? ` · $${costEstimate.diy_low}-${costEstimate.diy_high} DIY` : ""}
+            </Text>
+            {costEstimate.difficulty && (
+              <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: costEstimate.difficulty === 1 ? Colors.good : costEstimate.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: costEstimate.difficulty === 1 ? Colors.goodMuted : costEstimate.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
+                {costEstimate.difficulty === 1 ? "Easy DIY" : costEstimate.difficulty === 2 ? "Moderate" : "Pro"}
+              </Text>
+            )}
+          </View>
+        )}
         {showCompletedInfo && (
           <Text style={styles.scheduleCardCompletedInfo}>
             Already completed. To undo, delete the entry from the History tab.
@@ -1182,6 +1260,8 @@ function MarkCompleteSheet({
   onCostChange,
   provider,
   onProviderChange,
+  diy,
+  onDiyChange,
   durationMinutes,
   onDurationChange,
   onSave,
@@ -1204,6 +1284,8 @@ function MarkCompleteSheet({
   onCostChange: (v: string) => void;
   provider: string;
   onProviderChange: (v: string) => void;
+  diy: boolean;
+  onDiyChange: (v: boolean) => void;
   durationMinutes: string;
   onDurationChange: (v: string) => void;
   onSave: () => void;
@@ -1355,6 +1437,21 @@ function MarkCompleteSheet({
                 placeholderTextColor={Colors.textTertiary}
               />
             </View>
+
+            <Pressable
+              onPress={() => onDiyChange(!diy)}
+              style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}
+            >
+              <View style={{
+                width: 24, height: 24, borderRadius: 6, borderWidth: 2,
+                borderColor: diy ? "#E8943A" : Colors.border,
+                backgroundColor: diy ? "#E8943A" : "transparent",
+                alignItems: "center", justifyContent: "center",
+              }}>
+                {diy && <Ionicons name="checkmark" size={16} color="#0C111B" />}
+              </View>
+              <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text }}>I did this myself</Text>
+            </Pressable>
           </View>
           </ScrollView>
 
