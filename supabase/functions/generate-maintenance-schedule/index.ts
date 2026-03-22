@@ -459,7 +459,12 @@ Respond ONLY with a valid JSON array, no markdown, no backticks, no explanation.
   }
 ]
 
-Generate 12-20 tasks. Every task MUST have at least one of interval_miles or interval_months.`;
+Generate 12-16 tasks. Quality over quantity. Every task should be something a knowledgeable owner would actually schedule and track.
+- Do NOT generate multiple tasks for the same real-world service. Chain cleaning, lubrication, and tension adjustment are ONE task, not three separate tasks.
+- Do NOT generate both an inspection and a replacement for the same system. Choose the one users would actually track.
+- For small motorcycles: focus on oil, chain, brakes, tires, valves, air filter, spark plugs, coolant (if liquid-cooled), cables, battery, and fork service. Do not include niche dealership-checklist items like engine mount checks, steering head bearings, wheel bearings, or fuel system cleaning.
+- Use distinct realistic intervals — avoid assigning the same mileage interval to unrelated tasks.
+Every task MUST have at least one of interval_miles or interval_months.`;
 
         const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
@@ -486,42 +491,180 @@ Generate 12-20 tasks. Every task MUST have at least one of interval_miles or int
             }));
             validatedTasks = validateAndEnforce(parsed, vehicleCategory);
 
-            // Post-processing cleanup
+            // ══════════════════════════════════════════════════════════════
+            // POST-PROCESSING: Task family dedup, merge, cleanup, trimming
+            // ══════════════════════════════════════════════════════════════
             if (validatedTasks) {
-              // 1. Merge duplicate cable lubrication tasks
-              const cablePattern = /cable.*lube|cable.*lubric/i;
-              const cableIndexes = validatedTasks.map((t, i) => cablePattern.test(t.task) ? i : -1).filter(i => i !== -1);
-              if (cableIndexes.length > 1) {
-                const keepIdx = cableIndexes[0];
-                validatedTasks[keepIdx] = { ...validatedTasks[keepIdx], task: "Cable Lubrication", description: "Lubricate throttle, clutch, and other control cables. Recommended every 3,000-6,000 miles or annually depending on conditions." };
-                const removeIdxs = new Set(cableIndexes.slice(1));
+              const isSmallMoto = (vehicleCategory === "motorcycle" || vehicleCategory === "atv" || vehicleCategory === "utv" || vehicleCategory === "snowmobile");
+
+              interface TaskFamily {
+                key: string;
+                patterns: RegExp[];
+                canonical: string;
+                description: string;
+                priorityOverride?: string;
+                remove?: boolean;
+                removeCondition?: () => boolean;
+                mergeIntervals?: boolean;
+                conditionBased?: boolean;
+              }
+
+              const families: TaskFamily[] = [
+                { key: "engine_oil", patterns: [/oil.*change/i, /oil.*filter/i, /engine.*oil/i], canonical: "Engine Oil and Filter Change", description: "Change engine oil and replace oil filter. Recommended every 2,500-3,500 miles or 6 months for small-displacement engines, 5,000-7,500 miles for larger engines.", priorityOverride: "high" },
+                { key: "chain_maintenance", patterns: [/chain.*clean/i, /chain.*lube/i, /chain.*adjust/i, /chain.*tension/i, /chain.*maintenance/i], canonical: "Clean, Lubricate, and Adjust Chain", description: "Clean and lubricate drive chain, check and adjust tension. Recommended every 300-600 miles depending on riding conditions.", priorityOverride: "high", mergeIntervals: true },
+                { key: "chain_replacement", patterns: [/chain.*replace/i, /drive.*chain.*replace/i], canonical: "Replace Chain", description: "Inspect regularly and replace as needed based on wear.", conditionBased: true },
+                { key: "tire_inspection", patterns: [/tire.*pressure/i, /tire.*check/i, /tire.*condition/i, /tire.*inspect/i], canonical: "Check Tire Pressure and Condition", description: "Check tire pressure and inspect tread depth, sidewalls, and overall condition. Recommended every 1,000-3,000 miles or monthly.", priorityOverride: "high" },
+                { key: "tire_replacement", patterns: [/tire.*replace/i], canonical: "Replace Tires", description: "Inspect regularly and replace as needed based on wear.", conditionBased: true },
+                { key: "brake_fluid", patterns: [/brake.*fluid/i], canonical: "Replace Brake Fluid", description: "Replace brake fluid to maintain stopping performance. Recommended every 1-2 years regardless of mileage." },
+                { key: "brake_pads", patterns: [/brake.*pad/i], canonical: "Inspect Brake Pads", description: "Inspect brake pads regularly and replace as needed based on wear.", priorityOverride: "high", conditionBased: true },
+                { key: "brake_inspection", patterns: [/brake(?!.*pad)(?!.*fluid).*inspect/i, /brake.*system.*inspect/i], canonical: "", description: "", remove: true, removeCondition: () => isSmallMoto },
+                { key: "coolant", patterns: [/coolant.*replace/i, /coolant.*service/i, /coolant.*flush/i, /coolant.*system/i, /coolant.*inspect/i], canonical: "Replace Coolant", description: "Replace engine coolant to maintain proper cooling and prevent corrosion. Recommended every 2 years or per manufacturer spec." },
+                { key: "spark_plugs", patterns: [/spark.*plug/i], canonical: "Replace Spark Plugs", description: "Replace spark plugs per manufacturer interval. Recommended every 4,000-8,000 miles for small engines, longer for larger engines." },
+                { key: "air_filter", patterns: [/air.*filter/i], canonical: "Air Filter Cleaning and Replacement", description: "Clean or replace the air filter. Recommended every 3,000-6,000 miles depending on riding conditions." },
+                { key: "cable_lube", patterns: [/cable.*lube/i, /cable.*lubric/i, /throttle.*cable/i, /clutch.*cable/i], canonical: "Lubricate Control Cables", description: "Lubricate throttle, clutch, and other control cables. Recommended every 3,000-6,000 miles or annually depending on conditions." },
+                { key: "valve_clearance", patterns: [/valve.*clear/i, /valve.*check/i, /valve.*adjust/i, /valve.*inspect/i], canonical: "Check and Adjust Valve Clearance", description: "Check and adjust valve clearances per manufacturer spec. Recommended every 6,000-8,000 miles for small engines.", priorityOverride: "high" },
+                { key: "battery", patterns: [/battery.*maintain/i, /battery.*check/i, /battery.*inspect/i, /battery.*replace/i, /battery.*service/i], canonical: "Battery Inspection and Maintenance", description: "Check battery terminals, voltage, and electrolyte level. Clean connections and charge as needed." },
+                { key: "fork_oil", patterns: [/fork.*oil/i, /fork.*seal/i, /front.*fork.*service/i, /fork.*service/i], canonical: "Replace Fork Oil", description: "Replace fork oil and inspect seals. Recommended every 10,000-15,000 miles or every 2 years.", priorityOverride: "medium" },
+                { key: "fuel_system", patterns: [/fuel.*system/i, /fuel.*inject.*clean/i], canonical: "", description: "", remove: true, removeCondition: () => isSmallMoto },
+                { key: "suspension_generic", patterns: [/suspension.*inspect/i, /shock.*inspect/i, /rear.*shock/i], canonical: "", description: "", remove: true, removeCondition: () => isSmallMoto },
+                { key: "hardware", patterns: [/engine.*mount/i, /hardware.*check/i, /fastener/i, /bolt.*torque/i], canonical: "", description: "", remove: true },
+                { key: "steering_bearing", patterns: [/steering.*head.*bearing/i], canonical: "", description: "", remove: true, removeCondition: () => isSmallMoto },
+                { key: "wheel_bearing", patterns: [/wheel.*bearing/i], canonical: "", description: "", remove: true, removeCondition: () => isSmallMoto },
+                { key: "general_inspection", patterns: [/general.*inspect/i, /safety.*inspect/i, /multi.*point/i], canonical: "", description: "", remove: true },
+                { key: "winterization", patterns: [/winteriz/i], canonical: "", description: "", remove: true, removeCondition: () => isSmallMoto || vehicleCategory === "motorcycle" || vehicleCategory === "atv" || vehicleCategory === "utv" },
+              ];
+
+              // Step 1: Map each task to a family
+              const matched = new Set<number>();
+              const familyGroups = new Map<number, number[]>();
+
+              for (let fi = 0; fi < families.length; fi++) {
+                const fam = families[fi];
+                for (let ti = 0; ti < validatedTasks.length; ti++) {
+                  if (matched.has(ti)) continue;
+                  if (fam.patterns.some(p => p.test(validatedTasks[ti].task))) {
+                    const arr = familyGroups.get(fi) || [];
+                    arr.push(ti);
+                    familyGroups.set(fi, arr);
+                    matched.add(ti);
+                  }
+                }
+              }
+
+              // Step 2: Process each family — determine what to keep
+              const keepIndexes = new Set<number>();
+              const overrides = new Map<number, Partial<ValidatedTask>>();
+
+              for (const [fi, taskIdxs] of familyGroups.entries()) {
+                const fam = families[fi];
+                if (fam.remove) {
+                  if (!fam.removeCondition || fam.removeCondition()) continue;
+                }
+                const keepIdx = taskIdxs[0];
+                keepIndexes.add(keepIdx);
+                const ov: Partial<ValidatedTask> = {};
+                if (fam.canonical) ov.task = fam.canonical;
+                if (fam.description) ov.description = fam.description;
+                if (fam.priorityOverride) ov.priority = fam.priorityOverride;
+                if (fam.mergeIntervals && taskIdxs.length > 1) {
+                  let minMiles: number | null = null;
+                  let minMonths: number | null = null;
+                  for (const ti of taskIdxs) {
+                    const t = validatedTasks[ti];
+                    if (t.interval_miles !== null && (minMiles === null || t.interval_miles < minMiles)) minMiles = t.interval_miles;
+                    if (t.interval_months !== null && (minMonths === null || t.interval_months < minMonths)) minMonths = t.interval_months;
+                  }
+                  if (minMiles !== null) ov.interval_miles = minMiles;
+                  if (minMonths !== null) ov.interval_months = minMonths;
+                }
+                if (fam.conditionBased) {
+                  const currentDesc = (ov.description || validatedTasks[keepIdx].description).toLowerCase();
+                  if (!currentDesc.includes("inspect") && !currentDesc.includes("check") && !currentDesc.includes("condition") && !currentDesc.includes("when worn")) {
+                    const base = (ov.description || validatedTasks[keepIdx].description).replace(/\.\s*$/, "");
+                    ov.description = base + ". Inspect regularly and replace as needed based on wear.";
+                  }
+                }
+                if (Object.keys(ov).length > 0) overrides.set(keepIdx, ov);
+              }
+
+              // Keep unmatched tasks ONLY for non-small-moto vehicles
+              for (let i = 0; i < validatedTasks.length; i++) {
+                if (!matched.has(i)) {
+                  if (!isSmallMoto) keepIndexes.add(i);
+                }
+              }
+
+              // Step 3: Build filtered list with overrides (safe index mapping)
+              validatedTasks = validatedTasks
+                .map((t, i) => ({ t, i }))
+                .filter(({ i }) => keepIndexes.has(i))
+                .map(({ t, i }) => {
+                  const ov = overrides.get(i);
+                  return ov ? { ...t, ...ov } as ValidatedTask : t;
+                });
+
+              // Step 4: Spark plug interval guard
+              const oilTask = validatedTasks.find(t => /oil.*change|oil.*filter|engine.*oil/i.test(t.task));
+              const sparkTask = validatedTasks.find(t => /spark.*plug/i.test(t.task));
+              if (oilTask && sparkTask && oilTask.interval_miles && sparkTask.interval_miles && oilTask.interval_miles === sparkTask.interval_miles) {
+                sparkTask.interval_miles = Math.min(sparkTask.interval_miles * 2, 10000);
+              }
+
+              // Step 5: Fork oil priority cap
+              validatedTasks = validatedTasks.map(t => /fork.*oil/i.test(t.task) ? { ...t, priority: "medium" } : t);
+
+              // Step 6: Interval diversity — max 2 unrelated tasks with same interval_miles
+              const PROTECTED_NAMES = ["Engine Oil and Filter Change", "Clean, Lubricate, and Adjust Chain", "Inspect Brake Pads", "Check Tire Pressure and Condition", "Check and Adjust Valve Clearance"];
+              const mileageCounts = new Map<number, number[]>();
+              validatedTasks.forEach((t, i) => {
+                if (t.interval_miles !== null) {
+                  const arr = mileageCounts.get(t.interval_miles) || [];
+                  arr.push(i);
+                  mileageCounts.set(t.interval_miles, arr);
+                }
+              });
+              for (const [miles, idxs] of mileageCounts.entries()) {
+                if (idxs.length > 2) {
+                  const sortedIdxs = [...idxs].sort((a, b) => {
+                    const pa = validatedTasks[a].priority === "high" ? 3 : validatedTasks[a].priority === "medium" ? 2 : 1;
+                    const pb = validatedTasks[b].priority === "high" ? 3 : validatedTasks[b].priority === "medium" ? 2 : 1;
+                    return pa - pb;
+                  });
+                  let adjusted = 0;
+                  for (const idx of sortedIdxs) {
+                    if (adjusted >= idxs.length - 2) break;
+                    if (PROTECTED_NAMES.includes(validatedTasks[idx].task)) continue;
+                    validatedTasks[idx] = { ...validatedTasks[idx], interval_miles: Math.round(miles * 1.2) };
+                    adjusted++;
+                  }
+                }
+              }
+
+              // Step 7: Trim to max 18 tasks
+              if (validatedTasks.length > 18) {
+                const scored = validatedTasks.map((t, i) => {
+                  const priScore = t.priority === "high" ? 3 : t.priority === "medium" ? 2 : 1;
+                  const coreScore = PROTECTED_NAMES.includes(t.task) ? 10 : 0;
+                  return { idx: i, score: priScore + coreScore };
+                });
+                scored.sort((a, b) => a.score - b.score);
+                const removeCount = validatedTasks.length - 18;
+                const removeIdxs = new Set(scored.slice(0, removeCount).map(s => s.idx));
                 validatedTasks = validatedTasks.filter((_, i) => !removeIdxs.has(i));
               }
 
-              // 2. Remove vague inspection tasks if specific inspections exist
-              const hasSpecificInspections = validatedTasks.some(t => /brake.*inspect/i.test(t.task)) && validatedTasks.some(t => /tire.*inspect/i.test(t.task));
-              if (hasSpecificInspections) {
-                validatedTasks = validatedTasks.filter(t => !/general.*inspect|safety.*inspect|multi.*point.*inspect/i.test(t.task));
-              }
-
-              // 3. Remove winterization for non-seasonal motorcycles
-              if (vehicleCategory === "motorcycle" || vehicleCategory === "atv" || vehicleCategory === "utv") {
-                validatedTasks = validatedTasks.filter(t => !/winteriz/i.test(t.task));
-              }
-
-              // 4. Mark condition-based items with natural descriptions
-              const conditionPattern = /tire.*replace|chain.*replace|drive.*chain.*replace|shock.*replace|suspension.*replace|brake.*pad.*replace/i;
-              validatedTasks = validatedTasks.map(t => {
-                if (conditionPattern.test(t.task)) {
-                  const descLower = t.description.toLowerCase();
-                  if (descLower.includes("inspect") || descLower.includes("check") || descLower.includes("condition") || descLower.includes("when worn")) {
-                    return t;
-                  }
-                  const trimmed = t.description.replace(/\.\s*$/, "");
-                  return { ...t, description: trimmed + ". Inspect regularly and replace as needed based on wear." };
-                }
-                return t;
+              // Step 8: Final dedup by normalized name
+              const seenNames = new Set<string>();
+              validatedTasks = validatedTasks.filter(t => {
+                const k = t.task.toLowerCase().trim();
+                if (seenNames.has(k)) return false;
+                seenNames.add(k);
+                return true;
               });
+
+              if (validatedTasks.length < 10) {
+                console.warn(`[POST-PROCESS] Only ${validatedTasks.length} tasks after cleanup`);
+              }
             }
             if (validatedTasks.length >= 5) {
               await adminClient.from("ai_schedule_cache").upsert({ cache_key: cacheKey, vehicle_desc: vehicleDesc, vehicle_category: vehicleCategory, fuel_type: resolvedVehicleType, tasks_json: JSON.stringify(validatedTasks), task_count: validatedTasks.length }, { onConflict: "cache_key" });
