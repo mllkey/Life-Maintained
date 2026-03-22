@@ -16,7 +16,8 @@ import {
   Linking,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -148,8 +149,8 @@ export default function VehicleDetailScreen() {
         cached.add(item.service_name);
       }
 
-      // For uncached items, fetch estimates one at a time (max 3 per load to avoid rate limits)
-      const uncached = serviceNames.filter(s => !cached.has(s)).slice(0, 3);
+      // For uncached items, fetch estimates one at a time
+      const uncached = serviceNames.filter((s: string) => !cached.has(s));
       for (const svc of uncached) {
         try {
           const { data: fnData } = await supabase.functions.invoke("estimate-repair-cost", {
@@ -172,6 +173,18 @@ export default function VehicleDetailScreen() {
     enabled: !!vehicle?.make && !!scheduleTasks?.length,
     staleTime: 1000 * 60 * 60, // 1 hour
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      if (vehicle?.make && scheduleTasks?.length) {
+        // Small delay to not block screen render
+        const timer = setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ["repair_costs", id, vehicle?.make] });
+        }, 1000);
+        return () => clearTimeout(timer);
+      }
+    }, [vehicle?.make, scheduleTasks?.length]),
+  );
 
   const { data: logs, refetch: refetchLogs } = useQuery({
     queryKey: ["maintenance_logs", id],
@@ -622,19 +635,24 @@ export default function VehicleDetailScreen() {
             setIsDeletingVehicle(true);
             try {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-              const userId = user!.id;
-              const r2 = await supabase.from("user_vehicle_maintenance_tasks").delete().eq("vehicle_id", id!);
-              const r3 = await supabase.from("maintenance_logs").delete().eq("vehicle_id", id!);
-              const r4 = await supabase.from("vehicle_mileage_history").delete().eq("vehicle_id", id!);
-              const { data: walletFiles } = await supabase.storage.from("wallet-documents").list(`${userId}/${id}`);
-              if (walletFiles?.length) {
-                await supabase.storage.from("wallet-documents").remove(walletFiles.map(f => `${userId}/${id}/${f.name}`));
-              }
-              await supabase.from("vehicle_wallet_documents").delete().eq("vehicle_id", id!);
-              const r5 = await supabase.from("vehicles").delete().eq("id", id!);
               router.back();
-              queryClient.invalidateQueries({ queryKey: ["vehicles"] });
-              queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+              setTimeout(async () => {
+                try {
+                  const userId = user!.id;
+                  const vehicleId = id!;
+                  await supabase.from("user_vehicle_maintenance_tasks").delete().eq("vehicle_id", vehicleId);
+                  await supabase.from("maintenance_logs").delete().eq("vehicle_id", vehicleId);
+                  await supabase.from("vehicle_mileage_history").delete().eq("vehicle_id", vehicleId);
+                  const { data: walletFiles } = await supabase.storage.from("wallet-documents").list(`${userId}/${vehicleId}`);
+                  if (walletFiles?.length) {
+                    await supabase.storage.from("wallet-documents").remove(walletFiles.map(f => `${userId}/${vehicleId}/${f.name}`));
+                  }
+                  await supabase.from("vehicle_wallet_documents").delete().eq("vehicle_id", vehicleId);
+                  await supabase.from("vehicles").delete().eq("id", vehicleId);
+                  queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+                  queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+                } catch {}
+              }, 200);
             } catch (err: any) {
               setIsDeletingVehicle(false);
               Alert.alert("Couldn't delete", err?.message ?? "Try again in a moment.");
