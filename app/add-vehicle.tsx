@@ -815,6 +815,33 @@ export default function AddVehicleScreen() {
       return;
     }
 
+    const prefetchRepairCostEstimates = (insertedVehicleId: string) => {
+      // Fire-and-forget: pre-fetch cost estimates so they're cached when user views Schedule tab
+      (async () => {
+        try {
+          const { data: tasks } = await supabase
+            .from("user_vehicle_maintenance_tasks")
+            .select("name")
+            .eq("vehicle_id", insertedVehicleId);
+          if (!tasks?.length) return;
+          const serviceNames = tasks.map((t: any) => t.name.toLowerCase().trim());
+          for (const svc of serviceNames) {
+            try {
+              await supabase.functions.invoke("estimate-repair-cost", {
+                body: {
+                  year: yearNum,
+                  make: make.trim(),
+                  model: model,
+                  service_name: svc,
+                  vehicle_type: fuelType,
+                },
+              });
+            } catch {}
+          }
+        } catch {}
+      })();
+    };
+
     // 2. Paywall check (must await before dismissing — can't dismiss if paywall needs to show)
     try {
       const { count } = await supabase
@@ -869,9 +896,14 @@ export default function AddVehicleScreen() {
             "generate-maintenance-schedule",
             { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
           );
+          const httpStatusNoCandidates = scheduleError
+            ? ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined
+            : undefined;
           if (scheduleError) {
-            const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
-            if (httpStatus !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
+            if (httpStatusNoCandidates !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
+          }
+          if (!scheduleError) {
+            prefetchRepairCostEstimates(inserted.id);
           }
         } catch (scheduleErr) {
           console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
@@ -911,11 +943,16 @@ export default function AddVehicleScreen() {
           "generate-maintenance-schedule",
           { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
         );
+        const httpStatusCandidates = scheduleError
+          ? ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined
+          : undefined;
         if (scheduleError) {
-          const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
-          if (httpStatus !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
+          if (httpStatusCandidates !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
         } else {
           console.log("[generate-maintenance-schedule] Success for vehicle:", inserted.id);
+        }
+        if (!scheduleError) {
+          prefetchRepairCostEstimates(inserted.id);
         }
       } catch (scheduleErr) {
         console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);

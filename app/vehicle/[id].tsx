@@ -88,6 +88,7 @@ export default function VehicleDetailScreen() {
   const [showScheduleToast, setShowScheduleToast] = useState(false);
   const [scheduleToastIsError, setScheduleToastIsError] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showDifficultyInfo, setShowDifficultyInfo] = useState(false);
   const lastStatusHashRef = useRef("");
 
   const [markCompleteTask, setMarkCompleteTask] = useState<any | null>(null);
@@ -129,7 +130,7 @@ export default function VehicleDetailScreen() {
   });
 
   const { data: costEstimates } = useQuery({
-    queryKey: ["repair_costs", id, vehicle?.make],
+    queryKey: ["repair_costs", id, vehicle?.make, scheduleTasks?.length ?? 0],
     queryFn: async () => {
       if (!vehicle || !scheduleTasks?.length) return {};
       const results: Record<string, any> = {};
@@ -137,11 +138,14 @@ export default function VehicleDetailScreen() {
       const serviceNames = scheduleTasks.map(t => t.name.toLowerCase().trim());
       const vehicleKey = `${vehicle.year ?? ""}|${vehicle.make}|${vehicle.model ?? ""}|${vehicle.vehicle_type ?? ""}`.toLowerCase();
 
-      const { data: cachedData } = await supabase
+      const { data: cachedData, error: cacheErr } = await supabase
         .from("repair_cost_cache")
         .select("*")
         .eq("vehicle_key", vehicleKey)
         .in("service_name", serviceNames);
+      if (cacheErr) {
+        console.warn("[CostEstimate] cache read error:", cacheErr.message);
+      }
 
       const cached = new Set<string>();
       for (const item of cachedData ?? []) {
@@ -153,19 +157,28 @@ export default function VehicleDetailScreen() {
       const uncached = serviceNames.filter((s: string) => !cached.has(s));
       for (const svc of uncached) {
         try {
-          const { data: fnData } = await supabase.functions.invoke("estimate-repair-cost", {
+          const { data: fnData, error: fnErr } = await supabase.functions.invoke("estimate-repair-cost", {
             body: {
-              year: vehicle.year ? parseInt(vehicle.year) : null,
+              year: vehicle.year ?? null,
               make: vehicle.make,
               model: vehicle.model,
               service_name: svc,
               vehicle_type: vehicle.vehicle_type ?? "car",
             },
           });
-          if (fnData?.data) {
-            results[svc] = fnData.data;
+          if (fnErr) {
+            console.warn("[CostEstimate] edge fn error for", svc, ":", fnErr.message ?? fnErr);
+            continue;
           }
-        } catch {}
+          const estimate = fnData?.data ?? (fnData?.shop_low != null ? fnData : null);
+          if (estimate) {
+            results[svc] = estimate;
+          } else {
+            console.warn("[CostEstimate] no estimate in response for", svc, ":", JSON.stringify(fnData)?.slice(0, 200));
+          }
+        } catch (err: any) {
+          console.warn("[CostEstimate] exception for", svc, ":", err?.message ?? err);
+        }
       }
 
       return results;
@@ -179,11 +192,11 @@ export default function VehicleDetailScreen() {
       if (vehicle?.make && scheduleTasks?.length) {
         // Small delay to not block screen render
         const timer = setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: ["repair_costs", id, vehicle?.make] });
+          queryClient.invalidateQueries({ queryKey: ["repair_costs", id] });
         }, 1000);
         return () => clearTimeout(timer);
       }
-    }, [vehicle?.make, scheduleTasks?.length]),
+    }, [vehicle?.make, scheduleTasks?.length, id, queryClient]),
   );
 
   const { data: logs, refetch: refetchLogs } = useQuery({
@@ -924,6 +937,7 @@ export default function VehicleDetailScreen() {
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
+                      onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                     />
                   )}
                   <ScheduleSection
@@ -935,6 +949,7 @@ export default function VehicleDetailScreen() {
                     emptyMessage="No upcoming tasks"
                     onMarkComplete={handleOpenMarkComplete}
                     costEstimates={costEstimates}
+                    onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
@@ -946,6 +961,7 @@ export default function VehicleDetailScreen() {
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
+                      onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                     />
                   )}
                   {Object.keys(costEstimates ?? {}).length > 0 && (
@@ -1083,6 +1099,67 @@ export default function VehicleDetailScreen() {
         insets={insets}
       />
 
+      <Modal
+        visible={showDifficultyInfo}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDifficultyInfo(false)}
+      >
+        <View style={{ flex: 1, justifyContent: "flex-end" }}>
+          <Pressable
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.4)" }}
+            onPress={() => setShowDifficultyInfo(false)}
+          />
+          <View
+            style={{
+              backgroundColor: "#FFFFFF",
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              paddingHorizontal: 20,
+              paddingTop: 16,
+              paddingBottom: insets.bottom + 40,
+            }}
+          >
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.borderSubtle, alignSelf: "center", marginBottom: 16 }} />
+            <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.text, marginBottom: 16 }}>
+              DIY Difficulty Levels
+            </Text>
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
+              <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: Colors.good, backgroundColor: Colors.goodMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
+                Easy DIY
+              </Text>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 }}>
+                No special tools or experience needed. Most people can do this with basic supplies and a YouTube video. Examples: air filter, wiper blades, cabin filter.
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
+              <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: Colors.dueSoon, backgroundColor: Colors.dueSoonMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
+                Moderate
+              </Text>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 }}>
+                Requires some tools and comfort working on your vehicle. May take 1-2 hours. Examples: brake pads, spark plugs, battery replacement.
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
+              <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: Colors.overdue, backgroundColor: Colors.overdueMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
+                Pro Recommended
+              </Text>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 }}>
+                Complex job requiring professional tools, expertise, or safety equipment. Best left to a certified mechanic. Examples: timing belt, transmission service, suspension work.
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setShowDifficultyInfo(false)}
+              style={{ width: "100%", backgroundColor: Colors.vehicle, borderRadius: 10, paddingVertical: 13, marginTop: 8 }}
+            >
+              <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#FFFFFF", textAlign: "center" }}>
+                Got it
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {showPaywall && (
         <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
           <Paywall
@@ -1122,6 +1199,7 @@ function ScheduleSection({
   emptyMessage,
   onMarkComplete,
   costEstimates,
+  onShowDifficultyInfo,
 }: {
   title: string;
   titleColor?: string;
@@ -1132,6 +1210,7 @@ function ScheduleSection({
   emptyMessage?: string;
   onMarkComplete: (task: any) => void;
   costEstimates?: Record<string, any>;
+  onShowDifficultyInfo?: () => void;
 }) {
   return (
     <View style={styles.scheduleSection}>
@@ -1158,6 +1237,7 @@ function ScheduleSection({
                 onMarkComplete={onMarkComplete}
                 isLast={idx === tasks.length - 1}
                 costEstimate={costEstimates?.[task.name.toLowerCase().trim()]}
+                onShowDifficultyInfo={onShowDifficultyInfo}
               />
             ))
           )}
@@ -1167,12 +1247,13 @@ function ScheduleSection({
   );
 }
 
-function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate }: {
+function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate, onShowDifficultyInfo }: {
   task: any;
   vehicle: any;
   onMarkComplete: (task: any) => void;
   isLast?: boolean;
   costEstimate?: any;
+  onShowDifficultyInfo?: () => void;
 }) {
   const isCompleted = task.status === "completed";
   const [showCompletedInfo, setShowCompletedInfo] = useState(false);
@@ -1243,13 +1324,18 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 }}>
             <Ionicons name="cash-outline" size={12} color={Colors.good} />
             <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
-              ${costEstimate.shop_low}-${costEstimate.shop_high} shop
-              {costEstimate.diy_low != null ? ` · $${costEstimate.diy_low}-${costEstimate.diy_high} DIY` : ""}
+              {Number(costEstimate.shop_low) === 0 && Number(costEstimate.shop_high) === 0 ? "Free shop" : Number(costEstimate.shop_low) === Number(costEstimate.shop_high) ? `$${Number(costEstimate.shop_low)} shop` : `$${Number(costEstimate.shop_low)}-$${Number(costEstimate.shop_high)} shop`}
+              {costEstimate.diy_low == null ? "" : Number(costEstimate.diy_low) === 0 && Number(costEstimate.diy_high) === 0 ? " · Free DIY" : Number(costEstimate.diy_low) === Number(costEstimate.diy_high) ? ` · $${Number(costEstimate.diy_low)} DIY` : ` · $${Number(costEstimate.diy_low)}-$${Number(costEstimate.diy_high)} DIY`}
             </Text>
             {costEstimate.difficulty && (
-              <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: costEstimate.difficulty === 1 ? Colors.good : costEstimate.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: costEstimate.difficulty === 1 ? Colors.goodMuted : costEstimate.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
-                {costEstimate.difficulty === 1 ? "Easy DIY" : costEstimate.difficulty === 2 ? "Moderate" : "Pro"}
-              </Text>
+              <>
+                <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: costEstimate.difficulty === 1 ? Colors.good : costEstimate.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: costEstimate.difficulty === 1 ? Colors.goodMuted : costEstimate.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
+                  {costEstimate.difficulty === 1 ? "Easy DIY" : costEstimate.difficulty === 2 ? "Moderate" : "Pro"}
+                </Text>
+                <Pressable onPress={() => onShowDifficultyInfo?.()} hitSlop={8}>
+                  <Ionicons name="information-circle-outline" size={14} color={Colors.textTertiary} />
+                </Pressable>
+              </>
             )}
           </View>
         )}
