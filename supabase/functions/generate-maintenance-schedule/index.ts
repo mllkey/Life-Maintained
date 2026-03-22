@@ -58,7 +58,7 @@ serve(async (req: Request) => {
       return json({ error: "Invalid JSON body" }, 400);
     }
 
-    const { vehicle_id, make, year, current_mileage, vehicle_type, fuel_type, is_awd, vehicle_category } = body;
+    const { vehicle_id, make, model, year, current_mileage, vehicle_type, fuel_type, is_awd, vehicle_category } = body;
 
     if (!vehicle_id || typeof vehicle_id !== "string") {
       return json({ error: "Missing or invalid required field: vehicle_id (string)" }, 400);
@@ -78,6 +78,7 @@ serve(async (req: Request) => {
       ? fuel_type
       : (typeof vehicle_type === "string" ? vehicle_type : "gas");
     const resolvedIsAwd = typeof is_awd === "boolean" ? is_awd : false;
+    const vehicleModel = typeof model === "string" ? model : "";
     const vehicleCategory = typeof vehicle_category === "string" ? vehicle_category : "car";
 
     // ── Category exclusion map ─────────────────────────────────────────────
@@ -226,6 +227,265 @@ serve(async (req: Request) => {
         409,
       );
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // AI-POWERED SCHEDULE GENERATION (with cache + hard validation)
+    // Falls through to template fallback below if anything fails.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const today = new Date();
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const vehicleDesc = `${year} ${make} ${vehicleModel}`.trim();
+    const cacheKey = `${year}|${make}|${vehicleModel}|${vehicleCategory}|${resolvedVehicleType}`.toLowerCase().trim();
+
+    interface ValidatedTask {
+      task: string;
+      description: string;
+      category: string;
+      interval_miles: number | null;
+      interval_months: number | null;
+      priority: string;
+    }
+    interface IntervalClamp {
+      match: RegExp[];
+      max_months?: number;
+      min_months?: number;
+      max_miles?: number;
+      min_miles?: number;
+    }
+    interface RequiredTask {
+      match: RegExp[];
+      task: string;
+      description: string;
+      category: string;
+      interval_miles: number | null;
+      interval_months: number;
+      priority: string;
+    }
+
+    const VALID_CATEGORIES = ["Engine", "Drivetrain", "Brakes", "Fluids", "Electrical", "Safety", "Suspension", "Body", "Controls", "Cooling", "Tires", "Seasonal", "General"];
+    function normalizeCategory(cat: string): string {
+      if (!cat) return "General";
+      const lower = cat.toLowerCase().trim();
+      const found = VALID_CATEGORIES.find(v => v.toLowerCase() === lower);
+      if (found) return found;
+      if (lower.includes("brake")) return "Brakes";
+      if (lower.includes("engine") || lower.includes("motor")) return "Engine";
+      if (lower.includes("tire") || lower.includes("wheel")) return "Tires";
+      if (lower.includes("fluid")) return "Fluids";
+      if (lower.includes("electric") || lower.includes("battery") || lower.includes("light")) return "Electrical";
+      if (lower.includes("suspension") || lower.includes("fork") || lower.includes("shock")) return "Suspension";
+      if (lower.includes("drive") || lower.includes("chain") || lower.includes("transmission") || lower.includes("clutch")) return "Drivetrain";
+      if (lower.includes("cool") || lower.includes("radiator")) return "Cooling";
+      if (lower.includes("control") || lower.includes("cable") || lower.includes("throttle")) return "Controls";
+      if (lower.includes("body") || lower.includes("paint") || lower.includes("wash")) return "Body";
+      if (lower.includes("safety") || lower.includes("inspect")) return "Safety";
+      if (lower.includes("season") || lower.includes("winter") || lower.includes("storage")) return "Seasonal";
+      return "General";
+    }
+    function normalizePriority(p: string): string {
+      const lower = (p || "").toLowerCase().trim();
+      if (lower === "high" || lower === "medium" || lower === "low") return lower;
+      return "medium";
+    }
+
+    const MOTORCYCLE_CLAMPS: IntervalClamp[] = [
+      { match: [/brake.*fluid/i], max_months: 24, max_miles: 20000 },
+      { match: [/coolant/i], max_months: 36, max_miles: 30000 },
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 12, max_miles: 5000, min_miles: 2000 },
+      { match: [/chain.*clean/i, /chain.*lube/i, /chain.*lubrication/i, /chain maintenance/i], max_months: 2, max_miles: 600, min_miles: 200 },
+      { match: [/chain.*adjust/i, /chain.*tension/i], max_months: 6, max_miles: 5000, min_miles: 1000 },
+      { match: [/valve.*check/i, /valve.*clearance/i, /valve.*adjust/i, /valve.*inspection/i], max_months: 18, max_miles: 10000, min_miles: 3000 },
+      { match: [/tire.*inspect/i, /tire.*check/i, /tire.*wear/i, /tire.*pressure/i], max_months: 6, max_miles: 5000 },
+      { match: [/brake.*pad/i, /brake.*inspection/i], max_months: 12, max_miles: 15000 },
+      { match: [/spark plug/i], max_months: 24, max_miles: 20000 },
+      { match: [/air filter/i], max_months: 12, max_miles: 15000 },
+      { match: [/fork.*oil/i, /fork.*seal/i], max_months: 24, max_miles: 20000 },
+    ];
+    const CAR_TRUCK_CLAMPS: IntervalClamp[] = [
+      { match: [/brake.*fluid/i], max_months: 36, max_miles: 45000 },
+      { match: [/coolant/i], max_months: 60, max_miles: 100000 },
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 12, max_miles: 10000, min_miles: 3000 },
+      { match: [/transmission.*fluid/i], max_months: 60, max_miles: 60000 },
+      { match: [/brake.*pad/i, /brake.*inspection/i], max_months: 18, max_miles: 30000 },
+      { match: [/tire.*rotation/i], max_months: 12, max_miles: 10000, min_miles: 3000 },
+      { match: [/spark plug/i], max_months: 60, max_miles: 100000 },
+      { match: [/air filter/i], max_months: 24, max_miles: 30000 },
+      { match: [/cabin.*air.*filter/i], max_months: 18, max_miles: 20000 },
+      { match: [/wiper.*blade/i], max_months: 12 },
+    ];
+    const BOAT_PWC_CLAMPS: IntervalClamp[] = [
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 12 },
+      { match: [/impeller/i], max_months: 24 },
+      { match: [/anode/i, /zinc/i], max_months: 12 },
+      { match: [/lower unit/i, /gear.*oil/i, /gear.*lube/i], max_months: 12 },
+      { match: [/winteriz/i], max_months: 12 },
+      { match: [/spark plug/i], max_months: 12 },
+      { match: [/fuel.*filter/i, /fuel.*water.*separator/i], max_months: 12 },
+    ];
+
+    const MOTORCYCLE_REQUIRED: RequiredTask[] = [
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], task: "Engine Oil & Filter Change", description: "Change engine oil and replace oil filter per manufacturer spec", category: "Engine", interval_miles: 4000, interval_months: 6, priority: "high" },
+      { match: [/brake.*fluid/i], task: "Brake Fluid Flush", description: "Replace brake fluid to maintain stopping performance", category: "Brakes", interval_miles: null, interval_months: 24, priority: "high" },
+      { match: [/chain.*clean/i, /chain.*lube/i, /chain.*lubrication/i, /chain maintenance/i], task: "Chain Clean & Lube", description: "Clean and lubricate the drive chain", category: "Drivetrain", interval_miles: 400, interval_months: 1, priority: "high" },
+      { match: [/chain.*adjust/i, /chain.*tension/i], task: "Chain Adjustment", description: "Check and adjust chain tension and alignment", category: "Drivetrain", interval_miles: 3000, interval_months: 6, priority: "medium" },
+      { match: [/valve.*check/i, /valve.*clearance/i, /valve.*adjust/i, /valve.*inspection/i], task: "Valve Check / Adjustment", description: "Check and adjust valve clearances per manufacturer spec", category: "Engine", interval_miles: 7500, interval_months: 12, priority: "high" },
+      { match: [/brake.*pad/i, /brake.*inspection/i], task: "Brake Pad Inspection", description: "Inspect brake pads for wear and replace if needed", category: "Brakes", interval_miles: 7500, interval_months: 12, priority: "high" },
+      { match: [/tire.*inspect/i, /tire.*check/i, /tire.*wear/i, /tire.*pressure/i], task: "Tire Inspection", description: "Inspect tires for wear, damage, and proper pressure", category: "Safety", interval_miles: 3000, interval_months: 3, priority: "high" },
+    ];
+    const CAR_TRUCK_REQUIRED: RequiredTask[] = [
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], task: "Engine Oil & Filter Change", description: "Change engine oil and replace oil filter", category: "Engine", interval_miles: 5000, interval_months: 6, priority: "high" },
+      { match: [/brake.*fluid/i], task: "Brake Fluid Flush", description: "Replace brake fluid", category: "Brakes", interval_miles: null, interval_months: 30, priority: "high" },
+      { match: [/brake.*pad/i, /brake.*inspection/i], task: "Brake Pad Inspection", description: "Inspect brake pads and rotors for wear", category: "Brakes", interval_miles: 20000, interval_months: 12, priority: "high" },
+      { match: [/tire.*rotation/i], task: "Tire Rotation", description: "Rotate tires for even wear", category: "Tires", interval_miles: 7500, interval_months: 6, priority: "medium" },
+    ];
+    const BOAT_PWC_REQUIRED: RequiredTask[] = [
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], task: "Engine Oil & Filter Change", description: "Change engine oil and replace oil filter", category: "Engine", interval_miles: null, interval_months: 12, priority: "high" },
+      { match: [/impeller/i], task: "Impeller Inspection / Replacement", description: "Inspect and replace water pump impeller", category: "Cooling", interval_miles: null, interval_months: 12, priority: "high" },
+      { match: [/lower unit/i, /gear.*oil/i, /gear.*lube/i], task: "Lower Unit Gear Oil Change", description: "Change lower unit gear oil and check for water intrusion", category: "Drivetrain", interval_miles: null, interval_months: 12, priority: "high" },
+      { match: [/winteriz/i], task: "Winterization", description: "Full winterization including fuel stabilizer, fog engine, drain water systems", category: "Seasonal", interval_miles: null, interval_months: 12, priority: "high" },
+    ];
+
+    function getClampsForCategory(cat: string): IntervalClamp[] {
+      if (cat === "motorcycle" || cat === "atv" || cat === "utv" || cat === "snowmobile") return MOTORCYCLE_CLAMPS;
+      if (cat === "boat" || cat === "pwc") return BOAT_PWC_CLAMPS;
+      return CAR_TRUCK_CLAMPS;
+    }
+    function getRequiredForCategory(cat: string): RequiredTask[] {
+      if (cat === "motorcycle" || cat === "atv" || cat === "utv" || cat === "snowmobile") return MOTORCYCLE_REQUIRED;
+      if (cat === "boat" || cat === "pwc") return BOAT_PWC_REQUIRED;
+      return CAR_TRUCK_REQUIRED;
+    }
+    function clampTask(t: ValidatedTask, clamps: IntervalClamp[]): ValidatedTask {
+      for (const c of clamps) {
+        if (c.match.some(re => re.test(t.task))) {
+          let mi = t.interval_miles;
+          let mo = t.interval_months;
+          if (mi !== null) {
+            if (c.max_miles !== undefined && mi > c.max_miles) mi = c.max_miles;
+            if (c.min_miles !== undefined && mi < c.min_miles) mi = c.min_miles;
+          }
+          if (mo !== null) {
+            if (c.max_months !== undefined && mo > c.max_months) mo = c.max_months;
+            if (c.min_months !== undefined && mo < c.min_months) mo = c.min_months;
+          }
+          return { ...t, interval_miles: mi, interval_months: mo };
+        }
+      }
+      return t;
+    }
+    function validateAndEnforce(tasks: ValidatedTask[], vCat: string): ValidatedTask[] {
+      const clamps = getClampsForCategory(vCat);
+      const required = getRequiredForCategory(vCat);
+      let v = tasks.map(t => ({ ...clampTask(t, clamps), category: normalizeCategory(t.category), priority: normalizePriority(t.priority) }));
+      v = v.filter(t => t.task.trim() !== "" && (t.interval_miles !== null || t.interval_months !== null));
+      for (const req of required) {
+        if (!v.some(t => req.match.some(re => re.test(t.task)))) {
+          v.push({ task: req.task, description: req.description, category: normalizeCategory(req.category), interval_miles: req.interval_miles, interval_months: req.interval_months, priority: normalizePriority(req.priority) });
+        }
+      }
+      const seen = new Set<string>();
+      v = v.filter(t => { const k = t.task.toLowerCase().trim(); if (seen.has(k)) return false; seen.add(k); return true; });
+      return v;
+    }
+
+    let aiSuccess = false;
+    try {
+      const { data: cached } = await adminClient.from("ai_schedule_cache").select("tasks_json").eq("cache_key", cacheKey).maybeSingle();
+      let validatedTasks: ValidatedTask[] | null = null;
+
+      if (cached?.tasks_json) {
+        try { validatedTasks = JSON.parse(cached.tasks_json); console.log(`[CACHE HIT] ${cacheKey}`); } catch { console.warn("[CACHE] Parse failed"); }
+      }
+
+      if (!validatedTasks && anthropicKey) {
+        const claudeModel = Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-4-20250514";
+        const categoryHint = vehicleCategory !== "car" ? ` (category: ${vehicleCategory})` : "";
+        const fuelHint = resolvedVehicleType !== "gas" ? ` (fuel type: ${resolvedVehicleType})` : "";
+        const awdHint = resolvedIsAwd ? " (AWD/4WD)" : "";
+
+        const prompt = `You are an expert vehicle maintenance advisor with deep knowledge of manufacturer service manuals. Generate a comprehensive maintenance schedule for this SPECIFIC vehicle based on its manufacturer's owner's manual recommendations and real-world best practices.
+
+Vehicle: ${vehicleDesc}${categoryHint}${fuelHint}${awdHint}
+
+CRITICAL RULES:
+- Be SPECIFIC to this exact year/make/model — use the actual manufacturer recommended intervals from the owner's manual for this vehicle
+- Include BOTH mileage AND time-based intervals for every task (whichever comes first triggers the service)
+- Time-based intervals are critical — fluids degrade with time regardless of miles driven
+- For motorcycles: you MUST include chain clean/lube (every 300-600 miles), chain adjustment, valve check/adjustment, cable lubrication, fork oil service, tire inspection
+- For boats/PWC: you MUST include winterization, impeller service, anode inspection, lower unit service
+- For any vehicle: include ALL tasks a thorough owner would track
+- Be conservative on safety-critical items (brakes, tires, fluids, steering)
+- Interval values are the INTERVAL (e.g., every 7500 miles), NOT the absolute mileage
+- Do NOT include tasks that don't apply to this vehicle
+
+Respond ONLY with a valid JSON array, no markdown, no backticks, no explanation. Each item:
+[
+  {
+    "task": "Task Name",
+    "description": "Brief description",
+    "category": "Engine|Drivetrain|Brakes|Fluids|Electrical|Safety|Suspension|Body|Controls|Cooling|Tires|Seasonal",
+    "interval_miles": <number or null if time-only>,
+    "interval_months": <number or null if mileage-only>,
+    "priority": "high"|"medium"|"low"
+  }
+]
+
+Generate 12-25 tasks. Every task MUST have at least one of interval_miles or interval_months.`;
+
+        const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({ model: claudeModel, max_tokens: 4000, messages: [{ role: "user", content: prompt }] }),
+        });
+
+        if (aiResponse.ok) {
+          const aiData = await aiResponse.json();
+          const aiText = aiData.content?.[0]?.text ?? "";
+          let aiTasks: any[];
+          try { aiTasks = JSON.parse(aiText); } catch {
+            const m = aiText.match(/\[[\s\S]*\]/);
+            if (m) aiTasks = JSON.parse(m[0]); else throw new Error("Could not parse AI JSON");
+          }
+          if (Array.isArray(aiTasks) && aiTasks.length >= 5) {
+            const parsed: ValidatedTask[] = aiTasks.filter(t => typeof t.task === "string" && t.task.trim()).map(t => ({
+              task: t.task.trim(),
+              description: typeof t.description === "string" ? t.description : "",
+              category: typeof t.category === "string" ? t.category : "General",
+              interval_miles: typeof t.interval_miles === "number" && t.interval_miles > 0 ? t.interval_miles : null,
+              interval_months: typeof t.interval_months === "number" && t.interval_months > 0 ? t.interval_months : null,
+              priority: typeof t.priority === "string" ? t.priority : "medium",
+            }));
+            validatedTasks = validateAndEnforce(parsed, vehicleCategory);
+            if (validatedTasks.length >= 5) {
+              await adminClient.from("ai_schedule_cache").upsert({ cache_key: cacheKey, vehicle_desc: vehicleDesc, vehicle_category: vehicleCategory, fuel_type: resolvedVehicleType, tasks_json: JSON.stringify(validatedTasks), task_count: validatedTasks.length }, { onConflict: "cache_key" });
+            }
+          }
+        }
+      }
+
+      if (validatedTasks && validatedTasks.length >= 5) {
+        const aiTasksToInsert = validatedTasks.map(t => ({
+          user_id: authUserId, vehicle_id, template_id: null,
+          name: t.task, description: t.description, category: t.category,
+          interval_miles: t.interval_miles, interval_months: t.interval_months,
+          last_completed_date: null, last_completed_miles: null,
+          next_due_miles: t.interval_miles !== null ? Math.round(current_mileage as number) + t.interval_miles : null,
+          next_due_date: t.interval_months !== null ? addMonths(today, t.interval_months).toISOString() : null,
+          status: "upcoming", priority: t.priority, is_custom: false, source: "ai",
+        }));
+        const { error: aiInsertErr } = await adminClient.from("user_vehicle_maintenance_tasks").insert(aiTasksToInsert);
+        if (!aiInsertErr) {
+          console.log(`[AI SUCCESS] ${aiTasksToInsert.length} tasks for ${vehicleDesc}`);
+          return json({ success: true, tasks_created: aiTasksToInsert.length, vehicle_id, source: "ai" });
+        }
+        console.error("[AI] Insert failed:", aiInsertErr.message);
+      }
+    } catch (aiBlockErr) {
+      console.error("[AI BLOCK] Error, falling back to templates:", aiBlockErr instanceof Error ? aiBlockErr.message : aiBlockErr);
+    }
+
+    // ── EXISTING TEMPLATE FALLBACK CONTINUES BELOW (UNTOUCHED) ──────────
 
     // ── 5. Determine which vehicle_type values to query ────────────────────
     // Note: `maintenance_templates.vehicle_type` is used in this project for fuel-type-aware templates.
@@ -415,7 +675,6 @@ serve(async (req: Request) => {
     }
 
     // ── 8 & 9. Resolve values and calculate due dates ──────────────────────
-    const today = new Date();
     const tasksToInsert: Record<string, unknown>[] = [];
     const insertedTaskNames = new Set<string>();
 

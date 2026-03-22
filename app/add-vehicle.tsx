@@ -894,7 +894,7 @@ export default function AddVehicleScreen() {
         try {
           const { error: scheduleError } = await supabase.functions.invoke(
             "generate-maintenance-schedule",
-            { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
+            { body: { vehicle_id: inserted.id, make: make.trim(), model: model.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
           );
           const httpStatusNoCandidates = scheduleError
             ? ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined
@@ -941,7 +941,7 @@ export default function AddVehicleScreen() {
         console.log("[generate-maintenance-schedule] Invoking for vehicle:", inserted.id);
         const { error: scheduleError } = await supabase.functions.invoke(
           "generate-maintenance-schedule",
-          { body: { vehicle_id: inserted.id, make: make.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
+          { body: { vehicle_id: inserted.id, make: make.trim(), model: model.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
         );
         const httpStatusCandidates = scheduleError
           ? ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined
