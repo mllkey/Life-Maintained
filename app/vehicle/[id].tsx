@@ -912,6 +912,57 @@ export default function VehicleDetailScreen() {
                     <Text style={styles.retryBtnText}>Try Again</Text>
                   </Pressable>
                 </View>
+              ) : processedScheduleTasks.length > 0 && !processedScheduleTasks.some(t => t.last_completed_date != null) ? (
+                <>
+                  <View style={{ backgroundColor: Colors.dueSoonMuted, borderRadius: 10, padding: 12, marginHorizontal: 16, marginTop: 8, marginBottom: 12, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
+                    <Ionicons name="information-circle-outline" size={18} color={Colors.dueSoon} style={{ marginTop: 1 }} />
+                    <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.dueSoon, flex: 1 }}>
+                      This schedule is estimated from your current mileage. Tap any task to log your last service date for more accurate due dates.
+                    </Text>
+                  </View>
+                  {actionNeededTasks.length > 0 && (
+                    <ScheduleSection
+                      title={`Action Needed (${actionNeededTasks.length})`}
+                      titleColor={Colors.overdue}
+                      expanded={actionNeededExpanded}
+                      onToggle={() => { Haptics.selectionAsync(); setActionNeededExpanded(v => !v); }}
+                      tasks={actionNeededTasks}
+                      vehicle={vehicle}
+                      onMarkComplete={handleOpenMarkComplete}
+                      costEstimates={costEstimates}
+                      onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
+                    />
+                  )}
+                  <ScheduleSection
+                    title={`Upcoming (${upcomingTasks.length})`}
+                    expanded={upcomingExpanded}
+                    onToggle={() => { Haptics.selectionAsync(); setUpcomingExpanded(v => !v); }}
+                    tasks={upcomingTasks}
+                    vehicle={vehicle}
+                    emptyMessage="No upcoming tasks"
+                    onMarkComplete={handleOpenMarkComplete}
+                    costEstimates={costEstimates}
+                    onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
+                  />
+                  {completedTasks.length > 0 && (
+                    <ScheduleSection
+                      title={`Completed (${completedTasks.length})`}
+                      titleColor={Colors.good}
+                      expanded={completedExpanded}
+                      onToggle={() => { Haptics.selectionAsync(); setCompletedExpanded(v => !v); }}
+                      tasks={completedTasks}
+                      vehicle={vehicle}
+                      onMarkComplete={handleOpenMarkComplete}
+                      costEstimates={costEstimates}
+                      onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
+                    />
+                  )}
+                  {Object.keys(costEstimates ?? {}).length > 0 && (
+                    <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", marginTop: 12, paddingHorizontal: 16 }}>
+                      Cost estimates are approximate and vary by location and shop. Not a guarantee of pricing.
+                    </Text>
+                  )}
+                </>
               ) : processedScheduleTasks.length === 0 ? (
                 <View style={styles.scheduleEmpty}>
                   <Text style={styles.scheduleEmptyTitle}>No maintenance schedule yet</Text>

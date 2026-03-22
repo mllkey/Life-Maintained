@@ -404,26 +404,54 @@ serve(async (req: Request) => {
         const fuelHint = resolvedVehicleType !== "gas" ? ` (fuel type: ${resolvedVehicleType})` : "";
         const awdHint = resolvedIsAwd ? " (AWD/4WD)" : "";
 
-        const prompt = `You are an expert vehicle maintenance advisor with deep knowledge of manufacturer service manuals. Generate a comprehensive maintenance schedule for this SPECIFIC vehicle based on its manufacturer's owner's manual recommendations and real-world best practices.
+        const prompt = `You are an expert maintenance advisor for vehicles and assets. Generate a realistic, trustworthy maintenance schedule for this specific asset.
 
-Vehicle: ${vehicleDesc}${categoryHint}${fuelHint}${awdHint}
+Asset: ${vehicleDesc}${categoryHint}${fuelHint}${awdHint}
 
-CRITICAL RULES:
-- Be SPECIFIC to this exact year/make/model — use the actual manufacturer recommended intervals from the owner's manual for this vehicle
-- Include BOTH mileage AND time-based intervals for every task (whichever comes first triggers the service)
-- Time-based intervals are critical — fluids degrade with time regardless of miles driven
-- For motorcycles: you MUST include chain clean/lube (every 300-600 miles), chain adjustment, valve check/adjustment, cable lubrication, fork oil service, tire inspection
-- For boats/PWC: you MUST include winterization, impeller service, anode inspection, lower unit service
-- For any vehicle: include ALL tasks a thorough owner would track
-- Be conservative on safety-critical items (brakes, tires, fluids, steering)
-- Interval values are the INTERVAL (e.g., every 7500 miles), NOT the absolute mileage
-- Do NOT include tasks that don't apply to this vehicle
+Important context:
+- Assume prior maintenance history is unknown
+- The schedule starts from the asset's current mileage/hours
+- Do NOT assume the asset has never been serviced
+
+Use the following three-tier framework to determine which tasks to include and how to set their intervals. Your final output must still be a single flat JSON array — do NOT nest or group by tier.
+
+TIER 1 — PRIMARY SERVICES
+Tasks with distinct manufacturer-specified intervals unique to this asset.
+- Each must have its own realistic interval
+- Do NOT assign identical intervals to unrelated tasks
+- These form the backbone of the maintenance schedule
+
+TIER 2 — GROUPED SERVICES
+Tasks that are legitimately performed together during major service milestones for this specific asset.
+- Only group tasks that a mechanic would realistically perform in the same visit
+- Do NOT group tasks solely because their intervals happen to align numerically
+- Grouping should reflect real service practices, not convenience
+
+TIER 3 — CONDITION-BASED
+Wear-dependent items (e.g., tires, chain replacement, brake pads, suspension).
+- Include inspection intervals where appropriate
+- Descriptions must clearly state: "Inspect regularly — replace based on condition"
+- Avoid presenting these as fixed scheduled replacements with exact due mileage
+
+Rules:
+- Be specific to this exact year/make/model — do not use generic averages
+- Account for engine displacement, cooling type, drivetrain type, and asset category
+- Each task description must include the recommended interval AND a realistic range (e.g., "every 2,000-3,000 miles depending on riding conditions")
+- Do NOT assign identical intervals to unrelated tasks unless they are genuinely part of the same manufacturer service milestone
+- Do NOT include winterization for non-seasonal assets
+- Do NOT include vague "general inspection" tasks if specific inspections are already included
+- Combine related cable lubrication into one "Cable Lubrication" task
+- Priorities: high = oil, brakes, drivetrain/chain; medium = filters, fluids, inspections; lower = condition-based replacements
+- Output should feel like it was written by an experienced mechanic — practical, realistic, not artificially uniform
+- Include BOTH mileage AND time-based intervals for every task (whichever comes first)
+- Interval values are the INTERVAL (e.g., every 3000 miles), NOT the absolute mileage
+- Be conservative on safety-critical items
 
 Respond ONLY with a valid JSON array, no markdown, no backticks, no explanation. Each item:
 [
   {
     "task": "Task Name",
-    "description": "Brief description",
+    "description": "Brief practical description including recommended interval range",
     "category": "Engine|Drivetrain|Brakes|Fluids|Electrical|Safety|Suspension|Body|Controls|Cooling|Tires|Seasonal",
     "interval_miles": <number or null if time-only>,
     "interval_months": <number or null if mileage-only>,
@@ -431,7 +459,7 @@ Respond ONLY with a valid JSON array, no markdown, no backticks, no explanation.
   }
 ]
 
-Generate 12-25 tasks. Every task MUST have at least one of interval_miles or interval_months.`;
+Generate 12-20 tasks. Every task MUST have at least one of interval_miles or interval_months.`;
 
         const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
@@ -457,6 +485,44 @@ Generate 12-25 tasks. Every task MUST have at least one of interval_miles or int
               priority: typeof t.priority === "string" ? t.priority : "medium",
             }));
             validatedTasks = validateAndEnforce(parsed, vehicleCategory);
+
+            // Post-processing cleanup
+            if (validatedTasks) {
+              // 1. Merge duplicate cable lubrication tasks
+              const cablePattern = /cable.*lube|cable.*lubric/i;
+              const cableIndexes = validatedTasks.map((t, i) => cablePattern.test(t.task) ? i : -1).filter(i => i !== -1);
+              if (cableIndexes.length > 1) {
+                const keepIdx = cableIndexes[0];
+                validatedTasks[keepIdx] = { ...validatedTasks[keepIdx], task: "Cable Lubrication", description: "Lubricate throttle, clutch, and other control cables. Recommended every 3,000-6,000 miles or annually depending on conditions." };
+                const removeIdxs = new Set(cableIndexes.slice(1));
+                validatedTasks = validatedTasks.filter((_, i) => !removeIdxs.has(i));
+              }
+
+              // 2. Remove vague inspection tasks if specific inspections exist
+              const hasSpecificInspections = validatedTasks.some(t => /brake.*inspect/i.test(t.task)) && validatedTasks.some(t => /tire.*inspect/i.test(t.task));
+              if (hasSpecificInspections) {
+                validatedTasks = validatedTasks.filter(t => !/general.*inspect|safety.*inspect|multi.*point.*inspect/i.test(t.task));
+              }
+
+              // 3. Remove winterization for non-seasonal motorcycles
+              if (vehicleCategory === "motorcycle" || vehicleCategory === "atv" || vehicleCategory === "utv") {
+                validatedTasks = validatedTasks.filter(t => !/winteriz/i.test(t.task));
+              }
+
+              // 4. Mark condition-based items with natural descriptions
+              const conditionPattern = /tire.*replace|chain.*replace|drive.*chain.*replace|shock.*replace|suspension.*replace|brake.*pad.*replace/i;
+              validatedTasks = validatedTasks.map(t => {
+                if (conditionPattern.test(t.task)) {
+                  const descLower = t.description.toLowerCase();
+                  if (descLower.includes("inspect") || descLower.includes("check") || descLower.includes("condition") || descLower.includes("when worn")) {
+                    return t;
+                  }
+                  const trimmed = t.description.replace(/\.\s*$/, "");
+                  return { ...t, description: trimmed + ". Inspect regularly and replace as needed based on wear." };
+                }
+                return t;
+              });
+            }
             if (validatedTasks.length >= 5) {
               await adminClient.from("ai_schedule_cache").upsert({ cache_key: cacheKey, vehicle_desc: vehicleDesc, vehicle_category: vehicleCategory, fuel_type: resolvedVehicleType, tasks_json: JSON.stringify(validatedTasks), task_count: validatedTasks.length }, { onConflict: "cache_key" });
             }
