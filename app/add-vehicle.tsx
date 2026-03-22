@@ -891,23 +891,24 @@ export default function AddVehicleScreen() {
           Alert.alert("Save Failed", err?.message ?? "Failed to save vehicle. Please try again.");
           return;
         }
-        try {
-          const { error: scheduleError } = await supabase.functions.invoke(
-            "generate-maintenance-schedule",
-            { body: { vehicle_id: inserted.id, make: make.trim(), model: model.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
-          );
-          const httpStatusNoCandidates = scheduleError
-            ? ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined
-            : undefined;
-          if (scheduleError) {
-            if (httpStatusNoCandidates !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
+        // Fire-and-forget: generate schedule + prefetch estimates in background
+        (async () => {
+          try {
+            const { error: scheduleError } = await supabase.functions.invoke(
+              "generate-maintenance-schedule",
+              { body: { vehicle_id: inserted.id, make: make.trim(), model: model.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
+            );
+            if (scheduleError) {
+              const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
+              if (httpStatus !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
+            } else {
+              prefetchRepairCostEstimates(inserted.id);
+            }
+            queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", inserted.id] });
+          } catch (scheduleErr) {
+            console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
           }
-          if (!scheduleError) {
-            prefetchRepairCostEstimates(inserted.id);
-          }
-        } catch (scheduleErr) {
-          console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
-        }
+        })();
         queryClient.invalidateQueries({ queryKey: ["vehicles"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
@@ -937,26 +938,24 @@ export default function AddVehicleScreen() {
         Alert.alert("Save Failed", err?.message ?? "Failed to save vehicle. Please try again.");
         return;
       }
-      try {
-        console.log("[generate-maintenance-schedule] Invoking for vehicle:", inserted.id);
-        const { error: scheduleError } = await supabase.functions.invoke(
-          "generate-maintenance-schedule",
-          { body: { vehicle_id: inserted.id, make: make.trim(), model: model.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
-        );
-        const httpStatusCandidates = scheduleError
-          ? ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined
-          : undefined;
-        if (scheduleError) {
-          if (httpStatusCandidates !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
-        } else {
-          console.log("[generate-maintenance-schedule] Success for vehicle:", inserted.id);
+      // Fire-and-forget: generate schedule + prefetch estimates in background
+      (async () => {
+        try {
+          const { error: scheduleError } = await supabase.functions.invoke(
+            "generate-maintenance-schedule",
+            { body: { vehicle_id: inserted.id, make: make.trim(), model: model.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
+          );
+          if (scheduleError) {
+            const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
+            if (httpStatus !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
+          } else {
+            prefetchRepairCostEstimates(inserted.id);
+          }
+          queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", inserted.id] });
+        } catch (scheduleErr) {
+          console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
         }
-        if (!scheduleError) {
-          prefetchRepairCostEstimates(inserted.id);
-        }
-      } catch (scheduleErr) {
-        console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
-      }
+      })();
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });

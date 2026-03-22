@@ -153,32 +153,38 @@ export default function VehicleDetailScreen() {
         cached.add(item.service_name);
       }
 
-      // For uncached items, fetch estimates one at a time
+      // Fetch uncached estimates in parallel (batches of 5 to avoid overwhelming the API)
       const uncached = serviceNames.filter((s: string) => !cached.has(s));
-      for (const svc of uncached) {
-        try {
-          const { data: fnData, error: fnErr } = await supabase.functions.invoke("estimate-repair-cost", {
-            body: {
-              year: vehicle.year ?? null,
-              make: vehicle.make,
-              model: vehicle.model,
-              service_name: svc,
-              vehicle_type: vehicle.vehicle_type ?? "car",
-            },
-          });
-          if (fnErr) {
-            console.warn("[CostEstimate] edge fn error for", svc, ":", fnErr.message ?? fnErr);
-            continue;
-          }
-          const estimate = fnData?.data ?? (fnData?.shop_low != null ? fnData : null);
-          if (estimate) {
-            results[svc] = estimate;
-          } else {
-            console.warn("[CostEstimate] no estimate in response for", svc, ":", JSON.stringify(fnData)?.slice(0, 200));
-          }
-        } catch (err: any) {
-          console.warn("[CostEstimate] exception for", svc, ":", err?.message ?? err);
-        }
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
+        const batch = uncached.slice(i, i + BATCH_SIZE);
+        await Promise.allSettled(
+          batch.map((svc) => {
+            const serviceName = svc;
+            return supabase.functions.invoke("estimate-repair-cost", {
+              body: {
+                year: vehicle.year ?? null,
+                make: vehicle.make,
+                model: vehicle.model,
+                service_name: serviceName,
+                vehicle_type: vehicle.vehicle_type ?? "car",
+              },
+            }).then(({ data: fnData, error: fnErr }) => {
+              if (fnErr) {
+                console.warn("[CostEstimate] edge fn error for", serviceName, ":", fnErr.message ?? fnErr);
+                return;
+              }
+              const estimate = fnData?.data ?? (fnData?.shop_low != null ? fnData : null);
+              if (estimate) {
+                results[serviceName] = estimate;
+              } else {
+                console.warn("[CostEstimate] no estimate for", serviceName);
+              }
+            }).catch((err: any) => {
+              console.warn("[CostEstimate] exception for", serviceName, ":", err?.message ?? err);
+            });
+          })
+        );
       }
 
       return results;
