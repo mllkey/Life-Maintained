@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const onboardingCacheChecked = useRef(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const mountedRef = useRef(true);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -87,8 +88,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error("[AUTH] fetchProfile error (attempt", attempt, "):", e);
       if (mountedRef.current) {
-        // Do NOT reset onboardingCompleted here — preserve whatever value it already has.
-        // For the initial load this means it stays false, which safely redirects to /(auth).
+        AsyncStorage.getItem("@onboarding_completed").then((cached) => {
+          if (cached === "true" && mountedRef.current) {
+            setOnboardingCompleted(true);
+          }
+        }).catch(() => {});
         setProfileLoaded(true);
       }
     }
@@ -109,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (event === "SIGNED_OUT") {
         userIdRef.current = null;
+        onboardingCacheChecked.current = false;
         setProfile(null);
         setOnboardingCompleted(false);
         setProfileLoaded(false);
@@ -129,6 +134,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setOnboardingCompleted(true);
               }
             } catch {}
+
+            // Trust AsyncStorage cache immediately for routing — don't wait for network
+            if (!onboardingCacheChecked.current) {
+              onboardingCacheChecked.current = true;
+              AsyncStorage.getItem("@onboarding_completed").then((cached) => {
+                if (cached === "true" && mountedRef.current) {
+                  setOnboardingCompleted(true);
+                }
+              }).catch(() => {});
+            }
 
             await fetchProfile(session.user.id);
 
