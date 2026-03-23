@@ -686,7 +686,24 @@ Every task MUST have at least one of interval_miles or interval_months.`;
         const { error: aiInsertErr } = await adminClient.from("user_vehicle_maintenance_tasks").insert(aiTasksToInsert);
         if (!aiInsertErr) {
           console.log(`[AI SUCCESS] ${aiTasksToInsert.length} tasks for ${vehicleDesc}`);
-          return json({ success: true, tasks_created: aiTasksToInsert.length, vehicle_id, source: "ai" });
+          const estimateUrl = `${supabaseUrl}/functions/v1/estimate-repair-cost`;
+          const estimateHeaders = { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}` };
+          const estimateNames = aiTasksToInsert.map((t: any) => (t.name as string).toLowerCase().trim());
+          const BATCH = 5;
+          let estimatesCached = 0;
+          for (let i = 0; i < estimateNames.length; i += BATCH) {
+            const batch = estimateNames.slice(i, i + BATCH);
+            await Promise.allSettled(batch.map(svc =>
+              fetch(estimateUrl, {
+                method: "POST",
+                headers: estimateHeaders,
+                body: JSON.stringify({ year, make, model: vehicleModel, service_name: svc, vehicle_type: resolvedVehicleType }),
+              }).then(r => { if (r.ok) estimatesCached++; else console.warn(`[ESTIMATES] Failed for ${svc}: ${r.status}`); })
+                .catch(e => console.warn(`[ESTIMATES] Error for ${svc}:`, e instanceof Error ? e.message : e))
+            ));
+          }
+          console.log(`[ESTIMATES] Cached ${estimatesCached}/${estimateNames.length} for ${vehicleDesc}`);
+          return json({ success: true, tasks_created: aiTasksToInsert.length, estimates_cached: estimatesCached, vehicle_id, source: "ai" });
         }
         console.error("[AI] Insert failed:", aiInsertErr.message);
       }
@@ -972,17 +989,26 @@ Every task MUST have at least one of interval_miles or interval_months.`;
     }
 
     // ── 10. Batch insert all tasks ─────────────────────────────────────────
-    const { error: insertError } = await adminClient
-      .from("user_vehicle_maintenance_tasks")
-      .insert(tasksToInsert);
-
-    if (insertError) {
-      console.error("Insert error:", insertError);
-      return json({ error: "Failed to generate schedule", detail: insertError.message }, 500);
+    const { error: insertError } = await adminClient.from("user_vehicle_maintenance_tasks").insert(tasksToInsert);
+    if (insertError) return json({ error: "Failed to generate schedule", detail: insertError.message }, 500);
+    const tplEstimateUrl = `${supabaseUrl}/functions/v1/estimate-repair-cost`;
+    const tplEstimateHeaders = { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}` };
+    const tplEstimateNames = tasksToInsert.map((t: any) => (t.name as string).toLowerCase().trim());
+    const TPL_BATCH = 5;
+    let tplEstimatesCached = 0;
+    for (let i = 0; i < tplEstimateNames.length; i += TPL_BATCH) {
+      const batch = tplEstimateNames.slice(i, i + TPL_BATCH);
+      await Promise.allSettled(batch.map(svc =>
+        fetch(tplEstimateUrl, {
+          method: "POST",
+          headers: tplEstimateHeaders,
+          body: JSON.stringify({ year, make, model: vehicleModel, service_name: svc, vehicle_type: resolvedVehicleType }),
+        }).then(r => { if (r.ok) tplEstimatesCached++; else console.warn(`[ESTIMATES] Failed for ${svc}: ${r.status}`); })
+          .catch(e => console.warn(`[ESTIMATES] Error for ${svc}:`, e instanceof Error ? e.message : e))
+      ));
     }
-
-    // ── 11. Return success ─────────────────────────────────────────────────
-    return json({ success: true, tasks_created: tasksToInsert.length, vehicle_id });
+    console.log(`[ESTIMATES] Cached ${tplEstimatesCached}/${tplEstimateNames.length} template estimates for ${vehicleDesc}`);
+    return json({ success: true, tasks_created: tasksToInsert.length, estimates_cached: tplEstimatesCached, vehicle_id, source: "template" });
 
   } catch (err) {
     console.error("Unhandled error:", err);

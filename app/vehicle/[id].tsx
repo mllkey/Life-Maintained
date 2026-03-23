@@ -14,6 +14,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Linking,
+  Animated,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -230,11 +231,30 @@ export default function VehicleDetailScreen() {
     }));
   }, [scheduleTasks, vehicle]);
 
+  const scheduleOpacity = useRef(new Animated.Value(0)).current;
+
   useFocusEffect(
     useCallback(() => {
       refetchSchedule();
     }, [refetchSchedule]),
   );
+
+  React.useEffect(() => {
+    if (!loadingSchedule && (!scheduleTasks || scheduleTasks.length === 0) && !!user && !!id) {
+      const interval = setInterval(() => { refetchSchedule(); }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [loadingSchedule, scheduleTasks?.length, user, id, refetchSchedule]);
+
+  React.useEffect(() => {
+    if (processedScheduleTasks.length > 0) {
+      Animated.timing(scheduleOpacity, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [processedScheduleTasks.length]);
 
   React.useEffect(() => {
     if (!processedScheduleTasks || !scheduleTasks || processedScheduleTasks.length === 0) return;
@@ -952,7 +972,7 @@ export default function VehicleDetailScreen() {
                   </Pressable>
                 </View>
               ) : processedScheduleTasks.length > 0 && !processedScheduleTasks.some(t => t.last_completed_date != null) ? (
-                <>
+                <Animated.View style={{ opacity: scheduleOpacity }}>
                   {scheduleInsight && (
                     <Pressable
                       onPress={() => { if (insightTaskName) { setHighlightedTask(insightTaskName); setTimeout(() => setHighlightedTask(null), 2000); } }}
@@ -1017,28 +1037,21 @@ export default function VehicleDetailScreen() {
                       Cost estimates are approximate and vary by location and shop. Not a guarantee of pricing.
                     </Text>
                   )}
-                </>
+                </Animated.View>
               ) : processedScheduleTasks.length === 0 ? (
-                <View style={styles.scheduleEmpty}>
-                  <Text style={styles.scheduleEmptyTitle}>No maintenance schedule yet</Text>
-                  <Text style={styles.scheduleEmptySubtitle}>Tap Log Service to record maintenance</Text>
-                  <Pressable
-                    style={({ pressed }) => [styles.generateBtn, { opacity: pressed ? 0.85 : 1 }]}
-                    onPress={generateSchedule}
-                    disabled={generatingSchedule}
-                  >
-                    {generatingSchedule ? (
-                      <ActivityIndicator size="small" color={Colors.textInverse} />
-                    ) : (
-                      <>
-                        <Ionicons name="sparkles-outline" size={15} color={Colors.textInverse} />
-                        <Text style={styles.generateBtnText}>Generate Schedule</Text>
-                      </>
-                    )}
-                  </Pressable>
+                <View style={{ paddingTop: 16 }}>
+                  <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
+                    <Text style={{ fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, marginBottom: 4 }}>
+                      Building your maintenance plan
+                    </Text>
+                    <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary }}>
+                      This usually takes about 10–20 seconds
+                    </Text>
+                  </View>
+                  <ScheduleSkeleton />
                 </View>
               ) : (
-                <>
+                <Animated.View style={{ opacity: scheduleOpacity }}>
                   {actionNeededTasks.length > 0 && (
                     <ScheduleSection
                       title={`Action Needed (${actionNeededTasks.length})`}
@@ -1084,7 +1097,7 @@ export default function VehicleDetailScreen() {
                       Cost estimates are approximate and vary by location and shop. Not a guarantee of pricing.
                     </Text>
                   )}
-                </>
+                </Animated.View>
               )}
             </View>
           ) : activeTab === "wallet" ? (
