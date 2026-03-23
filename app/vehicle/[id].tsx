@@ -1249,7 +1249,7 @@ export default function VehicleDetailScreen() {
             }}
           >
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.borderSubtle, alignSelf: "center", marginBottom: 16 }} />
-            <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.text, marginBottom: 16 }}>
+            <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.textPrimary, marginBottom: 16 }}>
               DIY Difficulty Levels
             </Text>
             <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>

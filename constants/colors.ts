@@ -14,6 +14,7 @@ export const Colors = {
   shadow: "rgba(0, 0, 0, 0.12)",
 
   text: "#F0F2F8",
+  textPrimary: "#0C111B",
   textSecondary: "#8B93A8",
   textTertiary: "#5A6480",
   textInverse: "#0C111B",
