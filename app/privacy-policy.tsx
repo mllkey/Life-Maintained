@@ -8,7 +8,7 @@ import { Colors } from "@/constants/colors";
 const SECTIONS = [
   {
     title: "1. Information We Collect",
-    body: "We collect the following types of information:\n\nAccount Information: Email address and login details.\n\nUser-Provided Data: Vehicle, property, and maintenance data. Health-related scheduling information. Maintenance logs and records. Uploaded files (receipts, photos, documents). Audio recordings (for transcription features).\n\nDevice & Usage Data: App usage data, device type, and operating system.\n\nDerived Data: AI-generated schedules, insights, and estimates based on your inputs.",
+    body: "We collect the following types of information:\n\nAccount Information: Email address and login details.\n\nUser-Provided Data: Vehicle, property, and maintenance data. Health-related scheduling information. Maintenance logs and records. Uploaded files (receipts, photos, documents). Audio recordings (for transcription features).\n\nDevice Information: Basic device information (device type, operating system) may be received by our infrastructure providers as part of normal service operation. We do not actively collect analytics, usage tracking, or performance data.\n\nDerived Data: AI-generated schedules, insights, and estimates based on your inputs.",
   },
   {
     title: "2. How We Use Information",

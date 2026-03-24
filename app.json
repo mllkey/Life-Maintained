@@ -15,7 +15,13 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.lifemaintained.app"
+      "bundleIdentifier": "com.lifemaintained.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "LifeMaintained uses your microphone to log maintenance by voice.",
+        "NSCameraUsageDescription": "LifeMaintained uses your camera to scan receipts and take vehicle photos.",
+        "NSPhotoLibraryUsageDescription": "LifeMaintained accesses your photos to attach receipts and vehicle images.",
+        "NSPhotoLibraryAddUsageDescription": "LifeMaintained saves exported documents to your photo library."
+      }
     },
     "android": {
       "package": "com.lifemaintained.app",
@@ -45,8 +51,19 @@
           "color": "#E8943A"
         }
       ],
-      "expo-image-picker",
-      "expo-av"
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "LifeMaintained accesses your photos to attach receipts and vehicle images.",
+          "cameraPermission": "LifeMaintained uses your camera to scan receipts and take vehicle photos."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "LifeMaintained uses your microphone to log maintenance by voice."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
