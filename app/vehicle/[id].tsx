@@ -708,33 +708,63 @@ export default function VehicleDetailScreen() {
         {
           text: "Delete",
           style: "destructive",
-          onPress: async () => {
-            if (isDeletingVehicle) return;
-            setIsDeletingVehicle(true);
-            try {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-              router.back();
-              setTimeout(async () => {
-                try {
-                  const userId = user!.id;
-                  const vehicleId = id!;
-                  await supabase.from("user_vehicle_maintenance_tasks").delete().eq("vehicle_id", vehicleId);
-                  await supabase.from("maintenance_logs").delete().eq("vehicle_id", vehicleId);
-                  await supabase.from("vehicle_mileage_history").delete().eq("vehicle_id", vehicleId);
-                  const { data: walletFiles } = await supabase.storage.from("wallet-documents").list(`${userId}/${vehicleId}`);
-                  if (walletFiles?.length) {
-                    await supabase.storage.from("wallet-documents").remove(walletFiles.map(f => `${userId}/${vehicleId}/${f.name}`));
-                  }
-                  await supabase.from("vehicle_wallet_documents").delete().eq("vehicle_id", vehicleId);
-                  await supabase.from("vehicles").delete().eq("id", vehicleId);
-                  queryClient.invalidateQueries({ queryKey: ["vehicles"] });
-                  queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-                } catch {}
-              }, 200);
-            } catch (err: any) {
-              setIsDeletingVehicle(false);
-              Alert.alert("Couldn't delete", err?.message ?? "Try again in a moment.");
-            }
+          onPress: () => {
+            const vehicleId = id!;
+            const userId = user!.id;
+
+            // Optimistically remove from cache (safe handling)
+            queryClient.setQueryData(["vehicles"], (old: any) => {
+              if (!old) return old;
+
+              // Handle array case
+              if (Array.isArray(old)) {
+                return old.filter((v: any) => v.id !== vehicleId);
+              }
+
+              // Handle object shape { data: [...] }
+              if (old.data && Array.isArray(old.data)) {
+                return {
+                  ...old,
+                  data: old.data.filter((v: any) => v.id !== vehicleId),
+                };
+              }
+
+              return old;
+            });
+
+            // Navigate safely to vehicles list
+            router.replace("/(tabs)/vehicles");
+
+            // Background delete
+            (async () => {
+              try {
+                await supabase.from("user_vehicle_maintenance_tasks").delete().eq("vehicle_id", vehicleId);
+                await supabase.from("maintenance_logs").delete().eq("vehicle_id", vehicleId);
+                await supabase.from("vehicle_mileage_history").delete().eq("vehicle_id", vehicleId);
+
+                const { data: walletFiles } = await supabase.storage
+                  .from("wallet-documents")
+                  .list(`${userId}/${vehicleId}`);
+
+                if (walletFiles?.length) {
+                  await supabase.storage
+                    .from("wallet-documents")
+                    .remove(walletFiles.map(f => `${userId}/${vehicleId}/${f.name}`));
+                }
+
+                await supabase.from("vehicle_wallet_documents").delete().eq("vehicle_id", vehicleId);
+                await supabase.from("vehicles").delete().eq("id", vehicleId);
+
+                queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+                queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+
+              } catch (err: any) {
+                console.warn("[DELETE] Background delete error:", err?.message ?? err);
+
+                // Re-sync state if something failed
+                queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+              }
+            })();
           },
         },
       ],
