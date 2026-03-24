@@ -7,44 +7,48 @@ import { Colors } from "@/constants/colors";
 
 const SECTIONS = [
   {
-    title: "Information We Collect",
-    body: "We collect information you provide directly to LifeMaintained, including account details, vehicle information, property information, health appointments, maintenance logs, receipt photos, and voice recordings submitted for transcription. We may also process location-related data when you use property lookup or address assistance features.",
+    title: "1. Information We Collect",
+    body: "We collect the following types of information:\n\nAccount Information: Email address and login details.\n\nUser-Provided Data: Vehicle, property, and maintenance data. Health-related scheduling information. Maintenance logs and records. Uploaded files (receipts, photos, documents). Audio recordings (for transcription features).\n\nDevice & Usage Data: App usage data, device type, and operating system.\n\nDerived Data: AI-generated schedules, insights, and estimates based on your inputs.",
   },
   {
-    title: "Storage and Security",
-    body: "Your data is stored in our cloud infrastructure through Supabase. Data is encrypted in transit and encrypted at rest. We implement reasonable administrative, technical, and organizational safeguards designed to protect your information.",
+    title: "2. How We Use Information",
+    body: "We use your data to provide maintenance tracking and reminders, generate schedules, insights, and estimates, process receipts, images, and voice input, operate subscriptions and billing, improve product performance and reliability, and provide customer support. We do not sell your personal data.",
   },
   {
-    title: "Third-Party Services",
-    body: "To operate core features, we use third-party service providers including Supabase (data platform), RevenueCat (subscription management), OpenAI Whisper (voice transcription), Anthropic Claude (receipt scanning and AI-assisted features), and Expo (push notifications and mobile infrastructure). These providers process data only as needed to provide services to us.",
+    title: "3. AI Processing",
+    body: "Some features use third-party AI providers to process your data. This may include receipt scanning, voice transcription, and maintenance recommendations. Your data may be transmitted to these providers solely to perform these functions.",
   },
   {
-    title: "How We Use Data",
-    body: "We use your data to provide maintenance tracking, reminders, receipt and voice processing, account administration, support, analytics, and product improvements. We do not use your data for sale to data brokers or third-party advertising networks.",
+    title: "4. Third-Party Services",
+    body: "We use trusted service providers:\n\nSupabase — data storage and infrastructure\nRevenueCat — subscription management\nAnthropic (Claude) — AI processing\nOpenAI (Whisper) — transcription\nGoogle Places API — location and address services\nNHTSA API — vehicle data\n\nThese providers process only the data necessary to provide their services.",
   },
   {
-    title: "Data Retention",
-    body: "We retain your data until you delete your account, unless a longer retention period is required by law, regulation, or a valid legal process.",
+    title: "5. Data Storage and Security",
+    body: "Data is stored using Supabase infrastructure, encrypted in transit and at rest. We implement reasonable safeguards to protect your data.",
   },
   {
-    title: "Data Sharing and Sale",
-    body: "We do not sell your personal data to third parties. We may share data with service providers that support the operation of the app, subject to contractual confidentiality and data protection obligations.",
+    title: "6. Data Retention",
+    body: "We retain your data until you delete your account. Some data may be retained temporarily in backups or logs for security, fraud prevention, or legal compliance.",
   },
   {
-    title: "Your Rights",
-    body: "You may request access to your data, request correction of inaccurate data, delete your account and associated data, and export your data where available. You can delete your account from in-app settings.",
+    title: "7. Your Rights",
+    body: "You may access your data, update or correct certain information within the app (subject to system constraints designed to maintain data integrity — for example, mileage values may not be reduced once recorded), delete your account and associated data, and request data export where available.",
   },
   {
-    title: "Children's Privacy",
-    body: "LifeMaintained is not directed to children under the age of 13, and we do not knowingly collect personal information from children under 13.",
+    title: "8. International Data Transfers",
+    body: "Your data may be processed in countries outside your own.",
   },
   {
-    title: "Changes to This Policy",
-    body: "We may update this Privacy Policy from time to time. We will post updates in the app or by other reasonable means. Your continued use of the service after an update becomes effective constitutes acceptance of the revised policy.",
+    title: "9. Children's Privacy",
+    body: "The Service is not intended for children under 13.",
   },
   {
-    title: "Contact Us",
-    body: "For privacy questions, requests, or complaints, contact us at support@lifemaintained.com.",
+    title: "10. Changes to This Policy",
+    body: "We may update this policy. Continued use after updates constitutes acceptance.",
+  },
+  {
+    title: "11. Contact",
+    body: "support@lifemaintained.com",
   },
 ];
 
@@ -57,7 +61,12 @@ export default function PrivacyPolicyScreen() {
         <Pressable onPress={() => router.back()} style={styles.closeBtn}>
           <Ionicons name="close" size={22} color={Colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>Privacy Policy</Text>
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Text style={styles.headerTitle}>Privacy Policy</Text>
+          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginBottom: 16 }}>
+            Effective Date: March 22, 2026
+          </Text>
+        </View>
         <View style={{ width: 36 }} />
       </View>
 
@@ -65,7 +74,6 @@ export default function PrivacyPolicyScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
       >
-        <Text style={styles.lastUpdated}>Effective date: March 2026</Text>
         <Text style={styles.intro}>
           This Privacy Policy describes how LifeMaintained ("LifeMaintained," "we," "us," or "our") collects, uses, stores, and discloses personal information when you use our mobile application and related services.
         </Text>
@@ -94,7 +102,6 @@ const styles = StyleSheet.create({
   closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   headerTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
   scroll: { paddingHorizontal: 20, paddingTop: 20, gap: 20 },
-  lastUpdated: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
   intro: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 24 },
   section: { gap: 8 },
   sectionTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
