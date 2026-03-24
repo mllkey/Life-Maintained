@@ -611,14 +611,16 @@ export default function AddVehicleScreen() {
       }
 
       async function loadModels(): Promise<void> {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         try {
           let names: string[] = [];
 
           if (vehicleType === "car") {
             const [passengerResp, truckResp, mpvResp] = await Promise.all([
-              fetch(`${nhtsaBase}?format=json&vehicleType=Passenger%20Car`),
-              fetch(`${nhtsaBase}?format=json&vehicleType=Truck`),
-              fetch(`${nhtsaBase}?format=json&vehicleType=Multipurpose%20Passenger%20Vehicle%20(MPV)`),
+              fetch(`${nhtsaBase}?format=json&vehicleType=Passenger%20Car`, { signal: controller.signal }),
+              fetch(`${nhtsaBase}?format=json&vehicleType=Truck`, { signal: controller.signal }),
+              fetch(`${nhtsaBase}?format=json&vehicleType=Multipurpose%20Passenger%20Vehicle%20(MPV)`, { signal: controller.signal }),
             ]);
             const [passengerJson, truckJson, mpvJson] = await Promise.all([
               passengerResp.json(),
@@ -632,9 +634,9 @@ export default function AddVehicleScreen() {
             ])];
           } else if (vehicleType === "rv") {
             const [incompleteResp, busResp, mpvResp] = await Promise.all([
-              fetch(`${nhtsaBase}?format=json&vehicleType=Incomplete%20Vehicle`),
-              fetch(`${nhtsaBase}?format=json&vehicleType=Bus`),
-              fetch(`${nhtsaBase}?format=json&vehicleType=Multipurpose%20Passenger%20Vehicle%20(MPV)`),
+              fetch(`${nhtsaBase}?format=json&vehicleType=Incomplete%20Vehicle`, { signal: controller.signal }),
+              fetch(`${nhtsaBase}?format=json&vehicleType=Bus`, { signal: controller.signal }),
+              fetch(`${nhtsaBase}?format=json&vehicleType=Multipurpose%20Passenger%20Vehicle%20(MPV)`, { signal: controller.signal }),
             ]);
             const [incompleteJson, busJson, mpvJson] = await Promise.all([
               incompleteResp.json(),
@@ -647,21 +649,21 @@ export default function AddVehicleScreen() {
               ...extractNames(mpvJson),
             ])];
           } else if (vehicleType === "motorcycle") {
-            const motoResp = await fetch(`${nhtsaBase}?format=json&vehicleType=Motorcycle`);
+            const motoResp = await fetch(`${nhtsaBase}?format=json&vehicleType=Motorcycle`, { signal: controller.signal });
             const motoJson = await motoResp.json();
             names = extractNames(motoJson);
           } else if (vehicleType === "atv" || vehicleType === "utv") {
-            const offRoadResp = await fetch(`${nhtsaBase}?format=json&vehicleType=Off%20Road%20Vehicle`);
+            const offRoadResp = await fetch(`${nhtsaBase}?format=json&vehicleType=Off%20Road%20Vehicle`, { signal: controller.signal });
             const offRoadJson = await offRoadResp.json();
             names = extractNames(offRoadJson);
           } else {
-            const allResp = await fetch(`${nhtsaBase}?format=json`);
+            const allResp = await fetch(`${nhtsaBase}?format=json`, { signal: controller.signal });
             const allJson = await allResp.json();
             names = extractNames(allJson);
           }
 
           if (names.length < 3) {
-            const allResp = await fetch(`${nhtsaBase}?format=json`);
+            const allResp = await fetch(`${nhtsaBase}?format=json`, { signal: controller.signal });
             const allJson = await allResp.json();
             names = [...new Set([...names, ...extractNames(allJson)])];
           }
@@ -670,13 +672,19 @@ export default function AddVehicleScreen() {
             const sorted = names.sort();
             modelCache.set(cacheKey, sorted);
             setNhtsaModels(sorted);
-            setIsLoadingModels(false);
           }
-        } catch {
+        } catch (e) {
+          if ((e as any)?.name === "AbortError") {
+            console.warn("[MODELS] NHTSA timeout — user can type model manually");
+          } else {
+            console.warn("[MODELS] Error loading models:", e);
+          }
           if (!modelCancelled) {
             setNhtsaModels([]);
-            setIsLoadingModels(false);
           }
+        } finally {
+          clearTimeout(timeoutId);
+          setIsLoadingModels(false);
         }
       }
 
