@@ -45,8 +45,6 @@ serve(async (req: Request) => {
 
   // --- Authenticate JWT ---
   const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-  console.log("[AUTH] Authorization header present:", !!authHeader);
-  console.log("[AUTH] Token prefix:", authHeader?.substring(0, 20));
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     console.error("[AUTH] Missing or invalid Authorization header");

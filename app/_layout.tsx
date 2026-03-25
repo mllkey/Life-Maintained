@@ -210,6 +210,9 @@ export default function RootLayout() {
         const Purchases = (await import("react-native-purchases")).default;
         const apiKey = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY;
         if (apiKey && apiKey !== "YOUR_REVENUECAT_API_KEY_HERE") {
+          if (__DEV__ && apiKey.startsWith("test_")) {
+            console.warn("[RevenueCat] Using TEST key — replace with production key (appl_) before App Store submission");
+          }
           Purchases.configure({ apiKey });
         }
       } catch {}

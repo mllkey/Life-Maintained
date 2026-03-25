@@ -8,16 +8,22 @@ serve(async (req) => {
 
   try {
     const secret = Deno.env.get("REVENUECAT_WEBHOOK_SECRET") ?? "";
-    const signature = req.headers.get("X-RevenueCat-Signature") ?? "";
+    if (!secret) {
+      console.error("[WEBHOOK] REVENUECAT_WEBHOOK_SECRET is not set — rejecting all webhook calls. Set this secret in Supabase dashboard.");
+      return new Response("Server misconfigured", { status: 500 });
+    }
 
-    if (secret && signature !== secret) {
+    const signature = req.headers.get("X-RevenueCat-Signature") ?? "";
+    if (signature !== secret) {
+      console.warn("[WEBHOOK] Invalid signature — rejecting");
       return new Response("Unauthorized", { status: 401 });
     }
 
-    processWebhook(req.clone()).catch(() => {});
+    processWebhook(req.clone()).catch((e) => console.error("[WEBHOOK] processWebhook error:", e));
     return new Response("OK", { status: 200 });
-  } catch {
-    return new Response("OK", { status: 200 });
+  } catch (err) {
+    console.error("[WEBHOOK] Unhandled error:", err);
+    return new Response("Internal error", { status: 500 });
   }
 });
 
@@ -105,5 +111,7 @@ async function processWebhook(req: Request): Promise<void> {
           .eq("user_id", profileUserId);
       }
     }
-  } catch {}
+  } catch (err) {
+    console.error("[WEBHOOK] processWebhook error:", err instanceof Error ? err.message : err);
+  }
 }
