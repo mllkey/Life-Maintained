@@ -2,14 +2,57 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-edge-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+function jsonRes(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * Auth: accepts either a valid user JWT or a private edge-function-to-edge-function secret.
+ * Returns true if authorized, false otherwise.
+ */
+async function isAuthorized(req: Request): Promise<boolean> {
+  // Path 1: Internal edge-to-edge secret (never exposed to client)
+  const edgeSecret = Deno.env.get("EDGE_FUNCTION_SECRET") ?? "";
+  const incomingSecret = req.headers.get("x-edge-secret") ?? "";
+  if (edgeSecret && incomingSecret === edgeSecret) {
+    return true;
+  }
+
+  // Path 2: User JWT verification
+  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return false;
+  }
+  const jwt = authHeader.replace("Bearer ", "").trim();
+  try {
+    const authClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: `Bearer ${jwt}` } } },
+    );
+    const { error } = await authClient.auth.getUser();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200, headers: corsHeaders });
   }
   try {
+    if (!(await isAuthorized(req))) {
+      return jsonRes({ error: "Unauthorized" }, 401);
+    }
+
     const { year, make, model, service_name, vehicle_type, zip_code } = await req.json();
     if (!make || !service_name) {
       return new Response(JSON.stringify({ error: "make and service_name required" }), {
@@ -114,9 +157,6 @@ Base your estimates on current 2025-2026 market prices. Be accurate for this spe
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message ?? "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonRes({ error: (err as Error).message ?? "Unknown error" }, 500);
   }
 });
