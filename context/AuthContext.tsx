@@ -30,11 +30,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
-  const onboardingCacheChecked = useRef(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const mountedRef = useRef(true);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const userIdRef = useRef<string | null>(null);
+  const fetchingProfileRef = useRef(false);
 
   const fetchProfile = useCallback(async (userId: string, attempt = 0) => {
     try {
@@ -113,11 +113,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (event === "SIGNED_OUT") {
         userIdRef.current = null;
-        onboardingCacheChecked.current = false;
+        fetchingProfileRef.current = false;
         setProfile(null);
         setOnboardingCompleted(false);
         setProfileLoaded(false);
         setIsLoading(false);
+        return;
+      }
+
+      // TOKEN_REFRESHED: session was silently refreshed after expiry.
+      // Update session state so the app doesn't think the user is logged out.
+      if (event === "TOKEN_REFRESHED") {
+        if (session?.user) {
+          userIdRef.current = session.user.id;
+          // Sync onboarding flag from cache in case INITIAL_SESSION was missed
+          AsyncStorage.getItem("@onboarding_completed").then((cached) => {
+            if (cached === "true" && mountedRef.current) {
+              setOnboardingCompleted(true);
+            }
+          }).catch(() => {});
+          // Refresh profile quietly, skip if already in-flight
+          if (!fetchingProfileRef.current) {
+            fetchingProfileRef.current = true;
+            fetchProfile(session.user.id)
+              .catch((err) => console.warn("[AUTH] TOKEN_REFRESHED profile sync failed:", err))
+              .finally(() => { fetchingProfileRef.current = false; });
+          }
+        }
         return;
       }
 
@@ -135,17 +157,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
             } catch {}
 
-            // Trust AsyncStorage cache immediately for routing — don't wait for network
-            if (!onboardingCacheChecked.current) {
-              onboardingCacheChecked.current = true;
-              AsyncStorage.getItem("@onboarding_completed").then((cached) => {
-                if (cached === "true" && mountedRef.current) {
-                  setOnboardingCompleted(true);
-                }
-              }).catch(() => {});
+            fetchingProfileRef.current = true;
+            try {
+              await fetchProfile(session.user.id);
+            } finally {
+              fetchingProfileRef.current = false;
             }
-
-            await fetchProfile(session.user.id);
 
             if (mountedRef.current) setIsLoading(false);
           })();
@@ -163,7 +180,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const prev = appStateRef.current;
       appStateRef.current = nextState;
       if (nextState === "active" && prev !== "active" && userIdRef.current) {
-        fetchProfile(userIdRef.current).catch(() => {});
+        if (!fetchingProfileRef.current) {
+          fetchingProfileRef.current = true;
+          fetchProfile(userIdRef.current)
+            .catch((err) => console.warn("[AUTH] Resume profile sync failed:", err))
+            .finally(() => { fetchingProfileRef.current = false; });
+        }
       }
     });
 
