@@ -447,7 +447,7 @@ export default function Paywall({
 
           <View style={styles.scanLimitsBox}>
             <Text style={styles.scanLimitsTitle}>AI scan limits</Text>
-            <Text style={styles.scanLimitsText}>Free: 3 AI scans/month</Text>
+            <Text style={styles.scanLimitsText}>Free: Upgrade to scan receipts</Text>
             <Text style={styles.scanLimitsText}>Personal: 15 AI scans/month</Text>
             <Text style={styles.scanLimitsText}>Pro: 30 AI scans/month</Text>
             <Text style={styles.scanLimitsText}>Business: 100 AI scans/month</Text>

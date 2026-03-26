@@ -36,7 +36,7 @@ export default function HealthProfileScreen() {
     queryKey: ["health_profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase.from("health_profiles").select("*").eq("user_id", user.id).single();
+      const { data } = await supabase.from("health_profiles").select("*").eq("user_id", user.id).maybeSingle();
       return data;
     },
     enabled: !!user,

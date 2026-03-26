@@ -92,7 +92,10 @@ export async function scanReceipt(base64Image: string): Promise<ReceiptScanResul
       rawText: data.rawText || "",
       error: data.error || undefined,
     };
-    await incrementScanCount();
+    // Only count successful scans — don't burn allowance on failures
+    if (!result.error) {
+      await incrementScanCount();
+    }
     console.log("RETURNING:", JSON.stringify(result));
     return result;
   } catch (err) {

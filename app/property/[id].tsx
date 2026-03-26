@@ -71,6 +71,8 @@ export default function PropertyDetailScreen() {
   // Skeleton / polling / animation state
   const prevTaskCountRef = useRef(0);
   const scheduleOpacity = useRef(new Animated.Value(0)).current;
+  const [scheduleTimedOut, setScheduleTimedOut] = useState(false);
+  const pollingStartRef = useRef<number | null>(null);
 
   function showToast(msg: string, isError = false) {
     setToastMsg(msg);
@@ -98,9 +100,29 @@ export default function PropertyDetailScreen() {
       return data ?? [];
     },
     enabled: !!id,
-    refetchInterval: (query: { state: { data: unknown } }) =>
-      ((query.state.data as any[] | undefined)?.length ?? 0) === 0 ? 3000 : false,
+    refetchInterval: (query: { state: { data: unknown } }) => {
+      const isEmpty = ((query.state.data as any[] | undefined)?.length ?? 0) === 0;
+      if (!isEmpty) return false;
+      if (scheduleTimedOut) return false;
+      if (!pollingStartRef.current) pollingStartRef.current = Date.now();
+      if (Date.now() - pollingStartRef.current > 45000) {
+        setScheduleTimedOut(true);
+        return false;
+      }
+      return 3000;
+    },
   });
+
+  function handleRetrySchedule() {
+    setScheduleTimedOut(false);
+    pollingStartRef.current = Date.now();
+    refetch();
+  }
+
+  useEffect(() => {
+    setScheduleTimedOut(false);
+    pollingStartRef.current = null;
+  }, [id]);
 
   const { data: logs, refetch: refetchLogs } = useQuery({
     queryKey: ["property_logs", id],
@@ -438,7 +460,7 @@ export default function PropertyDetailScreen() {
           refreshControl={
             <RefreshControl
               refreshing={false}
-              onRefresh={() => { refetch(); refetchLogs(); }}
+              onRefresh={() => { handleRetrySchedule(); refetchLogs(); }}
               tintColor={Colors.accent}
             />
           }
@@ -474,11 +496,28 @@ export default function PropertyDetailScreen() {
               </Pressable>
 
               {(tasks?.length ?? 0) === 0 && !loadingTasks ? (
-                <View style={styles.skeletonWrap}>
-                  <Text style={styles.skeletonTitle}>Building your maintenance plan</Text>
-                  <Text style={styles.skeletonSubtitle}>This usually takes about 10–20 seconds</Text>
-                  <PropertySkeleton />
-                </View>
+                scheduleTimedOut ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="alert-circle-outline" size={36} color={Colors.textTertiary} />
+                    <Text style={styles.emptyStateTitle}>Couldn't load your schedule</Text>
+                    <Text style={styles.emptyStateText}>
+                      This can happen if the server is busy. Tap below to try again.
+                    </Text>
+                    <Pressable
+                      style={({ pressed }) => [styles.retryBtn, { opacity: pressed ? 0.8 : 1 }]}
+                      onPress={handleRetrySchedule}
+                    >
+                      <Ionicons name="refresh" size={16} color={Colors.home} />
+                      <Text style={styles.retryBtnText}>Try Again</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View style={styles.skeletonWrap}>
+                    <Text style={styles.skeletonTitle}>Building your maintenance plan</Text>
+                    <Text style={styles.skeletonSubtitle}>This can take up to a minute</Text>
+                    <PropertySkeleton />
+                  </View>
+                )
               ) : (tasks?.length ?? 0) === 0 ? null : (
                 <Animated.View style={{ opacity: scheduleOpacity }}>
                   {insightText && (
@@ -1021,6 +1060,21 @@ const styles = StyleSheet.create({
 
   emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
   emptyStateTitle: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.homeMuted,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: Colors.home + "30",
+    marginTop: 8,
+  },
+  retryBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.home },
+
   emptyStateText: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
