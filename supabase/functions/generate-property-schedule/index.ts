@@ -376,14 +376,19 @@ serve(async (req: Request) => {
     // AI generation
     if (!validatedTasks && anthropicKey) {
       const claudeModel = Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-4-20250514";
+      const currentMonth = today.toLocaleString("en-US", { month: "long" });
+      const currentYear = today.getFullYear();
+
       const prompt = `You are an expert home maintenance advisor. Generate a realistic, trustworthy maintenance schedule for this specific property.
 
 Property: ${propertyDesc}
 Climate zone: ${climate.description} (IECC zone ${climate.zone})
 Location: ${zip ? `ZIP ${zip}` : "United States"}
+Current date: ${currentMonth} ${currentYear}
 
 Important context:
 - Generate tasks the homeowner should actually track and maintain
+- SEASONAL ANCHORING: Set each task's interval_months so the FIRST due date lands in the right season. For example, if it is March and gutter cleaning should happen in November, use interval_months: 8 (not 6). If winterizing faucets should happen in October and it is March, use interval_months: 7. Roof inspections in spring, HVAC tune-ups before heating/cooling season, etc. The interval_months you return will be used to calculate the first due date from today — make it land in the correct month.
 - Adjust intervals for the climate zone: freeze zones need winterization, pipe protection, ice dam prevention; humid zones need mold/moisture checks; hot-dry zones need different cooling and exterior cadences
 - Adjust for property age: older homes need more frequent structural, plumbing, and electrical inspections
 - For condos/apartments: skip tasks the HOA/building handles (roof, exterior, gutters, landscaping). Focus on unit-interior tasks.
@@ -399,6 +404,7 @@ Output rules:
 - Do NOT generate duplicate or near-duplicate tasks
 - Priorities: high = safety, HVAC, water damage prevention; medium = routine maintenance; low = cosmetic
 - Descriptions should include practical advice and interval guidance
+- For recurring tasks, mention which season or month is ideal (e.g., "Best done in late fall before freeze season")
 
 Respond ONLY with a valid JSON array, no markdown, no backticks:
 [
