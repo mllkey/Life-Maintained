@@ -381,11 +381,34 @@ export default function AddPropertyScreen() {
     }
 
     if (newProperty?.id) {
-      const tasks = buildDefaultTasks(newProperty.id, propertyType, yearBuiltNum);
-      await supabase.from("property_maintenance_tasks").insert(tasks);
+      // Fire-and-forget: generate AI schedule in background (same pattern as vehicles)
+      (async () => {
+        try {
+          const { error: scheduleError } = await supabase.functions.invoke(
+            "generate-property-schedule",
+            {
+              body: {
+                property_id: newProperty.id,
+                property_type: propertyType,
+                year_built: yearBuiltNum,
+                square_footage: sqft ? parseInt(sqft) : null,
+                zip_code: zip.trim() || null,
+              },
+            },
+          );
+          if (scheduleError) {
+            const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
+            if (httpStatus !== 409) console.warn("[generate-property-schedule] Error:", scheduleError.message);
+          }
+          queryClient.invalidateQueries({ queryKey: ["property_tasks", newProperty.id] });
+        } catch (scheduleErr) {
+          console.warn("[generate-property-schedule] Caught:", scheduleErr);
+        }
+      })();
     }
 
     queryClient.invalidateQueries({ queryKey: ["properties"] });
+    queryClient.invalidateQueries({ queryKey: ["properties", user.id] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowToast(true);
