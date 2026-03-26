@@ -8,6 +8,10 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,32 +19,57 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import { parseISO, isBefore, addDays, format } from "date-fns";
+import { parseISO, isBefore, addDays, addMonths, format } from "date-fns";
+import { SaveToast } from "@/components/SaveToast";
 
 function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): "overdue" | "due_soon" | "good" {
   const now = new Date();
   const soon = addDays(now, 30);
-
   if (nextDueDate) {
     const due = parseISO(nextDueDate);
     if (isBefore(due, now)) return "overdue";
     if (isBefore(due, soon)) return "due_soon";
   }
-
-  // A task with no completion record is never "all caught up"
   if (!lastCompletedAt) return "due_soon";
-
   return "good";
 }
 
+const INTERVAL_MONTHS: Record<string, number> = {
+  "Monthly": 1, "Quarterly": 3, "Bi-Annually": 6, "Annually": 12,
+  "Every 2 Years": 24, "Every 5 Years": 60, "As Needed": 12,
+  "3_months": 3, "6_months": 6, "12_months": 12,
+  "24_months": 24, "36_months": 36, "60_months": 60,
+};
 
 export default function PropertyDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"tasks" | "history">("tasks");
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [actionNeededExpanded, setActionNeededExpanded] = useState(true);
+  const [upToDateExpanded, setUpToDateExpanded] = useState(false);
+
+  const [markCompleteTask, setMarkCompleteTask] = useState<any | null>(null);
+  const [completeDate, setCompleteDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [completeCost, setCompleteCost] = useState("");
+  const [completeProvider, setCompleteProvider] = useState("");
+  const [completeNotes, setCompleteNotes] = useState("");
+  const [completeDiy, setCompleteDiy] = useState(false);
+  const [isSavingComplete, setIsSavingComplete] = useState(false);
+
+  const [toastMsg, setToastMsg] = useState("");
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastIsError, setToastIsError] = useState(false);
+
+  function showToast(msg: string, isError = false) {
+    setToastMsg(msg);
+    setToastIsError(isError);
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 2800);
+  }
 
   const { data: property, isLoading: loadingProperty } = useQuery({
     queryKey: ["property", id],
@@ -63,7 +92,7 @@ export default function PropertyDetailScreen() {
     enabled: !!id,
   });
 
-  const { data: logs } = useQuery({
+  const { data: logs, refetch: refetchLogs } = useQuery({
     queryKey: ["property_logs", id],
     queryFn: async () => {
       const { data } = await supabase
@@ -76,33 +105,85 @@ export default function PropertyDetailScreen() {
     enabled: !!id,
   });
 
-  async function markComplete(taskId: string, taskInterval: string | null) {
+  function handleOpenMarkComplete(task: any) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setMarkCompleteTask(task);
+    setCompleteDate(format(new Date(), "yyyy-MM-dd"));
+    setCompleteCost("");
+    setCompleteProvider("");
+    setCompleteNotes("");
+    setCompleteDiy(false);
+    setIsSavingComplete(false);
+  }
+
+  function handleCloseMarkComplete() {
+    setMarkCompleteTask(null);
+  }
+
+  async function handleSaveMarkComplete() {
+    if (!markCompleteTask || !user) return;
+    const task = markCompleteTask;
+    setIsSavingComplete(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const months: Record<string, number> = {
-      "Monthly": 1, "Quarterly": 3, "Bi-Annually": 6, "Annually": 12,
-      "Every 2 Years": 24, "Every 5 Years": 60, "As Needed": 12,
-      "3_months": 3, "6_months": 6, "12_months": 12,
-      "24_months": 24, "36_months": 36, "60_months": 60,
-    };
-    let nextDate: string | null = null;
-    if (taskInterval) {
-      const next = new Date();
-      next.setMonth(next.getMonth() + (months[taskInterval] ?? 12));
-      nextDate = next.toISOString().split("T")[0];
+
+    const months = INTERVAL_MONTHS[task.interval] ?? 12;
+    const nextDate = format(addMonths(parseISO(completeDate), months), "yyyy-MM-dd");
+    const now = new Date().toISOString();
+    const completedAt = new Date(completeDate + "T12:00:00").toISOString();
+
+    queryClient.setQueryData(["property_tasks", id], (old: any[] | undefined) => {
+      if (!old) return old;
+      return old.map(t =>
+        t.id === task.id
+          ? { ...t, last_completed_at: completedAt, next_due_date: nextDate, updated_at: now }
+          : t,
+      );
+    });
+
+    handleCloseMarkComplete();
+
+    try {
+      const costNum = completeCost.trim() ? parseFloat(completeCost.replace(/[^0-9.]/g, "")) : null;
+
+      const [taskRes, logRes] = await Promise.all([
+        supabase
+          .from("property_maintenance_tasks")
+          .update({ last_completed_at: completedAt, next_due_date: nextDate, updated_at: now })
+          .eq("id", task.id),
+        supabase.from("maintenance_logs").insert({
+          user_id: user.id,
+          vehicle_id: null,
+          property_id: id,
+          service_name: task.task,
+          service_date: completeDate,
+          cost: costNum,
+          mileage: null,
+          provider_name: completeProvider.trim() || null,
+          provider_contact: null,
+          receipt_url: null,
+          notes: completeNotes.trim() || null,
+          did_it_myself: completeDiy,
+        }),
+      ]);
+
+      if (taskRes.error || logRes.error) throw taskRes.error ?? logRes.error;
+
+      queryClient.invalidateQueries({ queryKey: ["property_tasks", id] });
+      queryClient.invalidateQueries({ queryKey: ["property_logs", id] });
+      queryClient.invalidateQueries({ queryKey: ["property_task_counts"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+
+      showToast(`${task.task} marked complete!`);
+    } catch {
+      queryClient.invalidateQueries({ queryKey: ["property_tasks", id] });
+      showToast("Failed to save. Please try again.", true);
+    } finally {
+      setIsSavingComplete(false);
     }
-    await supabase.from("property_maintenance_tasks").update({
-      last_completed_at: new Date().toISOString(),
-      next_due_date: nextDate,
-      updated_at: new Date().toISOString(),
-    }).eq("id", taskId);
-    queryClient.invalidateQueries({ queryKey: ["property_tasks", id] });
-    queryClient.invalidateQueries({ queryKey: ["property_task_counts"] });
-    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
   function handleDelete() {
-    if (isDeleting) return;
+    const userId = user?.id;
     Alert.alert(
       "Delete Property",
       "This will permanently delete this property and all its tasks. This cannot be undone.",
@@ -111,29 +192,59 @@ export default function PropertyDetailScreen() {
         {
           text: "Delete",
           style: "destructive",
-          onPress: async () => {
-            setIsDeleting(true);
-            try {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-              await supabase.from("property_maintenance_tasks").delete().eq("property_id", id!);
-              await supabase.from("maintenance_logs").delete().eq("property_id", id!);
-              await supabase.from("properties").delete().eq("id", id!);
-              queryClient.invalidateQueries({ queryKey: ["properties"] });
-              queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-              queryClient.invalidateQueries({ queryKey: ["dashboard_counts"] });
-              router.back();
-            } catch (err: any) {
-              setIsDeleting(false);
-              Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+          onPress: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+
+            for (const key of [["properties"], ["properties", userId]] as const) {
+              queryClient.setQueryData(key, (old: any) => {
+                if (!old) return old;
+                if (Array.isArray(old)) return old.filter((v: any) => v.id !== id);
+                if (old.data && Array.isArray(old.data)) {
+                  return { ...old, data: old.data.filter((v: any) => v.id !== id) };
+                }
+                return old;
+              });
             }
+
+            router.replace("/(tabs)/home-tab");
+
+            (async () => {
+              try {
+                await supabase.from("property_maintenance_tasks").delete().eq("property_id", id!);
+                await supabase.from("maintenance_logs").delete().eq("property_id", id!);
+                await supabase.from("properties").delete().eq("id", id!);
+                queryClient.invalidateQueries({ queryKey: ["properties"] });
+                queryClient.invalidateQueries({ queryKey: ["properties", userId] });
+                queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+                queryClient.invalidateQueries({ queryKey: ["dashboard_counts"] });
+              } catch (err: any) {
+                console.warn("[DELETE] Background delete error:", err?.message ?? err);
+                queryClient.invalidateQueries({ queryKey: ["properties"] });
+                queryClient.invalidateQueries({ queryKey: ["properties", userId] });
+              }
+            })();
           },
         },
-      ]
+      ],
     );
   }
 
   const isLoading = loadingProperty || loadingTasks;
   const propertyName = property ? (property.nickname ?? property.address ?? "Property") : "Property";
+
+  const overdueTasks = useMemo(
+    () => tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "overdue") ?? [],
+    [tasks],
+  );
+  const dueSoonTasks = useMemo(
+    () => tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "due_soon") ?? [],
+    [tasks],
+  );
+  const goodTasks = useMemo(
+    () => tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "good") ?? [],
+    [tasks],
+  );
+  const actionNeededTasks = useMemo(() => [...overdueTasks, ...dueSoonTasks], [overdueTasks, dueSoonTasks]);
 
   const groupedHistory = useMemo(() => {
     if (!logs || logs.length === 0) return [];
@@ -143,25 +254,27 @@ export default function PropertyDetailScreen() {
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(log);
     }
-    return Array.from(map.entries()).map(([name, entries]) => {
-      const sorted = [...entries].sort((a, b) => {
-        if (!a.service_date) return 1;
-        if (!b.service_date) return -1;
-        return b.service_date.localeCompare(a.service_date);
-      });
-      const last = sorted[0];
-      const hasCost = sorted.some(e => e.cost != null);
-      const totalCost = hasCost ? sorted.reduce((s, e) => s + (e.cost ?? 0), 0) : null;
-      return {
-        name,
-        entries: sorted,
-        lastDate: last?.service_date ?? null,
-        lastCost: last?.cost ?? null,
-        lastProvider: last?.provider_name ?? null,
-        totalCost,
-        count: sorted.length,
-      };
-    }).sort((a, b) => (b.lastDate ?? "").localeCompare(a.lastDate ?? ""));
+    return Array.from(map.entries())
+      .map(([name, entries]) => {
+        const sorted = [...entries].sort((a, b) => {
+          if (!a.service_date) return 1;
+          if (!b.service_date) return -1;
+          return b.service_date.localeCompare(a.service_date);
+        });
+        const last = sorted[0];
+        const hasCost = sorted.some(e => e.cost != null);
+        const totalCost = hasCost ? sorted.reduce((s, e) => s + (e.cost ?? 0), 0) : null;
+        return {
+          name,
+          entries: sorted,
+          lastDate: last?.service_date ?? null,
+          lastCost: last?.cost ?? null,
+          lastProvider: last?.provider_name ?? null,
+          totalCost,
+          count: sorted.length,
+        };
+      })
+      .sort((a, b) => (b.lastDate ?? "").localeCompare(a.lastDate ?? ""));
   }, [logs]);
 
   const historyStats = useMemo(() => {
@@ -172,21 +285,35 @@ export default function PropertyDetailScreen() {
     };
   }, [logs]);
 
-  const overdueTasks = tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "overdue") ?? [];
-  const dueSoonTasks = tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "due_soon") ?? [];
-  const goodTasks = tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "good") ?? [];
-  const allTasks = [...overdueTasks, ...dueSoonTasks, ...goodTasks];
-
   const typeLabel: Record<string, string> = {
-    house: "Single Family Home", condo: "Condo", apartment: "Apartment",
-    townhouse: "Townhouse", commercial: "Commercial Building",
-    vacation: "Vacation Home", other: "Property",
+    house: "Single Family Home",
+    condo: "Condo",
+    apartment: "Apartment",
+    townhouse: "Townhouse",
+    commercial: "Commercial Building",
+    vacation: "Vacation Home",
+    other: "Property",
   };
   const propType = property ? (typeLabel[property.property_type ?? "other"] ?? "Property") : "";
   const metaParts: string[] = [];
   if (propType) metaParts.push(propType);
   if (property?.year_built) metaParts.push(`Built ${property.year_built}`);
   const metaLine = metaParts.join(" · ");
+
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const yesterdayStr = format(addDays(new Date(), -1), "yyyy-MM-dd");
+
+  function formatDateLabel(dateStr: string) {
+    if (dateStr === todayStr) return `Today  ·  ${format(parseISO(dateStr), "MMM d")}`;
+    if (dateStr === yesterdayStr) return `Yesterday  ·  ${format(parseISO(dateStr), "MMM d")}`;
+    return format(parseISO(dateStr), "MMM d, yyyy");
+  }
+
+  function adjustDate(days: number) {
+    const current = parseISO(completeDate);
+    const next = addDays(current, days);
+    setCompleteDate(format(next, "yyyy-MM-dd"));
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: Colors.background }]}>
@@ -201,7 +328,6 @@ export default function PropertyDetailScreen() {
         <Pressable
           style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.7 : 1 }]}
           onPress={handleDelete}
-          disabled={isDeleting}
           hitSlop={4}
         >
           <Ionicons name="trash-outline" size={17} color={Colors.overdue} />
@@ -213,68 +339,74 @@ export default function PropertyDetailScreen() {
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} tintColor={Colors.accent} />}
+          stickyHeaderIndices={[0]}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={() => { refetch(); refetchLogs(); }}
+              tintColor={Colors.accent}
+            />
+          }
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
         >
-          <Pressable
-            style={({ pressed }) => [styles.addTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={() => router.push(`/add-property-task/${id}` as any)}
-          >
-            <Ionicons name="add" size={18} color={Colors.textInverse} />
-            <Text style={styles.addTaskBtnText}>Add Task</Text>
-          </Pressable>
-
-          <View style={styles.tabs}>
-            {(["tasks", "history"] as const).map(tab => (
-              <Pressable
-                key={tab}
-                style={[styles.tab, activeTab === tab && styles.tabActive]}
-                onPress={() => { Haptics.selectionAsync(); setActiveTab(tab); }}
-              >
-                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                  {tab === "tasks" ? "Maintenance Tasks" : "Service History"}
-                </Text>
-              </Pressable>
-            ))}
+          <View style={{ backgroundColor: Colors.background }}>
+            <View style={styles.tabs}>
+              {(["tasks", "history"] as const).map(tab => (
+                <Pressable
+                  key={tab}
+                  style={[styles.tab]}
+                  onPress={() => { Haptics.selectionAsync(); setActiveTab(tab); }}
+                >
+                  <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                    {tab === "tasks"
+                      ? (actionNeededTasks.length > 0 ? `Tasks (${actionNeededTasks.length})` : "Tasks")
+                      : "History"}
+                  </Text>
+                  {activeTab === tab && <View style={styles.tabUnderline} />}
+                </Pressable>
+              ))}
+            </View>
           </View>
 
           {activeTab === "tasks" ? (
             <View style={styles.tasksArea}>
-              {allTasks.length === 0 ? (
+              <Pressable
+                style={({ pressed }) => [styles.addTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
+                onPress={() => router.push(`/add-property-task/${id}` as any)}
+              >
+                <Ionicons name="add" size={18} color={Colors.textInverse} />
+                <Text style={styles.addTaskBtnText}>Add Task</Text>
+              </Pressable>
+
+              {(tasks?.length ?? 0) === 0 ? (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>No maintenance tasks yet</Text>
+                  <Ionicons name="home-outline" size={36} color={Colors.textTertiary} />
+                  <Text style={styles.emptyStateTitle}>No maintenance tasks yet</Text>
+                  <Text style={styles.emptyStateText}>
+                    Add your first task to start tracking home maintenance
+                  </Text>
                 </View>
               ) : (
                 <>
-                  {overdueTasks.length > 0 && (
-                    <>
-                      <Text style={styles.sectionLabel}>ACTION NEEDED ({overdueTasks.length})</Text>
-                      <View style={styles.taskCard}>
-                        {overdueTasks.map((task, i) => (
-                          <TaskRow key={task.id} task={task} onComplete={markComplete} isLast={i === overdueTasks.length - 1} />
-                        ))}
-                      </View>
-                    </>
-                  )}
-                  {dueSoonTasks.length > 0 && (
-                    <>
-                      <Text style={styles.sectionLabel}>UPCOMING ({dueSoonTasks.length})</Text>
-                      <View style={styles.taskCard}>
-                        {dueSoonTasks.map((task, i) => (
-                          <TaskRow key={task.id} task={task} onComplete={markComplete} isLast={i === dueSoonTasks.length - 1} />
-                        ))}
-                      </View>
-                    </>
+                  {actionNeededTasks.length > 0 && (
+                    <TaskSection
+                      title={`Action Needed (${actionNeededTasks.length})`}
+                      titleColor={Colors.overdue}
+                      expanded={actionNeededExpanded}
+                      onToggle={() => { Haptics.selectionAsync(); setActionNeededExpanded(v => !v); }}
+                      tasks={actionNeededTasks}
+                      onMarkComplete={handleOpenMarkComplete}
+                    />
                   )}
                   {goodTasks.length > 0 && (
-                    <>
-                      <Text style={styles.sectionLabel}>UP TO DATE ({goodTasks.length})</Text>
-                      <View style={styles.taskCard}>
-                        {goodTasks.map((task, i) => (
-                          <TaskRow key={task.id} task={task} onComplete={markComplete} isLast={i === goodTasks.length - 1} />
-                        ))}
-                      </View>
-                    </>
+                    <TaskSection
+                      title={`Up to Date (${goodTasks.length})`}
+                      titleColor={Colors.good}
+                      expanded={upToDateExpanded}
+                      onToggle={() => { Haptics.selectionAsync(); setUpToDateExpanded(v => !v); }}
+                      tasks={goodTasks}
+                      onMarkComplete={handleOpenMarkComplete}
+                    />
                   )}
                 </>
               )}
@@ -283,16 +415,21 @@ export default function PropertyDetailScreen() {
             <View style={styles.tasksArea}>
               {groupedHistory.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Ionicons name="document-outline" size={32} color={Colors.textTertiary} />
+                  <Ionicons name="document-outline" size={36} color={Colors.textTertiary} />
                   <Text style={styles.emptyStateTitle}>No service records yet</Text>
-                  <Text style={styles.emptyStateText}>Service history will appear here after tasks are logged.</Text>
+                  <Text style={styles.emptyStateText}>
+                    Service history will appear here after you complete tasks
+                  </Text>
                 </View>
               ) : (
                 <>
                   <View style={styles.historySummaryBar}>
                     <View style={styles.historySummaryStat}>
                       <Text style={styles.historySummaryValue}>
-                        ${historyStats.totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ${historyStats.totalSpent.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </Text>
                       <Text style={styles.historySummaryLabel}>total spent</Text>
                     </View>
@@ -300,7 +437,7 @@ export default function PropertyDetailScreen() {
                     <View style={styles.historySummaryStat}>
                       <Text style={styles.historySummaryValue}>{historyStats.visitCount}</Text>
                       <Text style={styles.historySummaryLabel}>
-                        {historyStats.visitCount === 1 ? "service visit" : "service visits"}
+                        {historyStats.visitCount === 1 ? "service" : "services"}
                       </Text>
                     </View>
                   </View>
@@ -353,11 +490,214 @@ export default function PropertyDetailScreen() {
           )}
         </ScrollView>
       )}
+
+      <SaveToast visible={toastVisible} message={toastMsg} isError={toastIsError} />
+
+      <Modal
+        visible={markCompleteTask != null}
+        transparent
+        animationType="slide"
+        onRequestClose={handleCloseMarkComplete}
+      >
+        <KeyboardAvoidingView
+          style={styles.sheetOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <Pressable style={styles.sheetBackdrop} onPress={handleCloseMarkComplete} />
+          <View style={[styles.sheetContainer, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>
+              {markCompleteTask?.task ?? "Mark Complete"}
+            </Text>
+
+            <ScrollView
+              style={styles.sheetScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.sheetFields}>
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetFieldLabel}>Date Completed</Text>
+                  <View style={styles.dateStepper}>
+                    <Pressable
+                      style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]}
+                      onPress={() => adjustDate(-1)}
+                      hitSlop={8}
+                    >
+                      <Ionicons name="chevron-back" size={18} color={Colors.text} />
+                    </Pressable>
+                    <Text style={styles.dateStepValue}>{formatDateLabel(completeDate)}</Text>
+                    <Pressable
+                      style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]}
+                      onPress={() => adjustDate(1)}
+                      disabled={completeDate >= todayStr}
+                      hitSlop={8}
+                    >
+                      <Ionicons
+                        name="chevron-forward"
+                        size={18}
+                        color={completeDate >= todayStr ? Colors.textTertiary : Colors.text}
+                      />
+                    </Pressable>
+                  </View>
+                  <View style={styles.dateQuickRow}>
+                    <Pressable
+                      onPress={() => setCompleteDate(todayStr)}
+                      style={[styles.dateQuickBtn, completeDate === todayStr && styles.dateQuickBtnActive]}
+                    >
+                      <Text style={[styles.dateQuickText, completeDate === todayStr && styles.dateQuickTextActive]}>
+                        Today
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setCompleteDate(yesterdayStr)}
+                      style={[styles.dateQuickBtn, completeDate === yesterdayStr && styles.dateQuickBtnActive]}
+                    >
+                      <Text style={[styles.dateQuickText, completeDate === yesterdayStr && styles.dateQuickTextActive]}>
+                        Yesterday
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetFieldLabel}>
+                    Cost  <Text style={styles.sheetFieldOptional}>(optional)</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.sheetInput}
+                    value={completeCost}
+                    onChangeText={setCompleteCost}
+                    keyboardType="decimal-pad"
+                    placeholder="e.g. 150.00"
+                    placeholderTextColor={Colors.textTertiary}
+                  />
+                </View>
+
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetFieldLabel}>
+                    Provider  <Text style={styles.sheetFieldOptional}>(optional)</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.sheetInput}
+                    value={completeProvider}
+                    onChangeText={setCompleteProvider}
+                    placeholder="e.g. ABC Heating & Cooling"
+                    placeholderTextColor={Colors.textTertiary}
+                  />
+                </View>
+
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetFieldLabel}>
+                    Notes  <Text style={styles.sheetFieldOptional}>(optional)</Text>
+                  </Text>
+                  <TextInput
+                    style={[styles.sheetInput, styles.sheetInputMultiline]}
+                    value={completeNotes}
+                    onChangeText={setCompleteNotes}
+                    placeholder="e.g. Replaced 4-inch filter, MERV 13"
+                    placeholderTextColor={Colors.textTertiary}
+                    multiline
+                    numberOfLines={2}
+                  />
+                </View>
+
+                <Pressable
+                  onPress={() => setCompleteDiy(!completeDiy)}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}
+                >
+                  <View style={{
+                    width: 24, height: 24, borderRadius: 6, borderWidth: 2,
+                    borderColor: completeDiy ? Colors.home : Colors.border,
+                    backgroundColor: completeDiy ? Colors.home : "transparent",
+                    alignItems: "center", justifyContent: "center",
+                  }}>
+                    {completeDiy && <Ionicons name="checkmark" size={16} color="#0C111B" />}
+                  </View>
+                  <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text }}>
+                    I did this myself
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+
+            <View style={styles.sheetActions}>
+              <Pressable
+                style={({ pressed }) => [styles.sheetCancelBtn, { opacity: pressed ? 0.8 : 1 }]}
+                onPress={handleCloseMarkComplete}
+              >
+                <Text style={styles.sheetCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.sheetSaveBtn, { opacity: pressed || isSavingComplete ? 0.8 : 1 }]}
+                onPress={handleSaveMarkComplete}
+                disabled={isSavingComplete}
+              >
+                {isSavingComplete ? (
+                  <ActivityIndicator size="small" color={Colors.textInverse} />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
+                    <Text style={styles.sheetSaveText}>Mark Complete</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
-function TaskRow({ task, onComplete, isLast }: { task: any; onComplete: (id: string, interval: string | null) => void; isLast: boolean }) {
+function TaskSection({
+  title,
+  titleColor,
+  expanded,
+  onToggle,
+  tasks,
+  onMarkComplete,
+}: {
+  title: string;
+  titleColor?: string;
+  expanded: boolean;
+  onToggle: () => void;
+  tasks: any[];
+  onMarkComplete: (task: any) => void;
+}) {
+  return (
+    <View style={styles.taskSection}>
+      <Pressable style={styles.taskSectionHeader} onPress={onToggle} hitSlop={6}>
+        <Text style={[styles.sectionLabel, titleColor ? { color: titleColor } : {}]}>
+          {title.toUpperCase()}
+        </Text>
+        <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={14} color={Colors.textTertiary} />
+      </Pressable>
+      {expanded && (
+        <View style={styles.taskCard}>
+          {tasks.map((task, i) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              onMarkComplete={onMarkComplete}
+              isLast={i === tasks.length - 1}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function TaskRow({
+  task,
+  onMarkComplete,
+  isLast,
+}: {
+  task: any;
+  onMarkComplete: (task: any) => void;
+  isLast: boolean;
+}) {
   const status = getStatus(task.next_due_date, task.last_completed_at);
   const barColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
   const isCompleted = status === "good";
@@ -372,17 +712,24 @@ function TaskRow({ task, onComplete, isLast }: { task: any; onComplete: (id: str
     dueText = "No date set";
   }
 
-  function handleCheckPress() {
+  function handlePress() {
     if (isCompleted) {
       setShowCompletedInfo(true);
       setTimeout(() => setShowCompletedInfo(false), 2500);
     } else {
-      onComplete(task.id, task.interval);
+      onMarkComplete(task);
     }
   }
 
   return (
-    <View style={[styles.taskRow, !isLast && styles.taskRowDivider]}>
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [
+        styles.taskRow,
+        !isLast && styles.taskRowDivider,
+        !isCompleted && pressed && { opacity: 0.7 },
+      ]}
+    >
       <View style={[styles.taskBar, { backgroundColor: isCompleted ? barColor + "70" : barColor }]} />
       <View style={styles.taskRowContent}>
         <Text style={[styles.taskRowName, isCompleted && styles.taskRowNameDone]} numberOfLines={2}>
@@ -391,22 +738,14 @@ function TaskRow({ task, onComplete, isLast }: { task: any; onComplete: (id: str
         <Text style={[styles.taskRowDue, isCompleted && styles.taskRowDueDone]}>{dueText}</Text>
         {showCompletedInfo && (
           <Text style={styles.taskRowCompletedInfo}>
-            Already completed. To undo, delete the entry from the History tab.
+            Already completed. Check the History tab for details.
           </Text>
         )}
       </View>
-      <Pressable
-        style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-        onPress={handleCheckPress}
-        hitSlop={8}
-      >
-        <Ionicons
-          name={isCompleted ? "checkmark-circle" : "ellipse-outline"}
-          size={22}
-          color={isCompleted ? Colors.good : Colors.textTertiary}
-        />
-      </Pressable>
-    </View>
+      {!isCompleted && (
+        <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+      )}
+    </Pressable>
   );
 }
 
@@ -437,6 +776,21 @@ const styles = StyleSheet.create({
 
   scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 16 },
 
+  tabs: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: Colors.border },
+  tab: { flex: 1, paddingVertical: 10, alignItems: "center", position: "relative" as const },
+  tabText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
+  tabTextActive: { color: Colors.text, fontFamily: "Inter_600SemiBold" },
+  tabUnderline: {
+    position: "absolute" as const,
+    bottom: -1,
+    left: "20%",
+    right: "20%",
+    height: 2,
+    backgroundColor: Colors.accent,
+    borderRadius: 1,
+  },
+
+  tasksArea: { gap: 12 },
   addTaskBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -448,17 +802,14 @@ const styles = StyleSheet.create({
   },
   addTaskBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 
-  tabs: {
+  taskSection: { gap: 0 },
+  taskSectionHeader: {
     flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+    paddingBottom: 8,
   },
-  tab: { flex: 1, paddingVertical: 10, alignItems: "center" },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: Colors.accent },
-  tabText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
-  tabTextActive: { color: Colors.text },
-
-  tasksArea: { gap: 10 },
   sectionLabel: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
@@ -477,24 +828,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  taskRowDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderSubtle,
-  },
+  taskRowDivider: { borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle },
   taskBar: { width: 4, height: 28, borderRadius: 2, flexShrink: 0 },
   taskRowContent: { flex: 1, gap: 3 },
   taskRowName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
   taskRowNameDone: { fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontSize: 14 },
   taskRowDue: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   taskRowDueDone: { color: Colors.textTertiary },
-  taskRowCompletedInfo: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 4 },
+  taskRowCompletedInfo: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
 
   emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
   emptyStateTitle: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  emptyStateText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
+  emptyStateText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textTertiary,
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
 
   historySummaryBar: {
     flexDirection: "row",
@@ -532,4 +891,114 @@ const styles = StyleSheet.create({
   historyGroupCardTotal: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.home },
   historyGroupCardRight: { alignItems: "flex-end", gap: 6, flexShrink: 0 },
   historyGroupCardCost: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.home },
+
+  sheetOverlay: { flex: 1, justifyContent: "flex-end" },
+  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
+  sheetContainer: {
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: Colors.border,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.text,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  sheetScroll: { maxHeight: 400 },
+  sheetFields: { gap: 16 },
+  sheetField: { gap: 6 },
+  sheetFieldLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+  },
+  sheetFieldOptional: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textTertiary,
+    textTransform: "none",
+    letterSpacing: 0,
+  },
+  sheetInput: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontFamily: "Inter_400Regular",
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  sheetInputMultiline: { minHeight: 64, textAlignVertical: "top" },
+  dateStepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: "hidden",
+  },
+  dateStepBtn: { width: 44, height: 46, alignItems: "center", justifyContent: "center" },
+  dateStepValue: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+    color: Colors.text,
+  },
+  dateQuickRow: { flexDirection: "row", gap: 8, marginTop: 6 },
+  dateQuickBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: "center",
+  },
+  dateQuickBtnActive: { backgroundColor: Colors.homeMuted, borderColor: Colors.home },
+  dateQuickText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  dateQuickTextActive: { color: Colors.home, fontFamily: "Inter_600SemiBold" },
+  sheetActions: { flexDirection: "row", gap: 10, marginTop: 24 },
+  sheetCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 13,
+    alignItems: "center",
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  sheetCancelText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  sheetSaveBtn: {
+    flex: 2,
+    paddingVertical: 13,
+    borderRadius: 13,
+    backgroundColor: Colors.home,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  sheetSaveText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 });
