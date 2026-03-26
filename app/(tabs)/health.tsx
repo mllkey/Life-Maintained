@@ -19,22 +19,34 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { parseISO, isBefore, addDays, format } from "date-fns";
 import { isFreeTier } from "@/lib/subscription";
 
 
-async function scheduleMedicationNotification(medName: string, reminderTime: string): Promise<boolean> {
+async function scheduleMedicationNotification(medId: string, medName: string, reminderTime: string): Promise<boolean> {
   const { status } = await Notifications.requestPermissionsAsync();
   if (status !== "granted") return false;
   const [hourStr, minuteStr] = reminderTime.split(":");
   const hour = parseInt(hourStr ?? "8");
   const minute = parseInt(minuteStr ?? "0");
   if (isNaN(hour) || isNaN(minute)) return false;
-  await Notifications.cancelAllScheduledNotificationsAsync();
-  await Notifications.scheduleNotificationAsync({
+
+  // Cancel only this medication's previous notification (not all notifications)
+  const storageKey = `@med_notif_${medId}`;
+  try {
+    const prevId = await AsyncStorage.getItem(storageKey);
+    if (prevId) {
+      await Notifications.cancelScheduledNotificationAsync(prevId);
+    }
+  } catch {}
+
+  const newId = await Notifications.scheduleNotificationAsync({
     content: { title: "Medication Reminder", body: `Time to take your ${medName}`, sound: true },
     trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute },
   });
+
+  await AsyncStorage.setItem(storageKey, newId).catch(() => {});
   return true;
 }
 
@@ -110,7 +122,7 @@ export default function HealthScreen() {
     setSchedulingMed(med.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      const success = await scheduleMedicationNotification(med.name, med.reminder_time);
+      const success = await scheduleMedicationNotification(med.id, med.name, med.reminder_time);
       if (success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert("Reminder Set", `You'll be reminded to take ${med.name} daily at ${med.reminder_time}.`);
