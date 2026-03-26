@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -64,6 +65,10 @@ export default function PropertyDetailScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastIsError, setToastIsError] = useState(false);
 
+  // Skeleton / polling / animation state
+  const prevTaskCountRef = useRef(0);
+  const scheduleOpacity = useRef(new Animated.Value(0)).current;
+
   function showToast(msg: string, isError = false) {
     setToastMsg(msg);
     setToastIsError(isError);
@@ -90,6 +95,8 @@ export default function PropertyDetailScreen() {
       return data ?? [];
     },
     enabled: !!id,
+    refetchInterval: (query: { state: { data: unknown } }) =>
+      ((query.state.data as any[] | undefined)?.length ?? 0) === 0 ? 3000 : false,
   });
 
   const { data: logs, refetch: refetchLogs } = useQuery({
@@ -229,8 +236,43 @@ export default function PropertyDetailScreen() {
     );
   }
 
+  // Fade-in + haptic when schedule first populates; reset when tasks clear
+  useEffect(() => {
+    const count = tasks?.length ?? 0;
+    if (count === 0) {
+      scheduleOpacity.setValue(0);
+      prevTaskCountRef.current = 0;
+      return;
+    }
+    if (prevTaskCountRef.current === 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Animated.timing(scheduleOpacity, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }).start();
+    }
+    prevTaskCountRef.current = count;
+  }, [tasks, scheduleOpacity]);
+
   const isLoading = loadingProperty || loadingTasks;
   const propertyName = property ? (property.nickname ?? property.address ?? "Property") : "Property";
+
+  // Insight card: pick the most urgent task
+  const insightText = useMemo(() => {
+    if (!tasks || tasks.length === 0) return null;
+    const overdue = tasks.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "overdue");
+    if (overdue.length > 0) return `${overdue[0].task} is overdue — take care of it soon to avoid bigger issues.`;
+    const dueSoon = tasks.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "due_soon");
+    if (dueSoon.length > 0) return `${dueSoon[0].task} is coming up soon. Stay ahead of your maintenance.`;
+    return null;
+  }, [tasks]);
+
+  // Show estimated banner when no tasks have been completed
+  const showEstimatedBanner = useMemo(() => {
+    if (!tasks || tasks.length === 0) return false;
+    return !tasks.some(t => t.last_completed_at != null);
+  }, [tasks]);
 
   const overdueTasks = useMemo(
     () => tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "overdue") ?? [],
@@ -378,16 +420,30 @@ export default function PropertyDetailScreen() {
                 <Text style={styles.addTaskBtnText}>Add Task</Text>
               </Pressable>
 
-              {(tasks?.length ?? 0) === 0 ? (
-                <View style={styles.emptyState}>
-                  <Ionicons name="home-outline" size={36} color={Colors.textTertiary} />
-                  <Text style={styles.emptyStateTitle}>No maintenance tasks yet</Text>
-                  <Text style={styles.emptyStateText}>
-                    Add your first task to start tracking home maintenance
-                  </Text>
+              {(tasks?.length ?? 0) === 0 && !loadingTasks ? (
+                <View style={styles.skeletonWrap}>
+                  <Text style={styles.skeletonTitle}>Building your maintenance plan</Text>
+                  <Text style={styles.skeletonSubtitle}>This usually takes about 10–20 seconds</Text>
+                  <PropertySkeleton />
                 </View>
-              ) : (
-                <>
+              ) : (tasks?.length ?? 0) === 0 ? null : (
+                <Animated.View style={{ opacity: scheduleOpacity }}>
+                  {insightText && (
+                    <View style={styles.insightCard}>
+                      <Ionicons name="bulb-outline" size={16} color={Colors.home} />
+                      <Text style={styles.insightText}>{insightText}</Text>
+                    </View>
+                  )}
+
+                  {showEstimatedBanner && (
+                    <View style={styles.estimatedBanner}>
+                      <Ionicons name="information-circle-outline" size={16} color={Colors.dueSoon} />
+                      <Text style={styles.estimatedBannerText}>
+                        This schedule is estimated from your property details. Tap any task to log your last service date for more accurate due dates.
+                      </Text>
+                    </View>
+                  )}
+
                   {actionNeededTasks.length > 0 && (
                     <TaskSection
                       title={`Action Needed (${actionNeededTasks.length})`}
@@ -408,7 +464,7 @@ export default function PropertyDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                     />
                   )}
-                </>
+                </Animated.View>
               )}
             </View>
           ) : (
@@ -749,6 +805,22 @@ function TaskRow({
   );
 }
 
+function PropertySkeleton() {
+  return (
+    <View style={styles.skeletonContainer}>
+      {[1, 2, 3, 4].map(i => (
+        <View key={i} style={styles.skeletonCard}>
+          <View style={{ width: 4, height: 28, borderRadius: 2, backgroundColor: Colors.surface, flexShrink: 0 }} />
+          <View style={{ flex: 1, gap: 8 }}>
+            <View style={styles.skeletonLine} />
+            <View style={[styles.skeletonLine, { width: "55%" }]} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
@@ -843,6 +915,40 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: Colors.textSecondary,
     marginTop: 4,
+  },
+
+  skeletonWrap: { alignItems: "center", gap: 16, paddingTop: 8 },
+  skeletonTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
+  skeletonSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
+  skeletonContainer: {
+    backgroundColor: Colors.card, borderRadius: 14, overflow: "hidden",
+    borderWidth: 1, borderColor: Colors.border, width: "100%",
+  },
+  skeletonCard: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
+  },
+  skeletonLine: { height: 14, borderRadius: 7, backgroundColor: Colors.surface, width: "80%" },
+
+  insightCard: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    backgroundColor: Colors.homeMuted, borderRadius: 14,
+    padding: 14, borderWidth: 1, borderColor: Colors.home + "30",
+  },
+  insightText: {
+    flex: 1, fontSize: 14, fontFamily: "Inter_500Medium",
+    color: Colors.text, lineHeight: 20,
+  },
+
+  estimatedBanner: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    backgroundColor: Colors.dueSoonMuted, borderRadius: 14,
+    padding: 14, borderWidth: 1, borderColor: Colors.dueSoon + "30",
+  },
+  estimatedBannerText: {
+    flex: 1, fontSize: 13, fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary, lineHeight: 19,
   },
 
   emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
