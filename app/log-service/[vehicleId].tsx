@@ -73,7 +73,7 @@ export default function LogServiceScreen() {
       .from("vehicles")
       .select("vehicle_type, tracking_mode, hours, mileage")
       .eq("id", vehicleId)
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
         if (data) {
           setVehicleType(data.vehicle_type);
@@ -140,14 +140,14 @@ export default function LogServiceScreen() {
             .from("vehicles")
             .select("year, make, model, nickname")
             .eq("id", bestLog.vehicle_id)
-            .single();
+            .maybeSingle();
           if (veh) assetName = veh.nickname ?? `${veh.year} ${veh.make} ${veh.model}`;
         } else if (bestLog.property_id) {
           const { data: prop } = await supabase
             .from("properties")
             .select("name")
             .eq("id", bestLog.property_id)
-            .single();
+            .maybeSingle();
           if (prop) assetName = prop.name;
         }
 

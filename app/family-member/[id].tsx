@@ -44,7 +44,7 @@ export default function FamilyMemberDetailScreen() {
         .from("family_members")
         .select("*")
         .eq("id", id!)
-        .single();
+        .maybeSingle();
       return data;
     },
     enabled: !!id,

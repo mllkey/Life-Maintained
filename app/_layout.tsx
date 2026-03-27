@@ -106,7 +106,7 @@ function RootLayoutNav() {
                 .from("profiles")
                 .select("trial_expires_at")
                 .eq("user_id", userId)
-                .single();
+                .maybeSingle();
               const stillTrial =
                 prof &&
                 (prof as any).trial_expires_at &&

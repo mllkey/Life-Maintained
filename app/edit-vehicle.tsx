@@ -61,7 +61,7 @@ export default function EditVehicleScreen() {
       .from("vehicles")
       .select("*")
       .eq("id", vehicleId)
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
         if (data) {
           setVehicle(data);
