@@ -72,6 +72,8 @@ export type Database = {
           vehicle_category: string | null;
           motorcycle_type: string | null;
           mileage: number | null;
+          hours: number | null;
+          tracking_mode: string | null;
           is_seasonal: boolean | null;
           average_miles_per_month: number | null;
           created_at: string | null;
@@ -80,6 +82,32 @@ export type Database = {
           color: string | null;
           vin: string | null;
           license_plate: string | null;
+        };
+      };
+      user_vehicle_maintenance_tasks: {
+        Row: {
+          id: string;
+          user_id: string;
+          vehicle_id: string;
+          template_id: string | null;
+          name: string;
+          description: string | null;
+          category: string | null;
+          interval_miles: number | null;
+          interval_months: number | null;
+          interval_hours: number | null;
+          last_completed_date: string | null;
+          last_completed_miles: number | null;
+          last_completed_hours: number | null;
+          next_due_miles: number | null;
+          next_due_hours: number | null;
+          next_due_date: string | null;
+          status: string | null;
+          priority: string | null;
+          is_custom: boolean | null;
+          source: string | null;
+          created_at: string | null;
+          updated_at: string | null;
         };
       };
       vehicle_maintenance_tasks: {
@@ -110,15 +138,18 @@ export type Database = {
       maintenance_logs: {
         Row: {
           id: string;
+          user_id: string | null;
           vehicle_id: string | null;
           property_id: string | null;
-          task: string | null;
-          date: string | null;
+          service_name: string | null;
+          service_date: string | null;
           mileage: number | null;
           cost: number | null;
-          provider: string | null;
+          provider_name: string | null;
+          provider_contact: string | null;
           notes: string | null;
           receipt_url: string | null;
+          did_it_myself: boolean | null;
           created_at: string | null;
           updated_at: string | null;
         };

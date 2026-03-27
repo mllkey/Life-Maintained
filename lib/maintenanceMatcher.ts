@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { resolveTrackingMode } from "./usageHelpers";
 
 export type MatchResult = { taskId: string; taskName: string; nextDue: string | null };
 
@@ -153,13 +154,14 @@ export async function matchAndUpdateVehicleTask(
   serviceName: string,
   serviceDate: string,
   serviceMileage: number | null,
+  serviceHours: number | null = null,
 ): Promise<MatchResult | null> {
   if (!serviceName.trim()) return null;
 
   try {
     const [{ data: tasks }, { data: vehicle }] = await Promise.all([
       supabase.from("user_vehicle_maintenance_tasks").select("*").eq("vehicle_id", vehicleId),
-      supabase.from("vehicles").select("average_miles_per_month").eq("id", vehicleId).single(),
+      supabase.from("vehicles").select("average_miles_per_month, tracking_mode, vehicle_type").eq("id", vehicleId).single(),
     ]);
 
     if (!tasks || tasks.length === 0) return null;
@@ -167,28 +169,73 @@ export async function matchAndUpdateVehicleTask(
     const matched = fuzzyMatchTask(serviceName, tasks);
     if (!matched) return null;
 
+    const mode = resolveTrackingMode((vehicle ?? {}) as { tracking_mode?: string | null; vehicle_type?: string | null });
     const intervalStr = matched.interval_months != null
       ? `${matched.interval_months}_months`
       : (matched.interval ?? null);
     const mileageInterval = matched.interval_miles ?? matched.mileage_interval ?? null;
+    const hoursInterval = matched.interval_hours ?? null;
     const asNeeded = isAsNeededInterval(intervalStr);
-    const nextDue = asNeeded
-      ? null
-      : calculateNextDue(
+
+    const updatePayload: Record<string, unknown> = {
+      last_completed_date: new Date(serviceDate + "T12:00:00").toISOString().split("T")[0],
+      updated_at: new Date().toISOString(),
+    };
+
+    let nextDue: string | null = null;
+
+    const hoursPath =
+      serviceHours != null &&
+      hoursInterval != null &&
+      hoursInterval > 0 &&
+      (mode === "hours" || mode === "both");
+
+    if (hoursPath) {
+      const completed = serviceHours as number;
+      updatePayload.last_completed_hours = completed;
+      updatePayload.next_due_hours = completed + hoursInterval;
+      updatePayload.last_completed_miles = null;
+      updatePayload.next_due_miles = null;
+      if (matched.interval_months != null && matched.interval_months > 0) {
+        const d = new Date(serviceDate + "T12:00:00");
+        d.setMonth(d.getMonth() + matched.interval_months);
+        updatePayload.next_due_date = d.toISOString().split("T")[0];
+        nextDue = d.toISOString();
+      }
+    } else if (
+      serviceMileage != null &&
+      mileageInterval != null &&
+      (mode === "mileage" || mode === "both")
+    ) {
+      updatePayload.last_completed_miles = serviceMileage;
+      updatePayload.last_completed_hours = null;
+      if (!asNeeded) {
+        nextDue = calculateNextDue(
           intervalStr,
           mileageInterval,
           serviceDate,
           serviceMileage,
-          (vehicle as any)?.average_miles_per_month ?? null,
+          (vehicle as { average_miles_per_month?: number | null })?.average_miles_per_month ?? null,
         );
-
-    const updatePayload: Record<string, any> = {
-      last_completed_date: new Date(serviceDate + "T12:00:00").toISOString().split("T")[0],
-      last_completed_miles: serviceMileage,
-      updated_at: new Date().toISOString(),
-    };
-    if (!asNeeded) {
-      updatePayload.next_due_date = nextDue;
+        if (nextDue) updatePayload.next_due_date = nextDue.split("T")[0];
+      }
+    } else if (serviceMileage != null && mode === "mileage") {
+      updatePayload.last_completed_miles = serviceMileage;
+      if (!asNeeded) {
+        nextDue = calculateNextDue(
+          intervalStr,
+          mileageInterval,
+          serviceDate,
+          serviceMileage,
+          (vehicle as { average_miles_per_month?: number | null })?.average_miles_per_month ?? null,
+        );
+        if (nextDue) updatePayload.next_due_date = nextDue.split("T")[0];
+      }
+    } else if (!asNeeded && matched.interval_months != null && matched.interval_months > 0) {
+      const d = new Date(serviceDate + "T12:00:00");
+      d.setMonth(d.getMonth() + matched.interval_months);
+      updatePayload.next_due_date = d.toISOString().split("T")[0];
+      nextDue = d.toISOString();
     }
 
     await supabase.from("user_vehicle_maintenance_tasks")

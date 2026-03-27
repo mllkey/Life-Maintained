@@ -28,12 +28,34 @@ import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
-import { parseISO, isBefore, addDays, addMonths, format, differenceInDays, formatDistanceToNowStrict } from "date-fns";
+import { parseISO, isBefore, addDays, addMonths, format, formatDistanceToNowStrict } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
 import Paywall from "@/components/Paywall";
 import { hasPersonalOrAbove } from "@/lib/subscription";
 import { SaveToast } from "@/components/SaveToast";
-import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import {
+  resolveTrackingMode,
+  calcVehicleTaskStatus,
+  taskUsesHoursUsage,
+  formatDueAtUsage,
+  isHoursTrackedMode,
+  isMileageTrackedMode,
+  type TrackingMode,
+} from "@/lib/usageHelpers";
+
+function nextUsageSortKey(
+  task: { next_due_miles?: number | null; next_due_hours?: number | null },
+  mode: TrackingMode,
+): number {
+  if (taskUsesHoursUsage(task, mode)) {
+    const h = task.next_due_hours;
+    if (h != null) return Number(h);
+  }
+  const m = task.next_due_miles;
+  if (m != null) return Number(m);
+  return Infinity;
+}
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   engine:     { bg: Colors.blueMuted,      text: Colors.blue },
@@ -51,25 +73,6 @@ const STATUS_BORDER: Record<string, string> = {
   overdue:   Colors.overdue,
   completed: Colors.good,
 };
-
-function calcStatus(
-  task: any,
-  vehicleMileage: number,
-): "overdue" | "due_soon" | "upcoming" | "completed" {
-  if (task.status === "completed") return "completed";
-  const today = new Date();
-  const dueDate = task.next_due_date ? parseISO(task.next_due_date) : null;
-  const dueMiles: number | null = task.next_due_miles ?? null;
-  if (
-    (dueMiles != null && vehicleMileage >= dueMiles) ||
-    (dueDate != null && dueDate <= today)
-  ) return "overdue";
-  if (
-    (dueMiles != null && dueMiles - vehicleMileage <= 500) ||
-    (dueDate != null && differenceInDays(dueDate, today) <= 30)
-  ) return "due_soon";
-  return "upcoming";
-}
 
 export default function VehicleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -222,14 +225,18 @@ export default function VehicleDetailScreen() {
     },
   });
 
+  const vehicleMode = useMemo(
+    () => (vehicle ? resolveTrackingMode(vehicle) : "mileage"),
+    [vehicle],
+  );
+
   const processedScheduleTasks = useMemo(() => {
     if (!scheduleTasks || !vehicle) return scheduleTasks ?? [];
-    const vehicleMileage = vehicle.mileage ?? 0;
     return scheduleTasks.map(t => ({
       ...t,
-      status: calcStatus(t, vehicleMileage),
+      status: calcVehicleTaskStatus(t, vehicle, vehicleMode),
     }));
-  }, [scheduleTasks, vehicle]);
+  }, [scheduleTasks, vehicle, vehicleMode]);
 
   const scheduleOpacity = useRef(new Animated.Value(0)).current;
 
@@ -280,24 +287,22 @@ export default function VehicleDetailScreen() {
     () => processedScheduleTasks.filter(t => t.status === "overdue" || t.status === "due_soon")
       .sort((a, b) => {
         if (a.status !== b.status) return a.status === "overdue" ? -1 : 1;
-        const aMiles = a.next_due_miles ?? Infinity;
-        const bMiles = b.next_due_miles ?? Infinity;
-        return aMiles - bMiles;
+        return nextUsageSortKey(a, vehicleMode) - nextUsageSortKey(b, vehicleMode);
       }),
-    [processedScheduleTasks],
+    [processedScheduleTasks, vehicleMode],
   );
 
   const upcomingTasks = useMemo(
     () => processedScheduleTasks.filter(t => t.status === "upcoming")
       .sort((a, b) => {
-        const aMiles = a.next_due_miles ?? Infinity;
-        const bMiles = b.next_due_miles ?? Infinity;
-        if (aMiles !== bMiles) return aMiles - bMiles;
+        const aKey = nextUsageSortKey(a, vehicleMode);
+        const bKey = nextUsageSortKey(b, vehicleMode);
+        if (aKey !== bKey) return aKey - bKey;
         const aDate = a.next_due_date ?? "9999";
         const bDate = b.next_due_date ?? "9999";
         return aDate.localeCompare(bDate);
       }),
-    [processedScheduleTasks],
+    [processedScheduleTasks, vehicleMode],
   );
 
   React.useEffect(() => {
@@ -345,12 +350,15 @@ export default function VehicleDetailScreen() {
     setGeneratingSchedule(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
+      const mode = resolveTrackingMode(vehicle);
       const { error } = await supabase.functions.invoke("generate-maintenance-schedule", {
         body: {
           vehicle_id: id,
           make: vehicle.make,
-          year: parseInt(vehicle.year),
+          year: parseInt(String(vehicle.year), 10),
           current_mileage: vehicle.mileage ?? 0,
+          current_hours: vehicle.hours ?? 0,
+          tracking_mode: mode,
           fuel_type: vehicle.fuel_type ?? "gas",
           is_awd: vehicle.is_awd ?? false,
           vehicle_category: vehicle.vehicle_type ?? "car",
@@ -390,9 +398,10 @@ export default function VehicleDetailScreen() {
   function handleOpenMarkComplete(task: any) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setMarkCompleteTask(task);
-    const tracksHoursOpen = HOURS_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "");
+    const mode = resolveTrackingMode(vehicle ?? {});
+    const hoursFirst = taskUsesHoursUsage(task, mode) || mode === "hours";
     setCompleteMileage(
-      tracksHoursOpen
+      hoursFirst
         ? vehicle?.hours != null
           ? String(vehicle.hours)
           : ""
@@ -421,17 +430,36 @@ export default function VehicleDetailScreen() {
   }
 
   async function handleSaveMarkComplete() {
-    if (!markCompleteTask) return;
-    const tracksMileage = MILEAGE_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "");
-    const tracksHours = HOURS_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "");
-    let mileageNum: number | null = null;
-    if (tracksMileage || tracksHours) {
-      const parsed = parseInt(completeMileage, 10);
-      if (!completeMileage.trim() || isNaN(parsed) || parsed < 0) {
-        showToast(tracksHours ? "Please enter a valid hours value." : "Please enter a valid mileage.", true);
-        return;
+    if (!markCompleteTask || !vehicle) return;
+    const task = markCompleteTask;
+    const mode = resolveTrackingMode(vehicle);
+    const useHoursTask = taskUsesHoursUsage(task, mode);
+    const needsUsageInput =
+      (useHoursTask && task.interval_hours != null) ||
+      (!useHoursTask && task.interval_miles != null);
+
+    let usageNum: number | null = null;
+    if (needsUsageInput) {
+      if (useHoursTask) {
+        const parsed = parseFloat(completeMileage.replace(/,/g, ""));
+        if (!completeMileage.trim() || isNaN(parsed) || parsed < 0) {
+          showToast("Please enter a valid hours value.", true);
+          return;
+        }
+        usageNum = parsed;
+      } else {
+        const parsed = parseInt(completeMileage.replace(/,/g, ""), 10);
+        if (!completeMileage.trim() || isNaN(parsed) || parsed < 0) {
+          showToast("Please enter a valid mileage.", true);
+          return;
+        }
+        usageNum = parsed;
       }
-      mileageNum = parsed;
+    } else if (completeMileage.trim()) {
+      const p = useHoursTask || isHoursTrackedMode(mode)
+        ? parseFloat(completeMileage.replace(/,/g, ""))
+        : parseInt(completeMileage.replace(/,/g, ""), 10);
+      if (!isNaN(p) && p >= 0) usageNum = p;
     }
     const costTrim = completeCost.trim();
     if (costTrim) {
@@ -458,13 +486,17 @@ export default function VehicleDetailScreen() {
       }
       return parts.length ? parts.join("\n\n") : null;
     })();
-    const task = markCompleteTask;
     setIsSavingComplete(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    const newNextDueMiles = (task.interval_miles != null && mileageNum != null)
-      ? mileageNum + task.interval_miles
-      : null;
+    const newNextDueMiles =
+      !useHoursTask && task.interval_miles != null && usageNum != null
+        ? usageNum + task.interval_miles
+        : null;
+    const newNextDueHours =
+      useHoursTask && task.interval_hours != null && usageNum != null
+        ? Math.round((usageNum + task.interval_hours) * 1000) / 1000
+        : null;
     const newNextDueDate = task.interval_months != null
       ? format(addMonths(parseISO(completeDate), task.interval_months), "yyyy-MM-dd")
       : null;
@@ -473,8 +505,10 @@ export default function VehicleDetailScreen() {
     const updatedTask = {
       ...task,
       last_completed_date: completeDate,
-      last_completed_miles: mileageNum,
-      next_due_miles: newNextDueMiles,
+      last_completed_miles: useHoursTask ? null : usageNum,
+      last_completed_hours: useHoursTask ? usageNum : null,
+      next_due_miles: useHoursTask ? null : newNextDueMiles,
+      next_due_hours: useHoursTask ? newNextDueHours : null,
       next_due_date: newNextDueDate,
       status: "upcoming",
       updated_at: now,
@@ -488,35 +522,43 @@ export default function VehicleDetailScreen() {
     handleCloseMarkComplete();
 
     try {
-      const [taskRes, vehicleRes, logRes] = await Promise.all([
+      const vehicleUsageUpdate =
+        usageNum != null
+          ? useHoursTask || isHoursTrackedMode(mode)
+            ? supabase.from("vehicles").update({ hours: usageNum }).eq("id", id!)
+            : supabase.from("vehicles").update({ mileage: usageNum }).eq("id", id!)
+          : Promise.resolve({ error: null });
+
+      const [taskRes, vehicleRes] = await Promise.all([
         supabase.from("user_vehicle_maintenance_tasks").update({
           last_completed_date: completeDate,
-          last_completed_miles: mileageNum,
-          next_due_miles: newNextDueMiles,
+          last_completed_miles: useHoursTask ? null : usageNum,
+          last_completed_hours: useHoursTask ? usageNum : null,
+          next_due_miles: useHoursTask ? null : newNextDueMiles,
+          next_due_hours: useHoursTask ? newNextDueHours : null,
           next_due_date: newNextDueDate,
           status: "upcoming",
           updated_at: now,
         }).eq("id", task.id),
-        mileageNum != null
-          ? tracksHours
-            ? supabase.from("vehicles").update({ hours: mileageNum }).eq("id", id!)
-            : supabase.from("vehicles").update({ mileage: mileageNum }).eq("id", id!)
-          : Promise.resolve({ error: null }),
-        supabase.from("maintenance_logs").insert({
-          user_id: user!.id,
-          vehicle_id: id,
-          property_id: null,
-          service_name: task.name,
-          service_date: completeDate,
-          cost: completeCost.trim() ? parseFloat(completeCost) : null,
-          mileage: mileageNum,
-          provider_name: completeProvider.trim() || null,
-          provider_contact: null,
-          receipt_url: null,
-          notes: notesForLog,
-          did_it_myself: completeDiy,
-        }),
+        vehicleUsageUpdate,
       ]);
+
+      const logInsert = supabase.from("maintenance_logs").insert({
+        user_id: user!.id,
+        vehicle_id: id,
+        property_id: null,
+        service_name: task.name,
+        service_date: completeDate,
+        cost: completeCost.trim() ? parseFloat(completeCost) : null,
+        mileage: usageNum,
+        provider_name: completeProvider.trim() || null,
+        provider_contact: null,
+        receipt_url: null,
+        notes: notesForLog,
+        did_it_myself: completeDiy,
+      });
+      const { error: logErr } = await logInsert;
+      if (logErr) console.warn("[markComplete] maintenance_logs insert:", logErr.message);
 
       if (taskRes.error || vehicleRes.error) throw taskRes.error ?? vehicleRes.error;
 
@@ -526,7 +568,9 @@ export default function VehicleDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["maintenance_logs", id] });
 
       let toastMsg = `${task.name} marked complete!`;
-      if (newNextDueMiles != null) {
+      if (newNextDueHours != null) {
+        toastMsg += ` Next due at ${newNextDueHours.toLocaleString()} hours.`;
+      } else if (newNextDueMiles != null) {
         toastMsg += ` Next due at ${newNextDueMiles.toLocaleString()} mi.`;
       } else if (newNextDueDate != null) {
         toastMsg += ` Next due ${format(parseISO(newNextDueDate), "MMM d, yyyy")}.`;
@@ -851,10 +895,16 @@ export default function VehicleDetailScreen() {
           {vehicle?.trim && (
             <Text style={styles.headerTrim} numberOfLines={1}>{vehicle.trim}</Text>
           )}
-          {vehicle?.mileage != null && (
+          {vehicle?.mileage != null && isMileageTrackedMode(vehicleMode) && (
             <View style={styles.headerMileageRow}>
               <Ionicons name="speedometer-outline" size={11} color={Colors.textTertiary} />
               <Text style={styles.headerMileage}>{vehicle.mileage.toLocaleString()} mi</Text>
+            </View>
+          )}
+          {vehicle?.hours != null && isHoursTrackedMode(vehicleMode) && (
+            <View style={styles.headerMileageRow}>
+              <Ionicons name="timer-outline" size={11} color={Colors.textTertiary} />
+              <Text style={styles.headerMileage}>{vehicle.hours.toLocaleString()} hrs</Text>
             </View>
           )}
         </View>
@@ -919,23 +969,21 @@ export default function VehicleDetailScreen() {
               </Pressable>
             )}
             {(() => {
-              const tracksMileage = MILEAGE_TRACKED_TYPES.has(vehicle.vehicle_type ?? "");
-              const tracksHours = HOURS_TRACKED_TYPES.has(vehicle.vehicle_type ?? "");
-              let metaLine = "No mileage tracked";
-              if (tracksMileage && vehicle.mileage != null) {
-                const mileStr = vehicle.mileage.toLocaleString() + " mi";
-                if (vehicle.updated_at) {
-                  metaLine = mileStr + " · Updated " + formatDistanceToNowStrict(parseISO(vehicle.updated_at), { addSuffix: true });
-                } else {
-                  metaLine = mileStr;
-                }
+              const tracksMileage = isMileageTrackedMode(vehicleMode);
+              const tracksHours = isHoursTrackedMode(vehicleMode);
+              let metaLine = "Calendar-based maintenance";
+              const updatedSuffix = vehicle.updated_at
+                ? " · Updated " + formatDistanceToNowStrict(parseISO(vehicle.updated_at), { addSuffix: true })
+                : "";
+              if (vehicleMode === "both") {
+                const parts: string[] = [];
+                if (vehicle.mileage != null) parts.push(`${vehicle.mileage.toLocaleString()} mi`);
+                if (vehicle.hours != null) parts.push(`${vehicle.hours.toLocaleString()} hrs`);
+                metaLine = parts.length ? parts.join(" · ") + updatedSuffix : "No mileage or hours entered yet";
+              } else if (tracksMileage && vehicle.mileage != null) {
+                metaLine = vehicle.mileage.toLocaleString() + " mi" + updatedSuffix;
               } else if (tracksHours && vehicle.hours != null) {
-                const hourStr = vehicle.hours.toLocaleString() + " hrs";
-                if (vehicle.updated_at) {
-                  metaLine = hourStr + " · Updated " + formatDistanceToNowStrict(parseISO(vehicle.updated_at), { addSuffix: true });
-                } else {
-                  metaLine = hourStr;
-                }
+                metaLine = vehicle.hours.toLocaleString() + " hrs" + updatedSuffix;
               } else if (tracksHours) {
                 metaLine = "No hours entered yet";
               } else if (tracksMileage) {
@@ -958,7 +1006,9 @@ export default function VehicleDetailScreen() {
                       style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, alignSelf: "center" }]}
                       onPress={() => router.push(`/update-mileage/${id}` as any)}
                     >
-                      <Text style={styles.updateMileageLink}>{tracksHours ? "Update hours →" : "Update mileage →"}</Text>
+                      <Text style={styles.updateMileageLink}>
+                        {tracksHours && !tracksMileage ? "Update hours →" : tracksMileage && !tracksHours ? "Update mileage →" : "Update usage →"}
+                      </Text>
                     </Pressable>
                   )}
                 </>
@@ -1012,14 +1062,22 @@ export default function VehicleDetailScreen() {
                         {scheduleInsight}
                       </Text>
                       <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 }}>
-                        Based on your vehicle and mileage
+                        {vehicleMode === "hours"
+                          ? "Based on your vehicle and engine hours"
+                          : vehicleMode === "both"
+                            ? "Based on your vehicle, mileage, and hours"
+                            : "Based on your vehicle and mileage"}
                       </Text>
                     </Pressable>
                   )}
                   <View style={{ backgroundColor: Colors.dueSoonMuted, borderRadius: 10, padding: 12, marginHorizontal: 16, marginTop: 8, marginBottom: 12, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
                     <Ionicons name="information-circle-outline" size={18} color={Colors.dueSoon} style={{ marginTop: 1 }} />
                     <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.dueSoon, flex: 1 }}>
-                      This schedule is estimated from your current mileage. Tap any task to log your last service date for more accurate due dates.
+                      {vehicleMode === "hours"
+                        ? "This schedule is estimated from your current engine hours. Tap any task to log your last service date for more accurate due dates."
+                        : vehicleMode === "both"
+                          ? "This schedule is estimated from your current mileage and/or hours. Tap any task to log your last service date for more accurate due dates."
+                          : "This schedule is estimated from your current mileage. Tap any task to log your last service date for more accurate due dates."}
                     </Text>
                   </View>
                   {actionNeededTasks.length > 0 && (
@@ -1236,8 +1294,16 @@ export default function VehicleDetailScreen() {
         task={markCompleteTask}
         mileage={completeMileage}
         onMileageChange={setCompleteMileage}
-        showMileage={MILEAGE_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "")}
-        tracksHours={HOURS_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "")}
+        showMileage={
+          !!markCompleteTask &&
+          !taskUsesHoursUsage(markCompleteTask, vehicleMode) &&
+          vehicleMode !== "hours" &&
+          isMileageTrackedMode(vehicleMode)
+        }
+        tracksHours={
+          !!markCompleteTask &&
+          (taskUsesHoursUsage(markCompleteTask, vehicleMode) || vehicleMode === "hours")
+        }
         date={completeDate}
         onDateChange={setCompleteDate}
         notes={completeNotes}
@@ -1437,9 +1503,11 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate,
         ? Colors.good
         : Colors.borderSubtle;
 
+  const mode = resolveTrackingMode(vehicle ?? {});
   const dueParts: string[] = [];
   if (!isCompleted) {
-    if (task.next_due_miles != null) dueParts.push(`Due at ${task.next_due_miles.toLocaleString()} mi`);
+    const usageDue = formatDueAtUsage(task, mode);
+    if (usageDue) dueParts.push(usageDue.charAt(0).toUpperCase() + usageDue.slice(1));
     if (task.next_due_date != null) dueParts.push(format(parseISO(task.next_due_date), "MMM d, yyyy"));
     if (dueParts.length === 0) dueParts.push("No schedule set");
   } else if (task.last_completed_date) {
@@ -1449,8 +1517,13 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate,
   let lastServicedText: string | null = null;
   if (!isCompleted && task.last_completed_date) {
     const lastDate = format(parseISO(task.last_completed_date), "MMM d, yyyy");
-    const lastMiles = task.last_completed_miles != null ? ` at ${task.last_completed_miles.toLocaleString()} mi` : "";
-    lastServicedText = `Last serviced ${lastDate}${lastMiles}`;
+    if (taskUsesHoursUsage(task, mode) && task.last_completed_hours != null) {
+      lastServicedText = `Last serviced ${lastDate} at ${Number(task.last_completed_hours).toLocaleString()} hours`;
+    } else if (task.last_completed_miles != null) {
+      lastServicedText = `Last serviced ${lastDate} at ${task.last_completed_miles.toLocaleString()} mi`;
+    } else {
+      lastServicedText = `Last serviced ${lastDate}`;
+    }
   }
 
   return (
@@ -1601,8 +1674,8 @@ function MarkCompleteSheet({
                   style={styles.sheetInput}
                   value={mileage}
                   onChangeText={onMileageChange}
-                  keyboardType="number-pad"
-                  placeholder={tracksHours ? "e.g. 1,250" : "e.g. 52,000"}
+                  keyboardType={tracksHours ? "decimal-pad" : "number-pad"}
+                  placeholder={tracksHours ? "e.g. 1,250.5" : "e.g. 52,000"}
                   placeholderTextColor={Colors.textTertiary}
                   returnKeyType="done"
                 />

@@ -58,7 +58,19 @@ serve(async (req: Request) => {
       return json({ error: "Invalid JSON body" }, 400);
     }
 
-    const { vehicle_id, make, model, year, current_mileage, vehicle_type, fuel_type, is_awd, vehicle_category } = body;
+    const {
+      vehicle_id,
+      make,
+      model,
+      year,
+      current_mileage,
+      current_hours,
+      vehicle_type,
+      fuel_type,
+      is_awd,
+      vehicle_category,
+      tracking_mode,
+    } = body;
 
     if (!vehicle_id || typeof vehicle_id !== "string") {
       return json({ error: "Missing or invalid required field: vehicle_id (string)" }, 400);
@@ -69,8 +81,57 @@ serve(async (req: Request) => {
     if (year === undefined || year === null || typeof year !== "number" || !Number.isInteger(year)) {
       return json({ error: "Missing or invalid required field: year (integer)" }, 400);
     }
-    if (current_mileage === undefined || current_mileage === null || typeof current_mileage !== "number") {
-      return json({ error: "Missing or invalid required field: current_mileage (number)" }, 400);
+
+    const vehicleModel = typeof model === "string" ? model : "";
+    const vehicleCategory = typeof vehicle_category === "string" ? vehicle_category : "car";
+
+    const TIME_ONLY_TYPES = new Set(["trailer", "dump_trailer", "dumpster"]);
+    const HOURS_DEFAULT_TYPES = new Set([
+      "boat",
+      "pwc",
+      "lawnmower",
+      "chainsaw",
+      "generator",
+      "excavator",
+      "skid_steer",
+      "mini_excavator",
+      "compact_track_loader",
+      "backhoe",
+      "wheel_loader",
+      "telehandler",
+      "forklift",
+      "snow_blower",
+      "pressure_washer",
+      "wood_chipper",
+      "stump_grinder",
+      "concrete_saw",
+      "welder",
+    ]);
+    function inferTrackingModeFromCategory(cat: string): string {
+      if (TIME_ONLY_TYPES.has(cat)) return "time_only";
+      if (HOURS_DEFAULT_TYPES.has(cat)) return "hours";
+      return "mileage";
+    }
+
+    const trackingMode =
+      typeof tracking_mode === "string" && tracking_mode.toString().trim()
+        ? String(tracking_mode).toLowerCase().trim()
+        : inferTrackingModeFromCategory(vehicleCategory);
+
+    let currentMileageNum = 0;
+    let currentHoursNum = 0;
+
+    if (trackingMode === "hours") {
+      if (current_hours === undefined || current_hours === null || typeof current_hours !== "number") {
+        return json({ error: "Missing or invalid required field: current_hours (number)" }, 400);
+      }
+      currentHoursNum = current_hours;
+      currentMileageNum = typeof current_mileage === "number" ? current_mileage : 0;
+    } else {
+      if (current_mileage === undefined || current_mileage === null || typeof current_mileage !== "number") {
+        return json({ error: "Missing or invalid required field: current_mileage (number)" }, 400);
+      }
+      currentMileageNum = current_mileage;
     }
 
     // `vehicle_type` historically carries the fuel type in this project; `fuel_type` is supported as well.
@@ -78,8 +139,6 @@ serve(async (req: Request) => {
       ? fuel_type
       : (typeof vehicle_type === "string" ? vehicle_type : "gas");
     const resolvedIsAwd = typeof is_awd === "boolean" ? is_awd : false;
-    const vehicleModel = typeof model === "string" ? model : "";
-    const vehicleCategory = typeof vehicle_category === "string" ? vehicle_category : "car";
 
     // ── Category exclusion map ─────────────────────────────────────────────
     const CATEGORY_EXCLUSIONS: Record<string, string[]> = {
@@ -224,6 +283,200 @@ serve(async (req: Request) => {
         { error: "Maintenance schedule already exists for this vehicle. Delete existing tasks first to regenerate." },
         409,
       );
+    }
+
+    // ── Hours-tracked assets (engine hours, not odometer miles) ───────────
+    if (trackingMode === "hours") {
+      const todayH = new Date();
+      const vehicleDescH = `${year} ${make} ${vehicleModel}`.trim();
+      const anthropicKeyH = Deno.env.get("ANTHROPIC_API_KEY");
+
+      interface ValidatedHoursTask {
+        task: string;
+        description: string;
+        category: string;
+        interval_hours: number | null;
+        interval_months: number | null;
+        priority: string;
+      }
+
+      const VALID_CAT_H = ["Engine", "Drivetrain", "Brakes", "Fluids", "Electrical", "Safety", "Suspension", "Body", "Controls", "Cooling", "Tires", "Seasonal", "General"];
+      function normalizeCategoryH(cat: string): string {
+        if (!cat) return "General";
+        const lower = cat.toLowerCase().trim();
+        const found = VALID_CAT_H.find((v) => v.toLowerCase() === lower);
+        if (found) return found;
+        return "General";
+      }
+      function normalizePriorityH(p: string): string {
+        const lower = (p || "").toLowerCase().trim();
+        if (lower === "high" || lower === "medium" || lower === "low") return lower;
+        return "medium";
+      }
+
+      type HoursClamp = { match: RegExp[]; max_hours?: number; min_hours?: number; max_months?: number; min_months?: number };
+
+      function clampProfile(cat: string): HoursClamp[] {
+        const marine: HoursClamp[] = [
+          { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_hours: 100, max_months: 12 },
+          { match: [/impeller/i], max_hours: 300, max_months: 24 },
+          { match: [/lower unit/i, /gear.*oil/i, /gearcase/i], max_hours: 200, max_months: 12 },
+        ];
+        const small: HoursClamp[] = [
+          { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_hours: 50, max_months: 12 },
+          { match: [/air filter/i], max_hours: 100, max_months: 12 },
+          { match: [/spark plug/i], max_hours: 200, max_months: 24 },
+        ];
+        const unknown: HoursClamp[] = [
+          { match: [/.+/], max_hours: 250, max_months: 60 },
+        ];
+        if (cat === "boat" || cat === "pwc") return [...marine, ...unknown];
+        if (
+          ["lawnmower", "chainsaw", "generator", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder"].includes(cat)
+        ) {
+          return [...small, ...unknown];
+        }
+        return [...small, ...unknown];
+      }
+
+      function clampHoursTask(t: ValidatedHoursTask, clamps: HoursClamp[]): ValidatedHoursTask {
+        for (const c of clamps) {
+          if (c.match.some((re) => re.test(t.task))) {
+            let ih = t.interval_hours;
+            let mo = t.interval_months;
+            if (ih !== null && c.max_hours !== undefined && ih > c.max_hours) ih = c.max_hours;
+            if (ih !== null && c.min_hours !== undefined && ih < c.min_hours) ih = c.min_hours;
+            if (mo !== null) {
+              if (c.max_months !== undefined && mo > c.max_months) mo = c.max_months;
+              if (c.min_months !== undefined && mo < c.min_months) mo = c.min_months;
+            }
+            return { ...t, interval_hours: ih, interval_months: mo };
+          }
+        }
+        return t;
+      }
+
+      function validateHoursTasks(tasks: ValidatedHoursTask[], vCat: string): ValidatedHoursTask[] {
+        const clamps = clampProfile(vCat);
+        let v = tasks.map((t) => ({
+          ...clampHoursTask(t, clamps),
+          category: normalizeCategoryH(t.category),
+          priority: normalizePriorityH(t.priority),
+        }));
+        v = v.filter((t) => t.task.trim() !== "" && (t.interval_hours !== null || t.interval_months !== null));
+        const seen = new Set<string>();
+        v = v.filter((t) => {
+          const k = t.task.toLowerCase().trim();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        return v;
+      }
+
+      function hoursFallbackTasks(cat: string): ValidatedHoursTask[] {
+        if (cat === "boat" || cat === "pwc") {
+          return [
+            { task: "Engine Oil & Filter Change", description: "Change engine oil and replace filter per manufacturer.", category: "Engine", interval_hours: 75, interval_months: 12, priority: "high" },
+            { task: "Impeller / Water Pump Service", description: "Inspect and replace raw water pump impeller as needed.", category: "Cooling", interval_hours: 200, interval_months: 24, priority: "high" },
+            { task: "Lower Unit / Gearcase Oil", description: "Change gear oil and inspect for water intrusion.", category: "Drivetrain", interval_hours: 150, interval_months: 12, priority: "high" },
+            { task: "Spark Plug Service", description: "Inspect and replace spark plugs.", category: "Engine", interval_hours: 120, interval_months: 12, priority: "medium" },
+            { task: "Fuel Filter / Separator", description: "Replace fuel filters and check water separator.", category: "Engine", interval_hours: 100, interval_months: 12, priority: "medium" },
+            { task: "Battery & Electrical Check", description: "Inspect battery, terminals, and charging system.", category: "Electrical", interval_hours: null, interval_months: 12, priority: "low" },
+          ];
+        }
+        return [
+          { task: "Engine Oil & Filter Change", description: "Change engine oil and replace filter.", category: "Engine", interval_hours: 40, interval_months: 12, priority: "high" },
+          { task: "Air Filter Service", description: "Clean or replace air filter.", category: "Engine", interval_hours: 75, interval_months: 12, priority: "medium" },
+          { task: "Spark Plug / Ignition Service", description: "Inspect and replace spark plugs or ignition components.", category: "Engine", interval_hours: 150, interval_months: 24, priority: "medium" },
+          { task: "Fluid Levels & Leaks Check", description: "Inspect engine oil, coolant, and hydraulic fluids.", category: "Fluids", interval_hours: 50, interval_months: 6, priority: "medium" },
+          { task: "Controls & Cables Inspection", description: "Inspect cables, linkages, and safety interlocks.", category: "Controls", interval_hours: 100, interval_months: 12, priority: "low" },
+          { task: "Fasteners & Hardware Check", description: "Check torque on critical fasteners.", category: "Safety", interval_hours: 100, interval_months: 12, priority: "low" },
+        ];
+      }
+
+      let validatedHours: ValidatedHoursTask[] | null = null;
+
+      if (anthropicKeyH) {
+        const claudeModel = Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-4-20250514";
+        const marineHint = vehicleCategory === "boat" || vehicleCategory === "pwc"
+          ? "Marine / outboard or inboard — use realistic marine hour intervals (never road miles)."
+          : "Small engine / equipment — use realistic hour-meter maintenance intervals.";
+        const prompt =
+          `You are an expert maintenance advisor for equipment tracked by ENGINE HOURS (hour meter), not road mileage.\n\nAsset: ${vehicleDescH} (category: ${vehicleCategory})\n${marineHint}\n\nRules:\n- Respond ONLY with a valid JSON array (no markdown).\n- Each task uses interval_hours (engine hours between services) and/or interval_months (calendar). NEVER use miles or interval_miles.\n- interval_hours is the REPEAT interval (e.g. every 50 hours), not cumulative total hours.\n- Include 10–14 distinct tasks. Avoid identical intervals for unrelated tasks.\n- Each object: {"task","description","category","interval_hours","interval_months","priority"}\n- category: Engine|Drivetrain|Brakes|Fluids|Electrical|Safety|Suspension|Body|Controls|Cooling|Tires|Seasonal|General\n- priority: high|medium|low\n- Every task MUST have at least one of interval_hours or interval_months.`;
+
+        try {
+          const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-api-key": anthropicKeyH, "anthropic-version": "2023-06-01" },
+            body: JSON.stringify({ model: claudeModel, max_tokens: 4000, messages: [{ role: "user", content: prompt }] }),
+          });
+          if (aiResponse.ok) {
+            const aiData = await aiResponse.json();
+            const aiText = aiData.content?.[0]?.text ?? "";
+            let aiTasks: unknown[];
+            try {
+              aiTasks = JSON.parse(aiText as string);
+            } catch {
+              const m = (aiText as string).match(/\[[\s\S]*\]/);
+              if (m) aiTasks = JSON.parse(m[0]);
+              else throw new Error("parse");
+            }
+            if (Array.isArray(aiTasks) && aiTasks.length >= 5) {
+              const parsed: ValidatedHoursTask[] = aiTasks
+                .filter((t: unknown) => typeof (t as { task?: string }).task === "string" && String((t as { task: string }).task).trim())
+                .map((t: unknown) => {
+                  const x = t as Record<string, unknown>;
+                  return {
+                    task: String(x.task).trim(),
+                    description: typeof x.description === "string" ? x.description : "",
+                    category: typeof x.category === "string" ? x.category : "General",
+                    interval_hours: typeof x.interval_hours === "number" && (x.interval_hours as number) > 0 ? (x.interval_hours as number) : null,
+                    interval_months: typeof x.interval_months === "number" && (x.interval_months as number) > 0 ? (x.interval_months as number) : null,
+                    priority: typeof x.priority === "string" ? x.priority : "medium",
+                  };
+                });
+              validatedHours = validateHoursTasks(parsed, vehicleCategory);
+              if (validatedHours.length < 5) validatedHours = null;
+            }
+          }
+        } catch (e) {
+          console.error("[HOURS AI]", e);
+        }
+      }
+
+      if (!validatedHours || validatedHours.length < 5) {
+        validatedHours = validateHoursTasks(hoursFallbackTasks(vehicleCategory), vehicleCategory);
+      }
+
+      const rowsH = validatedHours.map((t) => ({
+        user_id: authUserId,
+        vehicle_id,
+        template_id: null,
+        name: t.task,
+        description: t.description,
+        category: t.category,
+        interval_miles: null,
+        interval_hours: t.interval_hours,
+        interval_months: t.interval_months,
+        last_completed_date: null,
+        last_completed_miles: null,
+        last_completed_hours: null,
+        next_due_miles: null,
+        next_due_hours: t.interval_hours !== null ? Math.round((currentHoursNum + t.interval_hours) * 1000) / 1000 : null,
+        next_due_date: t.interval_months !== null ? addMonths(todayH, t.interval_months).toISOString() : null,
+        status: "upcoming",
+        priority: t.priority,
+        is_custom: false,
+        source: "ai",
+      }));
+
+      const { error: insHErr } = await adminClient.from("user_vehicle_maintenance_tasks").insert(rowsH);
+      if (insHErr) {
+        console.error("[HOURS INSERT]", insHErr);
+        return json({ error: "Failed to generate hours schedule", detail: insHErr.message }, 500);
+      }
+      return json({ success: true, tasks_created: rowsH.length, vehicle_id, source: "hours_ai" });
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -677,7 +930,7 @@ Every task MUST have at least one of interval_miles or interval_months.`;
           name: t.task, description: t.description, category: t.category,
           interval_miles: t.interval_miles, interval_months: t.interval_months,
           last_completed_date: null, last_completed_miles: null,
-          next_due_miles: t.interval_miles !== null ? Math.round(current_mileage as number) + t.interval_miles : null,
+          next_due_miles: t.interval_miles !== null ? Math.round(currentMileageNum) + t.interval_miles : null,
           next_due_date: t.interval_months !== null ? addMonths(today, t.interval_months).toISOString() : null,
           status: "upcoming", priority: t.priority, is_custom: false, source: "ai",
         }));
@@ -971,7 +1224,7 @@ Every task MUST have at least one of interval_miles or interval_months.`;
 
       const nextDueMiles =
         resolvedMiles !== null && resolvedMiles > 0
-          ? Math.round(current_mileage) + resolvedMiles
+          ? Math.round(currentMileageNum) + resolvedMiles
           : null;
 
       const nextDueDate =

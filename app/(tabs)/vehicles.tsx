@@ -21,7 +21,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays, differenceInDays, formatDistanceToNowStrict } from "date-fns";
 import { vehicleLimit } from "@/lib/subscription";
-import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import { resolveTrackingMode, isHoursTrackedMode, isMileageTrackedMode } from "@/lib/usageHelpers";
 
 type Vehicle = {
   id: string;
@@ -161,13 +161,28 @@ export default function VehiclesScreen() {
             const title = `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim();
             const displayName = v.nickname ?? title;
 
-            const isMileageTracked = MILEAGE_TRACKED_TYPES.has(v.vehicle_type ?? "");
-            const tracksHours = HOURS_TRACKED_TYPES.has(v.vehicle_type ?? "");
+            const mode = resolveTrackingMode(v);
+            const isMileageTracked = isMileageTrackedMode(mode);
+            const tracksHours = isHoursTrackedMode(mode);
             const daysSinceUpdate = v.updated_at ? differenceInDays(new Date(), parseISO(v.updated_at)) : null;
             const isStale = daysSinceUpdate != null && daysSinceUpdate >= 7;
 
             let metaLine: string;
-            if (isMileageTracked && v.mileage != null) {
+            if (mode === "both") {
+              const parts: string[] = [];
+              if (v.mileage != null) parts.push(v.mileage.toLocaleString() + " mi");
+              if (v.hours != null) parts.push(v.hours.toLocaleString() + " hrs");
+              if (parts.length) {
+                const joined = parts.join(" · ");
+                metaLine = isStale
+                  ? joined + " · Update needed"
+                  : daysSinceUpdate != null
+                    ? joined + " · " + formatDistanceToNowStrict(parseISO(v.updated_at!), { addSuffix: true })
+                    : joined;
+              } else {
+                metaLine = "No mileage or hours entered yet";
+              }
+            } else if (isMileageTracked && v.mileage != null) {
               const mileStr = v.mileage.toLocaleString() + " mi";
               metaLine = isStale
                 ? mileStr + " · Update needed"

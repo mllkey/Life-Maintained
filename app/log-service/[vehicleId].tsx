@@ -28,7 +28,7 @@ import { ReceiptScanResult } from "@/lib/receiptScanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { parseISO, format } from "date-fns";
 import { matchAndUpdateVehicleTask, CATEGORY_GROUPS, type MatchResult } from "@/lib/maintenanceMatcher";
-import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import { resolveTrackingMode, isHoursTrackedMode, isMileageTrackedMode } from "@/lib/usageHelpers";
 
 type PricingInsight = {
   cost: number | null;
@@ -63,16 +63,25 @@ export default function LogServiceScreen() {
   const [pricingInsight, setPricingInsight] = useState<PricingInsight | null>(null);
   const insightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [vehicleType, setVehicleType] = useState<string | null>(null);
+  const [trackingMode, setTrackingMode] = useState<string | null>(null);
+  const [hoursReading, setHoursReading] = useState("");
 
   useEffect(() => {
     if (!vehicleId) return;
     supabase
       .from("vehicles")
-      .select("vehicle_type")
+      .select("vehicle_type, tracking_mode")
       .eq("id", vehicleId)
       .single()
-      .then(({ data }) => { if (data) setVehicleType(data.vehicle_type); });
+      .then(({ data }) => {
+        if (data) {
+          setVehicleType(data.vehicle_type);
+          setTrackingMode(data.tracking_mode);
+        }
+      });
   }, [vehicleId]);
+
+  const usageMode = resolveTrackingMode({ vehicle_type: vehicleType, tracking_mode: trackingMode });
 
   const itemsTotal = scannedItems.length > 0
     ? scannedItems.reduce((sum, item) => sum + (item.cost ?? 0), 0)
@@ -236,13 +245,25 @@ export default function LogServiceScreen() {
         }
       }
 
+      let milesVal: number | null = null;
+      let hoursVal: number | null = null;
+      if (usageMode === "both") {
+        if (mileage.trim()) milesVal = parseInt(mileage.replace(/,/g, ""), 10);
+        if (hoursReading.trim()) hoursVal = parseFloat(hoursReading.replace(/,/g, ""));
+      } else if (usageMode === "hours") {
+        if (mileage.trim()) hoursVal = parseFloat(mileage.replace(/,/g, ""));
+      } else if (usageMode === "mileage") {
+        if (mileage.trim()) milesVal = parseInt(mileage.replace(/,/g, ""), 10);
+      }
+      const logMeter = milesVal ?? hoursVal ?? null;
+
       if (scannedItems.length > 0) {
         const rows = scannedItems.map(item => ({
           user_id: user!.id,
           vehicle_id: vehicleId,
           service_name: item.name || "Service",
           service_date: date || new Date().toISOString().split("T")[0],
-          mileage: mileage ? parseInt(mileage) : null,
+          mileage: logMeter,
           cost: item.cost,
           provider_name: provider.trim() || null,
           notes: item.details || null,
@@ -263,7 +284,7 @@ export default function LogServiceScreen() {
           vehicle_id: vehicleId,
           service_name: task.trim(),
           service_date: date || new Date().toISOString().split("T")[0],
-          mileage: mileage ? parseInt(mileage) : null,
+          mileage: logMeter,
           cost: cost ? parseFloat(cost) : null,
           provider_name: provider.trim() || null,
           notes: notes.trim() || null,
@@ -274,14 +295,21 @@ export default function LogServiceScreen() {
         if (err) throw err;
       }
 
-      if (mileage) {
+      const nowIso = new Date().toISOString();
+      if (hoursVal != null) {
         await supabase.from("vehicles").update({
-          mileage: parseInt(mileage),
-          updated_at: new Date().toISOString(),
+          hours: hoursVal,
+          updated_at: nowIso,
+        }).eq("id", vehicleId);
+      }
+      if (milesVal != null) {
+        await supabase.from("vehicles").update({
+          mileage: milesVal,
+          updated_at: nowIso,
         }).eq("id", vehicleId);
         await supabase.from("vehicle_mileage_history").insert({
           vehicle_id: vehicleId,
-          mileage: parseInt(mileage),
+          mileage: milesVal,
           recorded_at: date || new Date().toISOString(),
           created_at: new Date().toISOString(),
         });
@@ -302,11 +330,9 @@ export default function LogServiceScreen() {
       const serviceNames = scannedItems.length > 0
         ? scannedItems.map(i => i.name).filter(Boolean)
         : [task.trim()].filter(Boolean);
-      const serviceMileage = mileage ? parseInt(mileage) : null;
-
       const updatedTasks: MatchResult[] = [];
       for (const name of serviceNames) {
-        const result = await matchAndUpdateVehicleTask(vehicleId, name, date, serviceMileage);
+        const result = await matchAndUpdateVehicleTask(vehicleId, name, date, milesVal, hoursVal);
         if (result) updatedTasks.push(result);
       }
 
@@ -527,7 +553,7 @@ export default function LogServiceScreen() {
                   maxLength={10}
                 />
               </Field>
-              {MILEAGE_TRACKED_TYPES.has(vehicleType ?? "") && (
+              {isMileageTrackedMode(usageMode) && (
                 <Field label="Mileage" style={{ flex: 1 }}>
                   <TextInput
                     style={styles.input}
@@ -536,6 +562,30 @@ export default function LogServiceScreen() {
                     placeholder="45000"
                     placeholderTextColor={Colors.textTertiary}
                     keyboardType="numeric"
+                  />
+                </Field>
+              )}
+              {usageMode === "hours" && (
+                <Field label="Hours" style={{ flex: 1 }}>
+                  <TextInput
+                    style={styles.input}
+                    value={mileage}
+                    onChangeText={setMileage}
+                    placeholder="e.g. 125.5"
+                    placeholderTextColor={Colors.textTertiary}
+                    keyboardType="decimal-pad"
+                  />
+                </Field>
+              )}
+              {usageMode === "both" && (
+                <Field label="Hours" style={{ flex: 1 }}>
+                  <TextInput
+                    style={styles.input}
+                    value={hoursReading}
+                    onChangeText={setHoursReading}
+                    placeholder="e.g. 125.5"
+                    placeholderTextColor={Colors.textTertiary}
+                    keyboardType="decimal-pad"
                   />
                 </Field>
               )}

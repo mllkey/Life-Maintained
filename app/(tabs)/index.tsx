@@ -29,7 +29,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { useBudgetAlert } from "@/context/BudgetAlertContext";
 import TrialBanner from "@/components/TrialBanner";
-import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import { resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode } from "@/lib/usageHelpers";
 import * as Linking from "expo-linking";
 import { LogSheet } from "@/components/LogSheet";
 
@@ -62,7 +62,9 @@ type MileageVehicle = {
   model: string | null;
   nickname: string | null;
   mileage: number | null;
+  hours: number | null;
   vehicle_type: string | null;
+  tracking_mode: string | null;
   updated_at: string | null;
 };
 
@@ -182,17 +184,25 @@ export default function DashboardScreen() {
       if (!user) return [];
       const items: DashboardItem[] = [];
       const [vehicleTasks, propertyTasks, healthAppts] = await Promise.all([
-        supabase.from("user_vehicle_maintenance_tasks").select("*, vehicles(make, model, nickname)").eq("user_id", user.id),
+        supabase.from("user_vehicle_maintenance_tasks").select("*, vehicles(make, model, nickname, mileage, hours, tracking_mode, vehicle_type)").eq("user_id", user.id),
         supabase.from("property_maintenance_tasks").select("*, properties(address, nickname)").eq("properties.user_id", user.id),
         supabase.from("health_appointments").select("*").eq("user_id", user.id),
       ]);
       for (const t of vehicleTasks.data ?? []) {
         const v = (t as any).vehicles;
         if (!v) continue;
-        const status = getStatus(t.next_due_date);
-        if (status !== "good") {
-          items.push({ id: t.id, title: t.name, subtitle: v.nickname ?? `${v.make} ${v.model}`, dueDate: t.next_due_date, status, category: "vehicles", entityId: t.vehicle_id });
-        }
+        const mode = resolveTrackingMode(v);
+        const usageStatus = calcVehicleTaskStatus(t, v, mode);
+        if (usageStatus !== "overdue" && usageStatus !== "due_soon") continue;
+        items.push({
+          id: t.id,
+          title: t.name,
+          subtitle: v.nickname ?? `${v.make} ${v.model}`,
+          dueDate: t.next_due_date,
+          status: usageStatus,
+          category: "vehicles",
+          entityId: t.vehicle_id,
+        });
       }
       for (const t of propertyTasks.data ?? []) {
         const p = (t as any).properties;
@@ -247,10 +257,13 @@ export default function DashboardScreen() {
       if (!user) return [];
       const { data } = await supabase
         .from("vehicles")
-        .select("id, year, make, model, nickname, mileage, vehicle_type, updated_at")
-        .eq("user_id", user.id)
-        .in("vehicle_type", MILEAGE_TRACKED_TYPES as unknown as string[]);
-      return (data ?? []) as MileageVehicle[];
+        .select("id, year, make, model, nickname, mileage, hours, vehicle_type, tracking_mode, updated_at")
+        .eq("user_id", user.id);
+      const rows = (data ?? []) as MileageVehicle[];
+      return rows.filter(v => {
+        const m = resolveTrackingMode(v);
+        return m === "mileage" || m === "hours" || m === "both";
+      });
     },
     enabled: !!user,
   });
@@ -448,93 +461,170 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
     return bDays - aDays;
   });
 
-  function getInput(v: MileageVehicle): string {
-    return inputs[v.id] ?? (v.mileage != null ? String(v.mileage) : "");
+  function fieldKey(v: MileageVehicle, field: "mileage" | "hours") {
+    const mode = resolveTrackingMode(v);
+    return mode === "both" ? `${v.id}:${field}` : v.id;
   }
 
-  async function handleSave(v: MileageVehicle) {
-    const input = getInput(v).replace(/,/g, "");
-    const newMileage = parseInt(input, 10);
-    if (!input.trim() || isNaN(newMileage) || newMileage <= 0) {
-      setErrors(e => ({ ...e, [v.id]: "Please enter a valid mileage" }));
-      return;
+  function getInput(v: MileageVehicle, field: "mileage" | "hours"): string {
+    const k = fieldKey(v, field);
+    const mode = resolveTrackingMode(v);
+    if (mode === "hours") {
+      return inputs[k] ?? (v.hours != null ? String(v.hours) : "");
     }
-    if (v.mileage != null && newMileage < v.mileage) {
-      setErrors(e => ({ ...e, [v.id]: "Mileage can't be less than current reading" }));
-      return;
+    if (mode === "mileage") {
+      return inputs[k] ?? (v.mileage != null ? String(v.mileage) : "");
     }
-    setErrors(e => ({ ...e, [v.id]: "" }));
-    setSaving(s => ({ ...s, [v.id]: true }));
+    if (mode === "both") {
+      if (field === "hours") return inputs[k] ?? (v.hours != null ? String(v.hours) : "");
+      return inputs[k] ?? (v.mileage != null ? String(v.mileage) : "");
+    }
+    return "";
+  }
+
+  async function handleSave(v: MileageVehicle, field: "mileage" | "hours") {
+    const mode = resolveTrackingMode(v);
+    const k = fieldKey(v, field);
+    const input = getInput(v, field).replace(/,/g, "");
+    if (field === "hours") {
+      const newH = parseFloat(input);
+      if (!input.trim() || isNaN(newH) || newH < 0) {
+        setErrors(e => ({ ...e, [k]: "Please enter valid hours" }));
+        return;
+      }
+      if (v.hours != null && newH < v.hours) {
+        setErrors(e => ({ ...e, [k]: "Hours can't be less than current reading" }));
+        return;
+      }
+    } else {
+      const newM = parseInt(input, 10);
+      if (!input.trim() || isNaN(newM) || newM <= 0) {
+        setErrors(e => ({ ...e, [k]: "Please enter valid mileage" }));
+        return;
+      }
+      if (v.mileage != null && newM < v.mileage) {
+        setErrors(e => ({ ...e, [k]: "Mileage can't be less than current reading" }));
+        return;
+      }
+    }
+    setErrors(e => ({ ...e, [k]: "" }));
+    setSaving(s => ({ ...s, [k]: true }));
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const now = new Date().toISOString();
-      const { error: updateErr } = await supabase.from("vehicles").update({ mileage: newMileage, updated_at: now }).eq("id", v.id);
-      if (updateErr) throw updateErr;
-      const { error: histErr } = await supabase.from("vehicle_mileage_history").insert({ vehicle_id: v.id, user_id: userId, mileage: newMileage, recorded_at: now });
-      if (histErr && !histErr.message.includes("does not exist")) throw histErr;
-      setSaved(s => ({ ...s, [v.id]: true }));
+      if (field === "hours") {
+        const newH = parseFloat(input);
+        const { error: updateErr } = await supabase.from("vehicles").update({ hours: newH, updated_at: now }).eq("id", v.id);
+        if (updateErr) throw updateErr;
+      } else {
+        const newM = parseInt(input, 10);
+        const { error: updateErr } = await supabase.from("vehicles").update({ mileage: newM, updated_at: now }).eq("id", v.id);
+        if (updateErr) throw updateErr;
+        const { error: histErr } = await supabase.from("vehicle_mileage_history").insert({ vehicle_id: v.id, user_id: userId, mileage: newM, recorded_at: now });
+        if (histErr && !histErr.message.includes("does not exist")) throw histErr;
+      }
+      setSaved(s => ({ ...s, [k]: true }));
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
       setTimeout(() => {
-        setSaved(s => ({ ...s, [v.id]: false }));
+        setSaved(s => ({ ...s, [k]: false }));
       }, 1500);
     } catch {
-      setErrors(e => ({ ...e, [v.id]: "Save failed. Try again." }));
+      setErrors(e => ({ ...e, [k]: "Save failed. Try again." }));
     } finally {
-      setSaving(s => ({ ...s, [v.id]: false }));
+      setSaving(s => ({ ...s, [k]: false }));
     }
   }
 
-  function VehicleRow({ v }: { v: MileageVehicle }) {
-    const stale = isStale(v);
-    const inputVal = getInput(v);
-    const isSaving = saving[v.id] ?? false;
-    const isSaved = saved[v.id] ?? false;
-    const err = errors[v.id];
+  function UsageInputs({ v, hideName }: { v: MileageVehicle; hideName?: boolean }) {
+    const mode = resolveTrackingMode(v);
     const vehicleName = v.nickname ?? [v.year, v.make, v.model].filter(Boolean).join(" ");
+    const stale = isStale(v);
 
-    return (
-      <View style={styles.qmVehicleRow}>
-        <View style={styles.qmVehicleInfo}>
-          <Text style={styles.qmVehicleName} numberOfLines={1}>{vehicleName}</Text>
-          <Text style={[styles.qmVehicleAge, { color: stale ? Colors.dueSoon : Colors.good }]}>
-            {formatMileageAge(v.updated_at)}
-          </Text>
+    const row = (field: "mileage" | "hours", label: string, placeholder: string, keyboard: "number-pad" | "decimal-pad") => {
+      const fk = fieldKey(v, field);
+      const inputVal = getInput(v, field);
+      const isSaving = saving[fk] ?? false;
+      const isSaved = saved[fk] ?? false;
+      const err = errors[fk];
+      return (
+        <View style={{ gap: 6 }}>
+          {mode === "both" && (
+            <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textTertiary }}>{label}</Text>
+          )}
+          <View style={styles.qmInputRow}>
+            <TextInput
+              style={styles.qmInput}
+              value={inputVal}
+              onChangeText={t => {
+                setInputs(i => ({ ...i, [fk]: t }));
+                if (errors[fk]) setErrors(e => ({ ...e, [fk]: "" }));
+              }}
+              keyboardType={keyboard}
+              returnKeyType="done"
+              onSubmitEditing={() => handleSave(v, field)}
+              selectTextOnFocus
+              placeholder={placeholder}
+              placeholderTextColor={Colors.textTertiary}
+            />
+            <Pressable
+              style={[styles.qmSaveBtn, isSaved && { backgroundColor: Colors.good }]}
+              onPress={() => { if (!isSaving && !isSaved) handleSave(v, field); }}
+              disabled={isSaving}
+            >
+              {isSaved ? (
+                <Ionicons name="checkmark" size={14} color="#fff" />
+              ) : isSaving ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.qmSaveBtnText}>Save</Text>
+              )}
+            </Pressable>
+          </View>
           {!!err && <Text style={styles.qmError}>{err}</Text>}
         </View>
-        <View style={styles.qmInputRow}>
-          <TextInput
-            style={styles.qmInput}
-            value={inputVal}
-            onChangeText={t => {
-              setInputs(i => ({ ...i, [v.id]: t }));
-              if (errors[v.id]) setErrors(e => ({ ...e, [v.id]: "" }));
-            }}
-            keyboardType="number-pad"
-            returnKeyType="done"
-            onSubmitEditing={() => handleSave(v)}
-            selectTextOnFocus
-            placeholder="miles"
-            placeholderTextColor={Colors.textTertiary}
-          />
-          <Pressable
-            style={[styles.qmSaveBtn, isSaved && { backgroundColor: Colors.good }]}
-            onPress={() => { if (!isSaving && !isSaved) handleSave(v); }}
-            disabled={isSaving}
-          >
-            {isSaved ? (
-              <Ionicons name="checkmark" size={14} color="#fff" />
-            ) : isSaving ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.qmSaveBtnText}>Save</Text>
-            )}
-          </Pressable>
+      );
+    };
+
+    const nameBlock = !hideName && (
+      <View style={styles.qmVehicleInfo}>
+        <Text style={styles.qmVehicleName} numberOfLines={1}>{vehicleName}</Text>
+        <Text style={[styles.qmVehicleAge, { color: stale ? Colors.dueSoon : Colors.good }]}>
+          {formatMileageAge(v.updated_at)}
+        </Text>
+      </View>
+    );
+
+    if (mode === "hours") {
+      return (
+        <View style={styles.qmVehicleRow}>
+          {nameBlock}
+          {row("hours", "Hours", "hours", "decimal-pad")}
         </View>
+      );
+    }
+    if (mode === "mileage") {
+      return (
+        <View style={styles.qmVehicleRow}>
+          {nameBlock}
+          {row("mileage", "Mileage", "miles", "number-pad")}
+        </View>
+      );
+    }
+    return (
+      <View style={[styles.qmVehicleRow, { flexDirection: "column", alignItems: "stretch" }]}>
+        {nameBlock}
+        {row("mileage", "Mileage", "miles", "number-pad")}
+        {row("hours", "Hours", "hours", "decimal-pad")}
       </View>
     );
   }
+
+  const anyHours = vehicles.some(v => isHoursTrackedMode(resolveTrackingMode(v)));
+  const anyMiles = vehicles.some(v => isMileageTrackedMode(resolveTrackingMode(v)));
+  const cardTitle = anyHours && !anyMiles ? "Engine hours" : anyMiles && !anyHours ? "Mileage" : "Usage";
+  const cardSub = anyHours && !anyMiles ? "Update hours" : anyMiles && !anyHours ? "Update mileage" : "Update mileage or hours";
 
   if (vehicles.length === 1) {
     const v = vehicles[0];
@@ -544,39 +634,12 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
         <View style={styles.qmCardHeaderStatic}>
           <View style={{ flex: 1 }}>
             <Text style={styles.qmCardTitle}>{vehicleName}</Text>
-            <Text style={styles.qmCardSub}>Update mileage</Text>
-          </View>
-          <View style={styles.qmInputRow}>
-            <TextInput
-              style={styles.qmInput}
-              value={getInput(v)}
-              onChangeText={t => {
-                setInputs(i => ({ ...i, [v.id]: t }));
-                if (errors[v.id]) setErrors(e => ({ ...e, [v.id]: "" }));
-              }}
-              keyboardType="number-pad"
-              returnKeyType="done"
-              onSubmitEditing={() => handleSave(v)}
-              selectTextOnFocus
-              placeholder="miles"
-              placeholderTextColor={Colors.textTertiary}
-            />
-            <Pressable
-              style={[styles.qmSaveBtn, (saved[v.id] ?? false) && { backgroundColor: Colors.good }]}
-              onPress={() => { if (!(saving[v.id] ?? false) && !(saved[v.id] ?? false)) handleSave(v); }}
-              disabled={saving[v.id] ?? false}
-            >
-              {(saved[v.id] ?? false) ? (
-                <Ionicons name="checkmark" size={14} color="#fff" />
-              ) : (saving[v.id] ?? false) ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.qmSaveBtnText}>Save</Text>
-              )}
-            </Pressable>
+            <Text style={styles.qmCardSub}>{cardSub}</Text>
           </View>
         </View>
-        {!!(errors[v.id]) && <Text style={[styles.qmError, { marginTop: 6, marginLeft: 50 }]}>{errors[v.id]}</Text>}
+        <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+          <UsageInputs v={v} hideName />
+        </View>
       </View>
     );
   }
@@ -591,10 +654,10 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
           setExpanded(e => !e);
         }}
         accessibilityRole="button"
-        accessibilityLabel={expanded ? "Collapse mileage updater" : "Expand mileage updater"}
+        accessibilityLabel={expanded ? "Collapse usage updater" : "Expand usage updater"}
       >
         <View style={{ flex: 1 }}>
-          <Text style={styles.qmCardTitle}>Mileage</Text>
+          <Text style={styles.qmCardTitle}>{cardTitle}</Text>
           <Text style={[styles.qmCardSub, { color: allUpToDate ? Colors.good : Colors.dueSoon }]}>
             {allUpToDate
               ? "All up to date"
@@ -612,7 +675,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
         <View style={styles.qmVehicleList}>
           {sortedVehicles.map((v, idx) => (
             <View key={v.id} style={idx < sortedVehicles.length - 1 ? styles.qmVehicleRowBorder : undefined}>
-              <VehicleRow v={v} />
+              <UsageInputs v={v} />
             </View>
           ))}
         </View>

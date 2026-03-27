@@ -20,6 +20,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { parseISO, format } from "date-fns";
+import { resolveTrackingMode, isHoursTrackedMode, isMileageTrackedMode } from "@/lib/usageHelpers";
 
 const { width: SW, height: SH } = Dimensions.get("window");
 
@@ -33,6 +34,21 @@ export default function VehicleTaskHistoryScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [receiptGeneratingId, setReceiptGeneratingId] = useState<string | null>(null);
+
+  const { data: vehicleMeta } = useQuery({
+    queryKey: ["vehicle_task_hist_meta", vehicleId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("vehicles")
+        .select("vehicle_type, tracking_mode")
+        .eq("id", vehicleId!)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!vehicleId,
+  });
+
+  const usageMode = resolveTrackingMode(vehicleMeta ?? {});
 
   const { data: logs, isLoading } = useQuery({
     queryKey: ["vehicle_task_logs", vehicleId, task],
@@ -91,7 +107,7 @@ export default function VehicleTaskHistoryScreen() {
 
   const totalSpent = logs?.reduce((s, l) => s + (l.cost ?? 0), 0) ?? 0;
   const visitCount = logs?.length ?? 0;
-  const milesLogged = logs?.filter(l => l.mileage != null).length ?? 0;
+  const usageLogged = logs?.filter(l => l.mileage != null).length ?? 0;
   const taskName = task ?? "Service History";
 
   return (
@@ -131,12 +147,18 @@ export default function VehicleTaskHistoryScreen() {
                   <Text style={styles.summaryValue}>{visitCount}</Text>
                   <Text style={styles.summaryLabel}>{visitCount === 1 ? "service visit" : "service visits"}</Text>
                 </View>
-                {milesLogged > 0 && (
+                {usageLogged > 0 && (
                   <>
                     <View style={styles.summaryDivider} />
                     <View style={styles.summaryStat}>
-                      <Text style={styles.summaryValue}>{milesLogged}</Text>
-                      <Text style={styles.summaryLabel}>with mileage</Text>
+                      <Text style={styles.summaryValue}>{usageLogged}</Text>
+                      <Text style={styles.summaryLabel}>
+                        {isHoursTrackedMode(usageMode) && !isMileageTrackedMode(usageMode)
+                          ? "with hours"
+                          : isMileageTrackedMode(usageMode) && !isHoursTrackedMode(usageMode)
+                            ? "with mileage"
+                            : "with usage"}
+                      </Text>
                     </View>
                   </>
                 )}
@@ -149,8 +171,12 @@ export default function VehicleTaskHistoryScreen() {
                   const formattedDate = log.service_date
                     ? format(parseISO(log.service_date), "MMMM d, yyyy")
                     : null;
-                  const formattedMileage = log.mileage != null
-                    ? `${log.mileage.toLocaleString()} mi`
+                  const formattedUsage = log.mileage != null
+                    ? usageMode === "hours"
+                      ? `${Number(log.mileage).toLocaleString()} hrs`
+                      : usageMode === "mileage"
+                        ? `${Number(log.mileage).toLocaleString()} mi`
+                        : `${Number(log.mileage).toLocaleString()} (reading)`
                     : null;
                   const isGenerating = receiptGeneratingId === log.id;
 
@@ -169,7 +195,7 @@ export default function VehicleTaskHistoryScreen() {
                         <View style={styles.logCardLeft}>
                           <Text style={styles.logTitle}>{log.service_name ?? taskName}</Text>
                           <Text style={styles.logSubtitle} numberOfLines={1}>
-                            {[formattedDate, log.cost != null ? `$${log.cost.toFixed(2)}` : null, log.provider_name, formattedMileage].filter(Boolean).join(" · ")}
+                            {[formattedDate, log.cost != null ? `$${log.cost.toFixed(2)}` : null, log.provider_name, formattedUsage].filter(Boolean).join(" · ")}
                           </Text>
                         </View>
                         <View style={styles.logCardRight}>

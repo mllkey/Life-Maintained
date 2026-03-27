@@ -17,7 +17,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { HOURS_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import { resolveTrackingMode, isHoursTrackedMode } from "@/lib/usageHelpers";
 
 export default function UpdateMileageScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
@@ -36,7 +36,7 @@ export default function UpdateMileageScreen() {
     enabled: !!vehicleId,
   });
 
-  const tracksHours = HOURS_TRACKED_TYPES.has(vehicle?.vehicle_type ?? "");
+  const tracksHours = vehicle ? isHoursTrackedMode(resolveTrackingMode(vehicle)) : false;
 
   async function handleSave() {
     if (isLoading) return;

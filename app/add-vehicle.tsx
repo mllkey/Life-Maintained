@@ -25,7 +25,7 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import Paywall from "@/components/Paywall";
 import { vehicleLimit } from "@/lib/subscription";
-import { MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import { MILEAGE_TRACKED_TYPES, inferTrackingModeFromVehicleType } from "@/lib/vehicleTypes";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_ITEM_HEIGHT = 52;
@@ -493,6 +493,7 @@ export default function AddVehicleScreen() {
   >("enclosed_cargo");
   const [dumpTruckSubtype, setDumpTruckSubtype] = useState<"standard_dump" | "roll_off" | "hook_lift">("standard_dump");
   const [mileage, setMileage] = useState("");
+  const [engineHours, setEngineHours] = useState("");
   const [avgMilesPerMonth, setAvgMilesPerMonth] = useState("");
   const [isSeasonal, setIsSeasonal] = useState(false);
   const [seasonStartMonth, setSeasonStartMonth] = useState<number | null>(null);
@@ -836,6 +837,7 @@ export default function AddVehicleScreen() {
     } catch {}
 
     const hasCandidates = walletCandidates && walletCandidates.length > 0;
+    const inferredMode = inferTrackingModeFromVehicleType(vehicleType);
     const vehicleData = {
       user_id: user.id,
       year: yearNum,
@@ -847,8 +849,13 @@ export default function AddVehicleScreen() {
       vehicle_category: selectedVehicleCategory,
       fuel_type: fuelType,
       is_awd: isAwd,
-      mileage: mileage ? parseInt(mileage) : null,
-      average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth) : null,
+      tracking_mode: inferredMode,
+      mileage: mileage ? parseInt(mileage, 10) : null,
+      hours:
+        inferredMode === "hours" && engineHours.trim()
+          ? parseFloat(engineHours.replace(/,/g, ""))
+          : null,
+      average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth, 10) : null,
       is_seasonal: isSeasonal,
       season_start_month: isSeasonal ? seasonStartMonth : null,
       season_end_month: isSeasonal ? seasonEndMonth : null,
@@ -877,7 +884,20 @@ export default function AddVehicleScreen() {
           try {
             const { error: scheduleError } = await supabase.functions.invoke(
               "generate-maintenance-schedule",
-              { body: { vehicle_id: inserted.id, make: make.trim(), model: model.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
+              {
+                body: {
+                  vehicle_id: inserted.id,
+                  make: make.trim(),
+                  model: model.trim(),
+                  year: yearNum,
+                  current_mileage: mileage ? parseInt(mileage, 10) : 0,
+                  current_hours: engineHours.trim() ? parseFloat(engineHours.replace(/,/g, "")) : 0,
+                  tracking_mode: inferredMode,
+                  vehicle_type: fuelType,
+                  is_awd: isAwd,
+                  vehicle_category: selectedVehicleCategory,
+                },
+              },
             );
             if (scheduleError) {
               const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
@@ -922,7 +942,20 @@ export default function AddVehicleScreen() {
         try {
           const { error: scheduleError } = await supabase.functions.invoke(
             "generate-maintenance-schedule",
-            { body: { vehicle_id: inserted.id, make: make.trim(), model: model.trim(), year: yearNum, current_mileage: mileage ? parseInt(mileage) : 0, vehicle_type: fuelType, is_awd: isAwd, vehicle_category: selectedVehicleCategory } },
+            {
+              body: {
+                vehicle_id: inserted.id,
+                make: make.trim(),
+                model: model.trim(),
+                year: yearNum,
+                current_mileage: mileage ? parseInt(mileage, 10) : 0,
+                current_hours: engineHours.trim() ? parseFloat(engineHours.replace(/,/g, "")) : 0,
+                tracking_mode: inferredMode,
+                vehicle_type: fuelType,
+                is_awd: isAwd,
+                vehicle_category: selectedVehicleCategory,
+              },
+            },
           );
           if (scheduleError) {
             const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
@@ -1409,6 +1442,26 @@ export default function AddVehicleScreen() {
                   returnKeyType="done"
                 />
                 <Text style={styles.fieldHint}>Used to calculate mileage-based maintenance intervals</Text>
+              </View>
+            </FieldGroup>
+          )}
+
+          {inferTrackingModeFromVehicleType(vehicleType) === "hours" && (
+            <FieldGroup label="Engine hours">
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Current engine hours</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={engineHours}
+                  onChangeText={setEngineHours}
+                  placeholder="e.g. 125.5"
+                  placeholderTextColor={Colors.textTertiary}
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 4 }}>
+                  Hour-meter reading for this equipment. You can update later; it cannot be lowered.
+                </Text>
               </View>
             </FieldGroup>
           )}
