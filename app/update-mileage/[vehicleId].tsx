@@ -17,7 +17,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { resolveTrackingMode, isHoursTrackedMode } from "@/lib/usageHelpers";
+import { isHoursTracked } from "@/lib/usageHelpers";
 
 export default function UpdateMileageScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
@@ -41,11 +41,10 @@ export default function UpdateMileageScreen() {
   async function handleSave() {
     if (isLoading) return;
     if (!vehicleId || !mileage) return;
-    const mileageValue = mileage;
-    const m = parseInt(mileageValue);
-    if (isNaN(m)) return;
+    const mileageValue = mileage.replace(/,/g, "");
     const currentMileage = tracksHours ? vehicle?.hours ?? 0 : vehicle?.mileage ?? 0;
-    const newMileage = parseInt(mileageValue, 10);
+    const newMileage = tracksHours ? parseFloat(mileageValue) : parseInt(mileageValue, 10);
+    if (isNaN(newMileage)) return;
     if (currentMileage > 0 && newMileage < currentMileage) {
       setMileageWarning(
         tracksHours

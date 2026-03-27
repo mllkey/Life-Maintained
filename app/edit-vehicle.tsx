@@ -21,7 +21,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
-import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES, inferTrackingModeFromVehicleType } from "@/lib/vehicleTypes";
+import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES, inferTrackingMode } from "@/lib/vehicleTypes";
 
 const VEHICLE_TYPE_OPTIONS = [
   { value: "car", label: "Car / Truck / SUV" },
@@ -91,7 +91,6 @@ export default function EditVehicleScreen() {
       color: color.trim() || null,
       trim: trim.trim() || null,
       vehicle_type: vehicleType,
-      tracking_mode: inferTrackingModeFromVehicleType(vehicleType),
     };
 
     if (tracksMileage && mileage.trim()) {
@@ -124,6 +123,8 @@ export default function EditVehicleScreen() {
         updates.hours = newHours;
       }
     }
+
+    (updates as Record<string, unknown>).tracking_mode = inferTrackingMode(vehicleType as string);
 
     try {
       const { error } = await supabase.from("vehicles").update(updates).eq("id", vehicleId!);

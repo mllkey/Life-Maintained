@@ -20,7 +20,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { parseISO, format } from "date-fns";
-import { resolveTrackingMode, isHoursTrackedMode, isMileageTrackedMode } from "@/lib/usageHelpers";
+import { isHoursTracked } from "@/lib/usageHelpers";
 
 const { width: SW, height: SH } = Dimensions.get("window");
 
@@ -48,7 +48,7 @@ export default function VehicleTaskHistoryScreen() {
     enabled: !!vehicleId,
   });
 
-  const usageMode = resolveTrackingMode(vehicleMeta ?? {});
+  const tracksHours = isHoursTracked(vehicleMeta ?? {});
 
   const { data: logs, isLoading } = useQuery({
     queryKey: ["vehicle_task_logs", vehicleId, task],
@@ -107,7 +107,8 @@ export default function VehicleTaskHistoryScreen() {
 
   const totalSpent = logs?.reduce((s, l) => s + (l.cost ?? 0), 0) ?? 0;
   const visitCount = logs?.length ?? 0;
-  const usageLogged = logs?.filter(l => l.mileage != null).length ?? 0;
+  const usageLoggedCount = logs?.filter(l => l.mileage != null).length ?? 0;
+  const usageSummaryLabel = tracksHours ? "with hours" : "with mileage";
   const taskName = task ?? "Service History";
 
   return (
@@ -147,18 +148,12 @@ export default function VehicleTaskHistoryScreen() {
                   <Text style={styles.summaryValue}>{visitCount}</Text>
                   <Text style={styles.summaryLabel}>{visitCount === 1 ? "service visit" : "service visits"}</Text>
                 </View>
-                {usageLogged > 0 && (
+                {usageLoggedCount > 0 && (
                   <>
                     <View style={styles.summaryDivider} />
                     <View style={styles.summaryStat}>
-                      <Text style={styles.summaryValue}>{usageLogged}</Text>
-                      <Text style={styles.summaryLabel}>
-                        {isHoursTrackedMode(usageMode) && !isMileageTrackedMode(usageMode)
-                          ? "with hours"
-                          : isMileageTrackedMode(usageMode) && !isHoursTrackedMode(usageMode)
-                            ? "with mileage"
-                            : "with usage"}
-                      </Text>
+                      <Text style={styles.summaryValue}>{usageLoggedCount}</Text>
+                      <Text style={styles.summaryLabel}>{usageSummaryLabel}</Text>
                     </View>
                   </>
                 )}
@@ -172,11 +167,7 @@ export default function VehicleTaskHistoryScreen() {
                     ? format(parseISO(log.service_date), "MMMM d, yyyy")
                     : null;
                   const formattedUsage = log.mileage != null
-                    ? usageMode === "hours"
-                      ? `${Number(log.mileage).toLocaleString()} hrs`
-                      : usageMode === "mileage"
-                        ? `${Number(log.mileage).toLocaleString()} mi`
-                        : `${Number(log.mileage).toLocaleString()} (reading)`
+                    ? `${Number(log.mileage).toLocaleString()}${tracksHours ? " hrs" : " mi"}`
                     : null;
                   const isGenerating = receiptGeneratingId === log.id;
 
@@ -229,11 +220,11 @@ export default function VehicleTaskHistoryScreen() {
                             </View>
                           ) : null}
 
-                          {formattedMileage && !log.provider_name ? null : (
-                            formattedMileage && (
+                          {formattedUsage && !log.provider_name ? null : (
+                            formattedUsage && (
                               <View style={styles.expandedRow}>
                                 <Ionicons name="speedometer-outline" size={14} color={Colors.textSecondary} />
-                                <Text style={styles.expandedText}>{formattedMileage} at time of service</Text>
+                                <Text style={styles.expandedText}>{formattedUsage} at time of service</Text>
                               </View>
                             )
                           )}

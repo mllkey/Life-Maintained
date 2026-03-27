@@ -25,7 +25,7 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import Paywall from "@/components/Paywall";
 import { vehicleLimit } from "@/lib/subscription";
-import { MILEAGE_TRACKED_TYPES, inferTrackingModeFromVehicleType } from "@/lib/vehicleTypes";
+import { MILEAGE_TRACKED_TYPES, inferTrackingMode, inferTrackingModeFromVehicleType } from "@/lib/vehicleTypes";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_ITEM_HEIGHT = 52;
@@ -837,7 +837,7 @@ export default function AddVehicleScreen() {
     } catch {}
 
     const hasCandidates = walletCandidates && walletCandidates.length > 0;
-    const inferredMode = inferTrackingModeFromVehicleType(vehicleType);
+    const inferredMode = inferTrackingMode(selectedVehicleCategory);
     const vehicleData = {
       user_id: user.id,
       year: yearNum,
@@ -891,8 +891,8 @@ export default function AddVehicleScreen() {
                   model: model.trim(),
                   year: yearNum,
                   current_mileage: mileage ? parseInt(mileage, 10) : 0,
-                  current_hours: engineHours.trim() ? parseFloat(engineHours.replace(/,/g, "")) : 0,
-                  tracking_mode: inferredMode,
+                  current_hours: 0,
+                  tracking_mode: inferTrackingMode(selectedVehicleCategory),
                   vehicle_type: fuelType,
                   is_awd: isAwd,
                   vehicle_category: selectedVehicleCategory,
@@ -949,8 +949,8 @@ export default function AddVehicleScreen() {
                 model: model.trim(),
                 year: yearNum,
                 current_mileage: mileage ? parseInt(mileage, 10) : 0,
-                current_hours: engineHours.trim() ? parseFloat(engineHours.replace(/,/g, "")) : 0,
-                tracking_mode: inferredMode,
+                current_hours: 0,
+                tracking_mode: inferTrackingMode(selectedVehicleCategory),
                 vehicle_type: fuelType,
                 is_awd: isAwd,
                 vehicle_category: selectedVehicleCategory,

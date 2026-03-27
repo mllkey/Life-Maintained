@@ -21,7 +21,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays, differenceInDays, formatDistanceToNowStrict } from "date-fns";
 import { vehicleLimit } from "@/lib/subscription";
-import { resolveTrackingMode, isHoursTrackedMode, isMileageTrackedMode } from "@/lib/usageHelpers";
+import { resolveTrackingMode, isHoursTracked, isMileageTracked, currentUsageValue } from "@/lib/usageHelpers";
 
 type Vehicle = {
   id: string;
@@ -41,6 +41,7 @@ type Vehicle = {
   updated_at: string | null;
   average_miles_per_month: number | null;
   photo_url: string | null;
+  tracking_mode: string | null;
 };
 
 function getTaskStatus(date: string | null): "overdue" | "due_soon" | "good" {
@@ -162,8 +163,8 @@ export default function VehiclesScreen() {
             const displayName = v.nickname ?? title;
 
             const mode = resolveTrackingMode(v);
-            const isMileageTracked = isMileageTrackedMode(mode);
-            const tracksHours = isHoursTrackedMode(mode);
+            const tracksMiles = isMileageTracked(v);
+            const tracksHrs = isHoursTracked(v);
             const daysSinceUpdate = v.updated_at ? differenceInDays(new Date(), parseISO(v.updated_at)) : null;
             const isStale = daysSinceUpdate != null && daysSinceUpdate >= 7;
 
@@ -182,23 +183,23 @@ export default function VehiclesScreen() {
               } else {
                 metaLine = "No mileage or hours entered yet";
               }
-            } else if (isMileageTracked && v.mileage != null) {
+            } else if (tracksMiles && v.mileage != null) {
               const mileStr = v.mileage.toLocaleString() + " mi";
               metaLine = isStale
                 ? mileStr + " · Update needed"
                 : daysSinceUpdate != null
                   ? mileStr + " · " + formatDistanceToNowStrict(parseISO(v.updated_at!), { addSuffix: true })
                   : mileStr;
-            } else if (isMileageTracked) {
+            } else if (tracksMiles) {
               metaLine = "No mileage entered yet";
-            } else if (tracksHours && v.hours != null) {
+            } else if (tracksHrs && v.hours != null) {
               const hourStr = v.hours.toLocaleString() + " hrs";
               metaLine = isStale
                 ? hourStr + " · Update needed"
                 : daysSinceUpdate != null
                   ? hourStr + " · " + formatDistanceToNowStrict(parseISO(v.updated_at!), { addSuffix: true })
                   : hourStr;
-            } else if (tracksHours) {
+            } else if (tracksHrs) {
               metaLine = "No hours entered yet";
             } else {
               metaLine = "";
@@ -247,7 +248,7 @@ export default function VehiclesScreen() {
                   ) : null}
                   {metaLine ? (
                     <Text
-                      style={[styles.vehicleMeta, isStale && isMileageTracked && v.mileage != null && { color: Colors.dueSoon }]}
+                      style={[styles.vehicleMeta, isStale && (tracksMiles || tracksHrs) && currentUsageValue(v) != null && { color: Colors.dueSoon }]}
                       numberOfLines={1}
                     >
                       {metaLine}

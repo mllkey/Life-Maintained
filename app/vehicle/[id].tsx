@@ -55,10 +55,11 @@ function calcStatus(
   const today = new Date();
   const dueDate = task.next_due_date ? parseISO(task.next_due_date) : null;
 
+  // Usage-based check (miles OR hours depending on tracking mode)
   const currentUsage = currentUsageValue(vehicle);
   const nextDueUsage = taskNextDueUsage(task, vehicle);
   const hoursMode = isHoursTracked(vehicle);
-  const dueSoonThreshold = hoursMode ? 25 : 500;
+  const dueSoonThreshold = hoursMode ? 25 : 500; // 25 hours or 500 miles
 
   if (
     (nextDueUsage != null && currentUsage != null && currentUsage >= nextDueUsage) ||
@@ -1487,6 +1488,7 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate,
 
   const nextDueUsage = taskNextDueUsage(task, vehicle);
   const lastCompletedUsage = taskLastCompletedUsage(task, vehicle);
+  const tracksHrs = isHoursTracked(vehicle);
 
   const dueParts: string[] = [];
   if (!isCompleted) {

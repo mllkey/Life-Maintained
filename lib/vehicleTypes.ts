@@ -57,3 +57,8 @@ export function inferTrackingMode(vehicleType: string): "mileage" | "hours" | "t
   if (TIME_ONLY_TYPES.has(t)) return "time_only";
   return "mileage";
 }
+
+/** Alias for screens that name the helper after the vehicle_type field. */
+export function inferTrackingModeFromVehicleType(vehicleType: string): "mileage" | "hours" | "time_only" {
+  return inferTrackingMode(vehicleType);
+}

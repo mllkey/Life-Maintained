@@ -29,7 +29,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { useBudgetAlert } from "@/context/BudgetAlertContext";
 import TrialBanner from "@/components/TrialBanner";
-import { resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode } from "@/lib/usageHelpers";
+import { resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode, isHoursTracked, isTimeOnly } from "@/lib/usageHelpers";
 import * as Linking from "expo-linking";
 import { LogSheet } from "@/components/LogSheet";
 
@@ -260,10 +260,7 @@ export default function DashboardScreen() {
         .select("id, year, make, model, nickname, mileage, hours, vehicle_type, tracking_mode, updated_at")
         .eq("user_id", user.id);
       const rows = (data ?? []) as MileageVehicle[];
-      return rows.filter(v => {
-        const m = resolveTrackingMode(v);
-        return m === "mileage" || m === "hours" || m === "both";
-      });
+      return rows.filter(v => !isTimeOnly(v));
     },
     enabled: !!user,
   });
@@ -467,42 +464,38 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
   }
 
   function getInput(v: MileageVehicle, field: "mileage" | "hours"): string {
-    const k = fieldKey(v, field);
     const mode = resolveTrackingMode(v);
-    if (mode === "hours") {
-      return inputs[k] ?? (v.hours != null ? String(v.hours) : "");
+    if (mode !== "both") {
+      const currentVal = isHoursTracked(v) ? v.hours : v.mileage;
+      return inputs[v.id] ?? (currentVal != null ? String(currentVal) : "");
     }
-    if (mode === "mileage") {
-      return inputs[k] ?? (v.mileage != null ? String(v.mileage) : "");
-    }
-    if (mode === "both") {
-      if (field === "hours") return inputs[k] ?? (v.hours != null ? String(v.hours) : "");
-      return inputs[k] ?? (v.mileage != null ? String(v.mileage) : "");
-    }
-    return "";
+    const k = fieldKey(v, field);
+    if (field === "hours") return inputs[k] ?? (v.hours != null ? String(v.hours) : "");
+    return inputs[k] ?? (v.mileage != null ? String(v.mileage) : "");
   }
 
   async function handleSave(v: MileageVehicle, field: "mileage" | "hours") {
-    const mode = resolveTrackingMode(v);
     const k = fieldKey(v, field);
     const input = getInput(v, field).replace(/,/g, "");
     if (field === "hours") {
       const newH = parseFloat(input);
       if (!input.trim() || isNaN(newH) || newH < 0) {
-        setErrors(e => ({ ...e, [k]: "Please enter valid hours" }));
+        setErrors(e => ({ ...e, [k]: "Please enter a valid hours value" }));
         return;
       }
-      if (v.hours != null && newH < v.hours) {
+      const currentReading = v.hours ?? 0;
+      if (currentReading > 0 && newH < currentReading) {
         setErrors(e => ({ ...e, [k]: "Hours can't be less than current reading" }));
         return;
       }
     } else {
       const newM = parseInt(input, 10);
       if (!input.trim() || isNaN(newM) || newM <= 0) {
-        setErrors(e => ({ ...e, [k]: "Please enter valid mileage" }));
+        setErrors(e => ({ ...e, [k]: "Please enter a valid mileage" }));
         return;
       }
-      if (v.mileage != null && newM < v.mileage) {
+      const currentReading = v.mileage ?? 0;
+      if (currentReading > 0 && newM < currentReading) {
         setErrors(e => ({ ...e, [k]: "Mileage can't be less than current reading" }));
         return;
       }
@@ -624,7 +617,6 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
   const anyHours = vehicles.some(v => isHoursTrackedMode(resolveTrackingMode(v)));
   const anyMiles = vehicles.some(v => isMileageTrackedMode(resolveTrackingMode(v)));
   const cardTitle = anyHours && !anyMiles ? "Engine hours" : anyMiles && !anyHours ? "Mileage" : "Usage";
-  const cardSub = anyHours && !anyMiles ? "Update hours" : anyMiles && !anyHours ? "Update mileage" : "Update mileage or hours";
 
   if (vehicles.length === 1) {
     const v = vehicles[0];
@@ -634,7 +626,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
         <View style={styles.qmCardHeaderStatic}>
           <View style={{ flex: 1 }}>
             <Text style={styles.qmCardTitle}>{vehicleName}</Text>
-            <Text style={styles.qmCardSub}>{cardSub}</Text>
+            <Text style={styles.qmCardSub}>{isHoursTracked(v) ? "Update hours" : "Update mileage"}</Text>
           </View>
         </View>
         <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>

@@ -28,7 +28,7 @@ import { ReceiptScanResult } from "@/lib/receiptScanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { parseISO, format } from "date-fns";
 import { matchAndUpdateVehicleTask, CATEGORY_GROUPS, type MatchResult } from "@/lib/maintenanceMatcher";
-import { resolveTrackingMode, isHoursTrackedMode, isMileageTrackedMode } from "@/lib/usageHelpers";
+import { resolveTrackingMode, isHoursTracked, isMileageTracked } from "@/lib/usageHelpers";
 
 type PricingInsight = {
   cost: number | null;
@@ -63,6 +63,7 @@ export default function LogServiceScreen() {
   const [pricingInsight, setPricingInsight] = useState<PricingInsight | null>(null);
   const insightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [vehicleType, setVehicleType] = useState<string | null>(null);
+  const [vehicleData, setVehicleData] = useState<any>(null);
   const [trackingMode, setTrackingMode] = useState<string | null>(null);
   const [hoursReading, setHoursReading] = useState("");
 
@@ -70,13 +71,14 @@ export default function LogServiceScreen() {
     if (!vehicleId) return;
     supabase
       .from("vehicles")
-      .select("vehicle_type, tracking_mode")
+      .select("vehicle_type, tracking_mode, hours, mileage")
       .eq("id", vehicleId)
       .single()
       .then(({ data }) => {
         if (data) {
           setVehicleType(data.vehicle_type);
           setTrackingMode(data.tracking_mode);
+          setVehicleData(data);
         }
       });
   }, [vehicleId]);
@@ -553,41 +555,41 @@ export default function LogServiceScreen() {
                   maxLength={10}
                 />
               </Field>
-              {isMileageTrackedMode(usageMode) && (
-                <Field label="Mileage" style={{ flex: 1 }}>
+              {vehicleData && (isMileageTracked(vehicleData) || isHoursTracked(vehicleData)) && usageMode !== "both" && (
+                <Field label={isHoursTracked(vehicleData) ? "Hours" : "Mileage"} style={{ flex: 1 }}>
                   <TextInput
                     style={styles.input}
                     value={mileage}
                     onChangeText={setMileage}
-                    placeholder="45000"
+                    placeholder={isHoursTracked(vehicleData) ? "e.g. 150" : "45000"}
                     placeholderTextColor={Colors.textTertiary}
-                    keyboardType="numeric"
-                  />
-                </Field>
-              )}
-              {usageMode === "hours" && (
-                <Field label="Hours" style={{ flex: 1 }}>
-                  <TextInput
-                    style={styles.input}
-                    value={mileage}
-                    onChangeText={setMileage}
-                    placeholder="e.g. 125.5"
-                    placeholderTextColor={Colors.textTertiary}
-                    keyboardType="decimal-pad"
+                    keyboardType={isHoursTracked(vehicleData) ? "decimal-pad" : "numeric"}
                   />
                 </Field>
               )}
               {usageMode === "both" && (
-                <Field label="Hours" style={{ flex: 1 }}>
-                  <TextInput
-                    style={styles.input}
-                    value={hoursReading}
-                    onChangeText={setHoursReading}
-                    placeholder="e.g. 125.5"
-                    placeholderTextColor={Colors.textTertiary}
-                    keyboardType="decimal-pad"
-                  />
-                </Field>
+                <>
+                  <Field label="Mileage" style={{ flex: 1 }}>
+                    <TextInput
+                      style={styles.input}
+                      value={mileage}
+                      onChangeText={setMileage}
+                      placeholder="45000"
+                      placeholderTextColor={Colors.textTertiary}
+                      keyboardType="numeric"
+                    />
+                  </Field>
+                  <Field label="Hours" style={{ flex: 1 }}>
+                    <TextInput
+                      style={styles.input}
+                      value={hoursReading}
+                      onChangeText={setHoursReading}
+                      placeholder="e.g. 125.5"
+                      placeholderTextColor={Colors.textTertiary}
+                      keyboardType="decimal-pad"
+                    />
+                  </Field>
+                </>
               )}
             </View>
             <View style={styles.row}>
