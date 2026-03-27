@@ -899,6 +899,19 @@ function TaskRow({
           {task.task}
         </Text>
         <Text style={[styles.taskRowDue, isCompleted && styles.taskRowDueDone]}>{dueText}</Text>
+        {!isCompleted && task.estimated_cost != null && task.estimated_cost > 0 && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
+            <Ionicons name="cash-outline" size={12} color={Colors.good} />
+            <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
+              Est. ~${task.estimated_cost.toLocaleString()}
+            </Text>
+          </View>
+        )}
+        {!isCompleted && task.last_completed_at != null && (
+          <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.vehicle, marginTop: 2 }}>
+            Last completed {format(parseISO(task.last_completed_at), "MMM d, yyyy")}
+          </Text>
+        )}
         {showCompletedInfo && (
           <Text style={styles.taskRowCompletedInfo}>
             Already completed. Check the History tab for details.
