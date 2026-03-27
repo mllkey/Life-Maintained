@@ -36,7 +36,6 @@ import { SaveToast } from "@/components/SaveToast";
 import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 import {
   resolveTrackingMode,
-  taskUsesHoursUsage,
   isHoursTracked,
   isMileageTracked,
   isTimeOnly,
@@ -46,6 +45,13 @@ import {
   taskLastCompletedUsage,
   type TrackingMode,
 } from "@/lib/usageHelpers";
+
+function taskUsesHoursUsage(task: any, mode: TrackingMode): boolean {
+  if (mode === "hours" || mode === "both") {
+    return task.interval_hours != null || task.next_due_hours != null;
+  }
+  return false;
+}
 
 function calcStatus(
   task: any,
