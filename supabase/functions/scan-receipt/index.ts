@@ -86,6 +86,33 @@ serve(async (req: Request) => {
     });
   }
 
+  // ── Server-side entitlement check ───────────────────────────────────
+  const adminClient = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+  const { data: profile } = await adminClient
+    .from("profiles")
+    .select("subscription_tier, monthly_scan_count, scan_count_reset_at")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!profile) {
+    return new Response(JSON.stringify({ error: "Profile not found" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Free tier: 0 scans. Any paid tier: unlimited.
+  const isPaid = profile.subscription_tier && profile.subscription_tier !== "free";
+  if (!isPaid) {
+    return new Response(JSON.stringify({ error: "Receipt scanning requires a paid subscription. Upgrade to unlock this feature." }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   if (!ANTHROPIC_API_KEY) {
     console.error("ANTHROPIC_API_KEY is not set");
     return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY secret is not configured" }), {

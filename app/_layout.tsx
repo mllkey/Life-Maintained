@@ -123,7 +123,9 @@ function RootLayoutNav() {
 
         Purchases.addCustomerInfoUpdateListener(listener);
         rcListenerRef.current = () => Purchases.removeCustomerInfoUpdateListener(listener);
-      } catch {}
+      } catch (e) {
+        console.error("[RevenueCat] Initialization failed:", e);
+      }
     })();
 
     return () => {

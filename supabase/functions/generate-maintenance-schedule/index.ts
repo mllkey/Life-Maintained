@@ -114,16 +114,23 @@ serve(async (req: Request) => {
     }
 
     const resolvedCurrentMileage = typeof current_mileage === "number" ? current_mileage : 0;
-    const resolvedCurrentHours = typeof current_hours === "number" ? current_hours : 0;
 
-    // Validate: mileage assets need mileage, hours assets need hours
+    let resolvedCurrentHours = 0;
+    if (isHoursMode) {
+      if (typeof current_hours === "number" && Number.isFinite(current_hours)) {
+        resolvedCurrentHours = current_hours;
+      } else if (current_hours === undefined || current_hours === null) {
+        resolvedCurrentHours = 0;
+      } else {
+        return json({ error: "Invalid current_hours — must be a finite number, or omit for a new asset with no hour reading yet" }, 400);
+      }
+    } else {
+      resolvedCurrentHours = typeof current_hours === "number" && Number.isFinite(current_hours) ? current_hours : 0;
+    }
+
+    // Validate: mileage assets need mileage
     if (isMileageMode && (current_mileage === undefined || current_mileage === null || typeof current_mileage !== "number")) {
       return json({ error: "Missing or invalid required field: current_mileage (number)" }, 400);
-    }
-    if (isHoursMode && typeof current_hours !== "number") {
-      // Hours assets without current_hours default to 0 (new equipment).
-      // This is safe because next_due_hours = 0 + interval_hours is a valid starting point.
-      console.warn(`[HOURS] current_hours not provided for hours-tracked asset ${vehicleCategory}, defaulting to 0`);
     }
 
     // `vehicle_type` historically carries the fuel type in this project; `fuel_type` is supported as well.
@@ -1185,3 +1192,4 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     return json({ error: "Failed to generate schedule", detail: message }, 500);
   }
 });
+

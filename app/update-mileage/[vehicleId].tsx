@@ -36,7 +36,7 @@ export default function UpdateMileageScreen() {
     enabled: !!vehicleId,
   });
 
-  const tracksHours = vehicle ? isHoursTrackedMode(resolveTrackingMode(vehicle)) : false;
+  const tracksHours = isHoursTracked(vehicle);
 
   async function handleSave() {
     if (isLoading) return;
