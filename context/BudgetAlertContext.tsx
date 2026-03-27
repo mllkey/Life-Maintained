@@ -60,7 +60,57 @@ export function BudgetAlertProvider({ userId, children }: Props) {
         0
       );
 
-      const vehicleSum = 0;
+      let vehicleSum = 0;
+      if (vehicleIds.length > 0) {
+        // Get all due vehicle tasks this month
+        const { data: dueVehicleTasks } = await supabase
+          .from("user_vehicle_maintenance_tasks")
+          .select("vehicle_id, name")
+          .in("vehicle_id", vehicleIds)
+          .not("next_due_date", "is", null)
+          .gte("next_due_date", monthStart)
+          .lte("next_due_date", monthEnd);
+
+        if (dueVehicleTasks && dueVehicleTasks.length > 0) {
+          // Batch: load all vehicles at once
+          const uniqueVehicleIds = [...new Set(dueVehicleTasks.map(t => t.vehicle_id))];
+          const { data: vehicles } = await supabase
+            .from("vehicles")
+            .select("id, year, make, model, vehicle_type")
+            .in("id", uniqueVehicleIds);
+
+          if (vehicles) {
+            const vehicleMap = new Map(vehicles.map(v => [v.id, v]));
+
+            // Build all cache keys, then batch query
+            const lookups = dueVehicleTasks.map(t => {
+              const v = vehicleMap.get(t.vehicle_id);
+              if (!v) return null;
+              return {
+                vehicleKey: `${v.year ?? ""}|${v.make}|${v.model ?? ""}|${v.vehicle_type ?? ""}`.toLowerCase(),
+                serviceKey: t.name.toLowerCase().trim(),
+              };
+            }).filter(Boolean) as { vehicleKey: string; serviceKey: string }[];
+
+            // Query all matching estimates in one call per unique vehicle key
+            const uniqueVehicleKeys = [...new Set(lookups.map(l => l.vehicleKey))];
+            const { data: allEstimates } = await supabase
+              .from("repair_cost_cache")
+              .select("vehicle_key, service_name, shop_low, shop_high")
+              .in("vehicle_key", uniqueVehicleKeys);
+
+            if (allEstimates) {
+              const estimateMap = new Map(allEstimates.map(e => [`${e.vehicle_key}|${e.service_name}`, e]));
+              for (const lookup of lookups) {
+                const est = estimateMap.get(`${lookup.vehicleKey}|${lookup.serviceKey}`);
+                if (est) {
+                  vehicleSum += Math.round((Number(est.shop_low) + Number(est.shop_high)) / 2);
+                }
+              }
+            }
+          }
+        }
+      }
 
       const total = vehicleSum + propertySum;
       const threshold = prefsRes.data?.budget_threshold ?? null;

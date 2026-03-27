@@ -93,7 +93,7 @@ serve(async (req: Request) => {
   );
   const { data: profile } = await adminClient
     .from("profiles")
-    .select("subscription_tier, monthly_scan_count, scan_count_reset_at")
+    .select("subscription_tier")
     .eq("user_id", user.id)
     .maybeSingle();
 

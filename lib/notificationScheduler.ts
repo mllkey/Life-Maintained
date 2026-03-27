@@ -129,9 +129,12 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         : daysUntilDue <= 30 ? 2
         : 3;
 
+      const advDays = prefs.advanceDays ?? 14;
       const OFFSETS = [
-        { days: -30, label: "is due in 30 days" },
-        { days: -7, label: "is due in 7 days" },
+        ...(advDays >= 30 ? [{ days: -30, label: "is due in 30 days" }] : []),
+        ...(advDays >= 14 ? [{ days: -14, label: "is due in 2 weeks" }] : []),
+        ...(advDays >= 7 ? [{ days: -7, label: "is due in 7 days" }] : []),
+        { days: -3, label: "is due in 3 days" },
         { days: 0, label: "is due today" },
         { days: 7, label: "is 7 days overdue" },
       ];
@@ -165,6 +168,27 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       const assetName = property.nickname ?? property.address ?? "Property";
       const isMuted = (prefs.mutedProperties ?? []).includes(task.property_id);
       enqueue(task.task, assetName, task.next_due_date, isMuted);
+    }
+
+    // ── Health appointments (single query, reused for scheduling + badge) ──
+    let healthApptsData: any[] = [];
+    try {
+      const { data: healthAppts } = await supabase
+        .from("health_appointments")
+        .select("appointment_type, next_due_date, family_member_id, family_members(name)")
+        .eq("user_id", userId)
+        .not("next_due_date", "is", null);
+
+      healthApptsData = healthAppts ?? [];
+
+      for (const appt of healthApptsData) {
+        if (!appt.next_due_date) continue;
+        const memberName = (appt as any).family_members?.name;
+        const assetName = memberName ? `${memberName}'s` : "Your";
+        enqueue(appt.appointment_type, assetName, appt.next_due_date, false);
+      }
+    } catch (e) {
+      console.warn("[NOTIF] Health appointments query failed:", e);
     }
 
     candidates.sort((a, b) =>
@@ -203,7 +227,11 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       return new Date(t.next_due_date + "T12:00:00") < now;
     }).length;
 
-    await Notifications.setBadgeCountAsync(overdueVehicle + overdueProperty);
+    const overdueHealth = healthApptsData.filter(a =>
+      a.next_due_date && new Date(a.next_due_date + "T12:00:00") < now
+    ).length;
+
+    await Notifications.setBadgeCountAsync(overdueVehicle + overdueProperty + overdueHealth);
 
   } catch (err) {
     console.error("Notification scheduling failed:", err);
