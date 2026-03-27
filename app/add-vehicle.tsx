@@ -91,6 +91,23 @@ const MAKES_BY_TYPE: Record<string, string[]> = {
   dump_truck: ["Isuzu", "Hino", "Freightliner", "Peterbilt", "Kenworth", "International", "Mack", "Western Star", "Ford", "Chevrolet", "RAM"],
   semi_truck: ["Freightliner", "Kenworth", "Peterbilt", "Volvo", "Mack", "International", "Western Star", "Hino", "Isuzu"],
   dumpster: ["Custom", "Wastequip", "Galbreath", "Marathon", "KPAC", "Other"],
+  lawnmower: ["John Deere", "Husqvarna", "Toro", "Honda", "Craftsman", "Cub Cadet", "Ariens", "Ego", "Kubota", "Scag", "Exmark", "Bad Boy", "Gravely"],
+  chainsaw: ["Stihl", "Husqvarna", "Echo", "Makita", "Milwaukee", "DeWalt", "Oregon"],
+  generator: ["Honda", "Generac", "Champion", "Westinghouse", "Predator", "Yamaha", "Briggs & Stratton", "Kohler"],
+  snow_blower: ["Honda", "Toro", "Husqvarna", "Ariens", "Ego", "Cub Cadet", "Craftsman"],
+  pressure_washer: ["Honda", "Simpson", "Generac", "Ryobi", "DeWalt", "Karcher", "Sun Joe"],
+  wood_chipper: ["Vermeer", "Bandit", "Morbark", "Toro", "Patriot"],
+  stump_grinder: ["Vermeer", "Bandit", "Rayco", "Toro", "Carlton"],
+  concrete_saw: ["Stihl", "Husqvarna", "Hilti", "Makita", "Diamond Products"],
+  welder: ["Lincoln Electric", "Miller", "Hobart", "ESAB", "Fronius"],
+  excavator: ["Caterpillar", "John Deere", "Komatsu", "Kubota", "Volvo", "Hitachi", "Kobelco", "Case", "Bobcat", "Takeuchi", "Yanmar", "Hyundai"],
+  skid_steer: ["Bobcat", "Caterpillar", "John Deere", "Case", "Kubota", "New Holland", "Gehl", "Takeuchi", "ASV"],
+  mini_excavator: ["Kubota", "Caterpillar", "Bobcat", "John Deere", "Komatsu", "Takeuchi", "Yanmar", "Kobelco", "Case"],
+  compact_track_loader: ["Bobcat", "Caterpillar", "John Deere", "Case", "Kubota", "New Holland", "ASV", "Takeuchi"],
+  backhoe: ["Caterpillar", "John Deere", "Case", "Kubota", "New Holland", "JCB", "Komatsu"],
+  wheel_loader: ["Caterpillar", "John Deere", "Komatsu", "Volvo", "Kubota", "Case", "Hyundai", "Hitachi"],
+  telehandler: ["JLG", "Skyjack", "Caterpillar", "JCB", "Genie", "Manitou", "Kubota"],
+  forklift: ["Toyota", "Hyster", "Yale", "Crown", "Caterpillar", "Komatsu", "Mitsubishi", "Raymond", "Clark"],
   other: [],
 };
 
@@ -201,11 +218,30 @@ const VEHICLE_TYPES: { value: string; label: string; icon: string }[] = [
   { value: "utv",        label: "UTV / Side-by-Side",    icon: "atv" },
   { value: "pwc",        label: "Personal Watercraft",   icon: "waves" },
   { value: "snowmobile", label: "Snowmobile",            icon: "snowmobile" },
-  { value: "other",      label: "Other",                 icon: "wrench" },
   { value: "trailer",    label: "Trailer",               icon: "swap-horizontal-outline" },
   { value: "dump_truck", label: "Dump Truck",           icon: "cube-outline" },
   { value: "dumpster",   label: "Dumpster",             icon: "trash-outline" },
+  { value: "lawnmower",  label: "Lawn Mower",           icon: "flower-outline" },
+  { value: "chainsaw",   label: "Chainsaw",             icon: "hardware-chip-outline" },
+  { value: "generator",  label: "Generator",            icon: "flash-outline" },
+  { value: "snow_blower", label: "Snow Blower",         icon: "snow" },
+  { value: "pressure_washer", label: "Pressure Washer", icon: "construct-outline" },
+  { value: "wood_chipper", label: "Wood Chipper",       icon: "leaf-outline" },
+  { value: "stump_grinder", label: "Stump Grinder",     icon: "construct-outline" },
+  { value: "concrete_saw", label: "Concrete Saw",       icon: "cut-outline" },
+  { value: "welder",     label: "Welder",               icon: "flame-outline" },
+  { value: "excavator",  label: "Excavator",            icon: "build-outline" },
+  { value: "skid_steer", label: "Skid Steer",           icon: "build-outline" },
+  { value: "mini_excavator", label: "Mini Excavator",   icon: "build-outline" },
+  { value: "compact_track_loader", label: "Compact Track Loader", icon: "build-outline" },
+  { value: "backhoe",    label: "Backhoe",              icon: "build-outline" },
+  { value: "wheel_loader", label: "Wheel Loader",       icon: "build-outline" },
+  { value: "telehandler", label: "Telehandler",         icon: "build-outline" },
+  { value: "forklift",   label: "Forklift",             icon: "build-outline" },
+  { value: "other",      label: "Other",                icon: "wrench" },
 ];
+
+const SKIP_FUEL_TYPES = new Set(["lawnmower", "chainsaw", "generator", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder", "excavator", "skid_steer", "mini_excavator", "compact_track_loader", "backhoe", "wheel_loader", "telehandler", "forklift", "trailer", "dump_trailer", "dumpster"]);
 
 const FUEL_TYPES: { value: "gas" | "diesel" | "hybrid" | "ev"; label: string }[] = [
   { value: "gas",     label: "Gas" },
@@ -1372,9 +1408,9 @@ export default function AddVehicleScreen() {
           </FieldGroup>
 
           {/* ── Powertrain ───────────────────────────────────── */}
-          {(FUEL_OPTIONS_BY_TYPE[vehicleType] || AWD_TYPES.has(vehicleType)) && (
+          {((FUEL_OPTIONS_BY_TYPE[vehicleType] && !SKIP_FUEL_TYPES.has(vehicleType)) || AWD_TYPES.has(vehicleType)) && (
             <FieldGroup label="Powertrain">
-              {FUEL_OPTIONS_BY_TYPE[vehicleType] && (
+              {FUEL_OPTIONS_BY_TYPE[vehicleType] && !SKIP_FUEL_TYPES.has(vehicleType) && (
                 <View style={styles.field}>
                   <Text style={styles.fieldLabel}>Fuel Type</Text>
                   <View style={styles.segControl}>
