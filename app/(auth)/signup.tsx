@@ -169,6 +169,18 @@ export default function SignUpScreen() {
               )}
             </Pressable>
 
+            <View style={styles.legalRow}>
+              <Text style={styles.legalText}>By creating an account, you agree to our </Text>
+              <Pressable onPress={() => router.push("/terms-of-service")} hitSlop={6}>
+                <Text style={styles.legalLink}>Terms of Service</Text>
+              </Pressable>
+              <Text style={styles.legalText}> and </Text>
+              <Pressable onPress={() => router.push("/privacy-policy")} hitSlop={6}>
+                <Text style={styles.legalLink}>Privacy Policy</Text>
+              </Pressable>
+              <Text style={styles.legalText}>.</Text>
+            </View>
+
             <View style={styles.loginRow}>
               <Text style={styles.loginText}>Already have an account?</Text>
               <Pressable onPress={() => router.back()}>
@@ -226,6 +238,25 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   primaryButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  legalRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 12,
+  },
+  legalText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textTertiary,
+    lineHeight: 18,
+  },
+  legalLink: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: Colors.accent,
+    lineHeight: 18,
+  },
   loginRow: { flexDirection: "row", justifyContent: "center", gap: 6 },
   loginText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   loginLink: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.accent },
