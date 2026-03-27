@@ -44,6 +44,128 @@ async function isAuthorized(req: Request): Promise<boolean> {
   }
 }
 
+/**
+ * Query maintenance_logs for real user costs on a matching service + vehicle type.
+ * Uses multi-word matching plus small-sample safeguards.
+ * Returns null if not enough data or query fails.
+ */
+async function queryCommunityData(
+  supabase: any,
+  serviceKey: string,
+  vehicleType: string | null,
+): Promise<{ avg_cost: number; min_cost: number; max_cost: number; sample_size: number; avg_diy_cost: number | null; diy_count: number } | null> {
+  try {
+    // Extract significant words (3+ chars) for matching
+    const words = serviceKey
+      .toLowerCase()
+      .split(/[\s\-\/&,]+/)
+      .filter((w: string) => w.length >= 3);
+
+    if (words.length === 0) return null;
+
+    const vType = (vehicleType ?? "car").toLowerCase();
+
+    // Query candidate logs using up to the 2 longest words, then dedupe in JS.
+    // This reduces bias from a single broad primary word being limited too early.
+    const seedWords = [...words].sort((a, b) => b.length - a.length).slice(0, Math.min(2, words.length));
+    const seen = new Map<string, any>();
+
+    for (const seedWord of seedWords) {
+      const { data: logs } = await supabase
+        .from("maintenance_logs")
+        .select("id, service_name, cost, did_it_myself, vehicles!inner(vehicle_type)")
+        .ilike("service_name", `%${seedWord}%`)
+        .not("cost", "is", null)
+        .gt("cost", 0)
+        .limit(120);
+
+      for (const log of logs ?? []) {
+        if (log?.id != null) {
+          seen.set(String(log.id), log);
+        }
+      }
+    }
+
+    const candidates = Array.from(seen.values());
+    if (candidates.length === 0) return null;
+
+    // Tight filter:
+    // 1) vehicle type must match
+    // 2) service_name must contain at least 2 significant words (or all words if only 1 exists)
+    const requiredWordMatches = Math.min(2, words.length);
+    const matching = candidates.filter((l: any) => {
+      const logVehicleType = (l.vehicles?.vehicle_type ?? "").toLowerCase();
+      if (logVehicleType !== vType) return false;
+
+      const logName = (l.service_name ?? "").toLowerCase();
+      const matchCount = words.filter((w) => logName.includes(w)).length;
+      return matchCount >= requiredWordMatches;
+    });
+
+    if (matching.length < 1) return null;
+
+    // Small-sample safeguard:
+    // - < 3 rows: not enough to blend at all
+    // - 3 rows: use all rows, skip IQR because quartiles are not meaningful
+    // - 4+ rows: apply IQR-based outlier removal
+    if (matching.length < 3) return null;
+
+    let filtered = matching;
+
+    if (matching.length >= 4) {
+      const costs = matching
+        .map((l: any) => Number(l.cost))
+        .filter((c: number) => Number.isFinite(c))
+        .sort((a: number, b: number) => a - b);
+
+      if (costs.length >= 4) {
+        const q1 = costs[Math.floor((costs.length - 1) * 0.25)];
+        const q3 = costs[Math.floor((costs.length - 1) * 0.75)];
+        const iqr = q3 - q1;
+        const lowerBound = q1 - 2 * iqr;
+        const upperBound = q3 + 2 * iqr;
+
+        filtered = matching.filter((l: any) => {
+          const cost = Number(l.cost);
+          return Number.isFinite(cost) && cost >= lowerBound && cost <= upperBound;
+        });
+
+        // Do not let outlier filtering collapse a usable set below 3
+        if (filtered.length < 3) {
+          filtered = matching;
+        }
+      }
+    }
+
+    if (filtered.length < 3) return null;
+
+    const diyLogs = filtered.filter((l: any) => l.did_it_myself === true);
+    const allCosts = filtered.map((l: any) => Number(l.cost)).filter((c: number) => Number.isFinite(c));
+
+    if (allCosts.length < 3) return null;
+
+    const result = {
+      avg_cost: allCosts.reduce((s: number, c: number) => s + c, 0) / allCosts.length,
+      min_cost: Math.min(...allCosts),
+      max_cost: Math.max(...allCosts),
+      sample_size: filtered.length,
+      avg_diy_cost:
+        diyLogs.length > 0
+          ? diyLogs.reduce((s: number, l: any) => s + Number(l.cost), 0) / diyLogs.length
+          : null,
+      diy_count: diyLogs.length,
+    };
+
+    console.log(
+      `[COMMUNITY] ${serviceKey} on ${vType}: ${filtered.length} logs (${matching.length} pre-filter, ${candidates.length} candidates), avg $${result.avg_cost.toFixed(0)}`,
+    );
+    return result;
+  } catch (e) {
+    console.warn("[COMMUNITY] Query failed:", e);
+    return null;
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200, headers: corsHeaders });
@@ -77,6 +199,28 @@ serve(async (req: Request) => {
       .maybeSingle();
 
     if (cached) {
+      // Blend community data into cached estimate if enough real data exists
+      try {
+        const community = await queryCommunityData(supabase, serviceKey, vehicle_type);
+        if (community && community.sample_size >= 3) {
+          const weight = Math.min(community.sample_size / 10, 0.7); // Max 70% community, always 30% AI
+          const blended = {
+            ...cached,
+            shop_low: Math.round(cached.shop_low * (1 - weight) + community.min_cost * weight),
+            shop_high: Math.round(cached.shop_high * (1 - weight) + community.max_cost * weight),
+            ...(community.avg_diy_cost != null && community.diy_count >= 2 ? {
+              diy_low: Math.round(cached.diy_low * (1 - weight) + community.avg_diy_cost * 0.8 * weight),
+              diy_high: Math.round(cached.diy_high * (1 - weight) + community.avg_diy_cost * 1.2 * weight),
+            } : {}),
+            community_sample_size: community.sample_size,
+          };
+          return new Response(JSON.stringify({ data: blended, source: "cache+community" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (e) {
+        console.warn("[COMMUNITY] Cache blend failed:", e);
+      }
       return new Response(JSON.stringify({ data: cached, source: "cache" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -153,7 +297,24 @@ Base your estimates on current 2025-2026 market prices. Be accurate for this spe
       estimated_hours: estimate.estimated_hours,
     }, { onConflict: "vehicle_key,service_name" });
 
-    return new Response(JSON.stringify({ data: estimate, source: "ai" }), {
+    // Blend community data into AI estimate if available
+    try {
+      const community = await queryCommunityData(supabase, serviceKey, vehicle_type);
+      if (community && community.sample_size >= 3) {
+        const weight = Math.min(community.sample_size / 10, 0.7);
+        estimate.shop_low = Math.round(estimate.shop_low * (1 - weight) + community.min_cost * weight);
+        estimate.shop_high = Math.round(estimate.shop_high * (1 - weight) + community.max_cost * weight);
+        if (community.avg_diy_cost != null && community.diy_count >= 2) {
+          estimate.diy_low = Math.round(estimate.diy_low * (1 - weight) + community.avg_diy_cost * 0.8 * weight);
+          estimate.diy_high = Math.round(estimate.diy_high * (1 - weight) + community.avg_diy_cost * 1.2 * weight);
+        }
+        estimate.community_sample_size = community.sample_size;
+      }
+    } catch (e) {
+      console.warn("[COMMUNITY] AI blend failed:", e);
+    }
+
+    return new Response(JSON.stringify({ data: estimate, source: estimate.community_sample_size ? "ai+community" : "ai" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
