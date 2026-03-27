@@ -22,6 +22,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { matchAndUpdateVehicleTask, matchAndUpdatePropertyTask } from "@/lib/maintenanceMatcher";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
+import DatePicker from "@/components/DatePicker";
 import Reanimated, {
   useSharedValue,
   withRepeat,
@@ -354,7 +355,13 @@ function ConfirmCard({
 
       <View style={styles.confirmFields}>
         <FieldRow label="Service" value={serviceName} onChange={setServiceName} placeholder="e.g. Oil Change" />
-        <FieldRow label="Date" value={date} onChange={setDate} placeholder="YYYY-MM-DD" />
+        <View style={styles.fieldRow}>
+          <DatePicker
+            value={date}
+            onChange={setDate}
+            maximumDate={new Date()}
+          />
+        </View>
         <FieldRow label="Cost" value={cost} onChange={setCost} placeholder="0.00" keyboard="decimal-pad" prefix="$" />
         {isVehicle && (
           <FieldRow label="Mileage" value={mileage} onChange={setMileage} placeholder="0" keyboard="number-pad" suffix=" mi" />

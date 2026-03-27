@@ -273,6 +273,27 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         : a.triggerDate.getTime() - b.triggerDate.getTime()
     );
 
+    // ── Quiet hours filter ──────────────────────────────────────────────
+    const qStart = prefs.quietHoursStart ?? "22:00";
+    const qEnd = prefs.quietHoursEnd ?? "08:00";
+    const [qsH, qsM] = qStart.split(":").map(Number);
+    const [qeH, qeM] = qEnd.split(":").map(Number);
+    const qsMin = qsH * 60 + (qsM || 0);
+    const qeMin = qeH * 60 + (qeM || 0);
+
+    for (const c of candidates) {
+      const trigMin = c.triggerDate.getHours() * 60 + c.triggerDate.getMinutes();
+      const inQuiet = qsMin < qeMin
+        ? (trigMin >= qsMin && trigMin < qeMin)   // e.g., 01:00–06:00
+        : (trigMin >= qsMin || trigMin < qeMin);   // e.g., 22:00–08:00 (wraps midnight)
+      if (inQuiet) {
+        c.triggerDate.setHours(qeH, qeM || 0, 0, 0);
+        if (c.triggerDate <= now) {
+          c.triggerDate.setDate(c.triggerDate.getDate() + 1);
+        }
+      }
+    }
+
     const toSchedule = candidates.slice(0, 64);
 
     await Notifications.cancelAllScheduledNotificationsAsync();

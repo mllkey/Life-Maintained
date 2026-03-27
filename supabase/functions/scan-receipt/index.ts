@@ -20,34 +20,33 @@ interface ReceiptData {
   error?: string;
 }
 
+type ProfileRow = {
+  subscription_tier: string;
+  monthly_scan_count: number | null;
+  scan_count_reset_at: string | null;
+};
+
 function detectMediaType(base64: string): string {
-  // Inspect the first few bytes (base64 decoded) to identify the format
   const prefix = base64.substring(0, 16);
   const decoded = atob(prefix);
   const bytes = decoded.split("").map((c) => c.charCodeAt(0));
 
-  // PNG: 137 80 78 71
   if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
     return "image/png";
   }
-  // JPEG: 255 216 255
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     return "image/jpeg";
   }
-  // GIF: 71 73 70
   if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
     return "image/gif";
   }
-  // WebP: RIFF....WEBP
   if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) {
     return "image/webp";
   }
-  // Default to JPEG
   return "image/jpeg";
 }
 
 function stripDataUrlPrefix(base64: string): string {
-  // Strip "data:image/...;base64," prefix if present
   const match = base64.match(/^data:[^;]+;base64,(.+)$/);
   return match ? match[1] : base64;
 }
@@ -64,7 +63,6 @@ serve(async (req: Request) => {
     });
   }
 
-  // Verify caller is an authenticated user
   const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -86,25 +84,25 @@ serve(async (req: Request) => {
     });
   }
 
-  // ── Server-side entitlement check ───────────────────────────────────
   const adminClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
-  const { data: profile } = await adminClient
+  const { data: profileRaw } = await adminClient
     .from("profiles")
-    .select("subscription_tier")
+    .select("subscription_tier, monthly_scan_count, scan_count_reset_at")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!profile) {
+  if (!profileRaw) {
     return new Response(JSON.stringify({ error: "Profile not found" }), {
       status: 403,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  // Free tier: 0 scans. Any paid tier: unlimited.
+  const profile = profileRaw as ProfileRow;
+
   const isPaid = profile.subscription_tier && profile.subscription_tier !== "free";
   if (!isPaid) {
     return new Response(JSON.stringify({ error: "Receipt scanning requires a paid subscription. Upgrade to unlock this feature." }), {
@@ -113,33 +111,77 @@ serve(async (req: Request) => {
     });
   }
 
-  if (!ANTHROPIC_API_KEY) {
-    console.error("ANTHROPIC_API_KEY is not set");
-    return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY secret is not configured" }), {
-      status: 500,
+  // ── Monthly scan limits by tier ────────────────────────────────────
+  const TIER_SCAN_LIMITS: Record<string, number> = {
+    personal: 15,
+    pro: 30,
+    business: 100,
+    trial: 5,
+  };
+  const monthlyLimit = TIER_SCAN_LIMITS[profile.subscription_tier] ?? 5;
+  const now = new Date();
+  const resetAt = profile.scan_count_reset_at ? new Date(profile.scan_count_reset_at) : null;
+  let currentCount = profile.monthly_scan_count ?? 0;
+
+  if (!resetAt || resetAt.getMonth() !== now.getMonth() || resetAt.getFullYear() !== now.getFullYear()) {
+    currentCount = 0;
+    await adminClient.from("profiles").update({
+      monthly_scan_count: 0,
+      scan_count_reset_at: now.toISOString(),
+    }).eq("user_id", user.id);
+  }
+
+  if (currentCount >= monthlyLimit) {
+    return new Response(JSON.stringify({
+      error: `You've used all ${monthlyLimit} scans this month. Upgrade your plan for more.`,
+      scans_used: currentCount,
+      scans_limit: monthlyLimit,
+    }), {
+      status: 429,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  let rawImage: string;
+  // Atomically increment BEFORE processing to prevent race conditions
+  // Two simultaneous requests will both see the count go up immediately
+  await adminClient.from("profiles").update({
+    monthly_scan_count: currentCount + 1,
+  }).eq("user_id", user.id);
+
+  const refundScan = async () => {
+    await adminClient.from("profiles").update({
+      monthly_scan_count: Math.max(0, currentCount),
+    }).eq("user_id", user.id).catch(() => {});
+  };
+
   try {
-    const body = await req.json();
-    rawImage = body.image;
-    if (!rawImage) throw new Error("No image provided");
-  } catch (err) {
-    console.error("Bad request body:", err);
-    return new Response(JSON.stringify({ error: "Invalid request body — expected { image: base64string }" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+    if (!ANTHROPIC_API_KEY) {
+      console.error("ANTHROPIC_API_KEY is not set");
+      await refundScan();
+      return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY secret is not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-  // Clean and detect
-  const base64 = stripDataUrlPrefix(rawImage);
-  const mediaType = detectMediaType(base64);
-  console.log(`Image media type detected: ${mediaType}, base64 length: ${base64.length}`);
+    let rawImage: string;
+    try {
+      const body = await req.json();
+      rawImage = body.image;
+      if (!rawImage) throw new Error("No image provided");
+    } catch (err) {
+      console.error("Bad request body:", err);
+      await refundScan();
+      return new Response(JSON.stringify({ error: "Invalid request body — expected { image: base64string }" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-  const prompt = `You are analyzing a service receipt or invoice image. Extract the following fields exactly as they appear:
+    const base64 = stripDataUrlPrefix(rawImage);
+    const mediaType = detectMediaType(base64);
+
+    const prompt = `You are analyzing a service receipt or invoice image. Extract the following fields exactly as they appear:
 
 1. date — The service or transaction date. Format as YYYY-MM-DD. Return null if not found.
 2. cost — The total amount charged as a number (no currency symbol). Use the final total/amount due. Return null if not found.
@@ -157,7 +199,6 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
   "rawText": "a brief summary of what you can read on the receipt"
 }`;
 
-  try {
     const requestBody = {
       model: "claude-3-5-haiku-20241022",
       max_tokens: 512,
@@ -182,7 +223,6 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
       ],
     };
 
-    console.log("Calling Anthropic API...");
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -196,17 +236,17 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
     if (!anthropicRes.ok) {
       const errText = await anthropicRes.text();
       console.error(`Anthropic API error ${anthropicRes.status}:`, errText);
+      await refundScan();
       return new Response(
         JSON.stringify({
           error: `Anthropic API returned ${anthropicRes.status}: ${errText}`,
           date: null, cost: null, provider: null, serviceType: null, rawText: "",
         }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const anthropicData = await anthropicRes.json();
-    console.log("Anthropic response received, stop_reason:", anthropicData.stop_reason);
     const rawContent: string = anthropicData.content?.[0]?.text ?? "";
 
     let parsed: ReceiptData;
@@ -239,9 +279,10 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
     });
   } catch (err) {
     console.error("scan-receipt unexpected error:", err);
+    await refundScan();
     return new Response(
       JSON.stringify({ error: "Internal server error", date: null, cost: null, provider: null, serviceType: null, mileage: null, task: null, rawText: "" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

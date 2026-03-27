@@ -109,10 +109,6 @@ serve(async (req: Request) => {
     const isMileageMode = trackingMode === "mileage";
     const isTimeOnlyMode = trackingMode === "time_only";
 
-    if (trackingMode === "both") {
-      console.log(`[TRACKING] Asset ${vehicleCategory} uses 'both' mode — generating hours-primary schedule. Full dual-meter support is deferred.`);
-    }
-
     const resolvedCurrentMileage = typeof current_mileage === "number" ? current_mileage : 0;
 
     let resolvedCurrentHours = 0;
@@ -233,15 +229,12 @@ serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    console.log("[AUTH] SUPABASE_URL set:", !!supabaseUrl);
-    console.log("[AUTH] SUPABASE_ANON_KEY set:", !!supabaseAnonKey);
 
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: `Bearer ${jwt}` } },
     });
 
     const { data: { user }, error: authError } = await userClient.auth.getUser();
-    console.log("[AUTH] getUser result:", user?.id, "error:", authError?.message);
 
     if (authError || !user) {
       console.error("[AUTH] Auth failed — authError:", authError?.message, "user:", user?.id);
@@ -511,7 +504,6 @@ serve(async (req: Request) => {
           validatedTasks = Array.isArray(raw)
             ? raw.map((t) => ({ ...t, interval_hours: t.interval_hours ?? null, interval_miles: t.interval_miles ?? null }))
             : null;
-          console.log(`[CACHE HIT] ${cacheKey}`);
         } catch { console.warn("[CACHE] Parse failed"); }
       }
 
@@ -817,7 +809,6 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
         }));
         const { error: aiInsertErr } = await adminClient.from("user_vehicle_maintenance_tasks").insert(aiTasksToInsert);
         if (!aiInsertErr) {
-          console.log(`[AI SUCCESS] ${aiTasksToInsert.length} tasks for ${vehicleDesc}`);
           const edgeFnSecret = Deno.env.get("EDGE_FUNCTION_SECRET") ?? "";
           let estimatesCached = 0;
           let estimateWarning: string | undefined;
@@ -846,7 +837,6 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
                 if (r.status === "rejected") console.warn(`[ESTIMATES] Error:`, r.reason);
               }
             }
-            console.log(`[ESTIMATES] Cached ${estimatesCached}/${estimateNames.length} for ${vehicleDesc}`);
             if (estimatesCached === 0 && estimateNames.length > 0) {
               console.error(`[ESTIMATES] All ${estimateNames.length} estimate calls failed for ${vehicleDesc} — likely auth misconfiguration`);
               estimateWarning = "Cost estimates failed to generate. Check EDGE_FUNCTION_SECRET configuration.";
@@ -1178,7 +1168,6 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
           if (r.status === "rejected") console.warn(`[ESTIMATES] Error:`, r.reason);
         }
       }
-      console.log(`[ESTIMATES] Cached ${tplEstimatesCached}/${tplEstimateNames.length} template estimates for ${vehicleDesc}`);
       if (tplEstimatesCached === 0 && tasksToInsert.length > 0) {
         console.error(`[ESTIMATES] All template estimate calls failed for ${vehicleDesc} — likely auth misconfiguration`);
         tplEstimateWarning = "Cost estimates failed to generate. Check EDGE_FUNCTION_SECRET configuration.";

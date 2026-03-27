@@ -156,9 +156,6 @@ async function queryCommunityData(
       diy_count: diyLogs.length,
     };
 
-    console.log(
-      `[COMMUNITY] ${serviceKey} on ${vType}: ${filtered.length} logs (${matching.length} pre-filter, ${candidates.length} candidates), avg $${result.avg_cost.toFixed(0)}`,
-    );
     return result;
   } catch (e) {
     console.warn("[COMMUNITY] Query failed:", e);
@@ -238,8 +235,15 @@ serve(async (req: Request) => {
     const vehicleDesc = `${year ?? ""} ${make} ${model ?? ""}`.trim();
     const locationHint = zip_code ? ` in zip code ${zip_code}` : "";
 
-    const prompt = `You are an automotive repair cost estimator. Give me a cost estimate for the following service on the specified vehicle. Be specific to this exact vehicle, not generic.
-Vehicle: ${vehicleDesc} (type: ${vehicle_type ?? "car"})
+    const isPropertyEstimate = (vehicle_type ?? "").toString().startsWith("property_");
+    const estimatorType = isPropertyEstimate ? "home maintenance" : "automotive repair";
+    const entityLabel = isPropertyEstimate ? "property" : "vehicle";
+    const entityDesc = isPropertyEstimate
+      ? `${String(vehicle_type ?? "").replace("property_", "")} property built in ${year ?? "unknown year"}`
+      : vehicleDesc;
+
+    const prompt = `You are a ${estimatorType} cost estimator. Give me a cost estimate for the following service on the specified ${entityLabel}. Be specific to this exact ${entityLabel}, not generic.
+${entityLabel.charAt(0).toUpperCase() + entityLabel.slice(1)}: ${entityDesc}${isPropertyEstimate ? "" : ` (type: ${vehicle_type ?? "car"})`}
 Service: ${service_name}
 Location: United States${locationHint}
 Respond ONLY with valid JSON, no other text. Use this exact format:
@@ -252,7 +256,7 @@ Respond ONLY with valid JSON, no other text. Use this exact format:
 "estimated_hours": <number, estimated labor hours>,
 "parts_list": "<comma-separated list of parts needed with approximate individual costs>"
 }
-Base your estimates on current 2025-2026 market prices. Be accurate for this specific vehicle.`;
+Base your estimates on current 2025-2026 market prices. Be accurate for this specific ${entityLabel}.`;
     const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {

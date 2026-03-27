@@ -24,6 +24,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system/legacy";
 import { parseISO, isBefore, addDays, addMonths, format } from "date-fns";
 import { SaveToast } from "@/components/SaveToast";
 import DatePicker from "@/components/DatePicker";
@@ -61,6 +62,7 @@ export default function PropertyDetailScreen() {
   const [completeCost, setCompleteCost] = useState("");
   const [completeProvider, setCompleteProvider] = useState("");
   const [completeNotes, setCompleteNotes] = useState("");
+  const [completeDuration, setCompleteDuration] = useState("");
   const [completeDiy, setCompleteDiy] = useState(false);
   const [isSavingComplete, setIsSavingComplete] = useState(false);
 
@@ -68,6 +70,7 @@ export default function PropertyDetailScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastIsError, setToastIsError] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
 
   // Skeleton / polling / animation state
   const prevTaskCountRef = useRef(0);
@@ -80,6 +83,20 @@ export default function PropertyDetailScreen() {
     setToastIsError(isError);
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2800);
+  }
+
+  function buildCsv(logsData: any[]) {
+    const header = "Date,Service,Cost,Provider,DIY,Notes";
+    const rows = logsData.map(log => {
+      const date = log.service_date ?? "";
+      const task = (log.service_name ?? "").replace(/,/g, ";");
+      const cost = log.cost != null ? `$${Number(log.cost).toFixed(2)}` : "";
+      const provider = (log.provider_name ?? "").replace(/,/g, ";");
+      const diy = log.did_it_myself ? "Yes" : "No";
+      const notes = (log.notes ?? "").replace(/,/g, ";").replace(/\n/g, " ");
+      return `${date},${task},${cost},${provider},${diy},${notes}`;
+    });
+    return [header, ...rows, "", "Data is self-reported by the property owner and has not been independently verified."].join("\n");
   }
 
   const { data: property, isLoading: loadingProperty } = useQuery({
@@ -138,6 +155,30 @@ export default function PropertyDetailScreen() {
     enabled: !!id,
   });
 
+  const scheduleTasks = tasks;
+
+  const { data: costEstimates } = useQuery({
+    queryKey: ["property_repair_costs", id, property?.property_type, scheduleTasks?.length ?? 0],
+    queryFn: async () => {
+      if (!property || !scheduleTasks?.length) return {};
+      const results: Record<string, any> = {};
+      const serviceNames = scheduleTasks.map((t: any) => t.task.toLowerCase().trim());
+      const propertyKey = `${property.year_built ?? ""}|${property.property_type}||property_${property.property_type}`.toLowerCase();
+
+      const { data: cachedData } = await supabase
+        .from("repair_cost_cache")
+        .select("*")
+        .eq("vehicle_key", propertyKey)
+        .in("service_name", serviceNames);
+
+      for (const item of cachedData ?? []) {
+        results[item.service_name] = item;
+      }
+      return results;
+    },
+    enabled: !!property && (scheduleTasks?.length ?? 0) > 0,
+  });
+
   async function handleExportHistory() {
     if (!logs || logs.length === 0 || !property) return;
     setIsExporting(true);
@@ -188,6 +229,22 @@ export default function PropertyDetailScreen() {
     }
   }
 
+  async function handleExportCsv() {
+    if (!logs || logs.length === 0 || !property) return;
+    setIsExportingCsv(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const csv = buildCsv(logs);
+      const csvPath = `${FileSystem.cacheDirectory}property-history.csv`;
+      await FileSystem.writeAsStringAsync(csvPath, csv);
+      await Sharing.shareAsync(csvPath, { mimeType: "text/csv" });
+    } catch {
+      showToast("Failed to export CSV", true);
+    } finally {
+      setIsExportingCsv(false);
+    }
+  }
+
   function handleOpenMarkComplete(task: any) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setMarkCompleteTask(task);
@@ -195,6 +252,7 @@ export default function PropertyDetailScreen() {
     setCompleteCost("");
     setCompleteProvider("");
     setCompleteNotes("");
+    setCompleteDuration("");
     setCompleteDiy(false);
     setIsSavingComplete(false);
   }
@@ -228,6 +286,17 @@ export default function PropertyDetailScreen() {
     try {
       const costNum = completeCost.trim() ? parseFloat(completeCost.replace(/[^0-9.]/g, "")) : null;
 
+      const durTrim = completeDuration.trim();
+      const notesForLog = (() => {
+        const parts: string[] = [];
+        if (completeNotes.trim()) parts.push(completeNotes.trim());
+        if (durTrim) {
+          const dm = parseInt(durTrim, 10);
+          if (!isNaN(dm) && dm > 0) parts.push(`Time spent: ${dm} min`);
+        }
+        return parts.length ? parts.join("\n\n") : null;
+      })();
+
       const [taskRes, logRes] = await Promise.all([
         supabase
           .from("property_maintenance_tasks")
@@ -244,7 +313,7 @@ export default function PropertyDetailScreen() {
           provider_name: completeProvider.trim() || null,
           provider_contact: null,
           receipt_url: null,
-          notes: completeNotes.trim() || null,
+          notes: notesForLog,
           did_it_myself: completeDiy,
         }),
       ]);
@@ -510,6 +579,9 @@ export default function PropertyDetailScreen() {
                     <View style={styles.insightCard}>
                       <Ionicons name="bulb-outline" size={16} color={Colors.home} />
                       <Text style={styles.insightText}>{insightText}</Text>
+                      <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", marginBottom: 8 }}>
+                        Based on your property type and age
+                      </Text>
                     </View>
                   )}
 
@@ -530,6 +602,7 @@ export default function PropertyDetailScreen() {
                       onToggle={() => { Haptics.selectionAsync(); setActionNeededExpanded(v => !v); }}
                       tasks={actionNeededTasks}
                       onMarkComplete={handleOpenMarkComplete}
+                      costEstimates={costEstimates}
                     />
                   )}
                   {goodTasks.length > 0 && (
@@ -540,6 +613,7 @@ export default function PropertyDetailScreen() {
                       onToggle={() => { Haptics.selectionAsync(); setUpToDateExpanded(v => !v); }}
                       tasks={goodTasks}
                       onMarkComplete={handleOpenMarkComplete}
+                      costEstimates={costEstimates}
                     />
                   )}
                 </Animated.View>
@@ -576,20 +650,36 @@ export default function PropertyDetailScreen() {
                     </View>
                   </View>
 
-                  <Pressable
-                    style={({ pressed }) => [styles.exportBtn, { opacity: pressed || isExporting ? 0.7 : 1 }]}
-                    onPress={handleExportHistory}
-                    disabled={isExporting}
-                  >
-                    {isExporting ? (
-                      <ActivityIndicator size="small" color={Colors.home} />
-                    ) : (
-                      <>
-                        <Ionicons name="share-outline" size={16} color={Colors.home} />
-                        <Text style={styles.exportBtnText}>Share History</Text>
-                      </>
-                    )}
-                  </Pressable>
+                  <View style={styles.exportBtnRow}>
+                    <Pressable
+                      style={({ pressed }) => [styles.exportBtn, styles.exportBtnHalf, { opacity: pressed || isExporting ? 0.7 : 1 }]}
+                      onPress={handleExportHistory}
+                      disabled={isExporting}
+                    >
+                      {isExporting ? (
+                        <ActivityIndicator size="small" color={Colors.home} />
+                      ) : (
+                        <>
+                          <Ionicons name="document-text-outline" size={16} color={Colors.home} />
+                          <Text style={styles.exportBtnText}>Share PDF</Text>
+                        </>
+                      )}
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [styles.exportBtn, styles.exportBtnHalf, { opacity: pressed || isExportingCsv ? 0.7 : 1 }]}
+                      onPress={handleExportCsv}
+                      disabled={isExportingCsv}
+                    >
+                      {isExportingCsv ? (
+                        <ActivityIndicator size="small" color={Colors.home} />
+                      ) : (
+                        <>
+                          <Ionicons name="download-outline" size={16} color={Colors.home} />
+                          <Text style={styles.exportBtnText}>Export as CSV</Text>
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
 
                   <View style={styles.historyGroupList}>
                     {groupedHistory.map(group => (
@@ -716,6 +806,24 @@ export default function PropertyDetailScreen() {
                   />
                 </View>
 
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetFieldLabel}>
+                    Time spent (minutes) <Text style={{ color: Colors.textTertiary }}>(optional)</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.sheetInput}
+                    value={completeDuration}
+                    onChangeText={t => {
+                      const cleaned = t.replace(/[^0-9]/g, "").slice(0, 4);
+                      setCompleteDuration(cleaned);
+                    }}
+                    keyboardType="number-pad"
+                    placeholder="e.g. 45"
+                    placeholderTextColor={Colors.textTertiary}
+                    returnKeyType="done"
+                  />
+                </View>
+
                 <Pressable
                   onPress={() => setCompleteDiy(!completeDiy)}
                   style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}
@@ -771,6 +879,7 @@ function TaskSection({
   onToggle,
   tasks,
   onMarkComplete,
+  costEstimates,
 }: {
   title: string;
   titleColor?: string;
@@ -778,6 +887,7 @@ function TaskSection({
   onToggle: () => void;
   tasks: any[];
   onMarkComplete: (task: any) => void;
+  costEstimates?: Record<string, any>;
 }) {
   return (
     <View style={styles.taskSection}>
@@ -795,6 +905,7 @@ function TaskSection({
               task={task}
               onMarkComplete={onMarkComplete}
               isLast={i === tasks.length - 1}
+              costEstimates={costEstimates}
             />
           ))}
         </View>
@@ -807,10 +918,12 @@ function TaskRow({
   task,
   onMarkComplete,
   isLast,
+  costEstimates,
 }: {
   task: any;
   onMarkComplete: (task: any) => void;
   isLast: boolean;
+  costEstimates?: Record<string, any>;
 }) {
   const status = getStatus(task.next_due_date, task.last_completed_at);
   const barColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
@@ -850,14 +963,41 @@ function TaskRow({
           {task.task}
         </Text>
         <Text style={[styles.taskRowDue, isCompleted && styles.taskRowDueDone]}>{dueText}</Text>
-        {!isCompleted && task.estimated_cost != null && task.estimated_cost > 0 && (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
-            <Ionicons name="cash-outline" size={12} color={Colors.good} />
-            <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
-              Est. ~${task.estimated_cost.toLocaleString()}
-            </Text>
-          </View>
-        )}
+        {!isCompleted && (() => {
+          const est = costEstimates?.[task.task.toLowerCase().trim()];
+          if (est?.shop_low != null) {
+            const shopLow = Number(est.shop_low);
+            const shopHigh = Number(est.shop_high);
+            const diyLow = est.diy_low != null ? Number(est.diy_low) : null;
+            const diyHigh = est.diy_high != null ? Number(est.diy_high) : null;
+            const shopStr = shopLow === 0 && shopHigh === 0 ? "Free" : shopLow === shopHigh ? `$${shopLow} shop` : `$${shopLow}-$${shopHigh} shop`;
+            const diyStr = diyLow == null ? "" : diyLow === 0 && diyHigh === 0 ? " · Free DIY" : diyLow === diyHigh ? ` · $${diyLow} DIY` : ` · $${diyLow}-$${diyHigh} DIY`;
+            return (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
+                <Ionicons name="cash-outline" size={12} color={Colors.good} />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
+                  {shopStr}{diyStr}
+                </Text>
+                {est.difficulty != null && (
+                  <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: est.difficulty === 1 ? Colors.good : est.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: est.difficulty === 1 ? Colors.goodMuted : est.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
+                    {est.difficulty === 1 ? "Easy DIY" : est.difficulty === 2 ? "Moderate" : "Pro"}
+                  </Text>
+                )}
+              </View>
+            );
+          }
+          if (task.estimated_cost != null && task.estimated_cost > 0) {
+            return (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
+                <Ionicons name="cash-outline" size={12} color={Colors.good} />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
+                  Est. ~${task.estimated_cost.toLocaleString()}
+                </Text>
+              </View>
+            );
+          }
+          return null;
+        })()}
         {!isCompleted && task.last_completed_at != null && (
           <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.vehicle, marginTop: 2 }}>
             Last completed {format(parseISO(task.last_completed_at), "MMM d, yyyy")}
@@ -1062,6 +1202,11 @@ const styles = StyleSheet.create({
   historySummaryLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   historySummaryDivider: { width: 1, height: 36, backgroundColor: Colors.border },
 
+  exportBtnRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 10,
+  },
   exportBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1072,6 +1217,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderWidth: 1,
     borderColor: Colors.home + "30",
+  },
+  exportBtnHalf: {
+    flex: 1,
+    minWidth: 0,
   },
   exportBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.home },
 

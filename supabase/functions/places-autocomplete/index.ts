@@ -50,8 +50,6 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  console.log("[places-autocomplete] GOOGLE_PLACES_API_KEY is present, length:", GOOGLE_PLACES_API_KEY.length);
-
   let input: string;
   try {
     const body = await req.json();
@@ -65,8 +63,6 @@ serve(async (req: Request) => {
   }
 
   try {
-    console.log("[places-autocomplete] Calling Places API (New) for input:", input);
-
     const res = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
       method: "POST",
       headers: {
@@ -81,7 +77,6 @@ serve(async (req: Request) => {
     });
 
     const json = await res.json();
-    console.log("[places-autocomplete] API HTTP status:", res.status, "suggestions count:", json.suggestions?.length ?? 0);
 
     if (!res.ok) {
       const errMsg = json.error?.message ?? JSON.stringify(json);
@@ -111,8 +106,6 @@ serve(async (req: Request) => {
         secondaryText: p.structuredFormat?.secondaryText?.text ?? "",
       };
     }).filter(Boolean);
-
-    console.log("[places-autocomplete] Returning", suggestions.length, "suggestions");
 
     return new Response(JSON.stringify({ suggestions }), {
       status: 200,

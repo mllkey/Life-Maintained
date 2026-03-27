@@ -166,8 +166,10 @@ export default function LogServiceScreen() {
   }, [task, user?.id, vehicleId]);
 
   function handleScanComplete(result: ReceiptScanResult) {
-    console.log("Scan result:", JSON.stringify(result));
-    console.log("Scan result fields - task:", result.task, "serviceType:", result.serviceType, "cost:", result.cost, "provider:", result.provider, "mileage:", result.mileage, "date:", result.date);
+    if (__DEV__) {
+      console.log("Scan result:", JSON.stringify(result));
+      console.log("Scan result fields - task:", result.task, "serviceType:", result.serviceType, "cost:", result.cost, "provider:", result.provider, "mileage:", result.mileage, "date:", result.date);
+    }
     if (result.date) setDate(result.date);
     if (result.mileage != null) setMileage(String(result.mileage));
     if (result.provider) setProvider(result.provider);

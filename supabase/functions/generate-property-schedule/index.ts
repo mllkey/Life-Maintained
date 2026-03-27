@@ -498,7 +498,41 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
     if (insertError) return json({ error: "Failed to insert tasks", detail: insertError.message }, 500);
 
     console.log(`[SUCCESS] ${tasksToInsert.length} property tasks for ${propertyDesc} (source: ${usedAi ? "ai" : "template"})`);
-    return json({ success: true, tasks_created: tasksToInsert.length, property_id, source: usedAi ? "ai" : "template" });
+
+    // ── Generate detailed cost estimates (shop/DIY/difficulty) ──────────
+    const edgeFnSecret = Deno.env.get("EDGE_FUNCTION_SECRET") ?? "";
+    let estimatesCached = 0;
+    if (edgeFnSecret && supabaseUrl) {
+      const estimateUrl = `${supabaseUrl}/functions/v1/estimate-repair-cost`;
+      const estimateHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+        "x-edge-secret": edgeFnSecret,
+      };
+      const estimateNames = tasksToInsert.map((t: any) => (t.task as string).toLowerCase().trim());
+      const propertyTypeKey = `property_${propType}`;
+      const BATCH = 5;
+      for (let i = 0; i < estimateNames.length; i += BATCH) {
+        const batch = estimateNames.slice(i, i + BATCH);
+        await Promise.allSettled(batch.map(svc =>
+          fetch(estimateUrl, {
+            method: "POST",
+            headers: estimateHeaders,
+            body: JSON.stringify({
+              year: yearBuilt,
+              make: propType,
+              model: "",
+              service_name: svc,
+              vehicle_type: propertyTypeKey,
+            }),
+          }).then(r => {
+            if (r.ok) estimatesCached++;
+            else console.warn(`[ESTIMATES] Failed for ${svc}: ${r.status}`);
+          })
+        ));
+      }
+    }
+
+    return json({ success: true, tasks_created: tasksToInsert.length, estimates_cached: estimatesCached, property_id, source: usedAi ? "ai" : "template" });
 
   } catch (err) {
     console.error("[ERROR]", err);

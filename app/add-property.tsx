@@ -90,11 +90,11 @@ type ParsedAddress = {
 async function fetchSuggestions(query: string): Promise<PlaceSuggestion[]> {
   if (query.length < 2) return [];
   try {
-    console.log("[places] invoking places-autocomplete with input:", query);
+    if (__DEV__) console.log("[places] invoking places-autocomplete with input:", query);
     const { data, error } = await supabase.functions.invoke("places-autocomplete", {
       body: { input: query },
     });
-    console.log("[places] invoke result - data:", JSON.stringify(data), "error:", error);
+    if (__DEV__) console.log("[places] invoke result - data:", JSON.stringify(data), "error:", error);
     if (error) {
       console.warn("[places] invoke error:", error.message ?? error);
       return [];
@@ -103,7 +103,7 @@ async function fetchSuggestions(query: string): Promise<PlaceSuggestion[]> {
       console.warn("[places] no suggestions field in response:", data);
       return [];
     }
-    console.log("[places] suggestions count:", data.suggestions.length);
+    if (__DEV__) console.log("[places] suggestions count:", data.suggestions.length);
     return data.suggestions;
   } catch (err) {
     console.error("[places] fetchSuggestions threw:", err);
@@ -195,7 +195,7 @@ export default function AddPropertyScreen() {
     debounceRef.current = setTimeout(async () => {
       setIsFetchingSuggestions(true);
       const results = await fetchSuggestions(text);
-      console.log("[places] setting suggestions, count:", results.length, "showSuggestions:", results.length > 0);
+      if (__DEV__) console.log("[places] setting suggestions, count:", results.length, "showSuggestions:", results.length > 0);
       setSuggestions(results);
       setShowSuggestions(results.length > 0);
       setIsFetchingSuggestions(false);

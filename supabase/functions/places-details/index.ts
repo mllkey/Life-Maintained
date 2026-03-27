@@ -64,8 +64,6 @@ serve(async (req: Request) => {
   }
 
   try {
-    console.log("[places-details] Fetching details for placeId:", placeId);
-
     const res = await fetch(`https://places.googleapis.com/v1/places/${placeId}`, {
       method: "GET",
       headers: {
@@ -75,7 +73,6 @@ serve(async (req: Request) => {
     });
 
     const json = await res.json();
-    console.log("[places-details] API HTTP status:", res.status);
 
     if (!res.ok) {
       const errMsg = json.error?.message ?? JSON.stringify(json);
@@ -94,8 +91,6 @@ serve(async (req: Request) => {
       long_name: c.longText,
       short_name: c.shortText,
     }));
-
-    console.log("[places-details] Returning", addressComponents.length, "components");
 
     return new Response(JSON.stringify({ addressComponents }), {
       status: 200,
