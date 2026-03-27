@@ -28,11 +28,12 @@ import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
-import { parseISO, isBefore, addDays, addMonths, format, formatDistanceToNowStrict, differenceInDays } from "date-fns";
+import { parseISO, isBefore, addMonths, format, formatDistanceToNowStrict, differenceInDays } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
 import Paywall from "@/components/Paywall";
 import { hasPersonalOrAbove } from "@/lib/subscription";
 import { SaveToast } from "@/components/SaveToast";
+import DatePicker from "@/components/DatePicker";
 import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 import {
   resolveTrackingMode,
@@ -421,14 +422,6 @@ export default function VehicleDetailScreen() {
     setTimeout(() => setShowScheduleToast(false), 2800);
   }
 
-  function formatDateLabel(dateStr: string) {
-    const today = format(new Date(), "yyyy-MM-dd");
-    const yesterday = format(addDays(new Date(), -1), "yyyy-MM-dd");
-    if (dateStr === today) return `Today  ·  ${format(parseISO(dateStr), "MMM d")}`;
-    if (dateStr === yesterday) return `Yesterday  ·  ${format(parseISO(dateStr), "MMM d")}`;
-    return format(parseISO(dateStr), "MMM d, yyyy");
-  }
-
   function handleOpenMarkComplete(task: any) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setMarkCompleteTask(task);
@@ -789,7 +782,11 @@ export default function VehicleDetailScreen() {
             });
 
             // Navigate safely to vehicles list
-            router.replace("/(tabs)/vehicles");
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/(tabs)/vehicles");
+            }
 
             // Background delete
             (async () => {
@@ -1310,7 +1307,6 @@ export default function VehicleDetailScreen() {
         onSave={handleSaveMarkComplete}
         onClose={handleCloseMarkComplete}
         isSaving={isSavingComplete}
-        formatDateLabel={formatDateLabel}
         insets={insets}
       />
 
@@ -1595,7 +1591,6 @@ function MarkCompleteSheet({
   onSave,
   onClose,
   isSaving,
-  formatDateLabel,
   insets,
 }: {
   visible: boolean;
@@ -1619,18 +1614,8 @@ function MarkCompleteSheet({
   onSave: () => void;
   onClose: () => void;
   isSaving: boolean;
-  formatDateLabel: (d: string) => string;
   insets: { bottom: number };
 }) {
-  const todayStr = format(new Date(), "yyyy-MM-dd");
-  const yesterdayStr = format(addDays(new Date(), -1), "yyyy-MM-dd");
-
-  function adjustDate(days: number) {
-    const current = parseISO(date);
-    const next = addDays(current, days);
-    onDateChange(format(next, "yyyy-MM-dd"));
-  }
-
   return (
     <Modal
       visible={visible}
@@ -1671,47 +1656,12 @@ function MarkCompleteSheet({
             )}
 
             <View style={styles.sheetField}>
-              <Text style={styles.sheetFieldLabel}>Date Completed</Text>
-              <View style={styles.dateStepper}>
-                <Pressable
-                  style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]}
-                  onPress={() => adjustDate(-1)}
-                  hitSlop={8}
-                >
-                  <Ionicons name="chevron-back" size={18} color={Colors.text} />
-                </Pressable>
-                <Text style={styles.dateStepValue}>{formatDateLabel(date)}</Text>
-                <Pressable
-                  style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]}
-                  onPress={() => adjustDate(1)}
-                  disabled={date >= todayStr}
-                  hitSlop={8}
-                >
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={date >= todayStr ? Colors.textTertiary : Colors.text}
-                  />
-                </Pressable>
-              </View>
-              <View style={styles.dateQuickRow}>
-                <Pressable
-                  onPress={() => onDateChange(todayStr)}
-                  style={[styles.dateQuickBtn, date === todayStr && styles.dateQuickBtnActive]}
-                >
-                  <Text style={[styles.dateQuickText, date === todayStr && styles.dateQuickTextActive]}>
-                    Today
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => onDateChange(yesterdayStr)}
-                  style={[styles.dateQuickBtn, date === yesterdayStr && styles.dateQuickBtnActive]}
-                >
-                  <Text style={[styles.dateQuickText, date === yesterdayStr && styles.dateQuickTextActive]}>
-                    Yesterday
-                  </Text>
-                </Pressable>
-              </View>
+              <DatePicker
+                label="Date Completed"
+                value={date}
+                onChange={onDateChange}
+                maximumDate={new Date()}
+              />
             </View>
 
             <View style={styles.sheetField}>

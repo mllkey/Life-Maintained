@@ -26,6 +26,7 @@ import ScanPackModal from "@/components/ScanPackModal";
 import { isFreeTier, scansRemaining } from "@/lib/subscription";
 import { ReceiptScanResult } from "@/lib/receiptScanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
+import DatePicker from "@/components/DatePicker";
 import { parseISO, format } from "date-fns";
 import { matchAndUpdateVehicleTask, CATEGORY_GROUPS, type MatchResult } from "@/lib/maintenanceMatcher";
 import { resolveTrackingMode, isHoursTracked, isMileageTracked } from "@/lib/usageHelpers";
@@ -163,13 +164,6 @@ export default function LogServiceScreen() {
     }, 700);
     return () => { if (insightTimerRef.current) clearTimeout(insightTimerRef.current); };
   }, [task, user?.id, vehicleId]);
-
-  function formatDate(text: string) {
-    const digits = text.replace(/\D/g, "");
-    if (digits.length <= 4) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
-  }
 
   function handleScanComplete(result: ReceiptScanResult) {
     console.log("Scan result:", JSON.stringify(result));
@@ -545,14 +539,10 @@ export default function LogServiceScreen() {
             <Text style={styles.groupLabel}>Details</Text>
             <View style={styles.row}>
               <Field label="Date" style={{ flex: 1 }}>
-                <TextInput
-                  style={styles.input}
+                <DatePicker
                   value={date}
-                  onChangeText={t => setDate(formatDate(t))}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={Colors.textTertiary}
-                  keyboardType="numeric"
-                  maxLength={10}
+                  onChange={setDate}
+                  maximumDate={new Date()}
                 />
               </Field>
               {vehicleData && (isMileageTracked(vehicleData) || isHoursTracked(vehicleData)) && usageMode !== "both" && (

@@ -26,6 +26,7 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { parseISO, isBefore, addDays, addMonths, format } from "date-fns";
 import { SaveToast } from "@/components/SaveToast";
+import DatePicker from "@/components/DatePicker";
 
 function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): "overdue" | "due_soon" | "good" {
   const now = new Date();
@@ -417,21 +418,6 @@ export default function PropertyDetailScreen() {
   if (property?.year_built) metaParts.push(`Built ${property.year_built}`);
   const metaLine = metaParts.join(" · ");
 
-  const todayStr = format(new Date(), "yyyy-MM-dd");
-  const yesterdayStr = format(addDays(new Date(), -1), "yyyy-MM-dd");
-
-  function formatDateLabel(dateStr: string) {
-    if (dateStr === todayStr) return `Today  ·  ${format(parseISO(dateStr), "MMM d")}`;
-    if (dateStr === yesterdayStr) return `Yesterday  ·  ${format(parseISO(dateStr), "MMM d")}`;
-    return format(parseISO(dateStr), "MMM d, yyyy");
-  }
-
-  function adjustDate(days: number) {
-    const current = parseISO(completeDate);
-    const next = addDays(current, days);
-    setCompleteDate(format(next, "yyyy-MM-dd"));
-  }
-
   return (
     <View style={[styles.container, { backgroundColor: Colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -680,47 +666,12 @@ export default function PropertyDetailScreen() {
             >
               <View style={styles.sheetFields}>
                 <View style={styles.sheetField}>
-                  <Text style={styles.sheetFieldLabel}>Date Completed</Text>
-                  <View style={styles.dateStepper}>
-                    <Pressable
-                      style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]}
-                      onPress={() => adjustDate(-1)}
-                      hitSlop={8}
-                    >
-                      <Ionicons name="chevron-back" size={18} color={Colors.text} />
-                    </Pressable>
-                    <Text style={styles.dateStepValue}>{formatDateLabel(completeDate)}</Text>
-                    <Pressable
-                      style={({ pressed }) => [styles.dateStepBtn, { opacity: pressed ? 0.7 : 1 }]}
-                      onPress={() => adjustDate(1)}
-                      disabled={completeDate >= todayStr}
-                      hitSlop={8}
-                    >
-                      <Ionicons
-                        name="chevron-forward"
-                        size={18}
-                        color={completeDate >= todayStr ? Colors.textTertiary : Colors.text}
-                      />
-                    </Pressable>
-                  </View>
-                  <View style={styles.dateQuickRow}>
-                    <Pressable
-                      onPress={() => setCompleteDate(todayStr)}
-                      style={[styles.dateQuickBtn, completeDate === todayStr && styles.dateQuickBtnActive]}
-                    >
-                      <Text style={[styles.dateQuickText, completeDate === todayStr && styles.dateQuickTextActive]}>
-                        Today
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => setCompleteDate(yesterdayStr)}
-                      style={[styles.dateQuickBtn, completeDate === yesterdayStr && styles.dateQuickBtnActive]}
-                    >
-                      <Text style={[styles.dateQuickText, completeDate === yesterdayStr && styles.dateQuickTextActive]}>
-                        Yesterday
-                      </Text>
-                    </Pressable>
-                  </View>
+                  <DatePicker
+                    label="Date Completed"
+                    value={completeDate}
+                    onChange={setCompleteDate}
+                    maximumDate={new Date()}
+                  />
                 </View>
 
                 <View style={styles.sheetField}>

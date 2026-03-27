@@ -18,6 +18,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import DatePicker from "@/components/DatePicker";
 
 const APPOINTMENT_TYPES = [
   "Annual Physical",
@@ -170,7 +171,12 @@ export default function AddAppointmentScreen() {
           </Section>
 
           <Section title="Next Due Date (optional)">
-            <TextInput style={styles.input} value={nextDueDate} onChangeText={setNextDueDate} placeholder="YYYY-MM-DD (auto-calculated if blank)" placeholderTextColor={Colors.textTertiary} keyboardType="numeric" maxLength={10} />
+            <DatePicker
+              value={nextDueDate}
+              onChange={setNextDueDate}
+              maximumDate={new Date(new Date().setFullYear(new Date().getFullYear() + 5))}
+              minimumDate={new Date()}
+            />
           </Section>
 
           <Section title="Notes">

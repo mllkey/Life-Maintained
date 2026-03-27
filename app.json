@@ -63,7 +63,8 @@
         {
           "microphonePermission": "LifeMaintained uses your microphone to log maintenance by voice."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

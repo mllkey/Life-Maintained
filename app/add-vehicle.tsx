@@ -24,6 +24,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import Paywall from "@/components/Paywall";
+import { SaveToast } from "@/components/SaveToast";
 import { vehicleLimit } from "@/lib/subscription";
 import { MILEAGE_TRACKED_TYPES, inferTrackingMode, inferTrackingModeFromVehicleType } from "@/lib/vehicleTypes";
 
@@ -208,40 +209,75 @@ function countMonthsInRange(start: number | null, end: number | null): number {
   return (12 - start + 1) + end;
 }
 
-const VEHICLE_TYPES: { value: string; label: string; icon: string }[] = [
-  { value: "car",        label: "Car / Truck / SUV",    icon: "car" },
-  { value: "motorcycle", label: "Motorcycle",            icon: "motorbike" },
-  { value: "semi_truck", label: "Semi Truck",            icon: "bus-outline" },
-  { value: "rv",         label: "RV / Camper",           icon: "rv-truck" },
-  { value: "boat",       label: "Boat",                  icon: "sail-boat" },
-  { value: "atv",        label: "ATV",                   icon: "atv" },
-  { value: "utv",        label: "UTV / Side-by-Side",    icon: "atv" },
-  { value: "pwc",        label: "Personal Watercraft",   icon: "waves" },
-  { value: "snowmobile", label: "Snowmobile",            icon: "snowmobile" },
-  { value: "trailer",    label: "Trailer",               icon: "swap-horizontal-outline" },
-  { value: "dump_truck", label: "Dump Truck",           icon: "cube-outline" },
-  { value: "dumpster",   label: "Dumpster",             icon: "trash-outline" },
-  { value: "lawnmower",  label: "Lawn Mower",           icon: "flower-outline" },
-  { value: "chainsaw",   label: "Chainsaw",             icon: "hardware-chip-outline" },
-  { value: "generator",  label: "Generator",            icon: "flash-outline" },
-  { value: "snow_blower", label: "Snow Blower",         icon: "snow" },
-  { value: "pressure_washer", label: "Pressure Washer", icon: "construct-outline" },
-  { value: "wood_chipper", label: "Wood Chipper",       icon: "leaf-outline" },
-  { value: "stump_grinder", label: "Stump Grinder",     icon: "construct-outline" },
-  { value: "concrete_saw", label: "Concrete Saw",       icon: "cut-outline" },
-  { value: "welder",     label: "Welder",               icon: "flame-outline" },
-  { value: "excavator",  label: "Excavator",            icon: "build-outline" },
-  { value: "skid_steer", label: "Skid Steer",           icon: "build-outline" },
-  { value: "mini_excavator", label: "Mini Excavator",   icon: "build-outline" },
-  { value: "compact_track_loader", label: "Compact Track Loader", icon: "build-outline" },
-  { value: "backhoe",    label: "Backhoe",              icon: "build-outline" },
-  { value: "wheel_loader", label: "Wheel Loader",       icon: "build-outline" },
-  { value: "telehandler", label: "Telehandler",         icon: "build-outline" },
-  { value: "forklift",   label: "Forklift",             icon: "build-outline" },
-  { value: "other",      label: "Other",                icon: "wrench" },
+const VEHICLE_TYPE_GROUPS: { label: string; types: { value: string; label: string; icon: string }[] }[] = [
+  {
+    label: "Vehicles",
+    types: [
+      { value: "car", label: "Car / Truck / SUV", icon: "car" },
+      { value: "motorcycle", label: "Motorcycle", icon: "motorbike" },
+      { value: "semi_truck", label: "Semi Truck", icon: "bus-outline" },
+      { value: "rv", label: "RV / Camper", icon: "rv-truck" },
+      { value: "atv", label: "ATV", icon: "atv" },
+      { value: "utv", label: "UTV / Side-by-Side", icon: "atv" },
+      { value: "snowmobile", label: "Snowmobile", icon: "snowmobile" },
+    ],
+  },
+  {
+    label: "Marine",
+    types: [
+      { value: "boat", label: "Boat", icon: "sail-boat" },
+      { value: "pwc", label: "Personal Watercraft", icon: "waves" },
+    ],
+  },
+  {
+    label: "Small Equipment",
+    types: [
+      { value: "lawnmower", label: "Lawn Mower", icon: "flower-outline" },
+      { value: "chainsaw", label: "Chainsaw", icon: "hardware-chip-outline" },
+      { value: "generator", label: "Generator", icon: "flash-outline" },
+      { value: "snow_blower", label: "Snow Blower", icon: "snow" },
+      { value: "pressure_washer", label: "Pressure Washer", icon: "construct-outline" },
+      { value: "wood_chipper", label: "Wood Chipper", icon: "leaf-outline" },
+      { value: "stump_grinder", label: "Stump Grinder", icon: "construct-outline" },
+      { value: "concrete_saw", label: "Concrete Saw", icon: "cut-outline" },
+      { value: "welder", label: "Welder", icon: "flame-outline" },
+    ],
+  },
+  {
+    label: "Heavy Equipment",
+    types: [
+      { value: "excavator", label: "Excavator", icon: "build-outline" },
+      { value: "skid_steer", label: "Skid Steer", icon: "build-outline" },
+      { value: "mini_excavator", label: "Mini Excavator", icon: "build-outline" },
+      { value: "compact_track_loader", label: "Compact Track Loader", icon: "build-outline" },
+      { value: "backhoe", label: "Backhoe", icon: "build-outline" },
+      { value: "wheel_loader", label: "Wheel Loader", icon: "build-outline" },
+      { value: "telehandler", label: "Telehandler", icon: "build-outline" },
+      { value: "forklift", label: "Forklift", icon: "build-outline" },
+    ],
+  },
+  {
+    label: "Commercial",
+    types: [
+      { value: "dump_truck", label: "Dump Truck", icon: "cube-outline" },
+      { value: "trailer", label: "Trailer", icon: "swap-horizontal-outline" },
+      { value: "dumpster", label: "Dumpster", icon: "trash-outline" },
+    ],
+  },
+  {
+    label: "Other",
+    types: [
+      { value: "other", label: "Other", icon: "wrench" },
+    ],
+  },
 ];
 
+// Keep flat array for lookups
+const VEHICLE_TYPES = VEHICLE_TYPE_GROUPS.flatMap(g => g.types);
+
 const SKIP_FUEL_TYPES = new Set(["lawnmower", "chainsaw", "generator", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder", "excavator", "skid_steer", "mini_excavator", "compact_track_loader", "backhoe", "wheel_loader", "telehandler", "forklift", "trailer", "dump_trailer", "dumpster"]);
+
+const SKIP_NHTSA_MODELS = new Set(["boat", "pwc", "atv", "utv", "snowmobile", "rv", "lawnmower", "chainsaw", "generator", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder", "excavator", "skid_steer", "mini_excavator", "compact_track_loader", "backhoe", "wheel_loader", "telehandler", "forklift", "trailer", "dump_trailer", "dumpster"]);
 
 const FUEL_TYPES: { value: "gas" | "diesel" | "hybrid" | "ev"; label: string }[] = [
   { value: "gas",     label: "Gas" },
@@ -558,6 +594,8 @@ export default function AddVehicleScreen() {
 
   const [nhtsaModels, setNhtsaModels] = useState<string[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [modelLoadFailed, setModelLoadFailed] = useState(false);
+  const [showSaveToast, setShowSaveToast] = useState(false);
 
   const [hasManufacturerSchedule, setHasManufacturerSchedule] = useState(false);
   const [manufacturerTasks, setManufacturerTasks] = useState<MfrTask[]>([]);
@@ -592,6 +630,7 @@ export default function AddVehicleScreen() {
       setHasManufacturerSchedule(false);
       setManufacturerTasks([]);
       setNhtsaModels([]);
+      setModelLoadFailed(false);
       return;
     }
 
@@ -622,18 +661,26 @@ export default function AddVehicleScreen() {
     if (vehicleType === "other") {
       setNhtsaModels([]);
       setIsLoadingModels(false);
+      setModelLoadFailed(false);
     } else if (vehicleType === "pwc" || vehicleType === "snowmobile" || vehicleType === "semi_truck") {
       const byMake = HARDCODED_MODELS[vehicleType] ?? {};
       const models = byMake[make.trim()] ?? [];
       setNhtsaModels(models);
       setIsLoadingModels(false);
+      setModelLoadFailed(false);
+    } else if (SKIP_NHTSA_MODELS.has(vehicleType)) {
+      setNhtsaModels([]);
+      setIsLoadingModels(false);
+      setModelLoadFailed(false);
     } else {
       const cacheKey = modelCacheKey(make, year, vehicleType);
       const cached = modelCache.get(cacheKey);
       if (cached) {
+        setModelLoadFailed(false);
         setNhtsaModels(cached);
         setIsLoadingModels(false);
       } else {
+        setModelLoadFailed(false);
         setIsLoadingModels(true);
         setNhtsaModels([]);
       }
@@ -669,30 +716,10 @@ export default function AddVehicleScreen() {
               ...extractNames(truckJson),
               ...extractNames(mpvJson),
             ])];
-          } else if (vehicleType === "rv") {
-            const [incompleteResp, busResp, mpvResp] = await Promise.all([
-              fetch(`${nhtsaBase}?format=json&vehicleType=Incomplete%20Vehicle`, { signal: controller.signal }),
-              fetch(`${nhtsaBase}?format=json&vehicleType=Bus`, { signal: controller.signal }),
-              fetch(`${nhtsaBase}?format=json&vehicleType=Multipurpose%20Passenger%20Vehicle%20(MPV)`, { signal: controller.signal }),
-            ]);
-            const [incompleteJson, busJson, mpvJson] = await Promise.all([
-              incompleteResp.json(),
-              busResp.json(),
-              mpvResp.json(),
-            ]);
-            names = [...new Set([
-              ...extractNames(incompleteJson),
-              ...extractNames(busJson),
-              ...extractNames(mpvJson),
-            ])];
           } else if (vehicleType === "motorcycle") {
             const motoResp = await fetch(`${nhtsaBase}?format=json&vehicleType=Motorcycle`, { signal: controller.signal });
             const motoJson = await motoResp.json();
             names = extractNames(motoJson);
-          } else if (vehicleType === "atv" || vehicleType === "utv") {
-            const offRoadResp = await fetch(`${nhtsaBase}?format=json&vehicleType=Off%20Road%20Vehicle`, { signal: controller.signal });
-            const offRoadJson = await offRoadResp.json();
-            names = extractNames(offRoadJson);
           } else {
             const allResp = await fetch(`${nhtsaBase}?format=json`, { signal: controller.signal });
             const allJson = await allResp.json();
@@ -706,6 +733,7 @@ export default function AddVehicleScreen() {
           }
 
           if (!modelCancelled) {
+            setModelLoadFailed(false);
             const sorted = names.sort();
             modelCache.set(cacheKey, sorted);
             setNhtsaModels(sorted);
@@ -718,6 +746,7 @@ export default function AddVehicleScreen() {
           }
           if (!modelCancelled) {
             setNhtsaModels([]);
+            setModelLoadFailed(true);
           }
         } finally {
           clearTimeout(timeoutId);
@@ -949,7 +978,8 @@ export default function AddVehicleScreen() {
         queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
         queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setTimeout(() => router.back(), 150);
+        setShowSaveToast(true);
+        setTimeout(() => router.back(), 900);
       } catch (saveErr) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert("Save Failed", "Failed to save vehicle. Please try again.");
@@ -1089,45 +1119,44 @@ export default function AddVehicleScreen() {
 
           {/* ── Vehicle Type ──────────────────────────────────── */}
           <FieldGroup label="Vehicle Type">
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.typeScroll}
-            >
-              {VEHICLE_TYPES.map(t => {
-                const isSelected = vehicleType === t.value || (t.value === "trailer" && vehicleType === "dump_trailer");
-                return (
-                  <Pressable
-                    key={t.value}
-                    style={[styles.typeCard, isSelected && styles.typeCardSelected]}
-                    onPress={() => {
-                      Haptics.selectionAsync();
-                      if (t.value === "trailer") {
-                        const nextVehicleType = (trailerSubtype === "dump_scissor" || trailerSubtype === "dump_hydraulic")
-                          ? "dump_trailer"
-                          : "trailer";
-                        setVehicleType(nextVehicleType);
-                      } else if (t.value === "dump_truck") {
-                        setVehicleType("dump_truck");
-                      } else {
-                        setVehicleType(t.value);
-                      }
-                      setMake("");
-                      setModel("");
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name={t.icon as any}
-                      size={26}
-                      color={isSelected ? Colors.accent : Colors.textSecondary}
-                    />
-                    <Text style={[styles.typeCardLabel, isSelected && styles.typeCardLabelSelected]}>
-                      {t.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            {VEHICLE_TYPE_GROUPS.map(group => (
+              <View key={group.label} style={{ marginBottom: 12 }}>
+                <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, marginBottom: 8, paddingHorizontal: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  {group.label}
+                </Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {group.types.map(t => {
+                    const isSelected = vehicleType === t.value || (t.value === "trailer" && vehicleType === "dump_trailer");
+                    return (
+                      <Pressable
+                        key={t.value}
+                        style={[styles.typeCard, isSelected && styles.typeCardSelected, { width: "auto", minWidth: 80, paddingHorizontal: 12 }]}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          if (t.value === "trailer") {
+                            const nextVehicleType = (trailerSubtype === "dump_scissor" || trailerSubtype === "dump_hydraulic")
+                              ? "dump_trailer"
+                              : "trailer";
+                            setVehicleType(nextVehicleType);
+                          } else if (t.value === "dump_truck") {
+                            setVehicleType("dump_truck");
+                          } else {
+                            setVehicleType(t.value);
+                          }
+                          setMake("");
+                          setModel("");
+                        }}
+                      >
+                        <MaterialCommunityIcons name={t.icon as any} size={22} color={isSelected ? Colors.accent : Colors.textSecondary} />
+                        <Text style={[styles.typeCardLabel, isSelected && styles.typeCardLabelSelected, { fontSize: 11 }]}>
+                          {t.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
           </FieldGroup>
 
           {/* ── Trailer Sub-Type ─────────────────────────────── */}
@@ -1371,14 +1400,41 @@ export default function AddVehicleScreen() {
               </View>
             )}
 
-            <ModelPickerField
-              label="Model *"
-              value={model}
-              isLoadingModels={isLoadingModels}
-              hasModels={nhtsaModels.length > 0}
-              yearAndMakeSet={!!year && !!make}
-              onPress={() => { setModelSearch(""); setModelPickerVisible(true); }}
-            />
+            {SKIP_NHTSA_MODELS.has(vehicleType) ? (
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Model *</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={model}
+                  onChangeText={setModel}
+                  placeholder={vehicleType === "boat" ? "e.g. Yamaha AR190" : "e.g. Model name"}
+                  placeholderTextColor={Colors.textTertiary}
+                />
+              </View>
+            ) : modelLoadFailed && nhtsaModels.length === 0 ? (
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Model *</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={model}
+                  onChangeText={setModel}
+                  placeholder="Type your model name"
+                  placeholderTextColor={Colors.textTertiary}
+                />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.dueSoon, marginTop: 4 }}>
+                  Model list unavailable — type your model manually
+                </Text>
+              </View>
+            ) : (
+              <ModelPickerField
+                label="Model *"
+                value={model}
+                isLoadingModels={isLoadingModels}
+                hasModels={nhtsaModels.length > 0}
+                yearAndMakeSet={!!year && !!make}
+                onPress={() => { setModelSearch(""); setModelPickerVisible(true); }}
+              />
+            )}
 
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Trim</Text>
@@ -1662,9 +1718,11 @@ export default function AddVehicleScreen() {
         candidates={walletCandidates ?? []}
         onClose={() => {
           setShowCopyModal(false);
-          setTimeout(() => router.back(), 150);
+          setShowSaveToast(true);
+          setTimeout(() => router.back(), 900);
         }}
       />
+      <SaveToast visible={showSaveToast} message="Vehicle saved!" />
     </KeyboardAvoidingView>
   );
 }
@@ -1994,7 +2052,7 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
                 <View style={styles.listEmpty}>
                   <Text style={styles.listEmptyText}>
                     {filteredModels.length === 0 && !search
-                      ? "No models found. Type a custom model above."
+                      ? "Models are loading slowly. Type your model in the search bar above — it works even without the list."
                       : "No matches. Type your model above."}
                   </Text>
                 </View>

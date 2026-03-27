@@ -17,6 +17,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
+import DatePicker from "@/components/DatePicker";
 
 const CATEGORIES = ["HVAC", "Roof", "Gutters", "Plumbing", "Electrical", "Appliances", "Pest Control", "Landscaping", "Painting", "Foundation", "Windows", "General"];
 const INTERVALS = ["Monthly", "Quarterly", "Bi-Annually", "Annually", "Every 2 Years", "Every 5 Years", "As Needed"];
@@ -172,8 +173,13 @@ export default function AddPropertyTaskScreen() {
               <TextInput style={styles.input} value={estimatedCost} onChangeText={setEstimatedCost} placeholder="150" placeholderTextColor={Colors.textTertiary} keyboardType="decimal-pad" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.sectionTitle}>Next Due (YYYY-MM-DD)</Text>
-              <TextInput style={styles.input} value={nextDueDate} onChangeText={setNextDueDate} placeholder="Auto-calculated" placeholderTextColor={Colors.textTertiary} keyboardType="numeric" maxLength={10} />
+              <Text style={styles.sectionTitle}>Next Due Date</Text>
+              <DatePicker
+                value={nextDueDate}
+                onChange={setNextDueDate}
+                maximumDate={new Date(new Date().setFullYear(new Date().getFullYear() + 5))}
+                minimumDate={new Date()}
+              />
             </View>
           </View>
         </ScrollView>
