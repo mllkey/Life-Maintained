@@ -1,288 +1,276 @@
-import {
-  inferTrackingModeFromVehicleType,
-  type TrackingMode,
-} from "./vehicleTypes";
-
-export type { TrackingMode } from "./vehicleTypes";
-
-/** Prefer explicit DB `tracking_mode`; fall back to type inference for legacy rows. */
-export function resolveTrackingMode(vehicle: {
-  tracking_mode?: string | null;
-  vehicle_type?: string | null;
-}): TrackingMode {
-  const raw = vehicle.tracking_mode?.toLowerCase()?.trim();
-  if (
-    raw === "mileage" ||
-    raw === "hours" ||
-    raw === "both" ||
-    raw === "time_only"
-  ) {
-    return raw;
-  }
-  return inferTrackingModeFromVehicleType(vehicle.vehicle_type);
-}
-
-export function isMileageTrackedMode(mode: TrackingMode): boolean {
-  return mode === "mileage" || mode === "both";
-}
-
-export function isHoursTrackedMode(mode: TrackingMode): boolean {
-  return mode === "hours" || mode === "both";
-}
-
-export function isTimeOnlyMode(mode: TrackingMode): boolean {
-  return mode === "time_only";
-}
-
 /**
- * Primary meter label for generic UI. For `both`, mileage is treated as primary
- * unless you branch on task-level usage (see task helpers below).
+ * lib/usageHelpers.ts
+ *
+ * Centralized helpers for usage-based tracking (mileage, hours, time-only).
+ * Every screen that needs to know "is this miles or hours?" should import from here.
+ * Do NOT scatter if/else tracking-mode logic across screens.
  */
-export function getPrimaryUsageLabel(mode: TrackingMode): "miles" | "hours" | "none" {
-  if (mode === "time_only") return "none";
-  if (mode === "hours") return "hours";
-  if (mode === "mileage") return "miles";
-  return "miles";
+
+import { inferTrackingMode } from "./vehicleTypes";
+
+// ── Types ───────────────────────────────────────────────────────────────
+
+export type TrackingMode = "mileage" | "hours" | "both" | "time_only";
+
+export interface VehicleRow {
+  vehicle_type?: string | null;
+  tracking_mode?: TrackingMode | null;
+  mileage?: number | null;
+  hours?: number | null;
 }
 
-export function getCurrentUsageValue(
-  vehicle: { mileage?: number | null; hours?: number | null },
-  mode: TrackingMode,
-): number {
-  if (mode === "time_only") return 0;
-  if (mode === "hours") return Number(vehicle.hours ?? 0);
-  if (mode === "mileage") return Number(vehicle.mileage ?? 0);
-  // both: default aggregate for dashboards that show one number — prefer miles
-  return Number(vehicle.mileage ?? 0);
-}
-
-export function getCurrentHours(vehicle: { hours?: number | null }): number {
-  return Number(vehicle.hours ?? 0);
-}
-
-export function getCurrentMiles(vehicle: { mileage?: number | null }): number {
-  return Number(vehicle.mileage ?? 0);
-}
-
-export type UsageTaskLike = {
-  status?: string | null;
-  next_due_date?: string | null;
-  next_due_miles?: number | null;
-  next_due_hours?: number | null;
+export interface TaskRow {
   interval_miles?: number | null;
   interval_hours?: number | null;
   interval_months?: number | null;
+  next_due_miles?: number | null;
+  next_due_hours?: number | null;
+  next_due_date?: string | null;
   last_completed_miles?: number | null;
   last_completed_hours?: number | null;
-};
+  last_completed_date?: string | null;
+  [key: string]: any;
+}
 
-/** Label/copy helpers: true when the task row should read hour-based fields. */
-export function taskUsesHoursUsage(
-  task: UsageTaskLike,
-  vehicleMode: TrackingMode,
-): boolean {
-  if (vehicleMode === "time_only" || vehicleMode === "mileage") return false;
-  if (vehicleMode === "hours") {
-    return (
-      task.interval_hours != null ||
-      task.next_due_hours != null ||
-      task.last_completed_hours != null
-    );
+// ── Tracking mode resolution ────────────────────────────────────────────
+
+/**
+ * Resolve the tracking mode for a vehicle.
+ * Priority: explicit DB tracking_mode > inference from vehicle_type.
+ */
+export function resolveTrackingMode(vehicle: VehicleRow | null | undefined): TrackingMode {
+  if (!vehicle) return "mileage";
+  const explicit = vehicle.tracking_mode;
+  if (explicit === "mileage" || explicit === "hours" || explicit === "both" || explicit === "time_only") {
+    return explicit;
   }
-  // both: hour copy when any hour field is present
-  return (
-    task.interval_hours != null ||
-    task.next_due_hours != null ||
-    task.last_completed_hours != null
-  );
+  return inferTrackingMode(vehicle.vehicle_type ?? "");
 }
 
-export function taskUsesMilesUsage(
-  task: UsageTaskLike,
-  vehicleMode: TrackingMode,
-): boolean {
-  if (vehicleMode === "time_only" || vehicleMode === "hours") return false;
-  if (vehicleMode === "mileage") return true;
-  return (
-    task.interval_miles != null ||
-    task.next_due_miles != null ||
-    task.last_completed_miles != null
-  );
+export function isMileageTracked(vehicle: VehicleRow | null | undefined): boolean {
+  const mode = resolveTrackingMode(vehicle);
+  return mode === "mileage" || mode === "both";
 }
 
-export function getTaskIntervalMiles(task: UsageTaskLike): number | null {
-  const v = task.interval_miles;
-  return v != null && v > 0 ? v : null;
+export function isHoursTracked(vehicle: VehicleRow | null | undefined): boolean {
+  const mode = resolveTrackingMode(vehicle);
+  return mode === "hours" || mode === "both";
 }
 
-export function getTaskIntervalHours(task: UsageTaskLike): number | null {
-  const v = task.interval_hours;
-  return v != null && v > 0 ? v : null;
+export function isTimeOnly(vehicle: VehicleRow | null | undefined): boolean {
+  return resolveTrackingMode(vehicle) === "time_only";
 }
 
-export function getTaskNextDueMiles(task: UsageTaskLike): number | null {
-  const v = task.next_due_miles;
-  return v != null && v >= 0 ? v : null;
-}
+// ── Usage labels ────────────────────────────────────────────────────────
 
-export function getTaskNextDueHours(task: UsageTaskLike): number | null {
-  const v = task.next_due_hours;
-  return v != null && v >= 0 ? Number(v) : null;
-}
-
-export function getTaskLastCompletedMiles(task: UsageTaskLike): number | null {
-  const v = task.last_completed_miles;
-  return v != null && v >= 0 ? v : null;
-}
-
-export function getTaskLastCompletedHours(task: UsageTaskLike): number | null {
-  const v = task.last_completed_hours;
-  return v != null && v >= 0 ? Number(v) : null;
-}
-
-export function computeNextDueMilesAfterComplete(
-  completedMiles: number,
-  intervalMiles: number | null,
-): number | null {
-  if (intervalMiles == null || intervalMiles <= 0) return null;
-  return completedMiles + intervalMiles;
-}
-
-export function computeNextDueHoursAfterComplete(
-  completedHours: number,
-  intervalHours: number | null,
-): number | null {
-  if (intervalHours == null || intervalHours <= 0) return null;
-  return Math.round((completedHours + intervalHours) * 1000) / 1000;
-}
-
-const DUE_SOON_MILES = 500;
-const DUE_SOON_HOURS = 50;
-
-function parseDueDate(iso: string | null | undefined): Date | null {
-  if (!iso) return null;
-  try {
-    return new Date(iso.includes("T") ? iso : `${iso}T12:00:00`);
-  } catch {
-    return null;
-  }
+/**
+ * Returns the primary usage unit label for display.
+ * "miles" | "hours" | null (for time-only)
+ * NOTE: "both" mode biases to hours as the primary display unit in this pass.
+ * Full dual-meter UI is deferred.
+ */
+export function primaryUsageLabel(vehicle: VehicleRow | null | undefined): "miles" | "hours" | null {
+  const mode = resolveTrackingMode(vehicle);
+  if (mode === "hours") return "hours";
+  if (mode === "mileage") return "miles";
+  if (mode === "both") return "hours"; // primary display is hours for dual-meter
+  return null;
 }
 
 /**
- * Unified task status for schedule grouping. Date-only tasks still use calendar rules.
+ * Short unit abbreviation for compact display.
  */
-export function calcVehicleTaskStatus(
-  task: UsageTaskLike,
-  vehicle: { mileage?: number | null; hours?: number | null },
-  vehicleMode: TrackingMode,
-): "overdue" | "due_soon" | "upcoming" | "completed" {
-  if (task.status === "completed") return "completed";
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dueDate = parseDueDate(task.next_due_date);
-  if (dueDate) dueDate.setHours(0, 0, 0, 0);
-
-  const dateOverdue = dueDate != null && dueDate <= today;
-  const dateDueSoon =
-    dueDate != null &&
-    dueDate > today &&
-    differenceInDaysSafe(dueDate, today) <= 30;
-
-  if (vehicleMode === "time_only") {
-    if (dateOverdue) return "overdue";
-    if (dateDueSoon) return "due_soon";
-    return "upcoming";
-  }
-
-  let usageOverdue = false;
-  let usageDueSoon = false;
-
-  const checkHours = vehicleMode === "hours" || vehicleMode === "both";
-  const checkMiles = vehicleMode === "mileage" || vehicleMode === "both";
-
-  if (checkHours) {
-    const nh = getTaskNextDueHours(task);
-    if (nh != null) {
-      const ch = getCurrentHours(vehicle);
-      if (ch >= nh) usageOverdue = true;
-      else if (nh - ch <= DUE_SOON_HOURS && nh > ch) usageDueSoon = true;
-    }
-  }
-  if (checkMiles) {
-    const nm = getTaskNextDueMiles(task);
-    if (nm != null) {
-      const cm = getCurrentMiles(vehicle);
-      if (cm >= nm) usageOverdue = true;
-      else if (!usageOverdue && nm - cm <= DUE_SOON_MILES && nm > cm) {
-        usageDueSoon = true;
-      }
-    }
-  }
-
-  if (usageOverdue || dateOverdue) return "overdue";
-  if (usageDueSoon || dateDueSoon) return "due_soon";
-  return "upcoming";
+export function usageUnitShort(vehicle: VehicleRow | null | undefined): string {
+  const label = primaryUsageLabel(vehicle);
+  if (label === "hours") return "hrs";
+  if (label === "miles") return "mi";
+  return "";
 }
 
-function differenceInDaysSafe(a: Date, b: Date): number {
-  const ms = a.getTime() - b.getTime();
-  return Math.ceil(ms / (24 * 60 * 60 * 1000));
+/**
+ * Returns the current usage reading from the vehicle row.
+ */
+export function currentUsageValue(vehicle: VehicleRow | null | undefined): number | null {
+  if (!vehicle) return null;
+  const mode = resolveTrackingMode(vehicle);
+  if (mode === "hours" || mode === "both") return vehicle.hours ?? null;
+  if (mode === "mileage") return vehicle.mileage ?? null;
+  return null;
 }
 
-export function formatEveryInterval(
-  task: UsageTaskLike,
-  vehicleMode: TrackingMode,
-): string | null {
-  const months = task.interval_months;
-  const im = getTaskIntervalMiles(task);
-  const ih = getTaskIntervalHours(task);
-  const parts: string[] = [];
-
-  if (
-    vehicleMode !== "time_only" &&
-    taskUsesHoursUsage(task, vehicleMode) &&
-    ih != null
-  ) {
-    parts.push(`every ${formatHours(ih)}`);
-  } else if (im != null) {
-    parts.push(`every ${im.toLocaleString()} miles`);
-  }
-  if (months != null && months > 0) {
-    parts.push(months === 1 ? "every month" : `every ${months} months`);
-  }
-  if (parts.length === 0) return null;
-  return parts.join(" · ");
+/**
+ * Returns "Update mileage" / "Update hours" / null for time-only.
+ */
+export function updateUsageLabel(vehicle: VehicleRow | null | undefined): string | null {
+  const label = primaryUsageLabel(vehicle);
+  if (label === "hours") return "Update hours";
+  if (label === "miles") return "Update mileage";
+  return null;
 }
 
-export function formatDueAtUsage(
-  task: UsageTaskLike,
-  vehicleMode: TrackingMode,
-): string | null {
-  const nh = getTaskNextDueHours(task);
-  const nm = getTaskNextDueMiles(task);
-  if (vehicleMode !== "time_only" && taskUsesHoursUsage(task, vehicleMode) && nh != null) {
-    return `due at ${formatHours(nh)}`;
+/**
+ * Returns the DB column name to write usage updates to.
+ */
+export function usageDbColumn(vehicle: VehicleRow | null | undefined): "mileage" | "hours" | null {
+  const mode = resolveTrackingMode(vehicle);
+  if (mode === "hours" || mode === "both") return "hours";
+  if (mode === "mileage") return "mileage";
+  return null;
+}
+
+// ── Task interval reading ───────────────────────────────────────────────
+
+/**
+ * Returns the usage-based interval for a task (miles or hours).
+ * Returns null for time-only tasks.
+ */
+export function taskIntervalUsage(task: TaskRow, vehicle: VehicleRow | null | undefined): number | null {
+  const mode = resolveTrackingMode(vehicle);
+  if (mode === "hours" || mode === "both") return task.interval_hours ?? null;
+  if (mode === "mileage") return task.interval_miles ?? null;
+  return null;
+}
+
+/**
+ * Returns the next-due usage value for a task.
+ */
+export function taskNextDueUsage(task: TaskRow, vehicle: VehicleRow | null | undefined): number | null {
+  const mode = resolveTrackingMode(vehicle);
+  if (mode === "hours" || mode === "both") return task.next_due_hours != null ? Number(task.next_due_hours) : null;
+  if (mode === "mileage") return task.next_due_miles ?? null;
+  return null;
+}
+
+/**
+ * Returns the last-completed usage value for a task.
+ */
+export function taskLastCompletedUsage(task: TaskRow, vehicle: VehicleRow | null | undefined): number | null {
+  const mode = resolveTrackingMode(vehicle);
+  if (mode === "hours" || mode === "both") return task.last_completed_hours != null ? Number(task.last_completed_hours) : null;
+  if (mode === "mileage") return task.last_completed_miles ?? null;
+  return null;
+}
+
+// ── Completion calculation ──────────────────────────────────────────────
+
+/**
+ * After marking a task complete, calculate the next due usage value.
+ * Returns null if the task has no usage-based interval.
+ */
+export function calculateNextDueUsage(
+  task: TaskRow,
+  vehicle: VehicleRow | null | undefined,
+  completedUsageValue: number | null,
+): number | null {
+  if (completedUsageValue == null) return null;
+  const interval = taskIntervalUsage(task, vehicle);
+  if (interval == null) return null;
+  return completedUsageValue + interval;
+}
+
+/**
+ * Returns the DB field names to write on mark-complete for usage values.
+ * E.g., { lastCompletedField: "last_completed_hours", nextDueField: "next_due_hours" }
+ */
+export function completionUsageFields(vehicle: VehicleRow | null | undefined): {
+  lastCompletedField: string;
+  nextDueField: string;
+} | null {
+  const mode = resolveTrackingMode(vehicle);
+  if (mode === "hours" || mode === "both") {
+    return { lastCompletedField: "last_completed_hours", nextDueField: "next_due_hours" };
   }
-  if (nm != null) {
-    return `due at ${nm.toLocaleString()} mi`;
+  if (mode === "mileage") {
+    return { lastCompletedField: "last_completed_miles", nextDueField: "next_due_miles" };
   }
   return null;
 }
 
-export function formatHours(n: number): string {
-  const rounded = Math.round(n * 10) / 10;
-  return `${rounded.toLocaleString()} hours`;
+// ── Formatting ──────────────────────────────────────────────────────────
+
+/**
+ * Format a usage value for display.
+ * e.g., "45,000 mi" or "123.4 hrs"
+ */
+export function formatUsageValue(value: number | null | undefined, vehicle: VehicleRow | null | undefined): string {
+  if (value == null) return "";
+  const unit = usageUnitShort(vehicle);
+  // Hours can have decimals, mileage is always whole
+  const mode = resolveTrackingMode(vehicle);
+  if (mode === "hours" || mode === "both") {
+    const formatted = Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    return `${formatted} ${unit}`;
+  }
+  return `${value.toLocaleString()} ${unit}`;
 }
 
-export function formatServiceLogUsageReading(
-  value: number | null | undefined,
-  mode: TrackingMode,
-): string | null {
-  if (value == null || Number.isNaN(Number(value))) return null;
-  const n = Number(value);
-  if (isHoursTrackedMode(mode) && !isMileageTrackedMode(mode)) {
-    return `${n.toLocaleString()} hours`;
+/**
+ * Format a task interval for display.
+ * e.g., "every 50 hours" or "every 5,000 miles"
+ */
+export function formatIntervalUsage(task: TaskRow, vehicle: VehicleRow | null | undefined): string | null {
+  const interval = taskIntervalUsage(task, vehicle);
+  if (interval == null) return null;
+  const label = primaryUsageLabel(vehicle);
+  return `every ${interval.toLocaleString()} ${label}`;
+}
+
+/**
+ * Format a "due at" usage string.
+ * e.g., "due at 50,000 mi" or "due at 250.0 hrs"
+ */
+export function formatDueAtUsage(task: TaskRow, vehicle: VehicleRow | null | undefined): string | null {
+  const nextDue = taskNextDueUsage(task, vehicle);
+  if (nextDue == null) return null;
+  return `due at ${formatUsageValue(nextDue, vehicle)}`;
+}
+
+// ── Due status (usage-based) ────────────────────────────────────────────
+
+/**
+ * Evaluate whether a task is overdue or due soon based on usage.
+ * This is ONLY the usage component — date-based status is handled separately.
+ *
+ * Returns "overdue" | "due_soon" | "good" | null (if no usage tracking).
+ *
+ * @param dueThresholdPct - percentage of interval remaining to consider "due soon" (default 10%)
+ */
+export function usageDueStatus(
+  task: TaskRow,
+  vehicle: VehicleRow | null | undefined,
+  dueThresholdPct = 0.1,
+): "overdue" | "due_soon" | "good" | null {
+  const mode = resolveTrackingMode(vehicle);
+  if (mode === "time_only") return null;
+
+  const currentUsage = currentUsageValue(vehicle);
+  const nextDue = taskNextDueUsage(task, vehicle);
+  const interval = taskIntervalUsage(task, vehicle);
+
+  if (currentUsage == null || nextDue == null) return null;
+
+  if (currentUsage >= nextDue) return "overdue";
+
+  // "Due soon" if within threshold % of the interval
+  if (interval != null && interval > 0) {
+    const remaining = nextDue - currentUsage;
+    if (remaining <= interval * dueThresholdPct) return "due_soon";
   }
-  return `${n.toLocaleString()} mi`;
+
+  return "good";
+}
+
+/**
+ * Combined status: worst of date-based and usage-based.
+ * Accepts a pre-computed dateStatus so this helper stays UI-free.
+ */
+export function combinedDueStatus(
+  dateStatus: "overdue" | "due_soon" | "good",
+  task: TaskRow,
+  vehicle: VehicleRow | null | undefined,
+): "overdue" | "due_soon" | "good" {
+  const usageStatus = usageDueStatus(task, vehicle);
+  if (dateStatus === "overdue" || usageStatus === "overdue") return "overdue";
+  if (dateStatus === "due_soon" || usageStatus === "due_soon") return "due_soon";
+  return "good";
 }

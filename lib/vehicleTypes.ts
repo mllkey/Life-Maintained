@@ -1,3 +1,11 @@
+/**
+ * lib/vehicleTypes.ts
+ *
+ * Vehicle type classification sets and tracking mode inference.
+ * These sets are used as DEFAULT HEURISTICS — the DB column `vehicles.tracking_mode`
+ * is the source of truth. These are fallbacks for when tracking_mode is NULL.
+ */
+
 export const MILEAGE_TRACKED_TYPES = new Set([
   "car",
   "motorcycle",
@@ -10,17 +18,17 @@ export const MILEAGE_TRACKED_TYPES = new Set([
   "atv",
 ]);
 
-/** No odometer/hour meter — calendar-only maintenance. */
-export const TIME_ONLY_TYPES = new Set(["trailer", "dump_trailer", "dumpster"]);
+export const TIME_ONLY_TYPES = new Set([
+  "trailer",
+  "dump_trailer",
+  "dumpster",
+]);
 
-/**
- * Types that default to engine/runtime hours when `tracking_mode` is not set.
- * Authoritative behavior still comes from `vehicles.tracking_mode` when present.
- */
 export const HOURS_TRACKED_TYPES = new Set([
   "boat",
   "pwc",
   "lawnmower",
+  "lawn_mower",
   "chainsaw",
   "generator",
   "excavator",
@@ -39,17 +47,13 @@ export const HOURS_TRACKED_TYPES = new Set([
   "welder",
 ]);
 
-export type TrackingMode = "mileage" | "hours" | "both" | "time_only";
-
 /**
- * Default tracking mode from vehicle type alone (legacy / unset `tracking_mode`).
+ * Infer tracking mode from vehicle type string.
+ * Only used as a fallback when `vehicles.tracking_mode` is NULL.
  */
-export function inferTrackingModeFromVehicleType(
-  vehicleType: string | null | undefined,
-): TrackingMode {
+export function inferTrackingMode(vehicleType: string): "mileage" | "hours" | "time_only" {
   const t = (vehicleType ?? "").toLowerCase().trim();
-  if (TIME_ONLY_TYPES.has(t)) return "time_only";
   if (HOURS_TRACKED_TYPES.has(t)) return "hours";
-  if (MILEAGE_TRACKED_TYPES.has(t)) return "mileage";
+  if (TIME_ONLY_TYPES.has(t)) return "time_only";
   return "mileage";
 }

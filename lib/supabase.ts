@@ -73,7 +73,7 @@ export type Database = {
           motorcycle_type: string | null;
           mileage: number | null;
           hours: number | null;
-          tracking_mode: string | null;
+          tracking_mode: "mileage" | "hours" | "both" | "time_only" | null;
           is_seasonal: boolean | null;
           average_miles_per_month: number | null;
           created_at: string | null;
@@ -138,7 +138,7 @@ export type Database = {
       maintenance_logs: {
         Row: {
           id: string;
-          user_id: string | null;
+          user_id: string;
           vehicle_id: string | null;
           property_id: string | null;
           service_name: string | null;
@@ -147,8 +147,8 @@ export type Database = {
           cost: number | null;
           provider_name: string | null;
           provider_contact: string | null;
-          notes: string | null;
           receipt_url: string | null;
+          notes: string | null;
           did_it_myself: boolean | null;
           created_at: string | null;
           updated_at: string | null;
