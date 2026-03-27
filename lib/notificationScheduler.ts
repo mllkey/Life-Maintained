@@ -75,7 +75,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     const [vehiclesRes, propertiesRes] = await Promise.all([
       supabase
         .from("vehicles")
-        .select("id, year, make, model, nickname")
+        .select("id, year, make, model, nickname, mileage, hours, tracking_mode, vehicle_type")
         .eq("user_id", userId),
       supabase
         .from("properties")
@@ -92,9 +92,8 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       vehicleIds.length > 0
         ? supabase
             .from("user_vehicle_maintenance_tasks")
-            .select("vehicle_id, name, next_due_date")
+            .select("id, vehicle_id, name, next_due_date, next_due_miles, next_due_hours")
             .in("vehicle_id", vehicleIds)
-            .not("next_due_date", "is", null)
         : Promise.resolve({ data: [] as any[] }),
       propertyIds.length > 0
         ? supabase
@@ -152,13 +151,90 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       }
     }
 
+    // ── Vehicle notifications: unified date + usage pass ────────────────
+    // Each task gets AT MOST one notification per offset cycle.
     for (const task of vehicleTasks) {
-      if (!task.next_due_date) continue;
       const vehicle = vehicleMap.get(task.vehicle_id);
       if (!vehicle) continue;
       const assetName = vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
       const isMuted = (prefs.mutedVehicles ?? []).includes(task.vehicle_id);
-      enqueue(task.name, assetName, task.next_due_date, isMuted);
+      if (isMuted) continue;
+
+      // Date-based notifications (existing behavior)
+      if (task.next_due_date) {
+        enqueue(task.name, assetName, task.next_due_date, false);
+      }
+
+      // Usage-based notifications (new)
+      const trackingMode = (vehicle as any).tracking_mode ?? "";
+      const isBoth = trackingMode === "both";
+      const isHoursMode = trackingMode === "hours" || isBoth;
+      const isMilesMode = trackingMode === "mileage" || isBoth;
+
+      // Check hours
+      let hoursRemaining: number | null = null;
+      if (isHoursMode && (vehicle as any).hours != null && task.next_due_hours != null) {
+        hoursRemaining = Number(task.next_due_hours) - Number((vehicle as any).hours);
+      }
+
+      // Check miles
+      let milesRemaining: number | null = null;
+      if (isMilesMode && (vehicle as any).mileage != null && task.next_due_miles != null) {
+        milesRemaining = Number(task.next_due_miles) - Number((vehicle as any).mileage);
+      }
+
+      // Pick the more urgent usage dimension
+      let usageRemaining: number | null = null;
+      let usageUnit = "";
+      if (hoursRemaining != null && milesRemaining != null) {
+        // Both tracked: use whichever is more urgent (lower remaining)
+        if (hoursRemaining <= milesRemaining) {
+          usageRemaining = hoursRemaining;
+          usageUnit = "hours";
+        } else {
+          usageRemaining = milesRemaining;
+          usageUnit = "miles";
+        }
+      } else if (hoursRemaining != null) {
+        usageRemaining = hoursRemaining;
+        usageUnit = "hours";
+      } else if (milesRemaining != null) {
+        usageRemaining = milesRemaining;
+        usageUnit = "miles";
+      }
+
+      if (usageRemaining == null) continue;
+
+      // Only add usage notification if no date-based notification already covers this urgency,
+      // OR if the task has no date at all
+      const hasDateNotif = task.next_due_date != null;
+      const dateOverdue = hasDateNotif && new Date(task.next_due_date + "T12:00:00") < now;
+      const usageOverdue = usageRemaining <= 0;
+      const usageDueSoon = usageUnit === "hours" ? usageRemaining <= 25 : usageRemaining <= 500;
+
+      // Skip usage notification if date already shows overdue (avoid duplicate)
+      if (dateOverdue && usageOverdue) continue;
+
+      // Schedule usage notification for tomorrow morning
+      const triggerDate = new Date();
+      triggerDate.setDate(triggerDate.getDate() + 1);
+      triggerDate.setHours(hour, minute, 0, 0);
+      if (triggerDate <= now) continue;
+
+      if (usageOverdue) {
+        candidates.push({
+          body: `\u{1F527} ${task.name} on ${assetName} is ${Math.abs(Math.round(usageRemaining)).toLocaleString()} ${usageUnit} overdue`,
+          triggerDate,
+          priority: 0,
+        });
+      } else if (usageDueSoon && !hasDateNotif) {
+        // Only add due-soon usage notification if there's no date-based notification for this task
+        candidates.push({
+          body: `\u{1F527} ${task.name} on ${assetName} is due in ${Math.round(usageRemaining).toLocaleString()} ${usageUnit}`,
+          triggerDate,
+          priority: 1,
+        });
+      }
     }
 
     for (const task of propertyTasks) {
@@ -216,9 +292,23 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     }
 
     const overdueVehicle = vehicleTasks.filter(t => {
-      if (!t.next_due_date) return false;
       if ((prefs.mutedVehicles ?? []).includes(t.vehicle_id)) return false;
-      return new Date(t.next_due_date + "T12:00:00") < now;
+      // Date-based overdue
+      if (t.next_due_date && new Date(t.next_due_date + "T12:00:00") < now) return true;
+      // Usage-based overdue
+      const vehicle = vehicleMap.get(t.vehicle_id);
+      if (vehicle) {
+        const tm = (vehicle as any).tracking_mode ?? "";
+        const isH = tm === "hours" || tm === "both";
+        const isM = tm === "mileage" || tm === "both";
+        if (isH && (vehicle as any).hours != null && t.next_due_hours != null) {
+          if (Number((vehicle as any).hours) >= Number(t.next_due_hours)) return true;
+        }
+        if (isM && (vehicle as any).mileage != null && t.next_due_miles != null) {
+          if (Number((vehicle as any).mileage) >= Number(t.next_due_miles)) return true;
+        }
+      }
+      return false;
     }).length;
 
     const overdueProperty = propertyTasks.filter(t => {
