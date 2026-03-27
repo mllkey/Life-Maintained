@@ -8,6 +8,12 @@
 
 import { inferTrackingMode } from "./vehicleTypes";
 
+function fullCalendarDaysBetween(later: Date, earlier: Date): number {
+  const L = Date.UTC(later.getFullYear(), later.getMonth(), later.getDate());
+  const E = Date.UTC(earlier.getFullYear(), earlier.getMonth(), earlier.getDate());
+  return Math.floor((L - E) / 86400000);
+}
+
 // ── Types ───────────────────────────────────────────────────────────────
 
 export type TrackingMode = "mileage" | "hours" | "both" | "time_only";
@@ -273,4 +279,41 @@ export function combinedDueStatus(
   if (dateStatus === "overdue" || usageStatus === "overdue") return "overdue";
   if (dateStatus === "due_soon" || usageStatus === "due_soon") return "due_soon";
   return "good";
+}
+
+/** Mode-based checks (for call sites that already resolved `TrackingMode`). */
+export function isHoursTrackedMode(mode: TrackingMode): boolean {
+  return mode === "hours" || mode === "both";
+}
+
+export function isMileageTrackedMode(mode: TrackingMode): boolean {
+  return mode === "mileage" || mode === "both";
+}
+
+/**
+ * Task schedule status for dashboard / lists — matches vehicle detail `calcStatus` logic.
+ */
+export function calcVehicleTaskStatus(
+  task: TaskRow,
+  vehicle: VehicleRow | null | undefined,
+  mode: TrackingMode,
+): "overdue" | "due_soon" | "upcoming" | "completed" {
+  if (task.status === "completed") return "completed";
+  const today = new Date();
+  const dueDate = task.next_due_date ? new Date(task.next_due_date) : null;
+
+  const currentUsage = currentUsageValue(vehicle);
+  const nextDueUsage = taskNextDueUsage(task, vehicle);
+  const hoursMode = isHoursTrackedMode(mode);
+  const dueSoonThreshold = hoursMode ? 25 : 500;
+
+  if (
+    (nextDueUsage != null && currentUsage != null && currentUsage >= nextDueUsage) ||
+    (dueDate != null && dueDate <= today)
+  ) return "overdue";
+  if (
+    (nextDueUsage != null && currentUsage != null && nextDueUsage - currentUsage <= dueSoonThreshold) ||
+    (dueDate != null && fullCalendarDaysBetween(dueDate, today) <= 30)
+  ) return "due_soon";
+  return "upcoming";
 }
