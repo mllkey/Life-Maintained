@@ -49,6 +49,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hydrateRunIdRef = useRef(0);
   const profileFetchPromiseRef = useRef<Promise<Profile | null> | null>(null);
   const profileFetchUserIdRef = useRef<string | null>(null);
+  const sessionRef = useRef<Session | null>(null);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   // ── Onboarding cache helpers ──────────────────────────────────────────
 
@@ -264,8 +269,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const appStateSub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
       const prev = appStateRef.current;
       appStateRef.current = nextState;
-      if (nextState === "active" && prev !== "active" && session?.user) {
-        hydrateFromSession(session, { showLoading: false, quiet: true }).catch((e) => {
+      const currentSession = sessionRef.current;
+      if (nextState === "active" && prev !== "active" && currentSession?.user) {
+        hydrateFromSession(currentSession, { showLoading: false, quiet: true }).catch((e) => {
           console.error("[AUTH] app active hydrate failed:", e);
         });
       }
@@ -278,7 +284,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
       appStateSub.remove();
     };
-  }, [applySignedOutState, hydrateFromSession, session]);
+  }, [applySignedOutState, hydrateFromSession]);
 
   // ── Auth actions ──────────────────────────────────────────────────────
 
