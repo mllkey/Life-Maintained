@@ -117,10 +117,12 @@ export default function ValueRevealScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Progress */}
         <View style={styles.progressBar}>
           <View style={[styles.progressFill, { width: "100%" }]} />
         </View>
 
+        {/* Header */}
         <View style={styles.header}>
           <Ionicons name="checkmark-circle" size={48} color={Colors.good} />
           <Text style={styles.title}>
@@ -135,10 +137,12 @@ export default function ValueRevealScreen() {
           </Text>
         </View>
 
+        {/* Trust signal */}
         {hasTasks && (
           <Text style={styles.trust}>Based on your vehicle and current usage</Text>
         )}
 
+        {/* Task preview — skeletons while waiting; empty after poll timeout */}
         {hasTasks ? (
           <View style={styles.tasksSection}>
             <Text style={styles.sectionLabel}>Coming up first</Text>
@@ -171,6 +175,7 @@ export default function ValueRevealScreen() {
             })}
           </View>
         ) : !pollTimedOut ? (
+          // Still loading — show skeletons
           <View style={styles.tasksSection}>
             {[0, 1, 2].map(i => (
               <View key={i} style={styles.taskCard}>
@@ -186,6 +191,7 @@ export default function ValueRevealScreen() {
           </View>
         ) : null}
 
+        {/* Explainer */}
         {hasTasks && (
           <View style={styles.infoBox}>
             <Ionicons name="information-circle-outline" size={16} color={Colors.textTertiary} />
@@ -195,6 +201,7 @@ export default function ValueRevealScreen() {
           </View>
         )}
 
+        {/* CTAs — always available even if tasks never loaded */}
         <Pressable
           style={({ pressed }) => [styles.cta, { opacity: pressed ? 0.85 : 1 }]}
           onPress={handleOpenDashboard}
