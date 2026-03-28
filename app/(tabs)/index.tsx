@@ -32,6 +32,7 @@ import TrialBanner from "@/components/TrialBanner";
 import { resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode, isHoursTracked, isTimeOnly } from "@/lib/usageHelpers";
 import * as Linking from "expo-linking";
 import { LogSheet } from "@/components/LogSheet";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -372,6 +373,11 @@ export default function DashboardScreen() {
           <WelcomeView />
         ) : (
           <>
+            <Tooltip
+              id={TOOLTIP_IDS.DASHBOARD_WELCOME}
+              message="This is your command center. Everything that needs attention across vehicles, home, and health shows up here."
+              icon="compass-outline"
+            />
             <TrialBanner />
             {!budgetDismissed && !!budgetThreshold && budgetThreshold > 0 && monthlyCost > budgetThreshold && (
               <Pressable onPress={dismissBudgetBanner} style={styles.budgetBanner} accessibilityRole="button" accessibilityLabel="Dismiss budget alert">

@@ -18,6 +18,7 @@ import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { isHoursTracked } from "@/lib/usageHelpers";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 export default function UpdateMileageScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
@@ -101,6 +102,12 @@ export default function UpdateMileageScreen() {
               )
             )}
           </View>
+
+          <Tooltip
+            id={TOOLTIP_IDS.UPDATE_MILEAGE_TIP}
+            message="Keeping this current helps us predict when your next service is actually due."
+            icon="speedometer-outline"
+          />
 
           <View style={styles.inputSection}>
             <Text style={styles.inputLabel}>{tracksHours ? "Current Hours" : "Current Mileage"}</Text>

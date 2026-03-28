@@ -651,6 +651,26 @@ export default function SettingsScreen() {
           >
             <Text style={styles.deleteAccountText}>Delete Account</Text>
           </Pressable>
+
+          {__DEV__ && (
+            <Pressable
+              onPress={async () => {
+                const { resetAllTooltips } = await import("@/components/Tooltip");
+                await resetAllTooltips();
+                Alert.alert("Tooltips Reset", "All tutorial tips will show again next time you visit each screen.");
+              }}
+              style={({ pressed }) => ({
+                opacity: pressed ? 0.7 : 1,
+                paddingVertical: 12,
+                alignItems: "center",
+                marginTop: 16,
+              })}
+            >
+              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary }}>
+                Reset Tutorial Tooltips (Dev Only)
+              </Text>
+            </Pressable>
+          )}
         </View>
       </ScrollView>
 

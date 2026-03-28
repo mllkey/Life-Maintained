@@ -30,6 +30,7 @@ import { personLimit, petLimit } from "@/lib/subscription";
 import { SaveToast } from "@/components/SaveToast";
 import DatePicker from "@/components/DatePicker";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 async function scheduleMedicationNotification(medId: string, medName: string, reminderTime: string): Promise<boolean> {
   const { status } = await Notifications.requestPermissionsAsync();
@@ -597,6 +598,11 @@ export default function HealthScreen() {
           </View>
         ) : (
           <>
+            <Tooltip
+              id={TOOLTIP_IDS.HEALTH_FIRST_VISIT}
+              message="Track appointments, medications, and screenings for yourself, family members, and pets."
+              icon="heart-outline"
+            />
             {hasNoMembers && (!appointments || appointments.length === 0) && (!medications || medications.length === 0) ? (
               <View style={styles.emptyWrap}>
                 <Ionicons name="heart-outline" size={48} color={Colors.healthMuted} />

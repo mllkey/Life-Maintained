@@ -20,6 +20,7 @@ import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 const STORAGE_KEY = "notification_prefs";
 const DEFAULT_PREFS = {
@@ -182,6 +183,12 @@ export default function NotificationsSettingsScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
         keyboardShouldPersistTaps="handled"
       >
+        <Tooltip
+          id={TOOLTIP_IDS.NOTIF_SETTINGS_TIP}
+          message="Choose how far in advance you want reminders. Set quiet hours so you're never woken up."
+          icon="notifications-outline"
+        />
+
         <Section title="Push Notifications">
           <ToggleRow
             label="Enable Push Notifications"

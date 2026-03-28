@@ -22,6 +22,7 @@ import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays, differenceInDays, formatDistanceToNowStrict } from "date-fns";
 import { vehicleLimit } from "@/lib/subscription";
 import { resolveTrackingMode, isHoursTracked, isMileageTracked, currentUsageValue } from "@/lib/usageHelpers";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 type Vehicle = {
   id: string;
@@ -149,6 +150,13 @@ export default function VehiclesScreen() {
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.accent} />}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0), flexGrow: 1 }]}
       >
+        {!isLoading && (
+          <Tooltip
+            id={TOOLTIP_IDS.VEHICLES_FIRST_VISIT}
+            message="Tap any vehicle to see its full maintenance schedule, cost estimates, and service history."
+            icon="car-sport-outline"
+          />
+        )}
         {isLoading ? (
           <VehicleListSkeleton />
         ) : vehicles?.length === 0 ? (

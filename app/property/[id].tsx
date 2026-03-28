@@ -28,6 +28,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { parseISO, isBefore, addDays, addMonths, format } from "date-fns";
 import { SaveToast } from "@/components/SaveToast";
 import DatePicker from "@/components/DatePicker";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): "overdue" | "due_soon" | "good" {
   const now = new Date();
@@ -542,6 +543,11 @@ export default function PropertyDetailScreen() {
 
           {activeTab === "tasks" ? (
             <View style={styles.tasksArea}>
+              <Tooltip
+                id={TOOLTIP_IDS.PROPERTY_DETAIL_SCHEDULE}
+                message="Your home maintenance plan is built for your property type and age. Tap any task to mark it done."
+                icon="home-outline"
+              />
               <Pressable
                 style={({ pressed }) => [styles.addTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => router.push(`/add-property-task/${id}` as any)}
@@ -621,6 +627,11 @@ export default function PropertyDetailScreen() {
             </View>
           ) : (
             <View style={styles.tasksArea}>
+              <Tooltip
+                id={TOOLTIP_IDS.PROPERTY_HISTORY}
+                message="Your complete home service record. Export to PDF or CSV to share with buyers or contractors."
+                icon="time-outline"
+              />
               {groupedHistory.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Ionicons name="document-outline" size={36} color={Colors.textTertiary} />

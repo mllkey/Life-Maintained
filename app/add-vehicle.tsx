@@ -27,6 +27,7 @@ import Paywall from "@/components/Paywall";
 import { SaveToast } from "@/components/SaveToast";
 import { vehicleLimit } from "@/lib/subscription";
 import { MILEAGE_TRACKED_TYPES, inferTrackingMode, inferTrackingModeFromVehicleType } from "@/lib/vehicleTypes";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_ITEM_HEIGHT = 52;
@@ -1342,6 +1343,13 @@ export default function AddVehicleScreen() {
               </View>
             </FieldGroup>
           )}
+
+          <Tooltip
+            id={TOOLTIP_IDS.ADD_VEHICLE_TIP}
+            message="Can't find your exact model? Type it in manually — we'll build a custom schedule for any vehicle or equipment."
+            icon="create-outline"
+            delay={1500}
+          />
 
           {/* ── Basic Info ────────────────────────────────────── */}
           <FieldGroup label="Basic Info">

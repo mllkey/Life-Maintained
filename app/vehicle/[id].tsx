@@ -46,6 +46,7 @@ import {
   taskLastCompletedUsage,
   type TrackingMode,
 } from "@/lib/usageHelpers";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 function taskUsesHoursUsage(task: any, mode: TrackingMode): boolean {
   if (mode === "hours" || mode === "both") {
@@ -1042,6 +1043,11 @@ export default function VehicleDetailScreen() {
 
           {activeTab === "schedule" ? (
             <View style={styles.scheduleContainer}>
+              <Tooltip
+                id={TOOLTIP_IDS.VEHICLE_DETAIL_SCHEDULE}
+                message="Your schedule gets smarter when you log past services. Tap any task to mark it complete."
+                icon="checkmark-circle-outline"
+              />
               {loadingSchedule ? (
                 <ScheduleSkeleton />
               ) : scheduleError ? (
@@ -1185,9 +1191,21 @@ export default function VehicleDetailScreen() {
               )}
             </View>
           ) : activeTab === "wallet" ? (
-            <WalletTab vehicleId={id!} userId={user!.id} />
+            <>
+              <Tooltip
+                id={TOOLTIP_IDS.VEHICLE_GLOVEBOX}
+                message="Store your registration, insurance, and ID here. Always have them when you need them."
+                icon="wallet-outline"
+              />
+              <WalletTab vehicleId={id!} userId={user!.id} />
+            </>
           ) : (
             <View style={styles.historyContainer}>
+              <Tooltip
+                id={TOOLTIP_IDS.VEHICLE_HISTORY}
+                message="Every service you log shows up here. Export to PDF or CSV anytime."
+                icon="time-outline"
+              />
               {groupedHistory.length === 0 ? (
                 <View style={styles.emptyTasks}>
                   <Ionicons name="document-outline" size={36} color={Colors.textTertiary} />

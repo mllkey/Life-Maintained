@@ -30,6 +30,7 @@ import DatePicker from "@/components/DatePicker";
 import { parseISO, format } from "date-fns";
 import { matchAndUpdateVehicleTask, CATEGORY_GROUPS, type MatchResult } from "@/lib/maintenanceMatcher";
 import { resolveTrackingMode, isHoursTracked, isMileageTracked } from "@/lib/usageHelpers";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 type PricingInsight = {
   cost: number | null;
@@ -391,6 +392,13 @@ export default function LogServiceScreen() {
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
+
+          <Tooltip
+            id={TOOLTIP_IDS.LOG_SERVICE_INTRO}
+            message="Log a service manually, or tap the camera icon to scan a receipt and we'll fill everything in."
+            icon="scan-outline"
+            delay={500}
+          />
 
           <View style={styles.fieldGroup}>
             <Text style={styles.groupLabel}>Receipt</Text>

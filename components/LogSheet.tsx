@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { matchAndUpdateVehicleTask, matchAndUpdatePropertyTask } from "@/lib/maintenanceMatcher";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import DatePicker from "@/components/DatePicker";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 import Reanimated, {
   useSharedValue,
   withRepeat,
@@ -608,6 +609,15 @@ export function LogSheet({
               </Pressable>
             </View>
 
+            <View style={{ paddingHorizontal: 20 }}>
+              <Tooltip
+                id={TOOLTIP_IDS.VOICE_LOG_TIP}
+                message="Tap the microphone, say what you did, and we'll log it automatically. Works for vehicles, home, and health."
+                icon="mic-outline"
+                delay={500}
+              />
+            </View>
+
             {/* Orb — centered in upper portion */}
             <View style={styles.recordingCenter}>
               <VoiceOrb
@@ -667,6 +677,13 @@ export function LogSheet({
             >
               <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
                 <View style={styles.sheetHandleBar} />
+
+                <Tooltip
+                  id={TOOLTIP_IDS.VOICE_LOG_TIP}
+                  message="Tap the microphone, say what you did, and we'll log it automatically. Works for vehicles, home, and health."
+                  icon="mic-outline"
+                  delay={500}
+                />
 
                 <View style={styles.sheetHeader}>
                   <View style={styles.sheetIconWrap}>

@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays, format, differenceInYears } from "date-fns";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 function getApptStatus(nextDue: string | null, lastCompleted: string | null) {
   if (!lastCompleted) return "due_soon";
@@ -270,6 +271,12 @@ export default function FamilyMemberDetailScreen() {
               </Pressable>
             ))}
           </View>
+
+          <Tooltip
+            id={TOOLTIP_IDS.FAMILY_MEMBER_DETAIL}
+            message="Track appointments and medications for each family member or pet individually."
+            icon="people-outline"
+          />
 
           {activeTab === "appointments" ? (
             <>
