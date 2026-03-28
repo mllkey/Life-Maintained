@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
-  ActivityIndicator,
   Alert,
   Platform,
 } from "react-native";
@@ -17,6 +16,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays, format, differenceInYears } from "date-fns";
+import { usePulse, S, Row, Col } from "@/components/Skeleton";
 
 function getApptStatus(nextDue: string | null, lastCompleted: string | null) {
   if (!lastCompleted) return "due_soon";
@@ -31,6 +31,7 @@ export default function FamilyMemberDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const skeletonAnim = usePulse();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
   const [activeTab, setActiveTab] = useState<"appointments" | "medications">("appointments");
@@ -211,7 +212,24 @@ export default function FamilyMemberDetailScreen() {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator color={Colors.accent} style={{ marginTop: 60 }} />
+        <View style={{ padding: 20, gap: 16 }}>
+          <View style={{ alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <S anim={skeletonAnim} w={60} h={60} r={30} />
+            <S anim={skeletonAnim} w={120} h={18} r={5} />
+            <S anim={skeletonAnim} w={80} h={13} r={4} />
+          </View>
+          {[0, 1, 2].map(i => (
+            <View key={i} style={{ backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 10 }}>
+              <Row>
+                <Col flex={1} gap={6}>
+                  <S anim={skeletonAnim} w="70%" h={14} r={5} />
+                  <S anim={skeletonAnim} w="50%" h={11} r={4} />
+                </Col>
+                <S anim={skeletonAnim} w={50} h={22} r={11} />
+              </Row>
+            </View>
+          ))}
+        </View>
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

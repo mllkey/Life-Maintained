@@ -24,9 +24,12 @@ import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { parseISO, isBefore, addDays, addMonths, format } from "date-fns";
-import { isFreeTier } from "@/lib/subscription";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import { personLimit, petLimit } from "@/lib/subscription";
 import { SaveToast } from "@/components/SaveToast";
 import DatePicker from "@/components/DatePicker";
+import { usePulse, S, Row, Col } from "@/components/Skeleton";
 
 async function scheduleMedicationNotification(medId: string, medName: string, reminderTime: string): Promise<boolean> {
   const { status } = await Notifications.requestPermissionsAsync();
@@ -87,6 +90,7 @@ export default function HealthScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
+  const skeletonAnim = usePulse();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
   const [schedulingMed, setSchedulingMed] = useState<string | null>(null);
 
@@ -367,27 +371,163 @@ export default function HealthScreen() {
 
   const hasNoMembers = !familyMembers?.length;
 
+  function openAddPerson() {
+    const currentPeople = familyMembers?.filter(fm => fm.member_type !== "pet").length ?? 0;
+    const maxPeople = personLimit(profile);
+    if (currentPeople >= maxPeople) {
+      Alert.alert(
+        "Person Limit Reached",
+        `Your plan allows ${maxPeople === 0 ? "no people" : `${maxPeople} ${maxPeople === 1 ? "person" : "people"}`}. Upgrade to add more.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Upgrade", onPress: () => router.push("/subscription" as any) },
+        ],
+      );
+      return;
+    }
+    router.push("/add-family-member");
+  }
+
+  function openAddPet() {
+    const currentPets = familyMembers?.filter(fm => fm.member_type === "pet").length ?? 0;
+    const maxPets = petLimit(profile);
+    if (currentPets >= maxPets) {
+      Alert.alert(
+        "Pet Limit Reached",
+        `Your plan allows ${maxPets === 0 ? "no pets" : `${maxPets} ${maxPets === 1 ? "pet" : "pets"}`}. Upgrade to add more.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Upgrade", onPress: () => router.push("/subscription" as any) },
+        ],
+      );
+      return;
+    }
+    router.push("/add-family-member?type=pet" as any);
+  }
+
+  async function handleExportHealth() {
+    if (!appointments?.length && !medications?.length) {
+      Alert.alert("Nothing to Export", "Add some appointments or medications first.");
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    const peopleForExport = familyMembers?.filter(fm => fm.member_type !== "pet") ?? [];
+    const petsForExport = familyMembers?.filter(fm => fm.member_type === "pet") ?? [];
+
+    function formatExportDate(d: string | null) {
+      if (!d) return "\u2014";
+      try {
+        return format(parseISO(d), "MMM d, yyyy");
+      } catch {
+        return d;
+      }
+    }
+
+    function statusLabel(nextDue: string | null) {
+      if (!nextDue) return "No date set";
+      const due = new Date(nextDue + "T12:00:00");
+      const now = new Date();
+      const diff = Math.floor((due.getTime() - now.getTime()) / 86400000);
+      if (diff < 0) return "Overdue";
+      if (diff <= 30) return "Due soon";
+      return "Upcoming";
+    }
+
+    let apptRows = "";
+    for (const a of (appointments ?? []).sort((x, y) => (x.next_due_date ?? "9999").localeCompare(y.next_due_date ?? "9999"))) {
+      const memberName = (a as any).family_members?.name ?? "You";
+      const status = statusLabel(a.next_due_date);
+      const statusColor = status === "Overdue" ? "#EF4444" : status === "Due soon" ? "#F59E0B" : "#22C55E";
+      apptRows += `<tr>
+      <td>${a.appointment_type}</td>
+      <td>${memberName}</td>
+      <td>${a.provider_name ?? ""}</td>
+      <td>${formatExportDate(a.next_due_date)}</td>
+      <td>${formatExportDate(a.last_completed_at)}</td>
+      <td style="color:${statusColor};font-weight:600">${status}</td>
+    </tr>`;
+    }
+
+    let medRows = "";
+    for (const m of medications ?? []) {
+      const memberName = (m as any).family_members?.name ?? "You";
+      medRows += `<tr>
+      <td>${m.name}</td>
+      <td>${memberName}</td>
+      <td>${m.dosage ?? ""}</td>
+      <td>${m.frequency ?? ""}</td>
+      <td>${m.reminder_time ?? ""}</td>
+    </tr>`;
+    }
+
+    const html = `<!DOCTYPE html><html><head><style>
+    body { font-family: -apple-system, sans-serif; padding: 40px; color: #1a1f2e; }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    h2 { font-size: 16px; margin-top: 24px; color: #5a6480; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+    th { text-align: left; padding: 8px; border-bottom: 2px solid #e5e7eb; color: #5a6480; font-weight: 600; }
+    td { padding: 8px; border-bottom: 1px solid #f3f4f6; }
+    .footer { margin-top: 32px; font-size: 11px; color: #9ca3af; }
+  </style></head><body>
+    <h1>Health Summary</h1>
+    <p style="color:#5a6480;font-size:13px">${peopleForExport.length} ${peopleForExport.length === 1 ? "person" : "people"} · ${petsForExport.length} ${petsForExport.length === 1 ? "pet" : "pets"} · ${(appointments ?? []).length} ${(appointments ?? []).length === 1 ? "appointment" : "appointments"} · ${(medications ?? []).length} ${(medications ?? []).length === 1 ? "medication" : "medications"}</p>
+
+    ${apptRows ? `<h2>Appointments</h2>
+    <table>
+      <thead><tr><th>Type</th><th>For</th><th>Provider</th><th>Next Due</th><th>Last Done</th><th>Status</th></tr></thead>
+      <tbody>${apptRows}</tbody>
+    </table>` : ""}
+
+    ${medRows ? `<h2>Medications</h2>
+    <table>
+      <thead><tr><th>Medication</th><th>For</th><th>Dosage</th><th>Frequency</th><th>Reminder</th></tr></thead>
+      <tbody>${medRows}</tbody>
+    </table>` : ""}
+
+    <div class="footer">Generated by LifeMaintained · lifemaintained.app</div>
+  </body></html>`;
+
+    try {
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri, { mimeType: "application/pdf" });
+    } catch (e) {
+      console.warn("[EXPORT] Health PDF failed:", e);
+    }
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
         <Text style={styles.title}>Health</Text>
-        <Pressable
-          style={({ pressed }) => [styles.addHeaderBtn, { opacity: pressed ? 0.85 : 1 }]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            Alert.alert("Add to Health", "What would you like to add?", [
-              { text: "Family Member", onPress: () => router.push("/add-family-member") },
-              { text: "Appointment", onPress: () => router.push("/add-appointment") },
-              { text: "Medication", onPress: () => router.push("/add-medication") },
-              { text: "Cancel", style: "cancel" },
-            ]);
-          }}
-          accessibilityLabel="Add health item"
-          accessibilityRole="button"
-        >
-          <Ionicons name="add" size={18} color="#0C111B" />
-          <Text style={styles.addHeaderBtnText}>Add</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={handleExportHealth}
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, padding: 8 })}
+            hitSlop={8}
+            accessibilityLabel="Export health summary"
+            accessibilityRole="button"
+          >
+            <Ionicons name="share-outline" size={22} color={Colors.text} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.addHeaderBtn, { opacity: pressed ? 0.85 : 1 }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              Alert.alert("Add to Health", "What would you like to add?", [
+                { text: "Family Member", onPress: openAddPerson },
+                { text: "Appointment", onPress: () => router.push("/add-appointment") },
+                { text: "Medication", onPress: () => router.push("/add-medication") },
+                { text: "Cancel", style: "cancel" },
+              ]);
+            }}
+            accessibilityLabel="Add health item"
+            accessibilityRole="button"
+          >
+            <Ionicons name="add" size={18} color="#0C111B" />
+            <Text style={styles.addHeaderBtnText}>Add</Text>
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -396,7 +536,21 @@ export default function HealthScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0), flexGrow: 1 }]}
       >
         {isLoading ? (
-          <ActivityIndicator color={Colors.accent} style={{ marginTop: 40 }} />
+          <View style={{ padding: 20, gap: 16 }}>
+            {[0, 1, 2].map(i => (
+              <View key={i} style={{ backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 10 }}>
+                <Row>
+                  <S anim={skeletonAnim} w={36} h={36} r={18} />
+                  <Col flex={1} gap={6}>
+                    <S anim={skeletonAnim} w="60%" h={14} r={5} />
+                    <S anim={skeletonAnim} w="40%" h={11} r={4} />
+                  </Col>
+                  <S anim={skeletonAnim} w={60} h={24} r={12} />
+                </Row>
+                <S anim={skeletonAnim} w="80%" h={11} r={4} />
+              </View>
+            ))}
+          </View>
         ) : (
           <>
             {hasNoMembers && (!appointments || appointments.length === 0) && (!medications || medications.length === 0) ? (
@@ -408,11 +562,16 @@ export default function HealthScreen() {
                 </Text>
                 <Pressable
                   style={({ pressed }) => [styles.emptyBtn, { opacity: pressed ? 0.85 : 1 }]}
-                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-family-member"); }}
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openAddPerson(); }}
                 >
                   <Ionicons name="person-add-outline" size={18} color={Colors.textInverse} />
                   <Text style={styles.emptyBtnText}>Add Yourself</Text>
                 </Pressable>
+                {profile?.subscription_tier === "free" && (
+                  <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", marginTop: 8 }}>
+                    Free plan includes limited tracking. Upgrade for more.
+                  </Text>
+                )}
               </View>
             ) : (
               <>
@@ -463,12 +622,12 @@ export default function HealthScreen() {
                 {people.length > 0 && (
                   <SectionBlock
                     title="Family Members"
-                    onAdd={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-family-member"); }}
+                    onAdd={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openAddPerson(); }}
                   >
                     <View style={styles.memberGrid}>
                       {people.map((person, personIdx) => {
-                        const memberLimit = isFreeTier(profile) ? 1 : Infinity;
-                        const isLocked = personIdx >= memberLimit;
+                        const maxPeople = personLimit(profile);
+                        const isLocked = Number.isFinite(maxPeople) && personIdx >= maxPeople;
                         const status = apptStatusByMember[person.id] ?? { overdue: 0, upcoming: 0 };
                         return (
                           <View key={person.id} style={{ position: "relative" }}>
@@ -503,13 +662,12 @@ export default function HealthScreen() {
                 {pets.length > 0 && (
                   <SectionBlock
                     title="Pets"
-                    onAdd={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-family-member"); }}
+                    onAdd={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openAddPet(); }}
                   >
                     <View style={styles.memberGrid}>
                       {pets.map((pet, petIdx) => {
-                        const memberLimit = isFreeTier(profile) ? 1 : Infinity;
-                        const combinedIdx = people.length + petIdx;
-                        const isLocked = combinedIdx >= memberLimit;
+                        const maxPets = petLimit(profile);
+                        const isLocked = Number.isFinite(maxPets) && petIdx >= maxPets;
                         const status = apptStatusByMember[pet.id] ?? { overdue: 0, upcoming: 0 };
                         return (
                           <View key={pet.id} style={{ position: "relative" }}>
@@ -781,6 +939,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 4 },
   addHeaderBtn: {
     flexDirection: "row",
     alignItems: "center",

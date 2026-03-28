@@ -44,8 +44,10 @@ const TIER_CONFIG: Record<TierKey, {
     monthlyPrice: "$6.99/month",
     features: [
       "3 vehicles + 2 properties",
+      "1 person + 1 pet",
       "15 AI receipt scans/month",
-      "Export to PDF/CSV",
+      "Voice logging",
+      "Push notifications",
     ],
   },
   pro: {
@@ -59,8 +61,10 @@ const TIER_CONFIG: Record<TierKey, {
     popular: true,
     features: [
       "6 vehicles + 5 properties",
+      "5 people + 3 pets",
       "30 AI receipt scans/month",
-      "Cost analytics & breakdowns",
+      "Voice logging",
+      "Export to PDF/CSV",
     ],
   },
   business: {
@@ -73,8 +77,11 @@ const TIER_CONFIG: Record<TierKey, {
     monthlyPrice: "$29.99/month",
     features: [
       "Unlimited vehicles & properties",
+      "Unlimited people & pets",
       "100 AI receipt scans/month",
-      "Fleet reporting",
+      "Voice logging",
+      "Export to PDF/CSV",
+      "Priority support",
     ],
   },
 };

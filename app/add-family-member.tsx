@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { SaveToast } from "@/components/SaveToast";
 import Paywall from "@/components/Paywall";
-import { isFreeTier } from "@/lib/subscription";
+import { personLimit, petLimit } from "@/lib/subscription";
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import {
   Modal,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -31,9 +31,11 @@ export default function AddFamilyMemberScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
+  const { type } = useLocalSearchParams<{ type?: string | string[] }>();
+  const typeParam = Array.isArray(type) ? type[0] : type;
 
   const [name, setName] = useState("");
-  const [memberType, setMemberType] = useState("person");
+  const [memberType, setMemberType] = useState(typeParam === "pet" ? "pet" : "person");
   const [relationship, setRelationship] = useState("");
   const [petType, setPetType] = useState("");
   const [dob, setDob] = useState("");
@@ -57,15 +59,19 @@ export default function AddFamilyMemberScreen() {
     }
     if (!name.trim()) { setError("Name is required"); return; }
     try {
-      if (isFreeTier(profile)) {
-        const { count } = await supabase
-          .from("family_members")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", user.id);
-        if ((count ?? 0) >= 1) {
-          setShowPaywall(true);
-          return;
-        }
+      const { data: existing } = await supabase
+        .from("family_members")
+        .select("member_type")
+        .eq("user_id", user.id);
+      const peopleCount = existing?.filter((r: { member_type: string }) => r.member_type !== "pet").length ?? 0;
+      const petsCount = existing?.filter((r: { member_type: string }) => r.member_type === "pet").length ?? 0;
+      if (memberType === "person" && peopleCount >= personLimit(profile)) {
+        setShowPaywall(true);
+        return;
+      }
+      if (memberType === "pet" && petsCount >= petLimit(profile)) {
+        setShowPaywall(true);
+        return;
       }
     } catch {}
     setIsLoading(true);

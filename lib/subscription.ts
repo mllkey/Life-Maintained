@@ -90,6 +90,20 @@ export function propertyLimit(profile: Profile | null | undefined): number {
   return 1;
 }
 
+export function personLimit(profile: Profile | null | undefined): number {
+  if (hasBusiness(profile)) return Infinity;
+  if (hasProOrAbove(profile)) return 5;
+  if (hasPersonalOrAbove(profile)) return 1;
+  return 1;
+}
+
+export function petLimit(profile: Profile | null | undefined): number {
+  if (hasBusiness(profile)) return Infinity;
+  if (hasProOrAbove(profile)) return 3;
+  if (hasPersonalOrAbove(profile)) return 1;
+  return 0;
+}
+
 export function scanLimit(profile: Profile | null | undefined): number {
   if (hasBusiness(profile)) return 100;
   if (hasProOrAbove(profile)) return 30;
