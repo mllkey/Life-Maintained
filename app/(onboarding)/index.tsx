@@ -1,122 +1,154 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  ScrollView,
-} from "react-native";
+import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
-const CATEGORIES = [
+const VERTICALS = [
   {
-    id: "vehicles",
+    id: "vehicle",
     icon: "car-sport-outline" as const,
-    label: "Vehicles",
-    description: "Cars, trucks, motorcycles & more",
-    color: Colors.vehicle,
-    bg: Colors.vehicleMuted,
+    title: "Vehicle",
+    badge: "Recommended",
+    subtitle: "Fastest way to see value",
+    body: "Add your year, make, model, and current mileage. We\u2019ll build a personalized maintenance plan.",
+    color: Colors.accent,
   },
   {
     id: "home",
     icon: "home-outline" as const,
-    label: "Home & Property",
-    description: "HVAC, roof, appliances & more",
+    title: "Home",
+    badge: null,
+    subtitle: "Best for homeowners",
+    body: "Add your address and property type. We\u2019ll build a home maintenance plan with seasonal tasks.",
     color: Colors.home,
-    bg: Colors.homeMuted,
   },
   {
     id: "health",
     icon: "heart-outline" as const,
-    label: "Health",
-    description: "Appointments, meds & screenings",
+    title: "Health",
+    badge: null,
+    subtitle: "Appointments & preventive care",
+    body: "Track appointments, medications, and age-based care suggestions for you and your family.",
     color: Colors.health,
-    bg: Colors.healthMuted,
   },
 ];
 
-export default function OnboardingSelectScreen() {
+export default function OnboardingStartScreen() {
   const insets = useSafeAreaInsets();
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState("vehicle");
+  const { setOnboardingCompleted, user } = useAuth();
 
-  function toggle(id: string) {
-    Haptics.selectionAsync();
-    setSelected(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
+  async function completeAndGo(destination: string, thenPush?: string) {
+    try {
+      if (user) {
+        await supabase.from("profiles").upsert(
+          { user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() },
+          { onConflict: "user_id" }
+        );
+      }
+      await AsyncStorage.setItem("@onboarding_completed", "true");
+      setOnboardingCompleted(true);
+      router.replace(destination as any);
+      if (thenPush) {
+        setTimeout(() => router.push(thenPush as any), 400);
+      }
+    } catch (e) {
+      if (__DEV__) console.error("[onboarding] complete error:", e);
+    }
   }
 
   function handleContinue() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push("/(onboarding)/profile");
+    if (selected === "vehicle") {
+      // Use push so user can go back to this screen
+      router.push("/(onboarding)/vehicle-quick-add");
+    } else if (selected === "home") {
+      // Complete onboarding, go to tabs, then open add-property
+      completeAndGo("/(tabs)", "/add-property");
+    } else {
+      // Complete onboarding, go to tabs (health tab will prompt health profile setup inline)
+      completeAndGo("/(tabs)");
+    }
+  }
+
+  async function handleFinishLater() {
+    Haptics.selectionAsync();
+    await completeAndGo("/(tabs)");
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors.background }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
       <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 },
-        ]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Progress */}
         <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: "33%" }]} />
+          <View style={[styles.progressFill, { width: "25%" }]} />
         </View>
 
+        {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>What do you want to track?</Text>
+          <Text style={styles.title}>Start with one thing you own</Text>
           <Text style={styles.subtitle}>
-            Select everything that applies. You can always add more later.
+            We'll build your first maintenance plan in under a minute.
           </Text>
         </View>
 
+        {/* Cards */}
         <View style={styles.cards}>
-          {CATEGORIES.map(cat => {
-            const isSelected = selected.includes(cat.id);
+          {VERTICALS.map(v => {
+            const isSelected = selected === v.id;
             return (
               <Pressable
-                key={cat.id}
-                style={({ pressed }) => [
+                key={v.id}
+                style={[
                   styles.card,
-                  isSelected && styles.cardSelected,
-                  { opacity: pressed ? 0.85 : 1 },
+                  isSelected && { borderColor: v.color, backgroundColor: `${v.color}10` },
                 ]}
-                onPress={() => toggle(cat.id)}
+                onPress={() => { Haptics.selectionAsync(); setSelected(v.id); }}
               >
-                <View style={[styles.cardIcon, { backgroundColor: cat.bg }]}>
-                  <Ionicons name={cat.icon} size={18} color={cat.color} />
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIcon, { backgroundColor: `${v.color}20` }]}>
+                    <Ionicons name={v.icon} size={22} color={v.color} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Text style={styles.cardTitle}>{v.title}</Text>
+                      {v.badge && (
+                        <View style={[styles.badge, { backgroundColor: `${v.color}20` }]}>
+                          <Text style={[styles.badgeText, { color: v.color }]}>{v.badge}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.cardSubtitle}>{v.subtitle}</Text>
+                  </View>
+                  <View style={[styles.radio, isSelected && { borderColor: v.color, backgroundColor: v.color }]}>
+                    {isSelected && <View style={styles.radioDot} />}
+                  </View>
                 </View>
-                <View style={styles.cardContent}>
-                  <Text style={styles.cardLabel}>{cat.label}</Text>
-                  <Text style={styles.cardDesc}>{cat.description}</Text>
-                </View>
-                <View style={[styles.radio, isSelected && styles.radioSelected]}>
-                  {isSelected && (
-                    <View style={styles.radioDot} />
-                  )}
-                </View>
+                <Text style={styles.cardBody}>{v.body}</Text>
               </Pressable>
             );
           })}
         </View>
 
+        {/* CTA */}
         <Pressable
-          style={({ pressed }) => [
-            styles.continueButton,
-            { opacity: pressed ? 0.85 : 1 },
-          ]}
+          style={({ pressed }) => [styles.cta, { opacity: pressed ? 0.85 : 1 }]}
           onPress={handleContinue}
         >
-          <Text style={styles.continueText}>Continue</Text>
+          <Text style={styles.ctaText}>Continue</Text>
         </Pressable>
 
-        <Pressable onPress={handleContinue} style={styles.skipButton}>
-          <Text style={styles.skipText}>Skip for now</Text>
+        <Pressable onPress={handleFinishLater} style={styles.skip}>
+          <Text style={styles.skipText}>Finish later</Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -124,88 +156,33 @@ export default function OnboardingSelectScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Colors.background },
   scroll: { paddingHorizontal: 20, gap: 24 },
-
-  progressBar: {
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: Colors.border,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: Colors.accent,
-  },
-
+  progressBar: { height: 3, borderRadius: 2, backgroundColor: Colors.border, overflow: "hidden" },
+  progressFill: { height: 3, borderRadius: 2, backgroundColor: Colors.accent },
   header: { gap: 8 },
-  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text },
-  subtitle: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: Colors.textSecondary,
-  },
-
-  cards: { gap: 10 },
+  title: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text },
+  subtitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
+  cards: { gap: 12 },
   card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
     backgroundColor: Colors.card,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  cardSelected: {
-    borderColor: Colors.accent,
-    backgroundColor: "rgba(232, 147, 58, 0.08)",
-  },
-  cardIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cardContent: { flex: 1, gap: 2 },
-  cardLabel: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  cardDesc: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    alignItems: "center",
-    justifyContent: "center",
   },
-  radioSelected: { borderColor: Colors.accent, backgroundColor: Colors.accent },
-  radioDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.textInverse,
-  },
-
-  continueButton: {
-    backgroundColor: Colors.accent,
-    borderRadius: 14,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  continueText: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.textInverse,
-  },
-  skipButton: { alignItems: "center", paddingVertical: 4 },
-  skipText: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: Colors.textTertiary,
-  },
+  cardHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  cardIcon: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  cardTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  cardSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 1 },
+  cardBody: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, lineHeight: 19 },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  badgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: Colors.border, alignItems: "center", justifyContent: "center" },
+  radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#FFFFFF" },
+  cta: { backgroundColor: Colors.accent, borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" },
+  ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: "#0C111B" },
+  skip: { alignItems: "center", paddingVertical: 4 },
+  skipText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
 });
