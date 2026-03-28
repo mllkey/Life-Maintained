@@ -204,7 +204,7 @@ export default function FamilyMemberDetailScreen() {
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.addApptBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-appointment"); }}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/add-appointment?familyMemberId=${encodeURIComponent(id!)}` as any); }}
           >
             <Ionicons name="add" size={20} color={Colors.textInverse} />
           </Pressable>
@@ -280,7 +280,7 @@ export default function FamilyMemberDetailScreen() {
                   <Text style={styles.emptyText}>Tap + to add an appointment type to track.</Text>
                   <Pressable
                     style={({ pressed }) => [styles.emptyBtn, { opacity: pressed ? 0.8 : 1 }]}
-                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-appointment"); }}
+                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/add-appointment?familyMemberId=${encodeURIComponent(id!)}` as any); }}
                   >
                     <Ionicons name="add" size={16} color={Colors.textInverse} />
                     <Text style={styles.emptyBtnText}>Add Appointment</Text>
@@ -294,7 +294,6 @@ export default function FamilyMemberDetailScreen() {
                     const status = getApptStatus(appt.next_due_date, appt.last_completed_at);
                     const statusColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
                     const subtitleParts = [
-                      appt.provider_name,
                       appt.last_completed_at
                         ? `Last: ${format(parseISO(appt.last_completed_at), "MMM d, yyyy")}`
                         : "Not yet completed",
@@ -313,6 +312,11 @@ export default function FamilyMemberDetailScreen() {
                           <View style={[styles.taskBar, { backgroundColor: statusColor }]} />
                           <View style={styles.taskInfo}>
                             <Text style={styles.taskTitle} numberOfLines={1}>{appt.appointment_type}</Text>
+                            {appt.provider_name && (
+                              <Text numberOfLines={1} style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 }}>
+                                {appt.provider_name}
+                              </Text>
+                            )}
                             <Text style={styles.taskSub} numberOfLines={1}>{subtitleParts.join(" · ")}</Text>
                           </View>
                           {nextDueText && (

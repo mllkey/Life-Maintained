@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -52,6 +52,8 @@ export default function AddAppointmentScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const params = useLocalSearchParams<{ familyMemberId?: string | string[] }>();
+  const paramFamilyMemberId = Array.isArray(params.familyMemberId) ? params.familyMemberId[0] : params.familyMemberId;
 
   const [appointmentType, setAppointmentType] = useState("");
   const [providerName, setProviderName] = useState("");
@@ -68,6 +70,71 @@ export default function AddAppointmentScreen() {
       if (!user) return [];
       const { data } = await supabase.from("family_members").select("*").eq("user_id", user.id).order("name");
       return data ?? [];
+    },
+    enabled: !!user,
+  });
+
+  useEffect(() => {
+    if (paramFamilyMemberId) setFamilyMemberId(paramFamilyMemberId);
+  }, [paramFamilyMemberId]);
+
+  const { data: memberData } = useQuery({
+    queryKey: ["member_type", familyMemberId],
+    queryFn: async () => {
+      if (!familyMemberId) return null;
+      const { data } = await supabase
+        .from("family_members")
+        .select("member_type")
+        .eq("id", familyMemberId)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!familyMemberId,
+  });
+
+  const isPet = useMemo(() => {
+    if (!familyMemberId) return false;
+    const fromList = familyMembers?.find(fm => fm.id === familyMemberId)?.member_type;
+    if (fromList === "pet") return true;
+    if (fromList === "person") return false;
+    return memberData?.member_type === "pet";
+  }, [familyMemberId, familyMembers, memberData?.member_type]);
+
+  const { data: previousProviders } = useQuery({
+    queryKey: ["previous_providers", user?.id, isPet ? "pet" : "person"],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data: members } = await supabase
+        .from("family_members")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("member_type", isPet ? "pet" : "person");
+      const memberIds = (members ?? []).map((m: { id: string }) => m.id);
+
+      let query = supabase
+        .from("health_appointments")
+        .select("provider_name")
+        .eq("user_id", user.id)
+        .not("provider_name", "is", null);
+
+      if (isPet) {
+        if (memberIds.length === 0) return [];
+        query = query.in("family_member_id", memberIds);
+      } else if (memberIds.length > 0) {
+        query = query.or(`family_member_id.is.null,family_member_id.in.(${memberIds.join(",")})`);
+      } else {
+        query = query.is("family_member_id", null);
+      }
+
+      const { data } = await query;
+      const seen = new Map<string, string>();
+      for (const d of data ?? []) {
+        const raw = (d.provider_name ?? "").trim();
+        if (!raw) continue;
+        const key = raw.toLowerCase();
+        if (!seen.has(key)) seen.set(key, raw);
+      }
+      return [...seen.values()].sort();
     },
     enabled: !!user,
   });
@@ -139,8 +206,43 @@ export default function AddAppointmentScreen() {
             <TextInput style={styles.input} value={appointmentType} onChangeText={setAppointmentType} placeholder="Or enter custom type..." placeholderTextColor={Colors.textTertiary} returnKeyType="next" />
           </Section>
 
-          <Section title="Provider">
-            <TextInput style={styles.input} value={providerName} onChangeText={setProviderName} placeholder="Dr. Smith, HealthFirst Clinic..." placeholderTextColor={Colors.textTertiary} autoCapitalize="words" returnKeyType="next" />
+          <Section title={isPet ? "Vet / Clinic" : "Doctor / Clinic"}>
+            <TextInput
+              style={styles.input}
+              value={providerName}
+              onChangeText={setProviderName}
+              placeholder={isPet ? "Banfield, VCA Animal Hospital..." : "Dr. Smith, HealthFirst Clinic..."}
+              placeholderTextColor={Colors.textTertiary}
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
+            {providerName.length > 0 && previousProviders && previousProviders.length > 0 && (() => {
+              const matches = previousProviders
+                .filter(p => p.toLowerCase().includes(providerName.toLowerCase()) && p.toLowerCase() !== providerName.toLowerCase())
+                .slice(0, 3);
+              if (matches.length === 0) return null;
+              return (
+                <View style={{ marginTop: 4, gap: 2 }}>
+                  {matches.map(suggestion => (
+                    <Pressable
+                      key={suggestion}
+                      onPress={() => { Haptics.selectionAsync(); setProviderName(suggestion); }}
+                      style={({ pressed }) => ({
+                        paddingVertical: 8,
+                        paddingHorizontal: 12,
+                        backgroundColor: Colors.surface,
+                        borderRadius: 8,
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                    >
+                      <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.text }}>
+                        {suggestion}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              );
+            })()}
           </Section>
 
           {familyMembers && familyMembers.length > 0 && (

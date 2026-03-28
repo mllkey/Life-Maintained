@@ -20,7 +20,8 @@
         "NSMicrophoneUsageDescription": "LifeMaintained uses your microphone to log maintenance by voice.",
         "NSCameraUsageDescription": "LifeMaintained uses your camera to scan receipts and take vehicle photos.",
         "NSPhotoLibraryUsageDescription": "LifeMaintained accesses your photos to attach receipts and vehicle images.",
-        "NSPhotoLibraryAddUsageDescription": "LifeMaintained saves exported documents to your photo library."
+        "NSPhotoLibraryAddUsageDescription": "LifeMaintained saves exported documents to your photo library.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -30,7 +31,11 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -69,6 +74,14 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "origin": "https://lifemaintained.com"
+      },
+      "eas": {
+        "projectId": "2b817e52-5d6d-43c4-9855-966f7ded10ad"
+      }
     }
   }
 }

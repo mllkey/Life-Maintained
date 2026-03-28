@@ -165,6 +165,50 @@ export default function HealthScreen() {
     enabled: !!user,
   });
 
+  const completingForPet = useMemo(() => {
+    if (!markCompleteAppt?.family_member_id) return false;
+    return familyMembers?.find(fm => fm.id === markCompleteAppt.family_member_id)?.member_type === "pet" ?? false;
+  }, [markCompleteAppt, familyMembers]);
+
+  const { data: markCompleteProviders } = useQuery({
+    queryKey: ["previous_providers", user?.id, completingForPet ? "pet" : "person"],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data: members } = await supabase
+        .from("family_members")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("member_type", completingForPet ? "pet" : "person");
+      const memberIds = (members ?? []).map((m: { id: string }) => m.id);
+
+      let query = supabase
+        .from("health_appointments")
+        .select("provider_name")
+        .eq("user_id", user.id)
+        .not("provider_name", "is", null);
+
+      if (completingForPet) {
+        if (memberIds.length === 0) return [];
+        query = query.in("family_member_id", memberIds);
+      } else if (memberIds.length > 0) {
+        query = query.or(`family_member_id.is.null,family_member_id.in.(${memberIds.join(",")})`);
+      } else {
+        query = query.is("family_member_id", null);
+      }
+
+      const { data } = await query;
+      const seen = new Map<string, string>();
+      for (const d of data ?? []) {
+        const raw = (d.provider_name ?? "").trim();
+        if (!raw) continue;
+        const key = raw.toLowerCase();
+        if (!seen.has(key)) seen.set(key, raw);
+      }
+      return [...seen.values()].sort();
+    },
+    enabled: !!user && !!markCompleteAppt,
+  });
+
   const isLoading = loadingAppts || loadingMeds || loadingFamily;
 
   function refetch() {
@@ -799,15 +843,42 @@ export default function HealthScreen() {
 
                 <View style={styles.sheetField}>
                   <Text style={styles.sheetFieldLabel}>
-                    Provider  <Text style={styles.sheetFieldOptional}>(optional)</Text>
+                    {completingForPet ? "Vet / Clinic" : "Doctor / Clinic"}  <Text style={styles.sheetFieldOptional}>(optional)</Text>
                   </Text>
                   <TextInput
                     style={styles.sheetInput}
                     value={completeProvider}
                     onChangeText={setCompleteProvider}
-                    placeholder="e.g. Dr. Smith"
+                    placeholder={completingForPet ? "e.g. Banfield, VCA" : "e.g. Dr. Smith"}
                     placeholderTextColor={Colors.textTertiary}
                   />
+                  {completeProvider.length > 0 && markCompleteProviders && markCompleteProviders.length > 0 && (() => {
+                    const matches = markCompleteProviders
+                      .filter(p => p.toLowerCase().includes(completeProvider.toLowerCase()) && p.toLowerCase() !== completeProvider.toLowerCase())
+                      .slice(0, 3);
+                    if (matches.length === 0) return null;
+                    return (
+                      <View style={{ marginTop: 4, gap: 2 }}>
+                        {matches.map(suggestion => (
+                          <Pressable
+                            key={suggestion}
+                            onPress={() => { Haptics.selectionAsync(); setCompleteProvider(suggestion); }}
+                            style={({ pressed }) => ({
+                              paddingVertical: 8,
+                              paddingHorizontal: 12,
+                              backgroundColor: Colors.surface,
+                              borderRadius: 8,
+                              opacity: pressed ? 0.7 : 1,
+                            })}
+                          >
+                            <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.text }}>
+                              {suggestion}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    );
+                  })()}
                 </View>
 
                 <View style={styles.sheetField}>
@@ -862,7 +933,6 @@ function AppointmentCard({ appointment, onMarkComplete }: { appointment: any; on
   const member = (appointment as any).family_members;
   const subParts: string[] = [];
   if (member?.name) subParts.push(member.name);
-  if (appointment.provider_name) subParts.push(appointment.provider_name);
   if (appointment.next_due_date) subParts.push(format(parseISO(appointment.next_due_date), "MMM d, yyyy"));
 
   return (
@@ -873,6 +943,11 @@ function AppointmentCard({ appointment, onMarkComplete }: { appointment: any; on
       <View style={[styles.apptBar, { backgroundColor: barColor }]} />
       <View style={styles.apptInfo}>
         <Text style={styles.apptType}>{appointment.appointment_type}</Text>
+        {appointment.provider_name && (
+          <Text numberOfLines={1} style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 }}>
+            {appointment.provider_name}
+          </Text>
+        )}
         {subParts.length > 0 && (
           <Text style={styles.apptMeta} numberOfLines={1}>{subParts.join(" · ")}</Text>
         )}
