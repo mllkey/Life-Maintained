@@ -303,45 +303,53 @@ serve(async (req: Request) => {
   }
 
   try {
-    // Auth
-    const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return json({ error: "Unauthorized" }, 401);
-    }
-    const jwt = authHeader.replace("Bearer ", "").trim();
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
-    });
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
-    if (authError || !user) return json({ error: "Unauthorized" }, 401);
-    const authUserId = user.id;
-
-    // Parse body
+    // Parse body (before auth — needed for preload mode)
     let body: Record<string, unknown>;
     try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
 
     const { property_id, property_type, year_built, square_footage, zip_code } = body;
     if (!property_id || typeof property_id !== "string") return json({ error: "Missing property_id" }, 400);
 
+    const isPreload = typeof property_id === "string" && property_id.startsWith("preload-");
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+    let authUserId = "preload";
+    if (!isPreload) {
+      const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return json({ error: "Unauthorized" }, 401);
+      }
+      const jwt = authHeader.replace("Bearer ", "").trim();
+
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: `Bearer ${jwt}` } },
+      });
+      const { data: { user }, error: authError } = await userClient.auth.getUser();
+      if (authError || !user) return json({ error: "Unauthorized" }, 401);
+      authUserId = user.id;
+    }
+
     const propType = typeof property_type === "string" ? property_type : "house";
     const yearBuilt = typeof year_built === "number" ? year_built : null;
     const sqft = typeof square_footage === "number" ? square_footage : null;
     const zip = typeof zip_code === "string" ? zip_code : "";
 
-    // Verify ownership
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
-    const { data: property } = await adminClient
-      .from("properties").select("id").eq("id", property_id).eq("user_id", authUserId).maybeSingle();
-    if (!property) return json({ error: "Property not found or not owned by user" }, 403);
 
-    // Check existing tasks
-    const { count: existingCount } = await adminClient
-      .from("property_maintenance_tasks").select("id", { count: "exact", head: true }).eq("property_id", property_id);
-    if ((existingCount ?? 0) > 0) return json({ error: "Schedule already exists" }, 409);
+    if (!isPreload) {
+      const { data: property } = await adminClient
+        .from("properties").select("id").eq("id", property_id).eq("user_id", authUserId).maybeSingle();
+      if (!property) return json({ error: "Property not found or not owned by user" }, 403);
+    }
+
+    if (!isPreload) {
+      const { count: existingCount } = await adminClient
+        .from("property_maintenance_tasks").select("id", { count: "exact", head: true }).eq("property_id", property_id);
+      if ((existingCount ?? 0) > 0) return json({ error: "Schedule already exists" }, 409);
+    }
 
     // Climate + cache
     const climate = getClimateZone(zip);
@@ -472,9 +480,16 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
 
     // Fallback
     if (!validatedTasks || validatedTasks.length < 5) {
+      if (isPreload) {
+        return json({ success: true, source: "preload-template-fallback", cached: false });
+      }
       console.warn("[FALLBACK] Using template tasks for", propertyDesc);
       validatedTasks = getTemplateTasks(propType, yearBuilt, climate.zone);
       usedAi = false;
+    }
+
+    if (isPreload) {
+      return json({ success: true, source: "preload", cached: true, task_count: validatedTasks.length });
     }
 
     // Insert tasks — NOTE: do NOT include `priority` in the insert since the

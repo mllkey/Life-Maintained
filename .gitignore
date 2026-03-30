@@ -36,6 +36,9 @@ yarn-error.*
 .env.production
 *.env
 
+# scripts
+scripts/.preload-progress.json
+
 # typescript
 *.tsbuildinfo
 .vercel
