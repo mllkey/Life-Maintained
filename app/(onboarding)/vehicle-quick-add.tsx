@@ -277,9 +277,9 @@ export default function VehicleQuickAddScreen() {
 
         {/* Make Picker Modal */}
         <Modal visible={makePickerVisible} transparent animationType="slide" onRequestClose={() => setMakePickerVisible(false)}>
-          <View style={{ flex: 1, justifyContent: "flex-end" }}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: "flex-end" }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
             <Pressable style={styles.modalBackdrop} onPress={() => setMakePickerVisible(false)} />
-            <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16, maxHeight: "70%" }]}>
               <View style={styles.modalHandle} />
               <TextInput
                 style={styles.modalSearch}
@@ -295,7 +295,7 @@ export default function VehicleQuickAddScreen() {
                 data={filteredMakes}
                 keyExtractor={m => m}
                 keyboardShouldPersistTaps="handled"
-                style={{ maxHeight: 300 }}
+                style={{ flexShrink: 1 }}
                 renderItem={({ item }) => (
                   <Pressable
                     style={styles.modalRow}
@@ -317,7 +317,7 @@ export default function VehicleQuickAddScreen() {
                 }
               />
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
       </View>
     </KeyboardAvoidingView>
