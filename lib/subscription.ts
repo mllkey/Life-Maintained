@@ -61,11 +61,6 @@ export function hasBusiness(profile: Profile | null | undefined): boolean {
   if (!profile) return false;
   try {
     if (
-      profile.subscription_tier === "trial" &&
-      profile.trial_expires_at &&
-      new Date(profile.trial_expires_at) > new Date()
-    ) return true;
-    if (
       profile.subscription_tier === "business" &&
       profile.subscription_expires_at &&
       new Date(profile.subscription_expires_at) > new Date()

@@ -136,6 +136,8 @@ export default function VehicleDetailScreen() {
   const lastStatusHashRef = useRef("");
   const pollStartRef = useRef<number | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const statusSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingStatusHashRef = useRef<string | null>(null);
 
   const [markCompleteTask, setMarkCompleteTask] = useState<any | null>(null);
   const [completeMileage, setCompleteMileage] = useState("");
@@ -333,15 +335,44 @@ export default function VehicleDetailScreen() {
     if (changed.length === 0) return;
     const hash = changed.map(t => `${t.id}:${t.status}`).join(",");
     if (lastStatusHashRef.current === hash) return;
-    lastStatusHashRef.current = hash;
-    Promise.all(
-      changed.map(t =>
-        supabase
-          .from("user_vehicle_maintenance_tasks")
-          .update({ status: t.status, updated_at: new Date().toISOString() })
-          .eq("id", t.id),
-      ),
-    );
+
+    // Clear any pending write — new data supersedes it
+    if (statusSyncTimerRef.current) {
+      clearTimeout(statusSyncTimerRef.current);
+      statusSyncTimerRef.current = null;
+      pendingStatusHashRef.current = null;
+    }
+
+    pendingStatusHashRef.current = hash;
+
+    statusSyncTimerRef.current = setTimeout(() => {
+      const writingHash = pendingStatusHashRef.current;
+      Promise.all(
+        changed.map(t =>
+          supabase
+            .from("user_vehicle_maintenance_tasks")
+            .update({ status: t.status, updated_at: new Date().toISOString() })
+            .eq("id", t.id),
+        ),
+      ).then(() => {
+        // Only mark as synced after successful write
+        if (writingHash) lastStatusHashRef.current = writingHash;
+      }).catch((err) => {
+        // Write failed — don't mark as synced so it retries on next render
+        console.warn("[StatusSync] Write failed:", err);
+      }).finally(() => {
+        pendingStatusHashRef.current = null;
+        statusSyncTimerRef.current = null;
+      });
+    }, 2000);
+
+    return () => {
+      if (statusSyncTimerRef.current) {
+        clearTimeout(statusSyncTimerRef.current);
+        statusSyncTimerRef.current = null;
+        pendingStatusHashRef.current = null;
+      }
+    };
   }, [processedScheduleTasks, scheduleTasks]);
 
   const actionNeededTasks = useMemo(

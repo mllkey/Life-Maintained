@@ -253,6 +253,17 @@ export type Database = {
           created_at: string | null;
         };
       };
+      vehicle_wallet_documents: {
+        Row: {
+          id: string;
+          user_id: string;
+          vehicle_id: string;
+          document_type: string;
+          data: Record<string, any>;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+      };
       user_notification_preferences: {
         Row: {
           id: string;
