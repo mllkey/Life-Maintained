@@ -186,7 +186,7 @@ export default function DashboardScreen() {
       const items: DashboardItem[] = [];
       const [vehicleTasks, propertyTasks, healthAppts] = await Promise.all([
         supabase.from("user_vehicle_maintenance_tasks").select("*, vehicles(make, model, nickname, mileage, hours, tracking_mode, vehicle_type)").eq("user_id", user.id),
-        supabase.from("property_maintenance_tasks").select("*, properties(address, nickname)").eq("properties.user_id", user.id),
+        supabase.from("property_maintenance_tasks").select("*, properties!inner(address, nickname)").eq("properties.user_id", user.id),
         supabase.from("health_appointments").select("*").eq("user_id", user.id),
       ]);
       for (const t of vehicleTasks.data ?? []) {

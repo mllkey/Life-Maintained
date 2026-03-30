@@ -82,6 +82,9 @@ export type Database = {
           color: string | null;
           vin: string | null;
           license_plate: string | null;
+          fuel_type: string | null;
+          is_awd: boolean | null;
+          photo_url: string | null;
         };
       };
       user_vehicle_maintenance_tasks: {

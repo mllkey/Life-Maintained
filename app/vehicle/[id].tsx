@@ -134,6 +134,8 @@ export default function VehicleDetailScreen() {
   const [highlightedTask, setHighlightedTask] = useState<string | null>(null);
   const prevScheduleCountRef = useRef(0);
   const lastStatusHashRef = useRef("");
+  const pollStartRef = useRef<number | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [markCompleteTask, setMarkCompleteTask] = useState<any | null>(null);
   const [completeMileage, setCompleteMileage] = useState("");
@@ -237,18 +239,6 @@ export default function VehicleDetailScreen() {
     staleTime: 1000 * 60 * 60, // 1 hour
   });
 
-  useFocusEffect(
-    useCallback(() => {
-      if (vehicle?.make && scheduleTasks?.length) {
-        // Small delay to not block screen render
-        const timer = setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: ["repair_costs", id] });
-        }, 1000);
-        return () => clearTimeout(timer);
-      }
-    }, [vehicle?.make, scheduleTasks?.length, id, queryClient]),
-  );
-
   const { data: logs, refetch: refetchLogs } = useQuery({
     queryKey: ["maintenance_logs", id],
     queryFn: async () => {
@@ -282,10 +272,45 @@ export default function VehicleDetailScreen() {
     }, [refetchSchedule]),
   );
 
+  // Reset polling state when vehicle changes
   React.useEffect(() => {
+    pollStartRef.current = null;
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, [id]);
+
+  React.useEffect(() => {
+    // Clear any existing interval first to prevent overlaps
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
     if (!loadingSchedule && (!scheduleTasks || scheduleTasks.length === 0) && !!user && !!id) {
-      const interval = setInterval(() => { refetchSchedule(); }, 3000);
-      return () => clearInterval(interval);
+      if (pollStartRef.current === null) pollStartRef.current = Date.now();
+      const elapsed = Date.now() - pollStartRef.current;
+      if (elapsed >= 60000) return; // Hard stop at 60 seconds
+
+      pollIntervalRef.current = setInterval(() => {
+        const now = Date.now();
+        if (pollStartRef.current !== null && now - pollStartRef.current >= 60000) {
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+          return;
+        }
+        refetchSchedule();
+      }, 3000);
+
+      return () => {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      };
+    } else if (scheduleTasks && scheduleTasks.length > 0) {
+      pollStartRef.current = null; // Reset for future use (e.g., schedule refresh)
     }
   }, [loadingSchedule, scheduleTasks?.length, user, id, refetchSchedule]);
 
@@ -406,6 +431,11 @@ export default function VehicleDetailScreen() {
           showToast("Failed to generate schedule. Please try again.", true);
           return;
         }
+      }
+      pollStartRef.current = null;
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
       await refetchSchedule();
       showToast("Schedule generated!");
