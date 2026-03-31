@@ -364,18 +364,6 @@ export default function Paywall({
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={Colors.accent} size="large" />
         </View>
-      ) : offeringsError ? (
-        <View style={styles.errorContainer}>
-          <Ionicons name="cloud-offline-outline" size={48} color={Colors.textTertiary} />
-          <Text style={styles.errorTitle}>Unable to load pricing</Text>
-          <Text style={styles.errorSub}>Please try again.</Text>
-          <Pressable
-            style={({ pressed }) => [styles.retryBtn, { opacity: pressed ? 0.7 : 1 }]}
-            onPress={loadOfferings}
-          >
-            <Text style={styles.retryBtnText}>Retry</Text>
-          </Pressable>
-        </View>
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -468,15 +456,18 @@ export default function Paywall({
             style={({ pressed }) => [
               styles.ctaBtn,
               { opacity: pressed || isPurchasing ? 0.85 : 1 },
+              offeringsError && { backgroundColor: Colors.textTertiary },
             ]}
-            onPress={handlePurchase}
-            disabled={isPurchasing || isRestoring}
+            onPress={offeringsError ? loadOfferings : handlePurchase}
+            disabled={isPurchasing || isRestoring || loadingOfferings}
             testID="paywall-cta"
             accessibilityLabel="Subscribe to plan"
             accessibilityRole="button"
           >
             {isPurchasing ? (
               <ActivityIndicator color={Colors.background} />
+            ) : offeringsError ? (
+              <Text style={styles.ctaBtnText}>Retry Loading Plans</Text>
             ) : (
               <Text style={styles.ctaBtnText}>
                 {profile?.subscription_tier === "trial" && profile?.trial_expires_at && new Date(profile.trial_expires_at) > new Date()
@@ -584,11 +575,6 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text },
   headerSubtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
-  errorContainer: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 },
-  errorTitle: { fontSize: 18, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  errorSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
-  retryBtn: { marginTop: 8, backgroundColor: Colors.accent, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
-  retryBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
   scroll: { paddingHorizontal: 20, paddingTop: 20, gap: 16 },
 
   // Billing toggle — segmented control
