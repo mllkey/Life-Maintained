@@ -45,13 +45,14 @@ export default function SignUpScreen() {
     setIsLoading(true);
     setError(null);
     const { error } = await signUp(email.trim(), password);
-    setIsLoading(false);
     if (error) {
+      setIsLoading(false);
       setError(error.message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace("/");
+      // Keep isLoading true — the Supabase auth listener will fire SIGNED_IN,
+      // update user state, and the root routing guard will redirect automatically.
     }
   }
 
