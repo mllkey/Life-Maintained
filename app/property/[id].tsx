@@ -13,7 +13,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  Image,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -72,6 +74,7 @@ export default function PropertyDetailScreen() {
   const [toastIsError, setToastIsError] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // Skeleton / polling / animation state
   const prevTaskCountRef = useRef(0);
@@ -335,6 +338,69 @@ export default function PropertyDetailScreen() {
     }
   }
 
+  function handlePropertyPhoto() {
+    if (!user || !id) return;
+    if (property?.photo_url) {
+      Alert.alert("Property Photo", "Choose an option", [
+        { text: "Take Photo", onPress: () => pickPropertyPhoto("camera") },
+        { text: "Choose from Library", onPress: () => pickPropertyPhoto("library") },
+        { text: "Remove Photo", style: "destructive", onPress: removePropertyPhoto },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    } else {
+      Alert.alert("Add Photo", "Choose an option", [
+        { text: "Take Photo", onPress: () => pickPropertyPhoto("camera") },
+        { text: "Choose from Library", onPress: () => pickPropertyPhoto("library") },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    }
+  }
+
+  async function pickPropertyPhoto(source: "camera" | "library") {
+    try {
+      const result = source === "camera"
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [16, 9] })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [16, 9] });
+      if (result.canceled) return;
+      const uri = result.assets[0].uri;
+      setUploadingPhoto(true);
+      try {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const storagePath = `${user!.id}/${id}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from("property-photos")
+          .upload(storagePath, arrayBuffer, { contentType: "image/jpeg", upsert: true });
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from("property-photos").getPublicUrl(storagePath);
+        const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+        await supabase.from("properties").update({ photo_url: publicUrl }).eq("id", id!);
+        queryClient.invalidateQueries({ queryKey: ["property", id] });
+      } finally {
+        setUploadingPhoto(false);
+      }
+    } catch {
+      setUploadingPhoto(false);
+      showToast("Failed to upload photo", true);
+    }
+  }
+
+  async function removePropertyPhoto() {
+    if (!user || !id) return;
+    setUploadingPhoto(true);
+    try {
+      await supabase.from("properties").update({ photo_url: null }).eq("id", id!);
+      const storagePath = `${user.id}/${id}.jpg`;
+      await supabase.storage.from("property-photos").remove([storagePath]);
+      queryClient.invalidateQueries({ queryKey: ["property", id] });
+    } catch {
+      showToast("Failed to remove photo", true);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   function handleDelete() {
     const userId = user?.id;
     Alert.alert(
@@ -506,6 +572,31 @@ export default function PropertyDetailScreen() {
           <Ionicons name="trash-outline" size={17} color={Colors.overdue} />
         </Pressable>
       </View>
+
+      {property?.photo_url ? (
+        <Pressable onPress={handlePropertyPhoto} style={{ position: "relative" }}>
+          <Image source={{ uri: property.photo_url }} style={styles.photoHeader} resizeMode="cover" />
+          {uploadingPhoto && (
+            <View style={styles.photoOverlay}>
+              <ActivityIndicator color="#fff" />
+            </View>
+          )}
+          <View style={styles.photoEditBadge}>
+            <Ionicons name="camera-outline" size={14} color="#fff" />
+          </View>
+        </Pressable>
+      ) : (
+        <Pressable onPress={handlePropertyPhoto} style={styles.photoPlaceholder}>
+          {uploadingPhoto ? (
+            <ActivityIndicator color={Colors.textTertiary} />
+          ) : (
+            <>
+              <Ionicons name="camera-outline" size={20} color={Colors.textTertiary} />
+              <Text style={styles.photoPlaceholderText}>Add a photo</Text>
+            </>
+          )}
+        </Pressable>
+      )}
 
       {isLoading ? (
         <ActivityIndicator color={Colors.accent} style={{ marginTop: 60 }} />
@@ -1053,6 +1144,40 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     gap: 8,
+  },
+  photoHeader: { width: "100%", height: 200 },
+  photoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoEditBadge: {
+    position: "absolute",
+    bottom: 10,
+    right: 12,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 14,
+    padding: 7,
+  },
+  photoPlaceholder: {
+    height: 100,
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 2,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: Colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  photoPlaceholderText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textTertiary,
   },
   backBtn: { width: 40, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   headerCenter: { flex: 1, gap: 3 },

@@ -7,13 +7,17 @@ import {
   Pressable,
   Alert,
   Platform,
+  Image,
+  ActivityIndicator,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays, format, differenceInYears } from "date-fns";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
@@ -32,11 +36,13 @@ export default function FamilyMemberDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const skeletonAnim = usePulse();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
   const [activeTab, setActiveTab] = useState<"appointments" | "medications">("appointments");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const isDeletingMemberRef = useRef(false);
 
   const { data: member, isLoading: loadingMember } = useQuery({
@@ -105,6 +111,68 @@ export default function FamilyMemberDetailScreen() {
       return (order[sa] ?? 2) - (order[sb] ?? 2);
     });
   }, [appointments]);
+
+  function handleMemberPhoto() {
+    if (!user || !id) return;
+    if (member?.photo_url) {
+      Alert.alert("Profile Photo", "Choose an option", [
+        { text: "Take Photo", onPress: () => pickMemberPhoto("camera") },
+        { text: "Choose from Library", onPress: () => pickMemberPhoto("library") },
+        { text: "Remove Photo", style: "destructive", onPress: removeMemberPhoto },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    } else {
+      Alert.alert("Add Photo", "Choose an option", [
+        { text: "Take Photo", onPress: () => pickMemberPhoto("camera") },
+        { text: "Choose from Library", onPress: () => pickMemberPhoto("library") },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    }
+  }
+
+  async function pickMemberPhoto(source: "camera" | "library") {
+    try {
+      const result = source === "camera"
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [1, 1] })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
+      if (result.canceled) return;
+      const uri = result.assets[0].uri;
+      setUploadingPhoto(true);
+      try {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const storagePath = `${user!.id}/${id}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from("profile-photos")
+          .upload(storagePath, arrayBuffer, { contentType: "image/jpeg", upsert: true });
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from("profile-photos").getPublicUrl(storagePath);
+        const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+        await supabase.from("family_members").update({ photo_url: publicUrl }).eq("id", id!);
+        queryClient.invalidateQueries({ queryKey: ["family_member", id] });
+      } finally {
+        setUploadingPhoto(false);
+      }
+    } catch {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function removeMemberPhoto() {
+    if (!user || !id) return;
+    setUploadingPhoto(true);
+    try {
+      await supabase.from("family_members").update({ photo_url: null }).eq("id", id!);
+      const storagePath = `${user.id}/${id}.jpg`;
+      await supabase.storage.from("profile-photos").remove([storagePath]);
+      queryClient.invalidateQueries({ queryKey: ["family_member", id] });
+    } catch {
+      // silent
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
 
   function handleDeleteMember() {
     if (!member || isDeletingMemberRef.current) return;
@@ -239,6 +307,32 @@ export default function FamilyMemberDetailScreen() {
             { paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 0) + 40 },
           ]}
         >
+          <View style={styles.avatarSection}>
+            <Pressable onPress={handleMemberPhoto} style={styles.avatarWrap}>
+              {member?.photo_url ? (
+                <>
+                  <Image source={{ uri: member.photo_url }} style={styles.avatar} />
+                  {uploadingPhoto && (
+                    <View style={styles.avatarOverlay}>
+                      <ActivityIndicator color="#fff" size="small" />
+                    </View>
+                  )}
+                </>
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  {uploadingPhoto ? (
+                    <ActivityIndicator color={Colors.textTertiary} size="small" />
+                  ) : (
+                    <Ionicons name={isPet ? "paw-outline" : "person-outline"} size={28} color={Colors.textTertiary} />
+                  )}
+                </View>
+              )}
+              <View style={styles.avatarCameraBtn}>
+                <Ionicons name="camera-outline" size={10} color="#fff" />
+              </View>
+            </Pressable>
+          </View>
+
           <View style={styles.summaryBar}>
             <View style={styles.summaryStat}>
               <Text style={styles.summaryValue}>{summaryStats.total}</Text>
@@ -535,6 +629,41 @@ const styles = StyleSheet.create({
   deleteBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue },
 
   reminderDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+
+  avatarSection: { alignItems: "center", paddingTop: 4, paddingBottom: 8 },
+  avatarWrap: { position: "relative" },
+  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: Colors.card },
+  avatarOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 36,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarPlaceholder: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.card,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarCameraBtn: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: Colors.background,
+  },
 
   emptyState: { alignItems: "center", paddingVertical: 40, gap: 10 },
   emptyTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
