@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
+import { View, Text, Pressable, StyleSheet, ScrollView, Alert } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -80,18 +80,18 @@ export default function ValueRevealScreen() {
   });
 
   async function completeOnboarding() {
-    try {
-      if (user) {
-        await supabase.from("profiles").upsert(
-          { user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() },
-          { onConflict: "user_id" }
-        );
+    if (user) {
+      const { error } = await supabase.from("profiles").upsert(
+        { user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() },
+        { onConflict: "user_id" }
+      );
+      if (error) {
+        Alert.alert("Something went wrong", "Could not save your progress. Please try again.");
+        return;
       }
-      await AsyncStorage.setItem("@onboarding_completed", "true");
-      setOnboardingCompleted(true);
-    } catch (e) {
-      if (__DEV__) console.error("[onboarding] complete error:", e);
     }
+    await AsyncStorage.setItem("@onboarding_completed", "true");
+    setOnboardingCompleted(true);
   }
 
   async function handleOpenDashboard() {

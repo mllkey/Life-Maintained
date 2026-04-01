@@ -106,7 +106,7 @@ export default function PropertyDetailScreen() {
   const { data: property, isLoading: loadingProperty } = useQuery({
     queryKey: ["property", id],
     queryFn: async () => {
-      const { data } = await supabase.from("properties").select("*").eq("id", id).single();
+      const { data } = await supabase.from("properties").select("*").eq("id", id).maybeSingle();
       return data;
     },
   });
@@ -600,6 +600,17 @@ export default function PropertyDetailScreen() {
 
       {isLoading ? (
         <ActivityIndicator color={Colors.accent} style={{ marginTop: 60 }} />
+      ) : !property ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 }}>
+          <Text style={{ fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" }}>Property not found</Text>
+          <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" }}>This property may have been deleted.</Text>
+          <Pressable
+            onPress={() => router.back()}
+            style={{ paddingHorizontal: 24, paddingVertical: 12, backgroundColor: Colors.accent, borderRadius: 12 }}
+          >
+            <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse }}>Go Back</Text>
+          </Pressable>
+        </View>
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

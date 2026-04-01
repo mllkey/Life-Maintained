@@ -211,6 +211,13 @@ export default function HealthScreen() {
   });
 
   const isLoading = loadingAppts || loadingMeds || loadingFamily;
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    await Promise.all([refetchAppts(), refetchMeds(), refetchFamily()]);
+    setIsRefreshing(false);
+  }
 
   function refetch() {
     refetchAppts();
@@ -577,7 +584,7 @@ export default function HealthScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} tintColor={Colors.accent} />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={Colors.accent} />}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0), flexGrow: 1 }]}
       >
         {isLoading ? (

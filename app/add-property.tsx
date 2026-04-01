@@ -266,18 +266,19 @@ export default function AddPropertyScreen() {
       setError("Street address is required");
       return;
     }
+    setIsLoading(true);
+    setError(null);
     try {
       const { count } = await supabase
         .from("properties")
         .select("*", { count: "exact", head: true })
         .eq("user_id", user.id);
       if ((count ?? 0) >= propertyLimit(profile)) {
+        setIsLoading(false);
         setShowPaywall(true);
         return;
       }
     } catch {}
-    setIsLoading(true);
-    setError(null);
 
     const streetLine = unit.trim() ? `${street.trim()} ${unit.trim()}` : street.trim();
     const cityStateZip = [city.trim(), [stateCode, zip.trim()].filter(Boolean).join(" ")].filter(Boolean).join(", ");

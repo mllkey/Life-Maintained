@@ -4,7 +4,7 @@ import {
   Modal, FlatList, ActivityIndicator, Platform,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -132,6 +132,7 @@ export default function VehicleQuickAddScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <Stack.Screen options={{ gestureEnabled: !isLoading }} />
       <View style={[styles.container, { paddingTop: insets.top + 16 }]}>
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}

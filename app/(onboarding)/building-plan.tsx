@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -44,6 +44,7 @@ export default function BuildingPlanScreen() {
   const [failed, setFailed] = useState(false);
   const stepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTime = useRef(Date.now());
+  const hasAttempted = useRef(false);
 
   const vehicleId = oneParam(params.vehicleId);
   const vehicleName = oneParam(params.vehicleName);
@@ -115,6 +116,8 @@ export default function BuildingPlanScreen() {
   }, [vehicleId, vehicleName, make, model, yearStr, currentMileageStr, currentHoursStr, trackingMode, fuelType, vehicleCategory, queryClient]);
 
   useEffect(() => {
+    if (hasAttempted.current) return;
+    hasAttempted.current = true;
     startTime.current = Date.now();
     stepTimer.current = setInterval(() => {
       setCurrentStep(prev => {
@@ -139,19 +142,19 @@ export default function BuildingPlanScreen() {
 
   async function handleContinueAnyway() {
     // Complete onboarding and go to dashboard — vehicle is saved even if schedule failed
-    try {
-      if (user) {
-        await supabase.from("profiles").upsert(
-          { user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() },
-          { onConflict: "user_id" }
-        );
+    if (user) {
+      const { error } = await supabase.from("profiles").upsert(
+        { user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() },
+        { onConflict: "user_id" }
+      );
+      if (error) {
+        Alert.alert("Something went wrong", "Could not save your progress. Please try again.");
+        return;
       }
-      await AsyncStorage.setItem("@onboarding_completed", "true");
-      setOnboardingCompleted(true);
-      router.replace("/(tabs)");
-    } catch (e) {
-      if (__DEV__) console.error("[onboarding] complete error:", e);
     }
+    await AsyncStorage.setItem("@onboarding_completed", "true");
+    setOnboardingCompleted(true);
+    router.replace("/(tabs)");
   }
 
   return (

@@ -385,8 +385,8 @@ serve(async (req: Request) => {
     const CAR_TRUCK_CLAMPS: IntervalClamp[] = [
       { match: [/brake.*fluid/i], max_months: 36, max_miles: 45000 },
       { match: [/coolant/i], max_months: 60, max_miles: 100000 },
-      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 12, max_miles: 10000, min_miles: 3000 },
-      { match: [/transmission.*fluid/i], max_months: 60, max_miles: 60000 },
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 6, max_miles: 7500, min_miles: 3000 },
+      { match: [/transmission.*fluid/i], max_months: 36, max_miles: 45000 },
       { match: [/brake.*pad/i, /brake.*inspection/i], max_months: 18, max_miles: 30000 },
       { match: [/tire.*rotation/i], max_months: 12, max_miles: 10000, min_miles: 3000 },
       { match: [/spark plug/i], max_months: 60, max_miles: 100000 },
@@ -592,6 +592,7 @@ Rules:
 - Be specific to this exact year/make/model — do not use generic averages
 - Account for engine type, cooling type, drivetrain type, and asset category
 - For motorcycles: spark plug intervals are 3,000-7,500 miles for sport/supersport bikes, up to 16,000 miles for standard/touring — NEVER use car spark plug intervals (30,000-100,000 miles) for motorcycles
+- For cars and trucks: oil change intervals should reflect oil type — 3,000-5,000 miles for conventional oil, 5,000-7,500 miles for synthetic blend or full synthetic. Default to conventional (3,000-5,000 miles) unless the vehicle is known to require or recommend synthetic (e.g., turbocharged engines, European vehicles, luxury brands)
 - Each task description must include the recommended interval AND a realistic range
 - Do NOT assign identical intervals to unrelated tasks unless they are genuinely part of the same service milestone
 - Priorities: high = oil, critical fluids, safety-critical; medium = filters, secondary fluids, inspections; lower = condition-based replacements

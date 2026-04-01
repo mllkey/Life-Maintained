@@ -196,7 +196,7 @@ export default function FamilyMemberDetailScreen() {
               queryClient.invalidateQueries({ queryKey: ["health_appointments"] });
               queryClient.invalidateQueries({ queryKey: ["medications"] });
               queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-              router.back();
+              if (router.canGoBack()) router.back(); else router.replace("/(tabs)" as any);
             } catch (err: any) {
               isDeletingMemberRef.current = false;
               Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");

@@ -152,12 +152,15 @@ export default function VehicleDetailScreen() {
   const [completeDuration, setCompleteDuration] = useState("");
   const [isSavingComplete, setIsSavingComplete] = useState(false);
 
+  const [editTaskSheet, setEditTaskSheet] = useState<any | null>(null);
+
   const { data: vehicle, isLoading: loadingVehicle } = useQuery({
     queryKey: ["vehicle", id],
     queryFn: async () => {
-      const { data } = await supabase.from("vehicles").select("*").eq("id", id).single();
+      const { data } = await supabase.from("vehicles").select("*").eq("id", id).maybeSingle();
       return data;
     },
+    enabled: !!id,
   });
 
   const {
@@ -580,6 +583,82 @@ export default function VehicleDetailScreen() {
     setCompleteDiy(false);
     setCompleteDuration("");
     setIsSavingComplete(false);
+  }
+
+  function handleOpenEditTask(task: any) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setEditTaskSheet(task);
+  }
+
+  function handleCloseEditTask() {
+    setEditTaskSheet(null);
+  }
+
+  async function handleSaveEditTask(task: any, name: string, miles: number | null, months: number | null) {
+    if (!task || !vehicle) return;
+    const tracksHrs = isHoursTracked(vehicle);
+
+    const baseMiles = task.last_completed_miles ?? (tracksHrs ? null : (vehicle.mileage ?? null));
+    const baseHours = task.last_completed_hours ?? (tracksHrs ? (vehicle.hours ?? null) : null);
+    const baseDate = task.last_completed_date ?? format(new Date(), "yyyy-MM-dd");
+
+    const newNextDueMiles = !tracksHrs && miles != null && baseMiles != null
+      ? baseMiles + miles : task.next_due_miles;
+    const newNextDueHours = tracksHrs && task.interval_hours != null && baseHours != null
+      ? baseHours + task.interval_hours : task.next_due_hours;
+    const newNextDueDate = months != null
+      ? format(addMonths(parseISO(baseDate), months), "yyyy-MM-dd")
+      : task.next_due_date;
+
+    const updatedTask = {
+      ...task,
+      name,
+      interval_miles: miles,
+      interval_months: months,
+      is_custom: true,
+      next_due_miles: newNextDueMiles,
+      next_due_hours: newNextDueHours,
+      next_due_date: newNextDueDate,
+    };
+
+    queryClient.setQueryData(["user_vehicle_maintenance_tasks", id], (old: any[] | undefined) => {
+      if (!old) return old;
+      return old.map(t => t.id === task.id ? updatedTask : t);
+    });
+
+    try {
+      const { error } = await supabase.from("user_vehicle_maintenance_tasks").update({
+        name,
+        interval_miles: miles,
+        interval_months: months,
+        is_custom: true,
+        next_due_miles: newNextDueMiles,
+        next_due_hours: newNextDueHours,
+        next_due_date: newNextDueDate,
+      }).eq("id", task.id);
+      if (error) throw error;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast("Task updated");
+    } catch {
+      showToast("Failed to save changes.", true);
+      queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", id] });
+    }
+  }
+
+  async function handleDeleteEditTask(task: any) {
+    if (!task) return;
+    queryClient.setQueryData(["user_vehicle_maintenance_tasks", id], (old: any[] | undefined) => {
+      if (!old) return old;
+      return old.filter(t => t.id !== task.id);
+    });
+    try {
+      await supabase.from("user_vehicle_maintenance_tasks").delete().eq("id", task.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast("Task removed");
+    } catch {
+      showToast("Failed to delete task.", true);
+      queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", id] });
+    }
   }
 
   async function handleSaveMarkComplete() {
@@ -1244,6 +1323,7 @@ export default function VehicleDetailScreen() {
                       tasks={actionNeededTasks}
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}
+                      onEditTask={handleOpenEditTask}
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
@@ -1257,6 +1337,7 @@ export default function VehicleDetailScreen() {
                     vehicle={vehicle}
                     emptyMessage="No upcoming tasks"
                     onMarkComplete={handleOpenMarkComplete}
+                    onEditTask={handleOpenEditTask}
                     costEstimates={costEstimates}
                     onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                     highlightedTask={highlightedTask}
@@ -1270,6 +1351,7 @@ export default function VehicleDetailScreen() {
                       tasks={completedTasks}
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}
+                      onEditTask={handleOpenEditTask}
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
@@ -1312,6 +1394,7 @@ export default function VehicleDetailScreen() {
                       tasks={actionNeededTasks}
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}
+                      onEditTask={handleOpenEditTask}
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
@@ -1325,6 +1408,7 @@ export default function VehicleDetailScreen() {
                     vehicle={vehicle}
                     emptyMessage="No upcoming tasks"
                     onMarkComplete={handleOpenMarkComplete}
+                    onEditTask={handleOpenEditTask}
                     costEstimates={costEstimates}
                     onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                     highlightedTask={highlightedTask}
@@ -1338,6 +1422,7 @@ export default function VehicleDetailScreen() {
                       tasks={completedTasks}
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}
+                      onEditTask={handleOpenEditTask}
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
@@ -1468,9 +1553,31 @@ export default function VehicleDetailScreen() {
             </View>
           )}
         </ScrollView>
-      ) : null}
+      ) : (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 }}>
+          <Text style={{ fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" }}>Vehicle not found</Text>
+          <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" }}>This vehicle may have been deleted.</Text>
+          <Pressable
+            onPress={() => router.back()}
+            style={{ paddingHorizontal: 24, paddingVertical: 12, backgroundColor: Colors.accent, borderRadius: 12 }}
+          >
+            <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse }}>Go Back</Text>
+          </Pressable>
+        </View>
+      )}
 
       <SaveToast visible={showScheduleToast} message={scheduleToast} isError={scheduleToastIsError} />
+
+      <EditTaskSheet
+        visible={editTaskSheet != null}
+        task={editTaskSheet}
+        vehicle={vehicle}
+        onClose={handleCloseEditTask}
+        onMarkComplete={(task) => { handleCloseEditTask(); handleOpenMarkComplete(task); }}
+        onSave={handleSaveEditTask}
+        onDelete={(task) => { handleCloseEditTask(); handleDeleteEditTask(task); }}
+        insets={insets}
+      />
 
       <MarkCompleteSheet
         visible={markCompleteTask != null}
@@ -1596,6 +1703,7 @@ function ScheduleSection({
   vehicle,
   emptyMessage,
   onMarkComplete,
+  onEditTask,
   costEstimates,
   onShowDifficultyInfo,
   highlightedTask,
@@ -1608,6 +1716,7 @@ function ScheduleSection({
   vehicle: any;
   emptyMessage?: string;
   onMarkComplete: (task: any) => void;
+  onEditTask: (task: any) => void;
   costEstimates?: Record<string, any>;
   onShowDifficultyInfo?: () => void;
   highlightedTask?: string | null;
@@ -1635,6 +1744,7 @@ function ScheduleSection({
                 task={task}
                 vehicle={vehicle}
                 onMarkComplete={onMarkComplete}
+                onEditTask={onEditTask}
                 isLast={idx === tasks.length - 1}
                 costEstimate={costEstimates?.[task.name.toLowerCase().trim()]}
                 onShowDifficultyInfo={onShowDifficultyInfo}
@@ -1648,10 +1758,11 @@ function ScheduleSection({
   );
 }
 
-function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate, onShowDifficultyInfo, isHighlighted }: {
+function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, isLast, costEstimate, onShowDifficultyInfo, isHighlighted }: {
   task: any;
   vehicle: any;
   onMarkComplete: (task: any) => void;
+  onEditTask: (task: any) => void;
   isLast?: boolean;
   costEstimate?: any;
   onShowDifficultyInfo?: () => void;
@@ -1665,7 +1776,7 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate,
       setShowCompletedInfo(true);
       setTimeout(() => setShowCompletedInfo(false), 2500);
     } else {
-      onMarkComplete(task);
+      onEditTask(task);
     }
   }
 
@@ -1753,6 +1864,304 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, isLast, costEstimate,
         )}
       </View>
     </Pressable>
+  );
+}
+
+function EditTaskSheet({
+  visible,
+  task,
+  vehicle,
+  onClose,
+  onMarkComplete,
+  onSave,
+  onDelete,
+  insets,
+}: {
+  visible: boolean;
+  task: any | null;
+  vehicle: any;
+  onClose: () => void;
+  onMarkComplete: (task: any) => void;
+  onSave: (task: any, name: string, miles: number | null, months: number | null) => void;
+  onDelete: (task: any) => void;
+  insets: { bottom: number };
+}) {
+  const [editName, setEditName] = useState(task?.name ?? "");
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editMiles, setEditMiles] = useState<number | null>(task?.interval_miles ?? null);
+  const [editMonths, setEditMonths] = useState<number | null>(task?.interval_months ?? null);
+  const [showIntervalEditor, setShowIntervalEditor] = useState(false);
+  const [useCustomMiles, setUseCustomMiles] = useState(false);
+  const [useCustomMonths, setUseCustomMonths] = useState(false);
+  const [customMilesInput, setCustomMilesInput] = useState(String(task?.interval_miles ?? ""));
+  const [customMonthsInput, setCustomMonthsInput] = useState(String(task?.interval_months ?? ""));
+  const nameInputRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (task) {
+      setEditName(task.name ?? "");
+      setIsEditingName(false);
+      setEditMiles(task.interval_miles ?? null);
+      setEditMonths(task.interval_months ?? null);
+      setShowIntervalEditor(false);
+      setUseCustomMiles(false);
+      setUseCustomMonths(false);
+      setCustomMilesInput(String(task.interval_miles ?? ""));
+      setCustomMonthsInput(String(task.interval_months ?? ""));
+    }
+  }, [task?.id]);
+
+  if (!task) return null;
+
+  const isOilChange = /oil.*change|oil.*filter|engine.*oil/i.test(task.name ?? "");
+  const hasMiles = task.interval_miles != null;
+
+  const milesPresets: number[] = isOilChange
+    ? [3000, 5000, 7500, 10000]
+    : (() => {
+        const cur = task.interval_miles;
+        if (cur == null) return [1000, 3000, 5000, 10000];
+        const round = (n: number) => Math.max(500, Math.round(n / 500) * 500);
+        return Array.from(new Set([round(cur * 0.75), cur, round(cur * 1.25)])).filter((p): p is number => typeof p === "number" && p > 0);
+      })();
+
+  const monthsPresets = [3, 6, 12, 24];
+
+  const intervalText = (() => {
+    const parts: string[] = [];
+    if (editMiles != null) parts.push(`${editMiles.toLocaleString()} mi`);
+    if (editMonths != null) parts.push(`${editMonths} mo`);
+    return parts.length ? `Every ${parts.join(" · ")}` : "No interval set";
+  })();
+
+  function handleMilesPreset(val: number) {
+    setEditMiles(val);
+    setCustomMilesInput(String(val));
+    setUseCustomMiles(false);
+  }
+
+  function handleMonthsPreset(val: number) {
+    setEditMonths(val);
+    setCustomMonthsInput(String(val));
+    setUseCustomMonths(false);
+  }
+
+  function handleCustomMilesChange(text: string) {
+    setCustomMilesInput(text);
+    const n = parseInt(text.replace(/,/g, ""), 10);
+    if (!isNaN(n) && n > 0) setEditMiles(n);
+  }
+
+  function handleCustomMonthsChange(text: string) {
+    setCustomMonthsInput(text);
+    const n = parseInt(text, 10);
+    if (!isNaN(n) && n > 0) setEditMonths(n);
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={styles.sheetOverlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={onClose} />
+        <View style={[styles.sheetContainer, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.sheetHandle} />
+
+          {/* Task name — tappable to edit */}
+          {isEditingName ? (
+            <TextInput
+              ref={nameInputRef}
+              style={[styles.sheetTitle, { borderBottomWidth: 1, borderBottomColor: Colors.accent, paddingBottom: 4, marginBottom: 20 }]}
+              value={editName}
+              onChangeText={setEditName}
+              onBlur={() => setIsEditingName(false)}
+              returnKeyType="done"
+              onSubmitEditing={() => setIsEditingName(false)}
+              autoFocus
+            />
+          ) : (
+            <Pressable
+              onPress={() => { setIsEditingName(true); setTimeout(() => nameInputRef.current?.focus(), 50); }}
+              style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 20 }}
+            >
+              <Text style={[styles.sheetTitle, { marginBottom: 0, flex: 1, textAlign: "center" }]} numberOfLines={2}>{editName}</Text>
+              <Ionicons name="pencil-outline" size={14} color={Colors.textTertiary} />
+            </Pressable>
+          )}
+
+          <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <View style={[styles.sheetFields, { paddingBottom: 8 }]}>
+
+              {/* Interval row — tappable to expand editor */}
+              <Pressable
+                style={({ pressed }) => [{
+                  flexDirection: "row" as const, alignItems: "center" as const,
+                  justifyContent: "space-between" as const,
+                  backgroundColor: Colors.surface, borderRadius: 12, padding: 14,
+                  borderWidth: 1, borderColor: showIntervalEditor ? Colors.accent : Colors.border,
+                  opacity: pressed ? 0.8 : 1,
+                }]}
+                onPress={() => setShowIntervalEditor(v => !v)}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Ionicons name="time-outline" size={18} color={Colors.textSecondary} />
+                  <Text style={{ fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.text }}>{intervalText}</Text>
+                </View>
+                <Ionicons name={showIntervalEditor ? "chevron-up" : "chevron-down"} size={16} color={Colors.textTertiary} />
+              </Pressable>
+
+              {/* Interval editor */}
+              {showIntervalEditor && (
+                <View style={{ gap: 16 }}>
+                  {/* Miles presets */}
+                  {hasMiles && (
+                    <View style={{ gap: 8 }}>
+                      <Text style={styles.sheetFieldLabel}>Miles</Text>
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                        {milesPresets.map(val => (
+                          <Pressable
+                            key={val}
+                            style={({ pressed }) => [{
+                              paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                              borderWidth: 1, opacity: pressed ? 0.8 : 1,
+                              borderColor: editMiles === val && !useCustomMiles ? Colors.accent : Colors.border,
+                              backgroundColor: editMiles === val && !useCustomMiles ? Colors.accentMuted : Colors.surface,
+                            }]}
+                            onPress={() => handleMilesPreset(val)}
+                          >
+                            <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium",
+                              color: editMiles === val && !useCustomMiles ? Colors.accent : Colors.textSecondary }}>
+                              {val.toLocaleString()}
+                            </Text>
+                          </Pressable>
+                        ))}
+                        <Pressable
+                          style={({ pressed }) => [{
+                            paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                            borderWidth: 1, opacity: pressed ? 0.8 : 1,
+                            borderColor: useCustomMiles ? Colors.accent : Colors.border,
+                            backgroundColor: useCustomMiles ? Colors.accentMuted : Colors.surface,
+                          }]}
+                          onPress={() => setUseCustomMiles(true)}
+                        >
+                          <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium",
+                            color: useCustomMiles ? Colors.accent : Colors.textSecondary }}>Custom</Text>
+                        </Pressable>
+                      </View>
+                      {useCustomMiles && (
+                        <TextInput
+                          style={styles.sheetInput}
+                          value={customMilesInput}
+                          onChangeText={handleCustomMilesChange}
+                          placeholder="e.g. 6000"
+                          placeholderTextColor={Colors.textTertiary}
+                          keyboardType="numeric"
+                          returnKeyType="done"
+                        />
+                      )}
+                    </View>
+                  )}
+
+                  {/* Months presets */}
+                  <View style={{ gap: 8 }}>
+                    <Text style={styles.sheetFieldLabel}>Months</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                      {monthsPresets.map(val => (
+                        <Pressable
+                          key={val}
+                          style={({ pressed }) => [{
+                            paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                            borderWidth: 1, opacity: pressed ? 0.8 : 1,
+                            borderColor: editMonths === val && !useCustomMonths ? Colors.accent : Colors.border,
+                            backgroundColor: editMonths === val && !useCustomMonths ? Colors.accentMuted : Colors.surface,
+                          }]}
+                          onPress={() => handleMonthsPreset(val)}
+                        >
+                          <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium",
+                            color: editMonths === val && !useCustomMonths ? Colors.accent : Colors.textSecondary }}>
+                            {val} mo
+                          </Text>
+                        </Pressable>
+                      ))}
+                      <Pressable
+                        style={({ pressed }) => [{
+                          paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                          borderWidth: 1, opacity: pressed ? 0.8 : 1,
+                          borderColor: useCustomMonths ? Colors.accent : Colors.border,
+                          backgroundColor: useCustomMonths ? Colors.accentMuted : Colors.surface,
+                        }]}
+                        onPress={() => setUseCustomMonths(true)}
+                      >
+                        <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium",
+                          color: useCustomMonths ? Colors.accent : Colors.textSecondary }}>Custom</Text>
+                      </Pressable>
+                    </View>
+                    {useCustomMonths && (
+                      <TextInput
+                        style={styles.sheetInput}
+                        value={customMonthsInput}
+                        onChangeText={handleCustomMonthsChange}
+                        placeholder="e.g. 8"
+                        placeholderTextColor={Colors.textTertiary}
+                        keyboardType="numeric"
+                        returnKeyType="done"
+                      />
+                    )}
+                  </View>
+                </View>
+              )}
+
+              {/* Mark as Done */}
+              {task.status !== "completed" && (
+                <Pressable
+                  style={({ pressed }) => [{
+                    flexDirection: "row" as const, alignItems: "center" as const,
+                    justifyContent: "center" as const, gap: 8,
+                    backgroundColor: Colors.surface, borderRadius: 12, paddingVertical: 13,
+                    borderWidth: 1, borderColor: Colors.border, opacity: pressed ? 0.8 : 1,
+                  }]}
+                  onPress={() => { onClose(); onMarkComplete(task); }}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={18} color={Colors.good} />
+                  <Text style={{ fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.good }}>Mark as Done</Text>
+                </Pressable>
+              )}
+
+              {/* Delete Task */}
+              <Pressable
+                style={({ pressed }) => [{
+                  flexDirection: "row" as const, alignItems: "center" as const,
+                  justifyContent: "center" as const, gap: 8,
+                  borderRadius: 12, paddingVertical: 13, borderWidth: 1,
+                  borderColor: Colors.overdue + "40", backgroundColor: Colors.overdueMuted,
+                  opacity: pressed ? 0.8 : 1,
+                }]}
+                onPress={() => onDelete(task)}
+              >
+                <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
+                <Text style={{ fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.overdue }}>Delete Task</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+
+          <View style={[styles.sheetActions, { marginTop: 12 }]}>
+            <Pressable
+              style={({ pressed }) => [styles.sheetCancelBtn, { opacity: pressed ? 0.8 : 1 }]}
+              onPress={onClose}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.sheetSaveBtn, { opacity: pressed ? 0.8 : 1 }]}
+              onPress={() => { onSave(task, editName.trim() || task.name, editMiles, editMonths); onClose(); }}
+            >
+              <Text style={styles.sheetSaveText}>Save Changes</Text>
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
