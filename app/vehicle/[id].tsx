@@ -594,7 +594,7 @@ export default function VehicleDetailScreen() {
     setEditTaskSheet(null);
   }
 
-  async function handleSaveEditTask(task: any, name: string, miles: number | null, months: number | null) {
+  async function handleSaveEditTask(task: any, name: string, miles: number | null, months: number | null, changeMethod: "preset" | "custom") {
     if (!task || !vehicle) return;
     const tracksHrs = isHoursTracked(vehicle);
 
@@ -639,6 +639,24 @@ export default function VehicleDetailScreen() {
       if (error) throw error;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast("Task updated");
+
+      // Fire-and-forget analytics — never block the save or show errors
+      supabase.from("interval_corrections").insert({
+        user_id: user?.id,
+        vehicle_id: id,
+        task_name: task.name,
+        task_key: task.task_key ?? task.key ?? null,
+        vehicle_spec: [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" "),
+        vehicle_category: vehicle.vehicle_type ?? vehicle.vehicle_category ?? null,
+        fuel_type: vehicle.fuel_type ?? null,
+        original_interval_miles: task.interval_miles ?? null,
+        original_interval_months: task.interval_months ?? null,
+        corrected_interval_miles: miles,
+        corrected_interval_months: months,
+        change_method: changeMethod,
+        task_had_completion: task.last_completed_date != null,
+        schedule_source: task.source ?? null,
+      }).then(() => {}).catch(() => {});
     } catch {
       showToast("Failed to save changes.", true);
       queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", id] });
@@ -1882,7 +1900,7 @@ function EditTaskSheet({
   vehicle: any;
   onClose: () => void;
   onMarkComplete: (task: any) => void;
-  onSave: (task: any, name: string, miles: number | null, months: number | null) => void;
+  onSave: (task: any, name: string, miles: number | null, months: number | null, changeMethod: "preset" | "custom") => void;
   onDelete: (task: any) => void;
   insets: { bottom: number };
 }) {
@@ -1893,6 +1911,7 @@ function EditTaskSheet({
   const [showIntervalEditor, setShowIntervalEditor] = useState(false);
   const [useCustomMiles, setUseCustomMiles] = useState(false);
   const [useCustomMonths, setUseCustomMonths] = useState(false);
+  const [changeMethod, setChangeMethod] = useState<"preset" | "custom">("preset");
   const [customMilesInput, setCustomMilesInput] = useState(String(task?.interval_miles ?? ""));
   const [customMonthsInput, setCustomMonthsInput] = useState(String(task?.interval_months ?? ""));
   const nameInputRef = useRef<any>(null);
@@ -1908,6 +1927,7 @@ function EditTaskSheet({
       setUseCustomMonths(false);
       setCustomMilesInput(String(task.interval_miles ?? ""));
       setCustomMonthsInput(String(task.interval_months ?? ""));
+      setChangeMethod("preset");
     }
   }, [task?.id]);
 
@@ -1938,12 +1958,14 @@ function EditTaskSheet({
     setEditMiles(val);
     setCustomMilesInput(String(val));
     setUseCustomMiles(false);
+    setChangeMethod("preset");
   }
 
   function handleMonthsPreset(val: number) {
     setEditMonths(val);
     setCustomMonthsInput(String(val));
     setUseCustomMonths(false);
+    setChangeMethod("preset");
   }
 
   function handleCustomMilesChange(text: string) {
@@ -2043,7 +2065,7 @@ function EditTaskSheet({
                             borderColor: useCustomMiles ? Colors.accent : Colors.border,
                             backgroundColor: useCustomMiles ? Colors.accentMuted : Colors.surface,
                           }]}
-                          onPress={() => setUseCustomMiles(true)}
+                          onPress={() => { setUseCustomMiles(true); setChangeMethod("custom"); }}
                         >
                           <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium",
                             color: useCustomMiles ? Colors.accent : Colors.textSecondary }}>Custom</Text>
@@ -2091,7 +2113,7 @@ function EditTaskSheet({
                           borderColor: useCustomMonths ? Colors.accent : Colors.border,
                           backgroundColor: useCustomMonths ? Colors.accentMuted : Colors.surface,
                         }]}
-                        onPress={() => setUseCustomMonths(true)}
+                        onPress={() => { setUseCustomMonths(true); setChangeMethod("custom"); }}
                       >
                         <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium",
                           color: useCustomMonths ? Colors.accent : Colors.textSecondary }}>Custom</Text>
@@ -2154,7 +2176,7 @@ function EditTaskSheet({
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.sheetSaveBtn, { opacity: pressed ? 0.8 : 1 }]}
-              onPress={() => { onSave(task, editName.trim() || task.name, editMiles, editMonths); onClose(); }}
+              onPress={() => { onSave(task, editName.trim() || task.name, editMiles, editMonths, changeMethod); onClose(); }}
             >
               <Text style={styles.sheetSaveText}>Save Changes</Text>
             </Pressable>
