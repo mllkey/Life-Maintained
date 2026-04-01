@@ -319,9 +319,14 @@ export default function SettingsScreen() {
   const isPremium = hasPersonalOrAbove(profile);
   const userIsFreeTier = !userIsInTrial && !isPremium;
   const tierLabel = userIsInTrial ? "Trial" : hasBusiness(profile) ? "Business" : hasProOrAbove(profile) ? "Pro" : hasPersonalOrAbove(profile) ? "Personal" : "Free";
-  const tierExpiry = profile?.subscription_expires_at
-    ? format(parseISO(profile.subscription_expires_at), "MMMM d, yyyy")
-    : null;
+  const expiryDate = profile?.subscription_expires_at ? parseISO(profile.subscription_expires_at) : null;
+  const isLifetime = expiryDate != null && expiryDate.getFullYear() - new Date().getFullYear() > 50;
+  const tierExpiry = expiryDate && !isLifetime ? format(expiryDate, "MMMM d, yyyy") : null;
+  const tierExpiryLabel = isLifetime
+    ? "Lifetime"
+    : tierExpiry
+      ? (expiryDate! > new Date() ? `Renews ${tierExpiry}` : `Expires ${tierExpiry}`)
+      : "Active subscription";
 
   if (!isLoaded) {
     return (
@@ -381,23 +386,8 @@ export default function SettingsScreen() {
             <View style={styles.banner}>
               <View style={styles.bannerText}>
                 <Text style={styles.bannerTitle}>{tierLabel} Plan</Text>
-                {tierExpiry
-                  ? <Text style={styles.bannerSub}>Renews {tierExpiry}</Text>
-                  : <Text style={styles.bannerSub}>Active subscription</Text>}
+                <Text style={styles.bannerSub}>{tierExpiryLabel}</Text>
               </View>
-              <Pressable
-                style={({ pressed }) => [styles.bannerBtn, { opacity: pressed ? 0.8 : 1 }]}
-                onPress={() => {
-                  if (Platform.OS === "ios") {
-                    const { Linking } = require("react-native");
-                    Linking.openURL("itms-apps://apps.apple.com/account/subscriptions");
-                  } else {
-                    router.push("/subscription" as any);
-                  }
-                }}
-              >
-                <Text style={styles.bannerBtnText}>Manage</Text>
-              </Pressable>
             </View>
           )}
 
@@ -639,6 +629,20 @@ export default function SettingsScreen() {
             >
               <Text style={styles.legalBtnText}>Privacy Policy</Text>
             </Pressable>
+            {isPremium && !userIsInTrial && !!profile?.revenuecat_customer_id && (
+              <>
+                <Text style={styles.legalDot}>·</Text>
+                <Pressable
+                  style={({ pressed }) => [styles.legalBtn, { opacity: pressed ? 0.7 : 1 }]}
+                  onPress={() => {
+                    const { Linking } = require("react-native");
+                    Linking.openURL("itms-apps://apps.apple.com/account/subscriptions");
+                  }}
+                >
+                  <Text style={styles.legalBtnText}>Manage Subscription</Text>
+                </Pressable>
+              </>
+            )}
           </View>
 
           <Text style={styles.version}>LifeMaintained v1.0.0</Text>
