@@ -21,7 +21,7 @@ import * as Haptics from "expo-haptics";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { signIn, onboardingCompleted } = useAuth();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -42,11 +42,7 @@ export default function LoginScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (!onboardingCompleted) {
-        router.replace("/(onboarding)");
-      } else {
-        router.replace("/(tabs)");
-      }
+      router.replace("/");
     }
   }
 

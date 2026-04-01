@@ -159,6 +159,8 @@ export default function Paywall({
         : loadedOfferings?.all?.[cfg.rcOffering] ?? null;
 
       if (!offering) {
+        if (purchaseTimeoutRef.current) { clearTimeout(purchaseTimeoutRef.current); purchaseTimeoutRef.current = null; }
+        setIsPurchasing(false);
         Alert.alert("Couldn't load pricing", "Give it another shot.");
         return;
       }
@@ -168,6 +170,8 @@ export default function Paywall({
         : (offering.monthly ?? offering.availablePackages[0]);
 
       if (!pkg) {
+        if (purchaseTimeoutRef.current) { clearTimeout(purchaseTimeoutRef.current); purchaseTimeoutRef.current = null; }
+        setIsPurchasing(false);
         Alert.alert("Plan unavailable", "This plan isn't available right now. Try a different one.");
         return;
       }
@@ -196,17 +200,21 @@ export default function Paywall({
           update.trial_expires_at = expiry;
         }
 
-        await supabase.from("profiles").update(update).eq("user_id", user.id);
+        const { error: profileErr } = await supabase.from("profiles").update(update).eq("user_id", user.id);
+        if (profileErr) throw profileErr;
         await refreshProfile();
-      }
 
-      setToastMessage("Welcome to LifeMaintained Premium!");
-      setToastVisible(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setTimeout(() => {
-        setToastVisible(false);
-        onDismiss?.();
-      }, 1600);
+        setToastMessage("Welcome to LifeMaintained Premium!");
+        setToastVisible(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setTimeout(() => {
+          setToastVisible(false);
+          onDismiss?.();
+        }, 1600);
+      } else {
+        console.warn("[Paywall] Purchase completed but no entitlement found:", JSON.stringify(active));
+        Alert.alert("Something went wrong", "Your purchase was processed but we couldn't activate your plan. Please tap Restore Purchases, or contact support@lifemaintained.com.");
+      }
     } catch (err: any) {
       if (purchaseTimeoutRef.current) clearTimeout(purchaseTimeoutRef.current);
       if (!err?.userCancelled) {
@@ -255,49 +263,29 @@ export default function Paywall({
     if (!code || !user) return;
     setPromoStatus("checking");
     try {
-      const { data } = await supabase
-        .from("promo_codes")
-        .select("*")
-        .eq("code", code)
-        .maybeSingle();
+      const { data, error } = await supabase.functions.invoke("apply-promo-code", {
+        body: { code },
+      });
 
-      if (!data) {
+      if (error) {
+        const msg = (error as any)?.message ?? "Could not validate code. Please try again.";
         setPromoStatus("error");
-        setPromoMessage("Invalid promo code");
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        return;
-      }
-      if (data.expires_at && new Date(data.expires_at) < new Date()) {
-        setPromoStatus("error");
-        setPromoMessage("This code has expired");
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        return;
-      }
-      if (data.max_uses != null && data.current_uses >= data.max_uses) {
-        setPromoStatus("error");
-        setPromoMessage("This code has reached its usage limit");
+        setPromoMessage(msg);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
 
-      await supabase
-        .from("promo_codes")
-        .update({ current_uses: (data.current_uses ?? 0) + 1 })
-        .eq("id", data.id);
-
-      const expiry = new Date(Date.now() + data.duration_days * 86400000).toISOString();
-      await supabase
-        .from("profiles")
-        .update({
-          subscription_tier: data.tier,
-          subscription_expires_at: expiry,
-        })
-        .eq("user_id", user.id);
+      if (data?.error) {
+        setPromoStatus("error");
+        setPromoMessage(data.error);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
 
       await refreshProfile();
 
       setPromoStatus("success");
-      setPromoMessage(`Code applied! ${data.tier.charAt(0).toUpperCase() + data.tier.slice(1)} access for ${data.duration_days} days.`);
+      setPromoMessage(data?.message ? `Code applied! ${data.message}.` : "Code applied!");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (canDismiss && onDismiss) {
         setTimeout(() => {

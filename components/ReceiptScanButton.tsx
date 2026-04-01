@@ -23,7 +23,7 @@ export default function ReceiptScanButton({ onScanComplete }: Props) {
       }
       const pickerResult = useCamera
         ? await ImagePicker.launchCameraAsync({ quality: 1, allowsEditing: false })
-        : await ImagePicker.launchImageLibraryAsync({ quality: 1, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+        : await ImagePicker.launchImageLibraryAsync({ quality: 1, mediaTypes: ["images"] });
       if (pickerResult.canceled || !pickerResult.assets?.[0]?.uri) {
         return;
       }

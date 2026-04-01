@@ -1,17 +1,23 @@
-// template
-import { Link, Stack } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { Stack } from "expo-router";
+import { StyleSheet, Text, View, Pressable } from "react-native";
+import { router } from "expo-router";
+import { Colors } from "@/constants/colors";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function NotFoundScreen() {
   return (
     <>
-      <Stack.Screen options={{ title: "Oops!" }} />
+      <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.container}>
-        <Text style={styles.title}>This screen doesn&apos;t exist.</Text>
-
-        <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>Go to home screen!</Text>
-        </Link>
+        <Ionicons name="alert-circle-outline" size={48} color={Colors.textTertiary} />
+        <Text style={styles.title}>Page not found</Text>
+        <Text style={styles.body}>This screen doesn't exist or the link is broken.</Text>
+        <Pressable
+          style={({ pressed }) => [styles.button, { opacity: pressed ? 0.85 : 1 }]}
+          onPress={() => router.replace("/")}
+        >
+          <Text style={styles.buttonText}>Go to Dashboard</Text>
+        </Pressable>
       </View>
     </>
   );
@@ -23,17 +29,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 20,
+    backgroundColor: Colors.background,
+    gap: 12,
   },
   title: {
     fontSize: 20,
-    fontWeight: "bold",
+    fontFamily: "Inter_700Bold",
+    color: Colors.text,
+    marginTop: 8,
   },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
-  },
-  linkText: {
+  body: {
     fontSize: 14,
-    color: "#2e78b7",
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    textAlign: "center",
+  },
+  button: {
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    height: 48,
+    paddingHorizontal: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textInverse,
   },
 });

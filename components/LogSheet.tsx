@@ -327,6 +327,7 @@ function ConfirmCard({
       } else if (item.category === "property" && item.asset_id) {
         queryClient.invalidateQueries({ queryKey: ["properties"] });
         queryClient.invalidateQueries({ queryKey: ["property_tasks", item.asset_id] });
+        queryClient.invalidateQueries({ queryKey: ["property_logs", item.asset_id] });
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -549,8 +550,8 @@ export function LogSheet({
         body: { text: text.trim() },
       });
 
-      console.log("[extract-maintenance-data] data:", JSON.stringify(data));
-      console.log("[extract-maintenance-data] error:", error);
+      if (__DEV__) console.log("[extract-maintenance-data] data:", JSON.stringify(data));
+      if (__DEV__) console.log("[extract-maintenance-data] error:", error);
 
       if (error) {
         const msg = (error as any)?.message ?? String(error);

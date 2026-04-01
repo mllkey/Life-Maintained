@@ -317,8 +317,9 @@ export default function LogServiceScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["maintenance_logs", vehicleId] });
       queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
-      queryClient.invalidateQueries({ queryKey: ["vehicle_tasks", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", vehicleId] });
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
 
       if (user?.id) {
@@ -336,7 +337,7 @@ export default function LogServiceScreen() {
       }
 
       if (updatedTasks.length > 0) {
-        queryClient.invalidateQueries({ queryKey: ["vehicle_tasks", vehicleId] });
+        queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", vehicleId] });
         queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
         const fmt = (iso: string | null) => iso
           ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })

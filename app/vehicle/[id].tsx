@@ -447,13 +447,14 @@ export default function VehicleDetailScreen() {
         body: {
           vehicle_id: id,
           make: vehicle.make,
+          model: vehicle.model ?? "",
           year: parseInt(String(vehicle.year), 10),
           current_mileage: vehicle.mileage ?? 0,
           current_hours: vehicle.hours ?? 0,
           tracking_mode: mode,
           fuel_type: vehicle.fuel_type ?? "gas",
           is_awd: vehicle.is_awd ?? false,
-          vehicle_category: vehicle.vehicle_type ?? "car",
+          vehicle_category: vehicle.vehicle_category ?? vehicle.vehicle_type ?? "car",
         },
       });
       if (error) {
@@ -824,7 +825,7 @@ export default function VehicleDetailScreen() {
             const userId = user!.id;
 
             // Optimistically remove from cache (safe handling)
-            queryClient.setQueryData(["vehicles"], (old: any) => {
+            queryClient.setQueryData(["vehicles", userId], (old: any) => {
               if (!old) return old;
 
               // Handle array case
@@ -1402,7 +1403,7 @@ export default function VehicleDetailScreen() {
           />
           <View
             style={{
-              backgroundColor: "#FFFFFF",
+              backgroundColor: Colors.card,
               borderTopLeftRadius: 20,
               borderTopRightRadius: 20,
               paddingHorizontal: 20,

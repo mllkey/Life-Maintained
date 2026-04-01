@@ -55,25 +55,34 @@ export default function UpdateMileageScreen() {
       return;
     }
     setIsLoading(true);
+    try {
+      if (tracksHours) {
+        const { error: updateErr } = await supabase.from("vehicles").update({ hours: newMileage, updated_at: new Date().toISOString() }).eq("id", vehicleId);
+        if (updateErr) throw updateErr;
+      } else {
+        const { error: updateErr } = await supabase.from("vehicles").update({ mileage: newMileage, updated_at: new Date().toISOString() }).eq("id", vehicleId);
+        if (updateErr) throw updateErr;
 
-    if (tracksHours) {
-      await supabase.from("vehicles").update({ hours: newMileage, updated_at: new Date().toISOString() }).eq("id", vehicleId);
-    } else {
-      await supabase.from("vehicles").update({ mileage: newMileage, updated_at: new Date().toISOString() }).eq("id", vehicleId);
+        const { error: histErr } = await supabase.from("vehicle_mileage_history").insert({
+          vehicle_id: vehicleId,
+          mileage: newMileage,
+          recorded_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        });
+        if (histErr) console.warn("[update-mileage] history insert failed:", histErr.message);
+      }
 
-      await supabase.from("vehicle_mileage_history").insert({
-        vehicle_id: vehicleId,
-        mileage: newMileage,
-        recorded_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      router.back();
+    } catch (err: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setIsLoading(false);
+      setMileageWarning(err?.message ?? "Save failed. Give it another shot.");
     }
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
-    queryClient.invalidateQueries({ queryKey: ["vehicles"] });
-    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    router.back();
   }
 
   const vehicleName = vehicle ? (vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`) : "Vehicle";

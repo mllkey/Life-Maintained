@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -555,6 +555,9 @@ export default function AddVehicleScreen() {
     enabled: !!user,
   });
 
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollOffset = useRef(0);
+
   const [year, setYear] = useState("");
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
@@ -592,6 +595,7 @@ export default function AddVehicleScreen() {
   const [makeSearch, setMakeSearch] = useState("");
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
+  const [moreTypeSheetVisible, setMoreTypeSheetVisible] = useState(false);
 
   const [nhtsaModels, setNhtsaModels] = useState<string[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
@@ -827,23 +831,29 @@ export default function AddVehicleScreen() {
   }
 
   function selectYear(yr: number) {
+    const savedOffset = scrollOffset.current;
     setYear(String(yr));
     setYearPickerVisible(false);
+    setTimeout(() => scrollRef.current?.scrollTo({ y: savedOffset, animated: false }), 0);
     Haptics.selectionAsync();
   }
 
   function selectMake(selectedMake: string) {
+    const savedOffset = scrollOffset.current;
     setMake(selectedMake);
     setMakePickerVisible(false);
     setMakeSearch("");
     setModel("");
+    setTimeout(() => scrollRef.current?.scrollTo({ y: savedOffset, animated: false }), 0);
     Haptics.selectionAsync();
   }
 
   function selectModel(selectedModel: string) {
+    const savedOffset = scrollOffset.current;
     setModel(selectedModel);
     setModelPickerVisible(false);
     setModelSearch("");
+    setTimeout(() => scrollRef.current?.scrollTo({ y: savedOffset, animated: false }), 0);
     Haptics.selectionAsync();
   }
 
@@ -1059,9 +1069,12 @@ export default function AddVehicleScreen() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          onScroll={(e) => { scrollOffset.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={16}
         >
           {/* ── VIN Lookup ────────────────────────────────────── */}
           <FieldGroup label="VIN Lookup (Optional)">
@@ -1120,44 +1133,43 @@ export default function AddVehicleScreen() {
 
           {/* ── Vehicle Type ──────────────────────────────────── */}
           <FieldGroup label="Vehicle Type">
-            {VEHICLE_TYPE_GROUPS.map(group => (
-              <View key={group.label} style={{ marginBottom: 12 }}>
-                <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, marginBottom: 8, paddingHorizontal: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                  {group.label}
-                </Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                  {group.types.map(t => {
-                    const isSelected = vehicleType === t.value || (t.value === "trailer" && vehicleType === "dump_trailer");
-                    return (
-                      <Pressable
-                        key={t.value}
-                        style={[styles.typeCard, isSelected && styles.typeCardSelected, { width: "auto", minWidth: 80, paddingHorizontal: 12 }]}
-                        onPress={() => {
-                          Haptics.selectionAsync();
-                          if (t.value === "trailer") {
-                            const nextVehicleType = (trailerSubtype === "dump_scissor" || trailerSubtype === "dump_hydraulic")
-                              ? "dump_trailer"
-                              : "trailer";
-                            setVehicleType(nextVehicleType);
-                          } else if (t.value === "dump_truck") {
-                            setVehicleType("dump_truck");
-                          } else {
-                            setVehicleType(t.value);
-                          }
-                          setMake("");
-                          setModel("");
-                        }}
-                      >
-                        <MaterialCommunityIcons name={t.icon as any} size={22} color={isSelected ? Colors.accent : Colors.textSecondary} />
-                        <Text style={[styles.typeCardLabel, isSelected && styles.typeCardLabelSelected, { fontSize: 11 }]}>
-                          {t.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {VEHICLE_TYPE_GROUPS[0].types.map(t => {
+                const isSelected = vehicleType === t.value;
+                return (
+                  <Pressable
+                    key={t.value}
+                    style={[styles.typeCard, isSelected && styles.typeCardSelected, { width: "auto", minWidth: 80, paddingHorizontal: 12 }]}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setVehicleType(t.value);
+                      setMake("");
+                      setModel("");
+                    }}
+                  >
+                    <MaterialCommunityIcons name={t.icon as any} size={22} color={isSelected ? Colors.accent : Colors.textSecondary} />
+                    <Text style={[styles.typeCardLabel, isSelected && styles.typeCardLabelSelected, { fontSize: 11 }]}>
+                      {t.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              {/* More chip — selected when vehicleType is outside the Vehicles group */}
+              {(() => {
+                const isMoreSelected = !VEHICLE_TYPE_GROUPS[0].types.some(t => t.value === vehicleType);
+                return (
+                  <Pressable
+                    style={[styles.typeCard, isMoreSelected && styles.typeCardSelected, { width: "auto", minWidth: 80, paddingHorizontal: 12 }]}
+                    onPress={() => { Haptics.selectionAsync(); setMoreTypeSheetVisible(true); }}
+                  >
+                    <MaterialCommunityIcons name="dots-horizontal" size={22} color={isMoreSelected ? Colors.accent : Colors.textSecondary} />
+                    <Text style={[styles.typeCardLabel, isMoreSelected && styles.typeCardLabelSelected, { fontSize: 11 }]}>
+                      More
+                    </Text>
+                  </Pressable>
+                );
+              })()}
+            </View>
           </FieldGroup>
 
           {/* ── Trailer Sub-Type ─────────────────────────────── */}
@@ -1709,6 +1721,61 @@ export default function AddVehicleScreen() {
         onClose={() => { setModelPickerVisible(false); setModelSearch(""); }}
         insets={insets}
       />
+
+      <Modal
+        visible={moreTypeSheetVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMoreTypeSheetVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setMoreTypeSheetVisible(false)} />
+          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 8 }]}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>More Vehicle Types</Text>
+              <Pressable style={styles.modalCancelBtn} onPress={() => setMoreTypeSheetVisible(false)}>
+                <Text style={styles.modalCancelText}>Done</Text>
+              </Pressable>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+              {VEHICLE_TYPE_GROUPS.slice(1).map((group, gi) => (
+                <View key={group.label}>
+                  <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, paddingHorizontal: 20, paddingTop: gi === 0 ? 14 : 8, paddingBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    {group.label}
+                  </Text>
+                  {group.types.map(t => {
+                    const isSelected = vehicleType === t.value || (t.value === "trailer" && vehicleType === "dump_trailer");
+                    return (
+                      <Pressable
+                        key={t.value}
+                        style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 13, gap: 14, backgroundColor: pressed ? Colors.surface : "transparent" }]}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          if (t.value === "trailer") {
+                            setVehicleType((trailerSubtype === "dump_scissor" || trailerSubtype === "dump_hydraulic") ? "dump_trailer" : "trailer");
+                          } else {
+                            setVehicleType(t.value);
+                          }
+                          setMake("");
+                          setModel("");
+                          setMoreTypeSheetVisible(false);
+                        }}
+                      >
+                        <MaterialCommunityIcons name={t.icon as any} size={22} color={isSelected ? Colors.accent : Colors.textSecondary} />
+                        <Text style={{ flex: 1, fontSize: 15, fontFamily: isSelected ? "Inter_600SemiBold" : "Inter_400Regular", color: isSelected ? Colors.accent : Colors.text }}>
+                          {t.label}
+                        </Text>
+                        {isSelected && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
       {showPaywall && (
         <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
           <Paywall

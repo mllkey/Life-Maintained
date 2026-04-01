@@ -137,7 +137,9 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     AsyncStorage.getItem(SCREENING_NOTIF_KEY).then(raw => {
-      if (raw) setScreeningOptIns(JSON.parse(raw));
+      if (raw) {
+        try { setScreeningOptIns(JSON.parse(raw)); } catch {}
+      }
     });
     const now = new Date();
     const dismissKey = `budget_dismissed_${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}`;

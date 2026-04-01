@@ -51,7 +51,7 @@ export default function SignUpScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace("/(onboarding)");
+      router.replace("/");
     }
   }
 
