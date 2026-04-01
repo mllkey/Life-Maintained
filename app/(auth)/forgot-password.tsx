@@ -31,7 +31,9 @@ export default function ForgotPasswordScreen() {
     }
     setIsLoading(true);
     setError(null);
-    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim());
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: "lifemaintained://reset-password",
+    });
     setIsLoading(false);
     if (err) {
       setError(err.message);

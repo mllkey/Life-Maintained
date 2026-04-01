@@ -16,6 +16,7 @@ import { BudgetAlertProvider } from "@/context/BudgetAlertContext";
 import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
 import { supabase } from "@/lib/supabase";
+import { setPendingResetUrl } from "@/lib/pendingResetUrl";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -150,6 +151,25 @@ function RootLayoutNav() {
     };
   }, [session?.user?.id]);
 
+  // Deep link: lifemaintained://reset-password → password reset (no session gate)
+  useEffect(() => {
+    const handleResetUrl = (url: string | null) => {
+      if (!url) return;
+      try {
+        const parsed = Linking.parse(url);
+        if (parsed.scheme === "lifemaintained" && parsed.path === "reset-password") {
+          const { router } = require("expo-router");
+          setPendingResetUrl(url);
+          router.push("/reset-password");
+        }
+      } catch {}
+    };
+
+    // Foreground only — cold start is handled by Expo Router + the screen itself
+    const sub = Linking.addEventListener("url", (e) => handleResetUrl(e.url));
+    return () => sub.remove();
+  }, []);
+
   // Deep link: lifemaintained://voice-log → navigate to dashboard tab
   useEffect(() => {
     if (!session || isLoading) return;
@@ -198,6 +218,7 @@ function RootLayoutNav() {
           <Stack.Screen name="notifications-settings" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="terms-of-service" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="privacy-policy" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="reset-password" options={{ headerShown: false, presentation: "fullScreenModal" }} />
         </Stack>
         {showBanner && <NotifPermissionBanner />}
       </View>

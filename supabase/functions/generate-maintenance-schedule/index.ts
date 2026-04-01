@@ -378,7 +378,7 @@ serve(async (req: Request) => {
       { match: [/valve.*check/i, /valve.*clearance/i, /valve.*adjust/i, /valve.*inspection/i], max_months: 18, max_miles: 10000, min_miles: 3000 },
       { match: [/tire.*inspect/i, /tire.*check/i, /tire.*wear/i, /tire.*pressure/i], max_months: 6, max_miles: 5000 },
       { match: [/brake.*pad/i, /brake.*inspection/i], max_months: 12, max_miles: 15000 },
-      { match: [/spark plug/i], max_months: 24, max_miles: 20000 },
+      { match: [/spark plug/i], max_months: 24, max_miles: 16000, min_miles: 3000 },
       { match: [/air filter/i], max_months: 12, max_miles: 15000 },
       { match: [/fork.*oil/i, /fork.*seal/i], max_months: 24, max_miles: 20000 },
     ];
@@ -591,6 +591,7 @@ Wear-dependent items.
 Rules:
 - Be specific to this exact year/make/model — do not use generic averages
 - Account for engine type, cooling type, drivetrain type, and asset category
+- For motorcycles: spark plug intervals are 3,000-7,500 miles for sport/supersport bikes, up to 16,000 miles for standard/touring — NEVER use car spark plug intervals (30,000-100,000 miles) for motorcycles
 - Each task description must include the recommended interval AND a realistic range
 - Do NOT assign identical intervals to unrelated tasks unless they are genuinely part of the same service milestone
 - Priorities: high = oil, critical fluids, safety-critical; medium = filters, secondary fluids, inspections; lower = condition-based replacements
@@ -669,7 +670,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
                 { key: "brake_pads", patterns: [/brake.*pad/i], canonical: "Inspect Brake Pads", description: "Inspect brake pads regularly and replace as needed based on wear.", priorityOverride: "high", conditionBased: true },
                 { key: "brake_inspection", patterns: [/brake(?!.*pad)(?!.*fluid).*inspect/i, /brake.*system.*inspect/i], canonical: "", description: "", remove: true, removeCondition: () => isSmallMoto },
                 { key: "coolant", patterns: [/coolant.*replace/i, /coolant.*service/i, /coolant.*flush/i, /coolant.*system/i, /coolant.*inspect/i], canonical: "Replace Coolant", description: "Replace engine coolant to maintain proper cooling and prevent corrosion. Recommended every 2 years or per manufacturer spec." },
-                { key: "spark_plugs", patterns: [/spark.*plug/i], canonical: "Replace Spark Plugs", description: "Replace spark plugs per manufacturer interval. Recommended every 4,000-8,000 miles for small engines, longer for larger engines." },
+                { key: "spark_plugs", patterns: [/spark.*plug/i], canonical: "Replace Spark Plugs", description: "Replace spark plugs per manufacturer interval. Recommended every 3,000-7,500 miles for sport motorcycles, 7,500-16,000 miles for standard/touring bikes, 4,000-8,000 miles for small engines, longer for larger car engines." },
                 { key: "air_filter", patterns: [/air.*filter/i], canonical: "Air Filter Cleaning and Replacement", description: "Clean or replace the air filter. Recommended every 3,000-6,000 miles depending on riding conditions." },
                 { key: "cable_lube", patterns: [/cable.*lube/i, /cable.*lubric/i, /throttle.*cable/i, /clutch.*cable/i], canonical: "Lubricate Control Cables", description: "Lubricate throttle, clutch, and other control cables. Recommended every 3,000-6,000 miles or annually depending on conditions." },
                 { key: "valve_clearance", patterns: [/valve.*clear/i, /valve.*check/i, /valve.*adjust/i, /valve.*inspect/i], canonical: "Check and Adjust Valve Clearance", description: "Check and adjust valve clearances per manufacturer spec. Recommended every 6,000-8,000 miles for small engines.", priorityOverride: "high" },

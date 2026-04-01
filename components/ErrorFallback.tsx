@@ -86,6 +86,10 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           Please reload the app to continue.
         </Text>
 
+        <Text style={[styles.errorHint, { color: theme.textSecondary }]} numberOfLines={3}>
+          {error.message}
+        </Text>
+
         <Pressable
           onPress={handleRestart}
           style={({ pressed }) => [
@@ -205,6 +209,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: "center",
     lineHeight: 24,
+  },
+  errorHint: {
+    fontSize: 12,
+    textAlign: "center",
+    lineHeight: 18,
+    opacity: 0.5,
+    maxWidth: 320,
   },
   topButton: {
     position: "absolute",

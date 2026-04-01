@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,6 @@ import {
   Image,
 } from "react-native";
 import { router } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -21,15 +20,8 @@ import * as Haptics from "expo-haptics";
 
 export default function SignUpScreen() {
   const insets = useSafeAreaInsets();
-  const { signUp, session, profileLoaded } = useAuth();
+  const { signUp } = useAuth();
 
-  useFocusEffect(
-    useCallback(() => {
-      if (session && profileLoaded) {
-        router.replace("/");
-      }
-    }, [session, profileLoaded])
-  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
