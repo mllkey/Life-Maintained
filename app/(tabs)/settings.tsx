@@ -811,7 +811,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     justifyContent: "center",
   },
-  signOutText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  signOutText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.overdue },
 
   sectionCard: {
     backgroundColor: Colors.card,
