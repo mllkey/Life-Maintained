@@ -70,7 +70,10 @@ serve(async (req: Request) => {
       is_awd,
       vehicle_category,
       tracking_mode: reqTrackingMode,
+      force_refresh,
     } = body;
+
+    const isForceRefresh = force_refresh === true;
 
     if (!vehicle_id || typeof vehicle_id !== "string") {
       return json({ error: "Missing or invalid required field: vehicle_id (string)" }, 400);
@@ -270,20 +273,34 @@ serve(async (req: Request) => {
 
     // ── 4. Check for existing tasks (prevent duplicate schedules) ──────────
     if (!isPreload) {
-      const { count: existingCount, error: countError } = await adminClient
-        .from("user_vehicle_maintenance_tasks")
-        .select("id", { count: "exact", head: true })
-        .eq("vehicle_id", vehicle_id);
+      if (isForceRefresh) {
+        // Delete only non-custom tasks — preserve tasks where is_custom = true
+        const { error: deleteErr } = await adminClient
+          .from("user_vehicle_maintenance_tasks")
+          .delete()
+          .eq("vehicle_id", vehicle_id)
+          .neq("is_custom", true);
+        if (deleteErr) {
+          console.error("[REFRESH] Delete existing tasks error:", deleteErr.message);
+          return json({ error: "Failed to clear existing schedule", detail: deleteErr.message }, 500);
+        }
+        console.log(`[REFRESH] Cleared non-custom tasks for vehicle ${vehicle_id}`);
+      } else {
+        const { count: existingCount, error: countError } = await adminClient
+          .from("user_vehicle_maintenance_tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("vehicle_id", vehicle_id);
 
-      if (countError) {
-        console.error("Count query error:", countError);
-        return json({ error: "Failed to check existing tasks", detail: countError.message }, 500);
-      }
-      if ((existingCount ?? 0) > 0) {
-        return json(
-          { error: "Maintenance schedule already exists for this vehicle. Delete existing tasks first to regenerate." },
-          409,
-        );
+        if (countError) {
+          console.error("Count query error:", countError);
+          return json({ error: "Failed to check existing tasks", detail: countError.message }, 500);
+        }
+        if ((existingCount ?? 0) > 0) {
+          return json(
+            { error: "Maintenance schedule already exists for this vehicle. Delete existing tasks first to regenerate." },
+            409,
+          );
+        }
       }
     }
 

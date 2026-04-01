@@ -33,6 +33,7 @@ import { resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMilea
 import * as Linking from "expo-linking";
 import { LogSheet } from "@/components/LogSheet";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
+import UpdateBanner from "@/components/UpdateBanner";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -379,6 +380,10 @@ export default function DashboardScreen() {
               id={TOOLTIP_IDS.DASHBOARD_WELCOME}
               message="This is your command center. Everything that needs attention across vehicles, home, and health shows up here."
               icon="compass-outline"
+            />
+            <UpdateBanner
+              message="Your maintenance schedules just got smarter. Refresh any vehicle's schedule from its detail page."
+              onDismiss={() => {}}
             />
             <TrialBanner />
             {!budgetDismissed && !!budgetThreshold && budgetThreshold > 0 && monthlyCost > budgetThreshold && (
