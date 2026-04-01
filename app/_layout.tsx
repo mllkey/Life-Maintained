@@ -75,50 +75,64 @@ function RootLayoutNav() {
           rcListenerRef.current = null;
         }
 
+        const doWrite = async (info: any) => {
+          const active = info?.entitlements?.active ?? {};
+          const expiry = (key: string) =>
+            active[key]?.expirationDate ?? null;
+
+          let newTier: string | null = null;
+          let newExpiry: string | null = null;
+
+          if (active["business_access"] != null) {
+            newTier = "business";
+            newExpiry = expiry("business_access");
+          } else if (active["pro_access"] != null) {
+            newTier = "pro";
+            newExpiry = expiry("pro_access");
+          } else if (active["personal_access"] != null) {
+            newTier = "personal";
+            newExpiry = expiry("personal_access");
+          }
+
+          if (newTier) {
+            const { error } = await supabase.from("profiles").update({
+              subscription_tier: newTier,
+              subscription_expires_at: newExpiry,
+              revenuecat_customer_id: info.originalAppUserId ?? null,
+            }).eq("user_id", userId);
+            if (error) throw error;
+          } else {
+            const { data: prof, error: fetchError } = await supabase
+              .from("profiles")
+              .select("trial_expires_at")
+              .eq("user_id", userId)
+              .maybeSingle();
+            if (fetchError) throw fetchError;
+            const stillTrial =
+              prof &&
+              (prof as any).trial_expires_at &&
+              new Date((prof as any).trial_expires_at) > new Date();
+            if (!stillTrial) {
+              const { error } = await supabase.from("profiles").update({
+                subscription_tier: "free",
+              }).eq("user_id", userId);
+              if (error) throw error;
+            }
+          }
+          refreshProfile().catch(() => {});
+        };
+
         const listener = async (info: any) => {
           try {
-            const active = info?.entitlements?.active ?? {};
-            const expiry = (key: string) =>
-              active[key]?.expirationDate ?? null;
-
-            let newTier: string | null = null;
-            let newExpiry: string | null = null;
-
-            if (active["business_access"] != null) {
-              newTier = "business";
-              newExpiry = expiry("business_access");
-            } else if (active["pro_access"] != null) {
-              newTier = "pro";
-              newExpiry = expiry("pro_access");
-            } else if (active["personal_access"] != null) {
-              newTier = "personal";
-              newExpiry = expiry("personal_access");
+            await doWrite(info);
+          } catch (e) {
+            console.error("[RevenueCat] Subscription write failed, retrying:", e);
+            try {
+              await doWrite(info);
+            } catch (e2) {
+              console.error("[RevenueCat] Subscription write retry failed:", e2);
             }
-
-            if (newTier) {
-              await supabase.from("profiles").update({
-                subscription_tier: newTier,
-                subscription_expires_at: newExpiry,
-                revenuecat_customer_id: info.originalAppUserId ?? null,
-              }).eq("user_id", userId);
-            } else {
-              const { data: prof } = await supabase
-                .from("profiles")
-                .select("trial_expires_at")
-                .eq("user_id", userId)
-                .maybeSingle();
-              const stillTrial =
-                prof &&
-                (prof as any).trial_expires_at &&
-                new Date((prof as any).trial_expires_at) > new Date();
-              if (!stillTrial) {
-                await supabase.from("profiles").update({
-                  subscription_tier: "free",
-                }).eq("user_id", userId);
-              }
-            }
-            refreshProfile().catch(() => {});
-          } catch {}
+          }
         };
 
         Purchases.addCustomerInfoUpdateListener(listener);

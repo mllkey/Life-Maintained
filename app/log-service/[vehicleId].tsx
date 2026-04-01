@@ -257,10 +257,16 @@ export default function LogServiceScreen() {
       const logMeter = milesVal ?? hoursVal ?? null;
 
       if (scannedItems.length > 0) {
-        const rows = scannedItems.map(item => ({
+        const validItems = scannedItems.filter(item => item.name.trim().length > 0);
+        if (validItems.length === 0) {
+          setError("Please add a name for at least one service");
+          setIsLoading(false);
+          return;
+        }
+        const rows = validItems.map(item => ({
           user_id: user!.id,
           vehicle_id: vehicleId,
-          service_name: item.name || "Service",
+          service_name: item.name.trim(),
           service_date: date || new Date().toISOString().split("T")[0],
           mileage: logMeter,
           cost: item.cost,
@@ -351,7 +357,7 @@ export default function LogServiceScreen() {
           : "";
         Alert.alert("Maintenance Updated", lines + warnSuffix, [{ text: "OK", onPress: () => router.back() }]);
       } else if (storedReceiptPath === null && receiptLocalUri) {
-        Alert.alert("Saved", "Receipt saved but photo could not be uploaded.", [{ text: "OK", onPress: () => router.back() }]);
+        Alert.alert("Receipt Upload Failed", "Receipt couldn't be saved. Please try again.", [{ text: "OK", onPress: () => router.back() }]);
       } else {
         router.back();
       }

@@ -13,6 +13,7 @@ import {
   UIManager,
   Modal,
   KeyboardAvoidingView,
+  Alert,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
@@ -537,7 +538,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
         setSaved(s => ({ ...s, [k]: false }));
       }, 1500);
     } catch {
-      setErrors(e => ({ ...e, [k]: "Save failed. Try again." }));
+      Alert.alert("Save Failed", "Could not update your mileage. Please try again.");
     } finally {
       setSaving(s => ({ ...s, [k]: false }));
     }
