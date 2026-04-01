@@ -229,6 +229,7 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
     let authUserId = "preload";
+    let isServiceRoleCall = false;
     if (!isPreload) {
       const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
 
@@ -238,36 +239,58 @@ serve(async (req: Request) => {
       }
       const jwt = authHeader.replace("Bearer ", "").trim();
 
-      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: `Bearer ${jwt}` } },
-      });
+      // Check if caller is using service role key (admin/script calls)
+      try {
+        const parts = jwt.split(".");
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1]));
+          if (payload.iss === "supabase" && payload.role === "service_role") {
+            isServiceRoleCall = true;
+          }
+        }
+      } catch {}
 
-      const { data: { user }, error: authError } = await userClient.auth.getUser();
+      if (!isServiceRoleCall) {
+        const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+          global: { headers: { Authorization: `Bearer ${jwt}` } },
+        });
 
-      if (authError || !user) {
-        console.error("[AUTH] Auth failed — authError:", authError?.message, "user:", user?.id);
-        return json({ error: "Unauthorized: invalid or expired token" }, 401);
+        const { data: { user }, error: authError } = await userClient.auth.getUser();
+
+        if (authError || !user) {
+          console.error("[AUTH] Auth failed — authError:", authError?.message, "user:", user?.id);
+          return json({ error: "Unauthorized: invalid or expired token" }, 401);
+        }
+        authUserId = user.id;
       }
-      authUserId = user.id;
     }
 
     // ── 3. Verify vehicle ownership ────────────────────────────────────────
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
     if (!isPreload) {
-      const { data: vehicle, error: vehicleError } = await adminClient
-        .from("vehicles")
-        .select("id")
-        .eq("id", vehicle_id)
-        .eq("user_id", authUserId)
-        .maybeSingle();
+      if (isServiceRoleCall) {
+        // Admin call: look up user_id from vehicles table instead of verifying ownership
+        const { data: vRow } = await adminClient.from("vehicles").select("user_id").eq("id", vehicle_id).maybeSingle();
+        if (!vRow?.user_id) {
+          return json({ error: "Vehicle not found" }, 404);
+        }
+        authUserId = vRow.user_id;
+      } else {
+        const { data: vehicle, error: vehicleError } = await adminClient
+          .from("vehicles")
+          .select("id")
+          .eq("id", vehicle_id)
+          .eq("user_id", authUserId)
+          .maybeSingle();
 
-      if (vehicleError) {
-        console.error("Vehicle lookup error:", vehicleError);
-        return json({ error: "Failed to verify vehicle ownership", detail: vehicleError.message }, 500);
-      }
-      if (!vehicle) {
-        return json({ error: "Forbidden: vehicle not found or does not belong to this user" }, 403);
+        if (vehicleError) {
+          console.error("Vehicle lookup error:", vehicleError);
+          return json({ error: "Failed to verify vehicle ownership", detail: vehicleError.message }, 500);
+        }
+        if (!vehicle) {
+          return json({ error: "Forbidden: vehicle not found or does not belong to this user" }, 403);
+        }
       }
     }
 
