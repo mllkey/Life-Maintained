@@ -444,9 +444,8 @@ export default function Paywall({
             style={({ pressed }) => [
               styles.ctaBtn,
               { opacity: pressed || isPurchasing ? 0.85 : 1 },
-              offeringsError && { backgroundColor: Colors.textTertiary },
             ]}
-            onPress={offeringsError ? loadOfferings : handlePurchase}
+            onPress={handlePurchase}
             disabled={isPurchasing || isRestoring || loadingOfferings}
             testID="paywall-cta"
             accessibilityLabel="Subscribe to plan"
@@ -454,8 +453,6 @@ export default function Paywall({
           >
             {isPurchasing ? (
               <ActivityIndicator color={Colors.background} />
-            ) : offeringsError ? (
-              <Text style={styles.ctaBtnText}>Retry Loading Plans</Text>
             ) : (
               <Text style={styles.ctaBtnText}>
                 {profile?.subscription_tier === "trial" && profile?.trial_expires_at && new Date(profile.trial_expires_at) > new Date()
