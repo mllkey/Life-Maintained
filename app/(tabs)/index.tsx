@@ -406,7 +406,7 @@ export default function DashboardScreen() {
 
             <SpendingChartCard spending={spending} />
 
-            {screenings.length > 0 && (familyMembers?.length ?? 0) > 0 && (
+            {screenings.length > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionLabel}>HEALTH SCREENINGS</Text>

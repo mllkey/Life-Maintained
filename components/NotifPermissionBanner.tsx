@@ -31,20 +31,17 @@ export default function NotifPermissionBanner({ onDismiss }: Props) {
     checkAndShow();
   }, []);
 
+  const [permStatus, setPermStatus] = useState<string | null>(null);
+
   async function checkAndShow() {
     try {
       const dismissed = await AsyncStorage.getItem(DISMISSED_KEY);
       if (dismissed === "true") return;
 
       const { status } = await Notifications.getPermissionsAsync();
+      if (status !== "denied" && status !== "undetermined") return;
 
-      if (status === "undetermined") {
-        const result = await Notifications.requestPermissionsAsync();
-        if (result.status !== "denied") return;
-      } else if (status !== "denied") {
-        return;
-      }
-
+      setPermStatus(status);
       await new Promise(resolve => setTimeout(resolve, 800));
       setVisible(true);
       Animated.spring(slideAnim, {
@@ -66,6 +63,21 @@ export default function NotifPermissionBanner({ onDismiss }: Props) {
     }).start(() => setVisible(false));
     await AsyncStorage.setItem(DISMISSED_KEY, "true");
     onDismiss?.();
+  }
+
+  async function handleTurnOn() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (permStatus === "undetermined") {
+      const result = await Notifications.requestPermissionsAsync();
+      if (result.status !== "denied") {
+        dismiss();
+        return;
+      }
+      setPermStatus("denied");
+    } else {
+      await Linking.openSettings();
+      dismiss();
+    }
   }
 
   async function openSettings() {
@@ -97,12 +109,12 @@ export default function NotifPermissionBanner({ onDismiss }: Props) {
             Get reminders for overdue maintenance, upcoming appointments, and medication schedules.
           </Text>
           <Pressable
-            onPress={openSettings}
+            onPress={permStatus === "undetermined" ? handleTurnOn : openSettings}
             style={({ pressed }) => [styles.settingsBtn, { opacity: pressed ? 0.75 : 1 }]}
             accessibilityRole="button"
-            accessibilityLabel="Open notification settings"
+            accessibilityLabel={permStatus === "undetermined" ? "Turn on notifications" : "Open notification settings"}
           >
-            <Text style={styles.settingsBtnText}>Open Settings</Text>
+            <Text style={styles.settingsBtnText}>{permStatus === "undetermined" ? "Turn On" : "Open Settings"}</Text>
           </Pressable>
         </View>
 

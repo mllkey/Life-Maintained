@@ -87,8 +87,8 @@ export default function VehicleQuickAddScreen() {
         vehicle_category: vehicleType,
         fuel_type: showFuel ? fuelType : "gas",
         tracking_mode: inferredMode,
-        mileage: !isHours ? (parsedUsage || null) : null,
-        hours: isHours ? (parsedUsage || null) : null,
+        mileage: !isHours ? (parsedUsage !== 0 ? parsedUsage || null : 0) : null,
+        hours: isHours ? (parsedUsage !== 0 ? parsedUsage || null : 0) : null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };

@@ -18,9 +18,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { matchAndUpdateVehicleTask, matchAndUpdatePropertyTask } from "@/lib/maintenanceMatcher";
+import { isHoursTracked } from "@/lib/usageHelpers";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import DatePicker from "@/components/DatePicker";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
@@ -244,6 +245,17 @@ function ConfirmCard({
   const [cardError, setCardError] = useState("");
 
   const isVehicle = item.category === "vehicle";
+
+  const { data: vehicleData } = useQuery({
+    queryKey: ["vehicle", item.asset_id],
+    queryFn: async () => {
+      const { data } = await supabase.from("vehicles").select("*").eq("id", item.asset_id!).single();
+      return data;
+    },
+    enabled: isVehicle && !!item.asset_id,
+    staleTime: 1000 * 60 * 5,
+  });
+  const tracksHours = isHoursTracked(vehicleData);
   const catIcon = item.category === "vehicle" ? "car-outline" : item.category === "property" ? "home-outline" : "heart-outline";
   const catColor = item.category === "vehicle" ? Colors.blue : item.category === "property" ? Colors.good : Colors.health;
 
@@ -275,16 +287,23 @@ function ConfirmCard({
       if (insertErr) throw insertErr;
 
       if (isVehicle && item.asset_id && mileage) {
-        await supabase.from("vehicles").update({
-          mileage: parseInt(mileage),
-          updated_at: now,
-        }).eq("id", item.asset_id);
-        await supabase.from("vehicle_mileage_history").insert({
-          vehicle_id: item.asset_id,
-          mileage: parseInt(mileage),
-          recorded_at: date || now,
-          created_at: now,
-        });
+        if (tracksHours) {
+          await supabase.from("vehicles").update({
+            hours: parseFloat(mileage),
+            updated_at: now,
+          }).eq("id", item.asset_id);
+        } else {
+          await supabase.from("vehicles").update({
+            mileage: parseInt(mileage),
+            updated_at: now,
+          }).eq("id", item.asset_id);
+          await supabase.from("vehicle_mileage_history").insert({
+            vehicle_id: item.asset_id,
+            mileage: parseInt(mileage),
+            recorded_at: date || now,
+            created_at: now,
+          });
+        }
       }
 
       if (isVehicle && item.asset_id) {
@@ -366,7 +385,7 @@ function ConfirmCard({
         </View>
         <FieldRow label="Cost" value={cost} onChange={setCost} placeholder="0.00" keyboard="decimal-pad" prefix="$" />
         {isVehicle && (
-          <FieldRow label="Mileage" value={mileage} onChange={setMileage} placeholder="0" keyboard="number-pad" suffix=" mi" />
+          <FieldRow label={tracksHours ? "Hours" : "Mileage"} value={mileage} onChange={setMileage} placeholder="0" keyboard="number-pad" suffix={tracksHours ? " hrs" : " mi"} />
         )}
         <FieldRow label="Provider" value={provider} onChange={setProvider} placeholder="Shop or clinic name" />
         <FieldRow label="Notes" value={notes} onChange={setNotes} placeholder="Optional" />

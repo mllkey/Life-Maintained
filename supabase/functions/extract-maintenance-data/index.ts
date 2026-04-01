@@ -54,9 +54,6 @@ serve(async (req: Request) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  console.log("[AUTH] SUPABASE_URL set:", !!supabaseUrl);
-  console.log("[AUTH] SUPABASE_ANON_KEY set:", !!supabaseAnonKey);
-
   // Use getUser() (no jwt arg) — the Authorization header in global.headers does the work.
   // This matches the pattern used in generate-maintenance-schedule.
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -64,7 +61,6 @@ serve(async (req: Request) => {
   });
 
   const { data: { user }, error: authError } = await supabase.auth.getUser();
-  console.log("[AUTH] getUser result:", user?.id, "error:", authError?.message);
 
   if (authError || !user) {
     console.error("[AUTH] Auth failed — authError:", authError?.message, "user:", user?.id);
@@ -144,7 +140,7 @@ Return the JSON array directly with no wrapper object, no explanation, no markdo
 
   try {
     const requestBody = {
-      model: "claude-sonnet-4-20250514",
+      model: Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-4-20250514",
       max_tokens: 1024,
       system: systemPrompt,
       messages: [
