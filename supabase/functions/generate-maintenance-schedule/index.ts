@@ -370,58 +370,116 @@ serve(async (req: Request) => {
     }
 
     const MOTORCYCLE_CLAMPS: IntervalClamp[] = [
-      { match: [/brake.*fluid/i], max_months: 24, max_miles: 20000 },
-      { match: [/coolant/i], max_months: 36, max_miles: 30000 },
-      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 12, max_miles: 5000, min_miles: 2000 },
-      { match: [/chain.*clean/i, /chain.*lube/i, /chain.*lubrication/i, /chain maintenance/i], max_months: 2, max_miles: 600, min_miles: 200 },
-      { match: [/chain.*adjust/i, /chain.*tension/i], max_months: 6, max_miles: 5000, min_miles: 1000 },
+      // Brake fluid: moisture-absorbing fluid; most mfrs (Honda, Kawasaki, Yamaha) say every 2 years. Miles cap conservative since it's primarily time-based.
+      { match: [/brake.*fluid/i], max_months: 24, max_miles: 15000 },
+      // Coolant: most air-cooled bikes lack it; liquid-cooled mfrs say 2-3 years.
+      { match: [/coolant/i], max_months: 24, max_miles: 24000 },
+      // Oil: Kawasaki ZX-10R/Yamaha R1 say every 3,750 mi or 6 mo. Cap at 6 mo (not 12) for safety.
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 6, max_miles: 4000, min_miles: 2000 },
+      // Chain lube: most chain manufacturers say every 300-400 mi; 500 mi is the absolute max.
+      { match: [/chain.*clean/i, /chain.*lube/i, /chain.*lubrication/i, /chain maintenance/i], max_months: 1, max_miles: 500, min_miles: 200 },
+      // Chain tension: Kawasaki says every 600 mi; 3,000 mi is a reasonable outer bound.
+      { match: [/chain.*adjust/i, /chain.*tension/i], max_months: 6, max_miles: 3000, min_miles: 600 },
+      // Valve clearance: ZX-10R 7,500 mi; R1 11,250 mi; CBR600RR 8,000 mi. 10k is a safe outer bound.
       { match: [/valve.*check/i, /valve.*clearance/i, /valve.*adjust/i, /valve.*inspection/i], max_months: 18, max_miles: 10000, min_miles: 3000 },
-      { match: [/tire.*inspect/i, /tire.*check/i, /tire.*wear/i, /tire.*pressure/i], max_months: 6, max_miles: 5000 },
-      { match: [/brake.*pad/i, /brake.*inspection/i], max_months: 12, max_miles: 15000 },
+      // Tire inspect: safety-critical; inspect at least every 3,000 mi or 3 months. More frequent than before.
+      { match: [/tire.*inspect/i, /tire.*check/i, /tire.*wear/i, /tire.*pressure/i], max_months: 3, max_miles: 3000 },
+      // Brake pad: ZX-10R/R1 say inspect every 3,750 mi. 8,000 mi is a conservative outer bound.
+      { match: [/brake.*pad/i, /brake.*inspection/i], max_months: 12, max_miles: 8000 },
+      // Spark plug: already tightened; sport bikes 7,500, standard/touring up to 16,000.
       { match: [/spark plug/i], max_months: 24, max_miles: 16000, min_miles: 3000 },
-      { match: [/air filter/i], max_months: 12, max_miles: 15000 },
-      { match: [/fork.*oil/i, /fork.*seal/i], max_months: 24, max_miles: 20000 },
+      // Air filter: ZX-10R/R1 say 7,500-10,000 mi. Cap at 10,000 mi conservatively.
+      { match: [/air filter/i], max_months: 12, max_miles: 10000 },
+      // Fork oil: most mfrs say 10,000-15,000 mi or 2 years. 15,000 mi is the outer bound.
+      { match: [/fork.*oil/i, /fork.*seal/i], max_months: 24, max_miles: 15000 },
     ];
     const CAR_TRUCK_CLAMPS: IntervalClamp[] = [
-      { match: [/brake.*fluid/i], max_months: 36, max_miles: 45000 },
-      { match: [/coolant/i], max_months: 60, max_miles: 100000 },
+      // Brake fluid: NHTSA recommends every 2 years. BMW/Mercedes/VW mandate 2 years regardless of miles.
+      { match: [/brake.*fluid/i], max_months: 24, max_miles: 30000 },
+      // Coolant: traditional green = 2 yr/30k mi; long-life OAT = 5 yr/150k. Cap at 3 yr/60k (conservative middle ground).
+      { match: [/coolant/i], max_months: 36, max_miles: 60000 },
+      // Oil: conventional = 3,000-5,000 mi / 6 mo. Already tightened last pass.
       { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 6, max_miles: 7500, min_miles: 3000 },
+      // Transmission fluid: most mfrs recommend 30,000-45,000 mi for conventional ATF/MTF.
       { match: [/transmission.*fluid/i], max_months: 36, max_miles: 45000 },
-      { match: [/brake.*pad/i, /brake.*inspection/i], max_months: 18, max_miles: 30000 },
-      { match: [/tire.*rotation/i], max_months: 12, max_miles: 10000, min_miles: 3000 },
-      { match: [/spark plug/i], max_months: 60, max_miles: 100000 },
-      { match: [/air filter/i], max_months: 24, max_miles: 30000 },
-      { match: [/cabin.*air.*filter/i], max_months: 18, max_miles: 20000 },
+      // Brake pad inspection: most mfrs say every 12,000-15,000 mi or annually. 20,000 mi cap is conservative.
+      { match: [/brake.*pad/i, /brake.*inspection/i], max_months: 12, max_miles: 20000 },
+      // Tire rotation: most mfrs say every 5,000-7,500 mi. Cap at 7,500 mi.
+      { match: [/tire.*rotation/i], max_months: 6, max_miles: 7500, min_miles: 3000 },
+      // Spark plug: copper = 10-30k mi; platinum = 30-60k mi; iridium = 60-100k mi. Cap at 60k for conservative mid-range.
+      { match: [/spark plug/i], max_months: 48, max_miles: 60000 },
+      // Air filter: most mfrs say 15,000-30,000 mi / 1-2 years. 20k mi / 2 yr is conservative.
+      { match: [/air filter/i], max_months: 24, max_miles: 20000 },
+      // Cabin filter: Honda/Toyota say 15,000-25,000 mi or annually. Cap at 15k mi / 12 mo.
+      { match: [/cabin.*air.*filter/i], max_months: 12, max_miles: 15000 },
+      // Wiper blades: universally recommended every 6-12 months.
       { match: [/wiper.*blade/i], max_months: 12 },
+      // Serpentine/drive belt: most mfrs say 60,000-90,000 mi or 5-7 years.
+      { match: [/serpentine.*belt/i, /drive.*belt/i, /accessory.*belt/i], max_months: 60, max_miles: 60000 },
+      // Timing belt: most mfrs (non-chain) say 60,000-90,000 mi or 6-10 years. Safety-critical.
+      { match: [/timing.*belt/i], max_months: 60, max_miles: 60000 },
+      // Battery: average lifespan 3-5 years. Test at 3 years is conservative.
+      { match: [/battery/i], max_months: 36 },
+      // Power steering fluid: most mfrs say 50,000-75,000 mi or 3-4 years.
+      { match: [/power.*steering.*fluid/i], max_months: 36, max_miles: 50000 },
+      // Differential/axle fluid: most mfrs say 30,000-50,000 mi.
+      { match: [/differential.*fluid/i, /axle.*fluid/i, /rear.*axle/i], max_months: 36, max_miles: 40000 },
     ];
     const BOAT_PWC_CLAMPS: IntervalClamp[] = [
+      // Engine oil: Mercury/Yamaha/Sea-Doo all say 100 hours or annually. This is firm.
       { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 12, max_hours: 100 },
-      { match: [/impeller/i], max_months: 24, max_hours: 300 },
-      { match: [/anode/i, /zinc/i], max_months: 12, max_hours: 200 },
-      { match: [/lower unit/i, /gear.*oil/i, /gear.*lube/i], max_months: 12, max_hours: 200 },
+      // Impeller: Sea-Doo says inspect every 100 hours; many sources say replace at 200 hours. Cap at 200 hr / 1 yr.
+      { match: [/impeller/i], max_months: 12, max_hours: 200 },
+      // Anodes/zincs: check every 50-100 hours in saltwater; annually minimum. Critical for corrosion prevention.
+      { match: [/anode/i, /zinc/i], max_months: 12, max_hours: 100 },
+      // Lower unit/gear oil: Mercury/Yamaha say every 100 hours or annually. 200 was double the spec.
+      { match: [/lower unit/i, /gear.*oil/i, /gear.*lube/i], max_months: 12, max_hours: 100 },
+      // Winterization: annual for cold-climate storage. Not hours-based.
       { match: [/winteriz/i], max_months: 12 },
-      { match: [/spark plug/i], max_months: 12, max_hours: 200 },
-      { match: [/fuel.*filter/i, /fuel.*water.*separator/i], max_months: 12, max_hours: 200 },
+      // Spark plug: Mercury/Yamaha say every 100 hours or annually.
+      { match: [/spark plug/i], max_months: 12, max_hours: 100 },
+      // Fuel filter/water separator: most mfrs say every 100 hours or annually.
+      { match: [/fuel.*filter/i, /fuel.*water.*separator/i], max_months: 12, max_hours: 100 },
+      // Coolant (inboard): most inboard engines say every 2 years / 300-500 hours.
+      { match: [/coolant/i], max_months: 24, max_hours: 300 },
+      // Belts/drive belts (inboard): inspect annually or every 200 hours.
+      { match: [/belt/i], max_months: 12, max_hours: 200 },
     ];
 
     const SMALL_EQUIPMENT_CLAMPS: IntervalClamp[] = [
-      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 12, max_hours: 50, min_hours: 20 },
-      { match: [/air filter/i], max_months: 12, max_hours: 100, min_hours: 25 },
-      { match: [/spark plug/i], max_months: 24, max_hours: 200 },
-      { match: [/fuel.*filter/i, /fuel.*system/i], max_months: 12, max_hours: 100 },
-      { match: [/blade/i, /cutting/i, /chain.*sharpen/i], max_months: 6, max_hours: 50 },
-      { match: [/grease/i, /lubric/i], max_months: 6, max_hours: 50 },
+      // Engine oil: Briggs & Stratton says every 25 hours; Honda small engines say 50 hours. Use 25 for safety-first.
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 12, max_hours: 25, min_hours: 10 },
+      // Air filter: B&S says clean every 25 hr, replace every 100 hr. 50 hr is a safe inspection interval.
+      { match: [/air filter/i], max_months: 12, max_hours: 50, min_hours: 15 },
+      // Spark plug: B&S and Honda both say replace every 100 hours or annually. 200 hours was double.
+      { match: [/spark plug/i], max_months: 12, max_hours: 100 },
+      // Fuel filter: B&S says replace annually or every 50 hours.
+      { match: [/fuel.*filter/i, /fuel.*system/i], max_months: 12, max_hours: 50 },
+      // Blade/cutting edge: most manufacturers say sharpen every 25 hours or inspect each season.
+      { match: [/blade/i, /cutting/i, /chain.*sharpen/i], max_months: 6, max_hours: 25 },
+      // Lubrication: grease points every 25 hours per most manuals.
+      { match: [/grease/i, /lubric/i], max_months: 3, max_hours: 25 },
     ];
 
     const HEAVY_EQUIPMENT_CLAMPS: IntervalClamp[] = [
+      // Engine oil: Caterpillar/Komatsu both say 250 hours. John Deere says 500 hr with premium oil; use 250 for safety.
       { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 6, max_hours: 250, min_hours: 100 },
-      { match: [/hydraulic.*filter/i, /hydraulic.*fluid/i, /hydraulic.*service/i], max_months: 12, max_hours: 1000 },
+      // Hydraulic filter: Cat says hydraulic filter every 500 hours. 1,000 was for full fluid change — split these.
+      { match: [/hydraulic.*filter/i, /hydraulic.*fluid/i, /hydraulic.*service/i], max_months: 12, max_hours: 500 },
+      // Air filter: Cat/Komatsu say every 500 hours. Dust conditions can require much sooner.
       { match: [/air filter/i], max_months: 6, max_hours: 500 },
+      // Fuel filter: Cat primary filter every 500 hours.
       { match: [/fuel.*filter/i], max_months: 6, max_hours: 500 },
-      { match: [/coolant/i], max_months: 24, max_hours: 3000 },
+      // Coolant: Cat SCA-treated coolant = 1,500 hr/12 mo; ELC = 6,000 hr/3 yr. Use conservative SCA spec.
+      { match: [/coolant/i], max_months: 24, max_hours: 1500 },
+      // Transmission fluid: Cat says every 1,000 hours.
       { match: [/transmission.*fluid/i, /transmission.*filter/i], max_months: 12, max_hours: 1000 },
+      // Grease: Cat says 10 hours for most fittings. Monthly max is already tight.
       { match: [/grease/i, /lubric/i], max_months: 1, max_hours: 50, min_hours: 8 },
-      { match: [/track.*tension/i, /track.*inspect/i, /undercarriage/i], max_months: 6, max_hours: 500 },
+      // Track tension/undercarriage: Cat recommends thorough inspection every 250 hours. Visual checks more often.
+      { match: [/track.*tension/i, /track.*inspect/i, /undercarriage/i], max_months: 6, max_hours: 250 },
+      // Final drive/travel motor oil: Cat says every 1,000 hours.
+      { match: [/final.*drive/i, /travel.*motor/i, /swing.*drive/i], max_months: 12, max_hours: 1000 },
     ];
 
     const MOTORCYCLE_REQUIRED: RequiredTask[] = [
@@ -435,13 +493,13 @@ serve(async (req: Request) => {
     ];
     const CAR_TRUCK_REQUIRED: RequiredTask[] = [
       { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], task: "Engine Oil & Filter Change", description: "Change engine oil and replace oil filter", category: "Engine", interval_miles: 5000, interval_hours: null, interval_months: 6, priority: "high" },
-      { match: [/brake.*fluid/i], task: "Brake Fluid Flush", description: "Replace brake fluid", category: "Brakes", interval_miles: null, interval_hours: null, interval_months: 30, priority: "high" },
+      { match: [/brake.*fluid/i], task: "Brake Fluid Flush", description: "Replace brake fluid", category: "Brakes", interval_miles: null, interval_hours: null, interval_months: 24, priority: "high" },
       { match: [/brake.*pad/i, /brake.*inspection/i], task: "Brake Pad Inspection", description: "Inspect brake pads and rotors for wear", category: "Brakes", interval_miles: 20000, interval_hours: null, interval_months: 12, priority: "high" },
       { match: [/tire.*rotation/i], task: "Tire Rotation", description: "Rotate tires for even wear", category: "Tires", interval_miles: 7500, interval_hours: null, interval_months: 6, priority: "medium" },
     ];
     const BOAT_PWC_REQUIRED: RequiredTask[] = [
       { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], task: "Engine Oil & Filter Change", description: "Change engine oil and replace oil filter", category: "Engine", interval_miles: null, interval_hours: 100, interval_months: 12, priority: "high" },
-      { match: [/impeller/i], task: "Impeller Inspection / Replacement", description: "Inspect and replace water pump impeller", category: "Cooling", interval_miles: null, interval_hours: 200, interval_months: 12, priority: "high" },
+      { match: [/impeller/i], task: "Impeller Inspection / Replacement", description: "Inspect and replace water pump impeller", category: "Cooling", interval_miles: null, interval_hours: 100, interval_months: 12, priority: "high" },
       { match: [/lower unit/i, /gear.*oil/i, /gear.*lube/i], task: "Lower Unit Gear Oil Change", description: "Change lower unit gear oil and check for water intrusion", category: "Drivetrain", interval_miles: null, interval_hours: 100, interval_months: 12, priority: "high" },
       { match: [/winteriz/i], task: "Winterization", description: "Full winterization including fuel stabilizer, fog engine, drain water systems", category: "Seasonal", interval_miles: null, interval_hours: null, interval_months: 12, priority: "high" },
     ];
@@ -449,7 +507,7 @@ serve(async (req: Request) => {
     const SMALL_EQUIPMENT_REQUIRED: RequiredTask[] = [
       { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], task: "Engine Oil Change", description: "Change engine oil per manufacturer spec", category: "Engine", interval_miles: null, interval_hours: 25, interval_months: 12, priority: "high" },
       { match: [/air filter/i], task: "Air Filter Service", description: "Clean or replace air filter", category: "Engine", interval_miles: null, interval_hours: 50, interval_months: 12, priority: "medium" },
-      { match: [/spark plug/i], task: "Spark Plug Replacement", description: "Replace spark plug per manufacturer interval", category: "Engine", interval_miles: null, interval_hours: 100, interval_months: 24, priority: "medium" },
+      { match: [/spark plug/i], task: "Spark Plug Replacement", description: "Replace spark plug per manufacturer interval", category: "Engine", interval_miles: null, interval_hours: 100, interval_months: 12, priority: "medium" },
     ];
 
     const HEAVY_EQUIPMENT_REQUIRED: RequiredTask[] = [
