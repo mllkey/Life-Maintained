@@ -293,9 +293,16 @@ export default function SettingsScreen() {
                   try {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                     if (!user) return;
-                    await supabase.rpc("delete_user_account", { user_id: user.id }).maybeSingle();
-                    await supabase.auth.signOut();
+                    const { data: { session } } = await supabase.auth.getSession();
+                    const { data, error } = await supabase.functions.invoke("delete-account", {
+                      headers: { Authorization: `Bearer ${session?.access_token}` },
+                    });
+                    if (error || !data?.success) {
+                      throw new Error(data?.error ?? error?.message ?? "Something went wrong.");
+                    }
+                    await AsyncStorage.clear();
                     queryClient.clear();
+                    await supabase.auth.signOut();
                     router.replace("/(auth)");
                   } catch (err: any) {
                     isDeletingAccountRef.current = false;
