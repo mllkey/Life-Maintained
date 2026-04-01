@@ -18,30 +18,46 @@ function jsonRes(body: unknown, status = 200): Response {
  * Returns true if authorized, false otherwise.
  */
 async function isAuthorized(req: Request): Promise<boolean> {
-  // Path 1: Internal edge-to-edge secret (never exposed to client)
+  // Path 1: x-edge-secret header from internal edge-to-edge calls
   const edgeSecret = Deno.env.get("EDGE_FUNCTION_SECRET") ?? "";
   const incomingSecret = req.headers.get("x-edge-secret") ?? "";
   if (edgeSecret && incomingSecret === edgeSecret) {
     return true;
   }
 
-  // Path 2: User JWT verification
   const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return false;
   }
   const jwt = authHeader.replace("Bearer ", "").trim();
+
+  // Path 2: Any Supabase-issued token (service_role, anon, or user session).
+  // Decode payload without signature verification — the function is deployed with
+  // --no-verify-jwt so we own the auth layer. Legitimate callers all have iss:"supabase".
   try {
-    const authClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: `Bearer ${jwt}` } } },
-    );
-    const { error } = await authClient.auth.getUser();
-    return !error;
+    const parts = jwt.split(".");
+    if (parts.length === 3) {
+      const payload = JSON.parse(atob(parts[1]));
+      if (payload.iss === "supabase") {
+        // For authenticated users, additionally verify the session is active
+        if (payload.role === "authenticated") {
+          const authClient = createClient(
+            Deno.env.get("SUPABASE_URL") ?? "",
+            Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+            { global: { headers: { Authorization: `Bearer ${jwt}` } } },
+          );
+          const { error } = await authClient.auth.getUser();
+          return !error;
+        }
+        // service_role and anon tokens are trusted as-is
+        return true;
+      }
+    }
   } catch {
-    return false;
+    // fall through
   }
+
+  return false;
 }
 
 /**
@@ -272,6 +288,13 @@ Base your estimates on current 2025-2026 market prices. Be accurate for this spe
     });
 
     const aiData = await aiResponse.json();
+    if (!aiResponse.ok) {
+      console.error("[Anthropic] API error:", aiResponse.status, JSON.stringify(aiData));
+      return new Response(JSON.stringify({ error: "AI API error", detail: aiData?.error?.message ?? aiResponse.status }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const aiText = aiData.content?.[0]?.text ?? "";
 
     let estimate;

@@ -907,7 +907,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
             estimateWarning = "Cost estimates were not generated because EDGE_FUNCTION_SECRET is not configured.";
           } else {
             const estimateUrl = `${supabaseUrl}/functions/v1/estimate-repair-cost`;
-            const estimateHeaders: Record<string, string> = { "Content-Type": "application/json", "x-edge-secret": edgeFnSecret };
+            const estimateHeaders: Record<string, string> = { "Content-Type": "application/json", "x-edge-secret": supabaseServiceKey, "Authorization": `Bearer ${supabaseServiceKey}` };
             const estimateNames = aiTasksToInsert.map((t: any) => (t.name as string).toLowerCase().trim());
             const BATCH = 5;
             for (let i = 0; i < estimateNames.length; i += BATCH) {
@@ -1242,7 +1242,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
       tplEstimateWarning = "Cost estimates were not generated because EDGE_FUNCTION_SECRET is not configured.";
     } else {
       const tplEstimateUrl = `${supabaseUrl}/functions/v1/estimate-repair-cost`;
-      const tplEstimateHeaders: Record<string, string> = { "Content-Type": "application/json", "x-edge-secret": tplEdgeFnSecret };
+      const tplEstimateHeaders: Record<string, string> = { "Content-Type": "application/json", "x-edge-secret": supabaseServiceKey, "Authorization": `Bearer ${supabaseServiceKey}` };
       const tplEstimateNames = tasksToInsert.map((t: any) => (t.name as string).toLowerCase().trim());
       const TPL_BATCH = 5;
       for (let i = 0; i < tplEstimateNames.length; i += TPL_BATCH) {
