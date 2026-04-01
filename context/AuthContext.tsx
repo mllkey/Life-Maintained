@@ -289,8 +289,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Auth actions ──────────────────────────────────────────────────────
 
   async function signUp(email: string, password: string) {
-    const { error } = await supabase.auth.signUp({ email, password });
-    return { error };
+    const { error, data } = await supabase.auth.signUp({ email, password });
+    return { error, data };
   }
 
   async function signIn(email: string, password: string) {

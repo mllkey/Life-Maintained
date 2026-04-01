@@ -44,15 +44,19 @@ export default function SignUpScreen() {
     }
     setIsLoading(true);
     setError(null);
-    const { error } = await signUp(email.trim(), password);
+    const { error, data } = await signUp(email.trim(), password);
     if (error) {
       setIsLoading(false);
       setError(error.message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } else {
+    } else if (data?.session) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Keep isLoading true — the Supabase auth listener will fire SIGNED_IN,
-      // update user state, and the root routing guard will redirect automatically.
+      // Session created immediately (email confirmation off) — auth listener will navigate
+    } else {
+      // No session — email confirmation is required
+      setIsLoading(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setError("Check your email to confirm your account, then come back and sign in.");
     }
   }
 
