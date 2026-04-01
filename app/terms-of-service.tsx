@@ -35,35 +35,39 @@ const SECTIONS = [
     body: "You retain ownership of content you submit. You grant LifeMaintained a limited license to use it solely to operate, maintain, and improve the Service.",
   },
   {
-    title: "8. Prohibited Use",
+    title: "8. DMCA and Copyright",
+    body: "If you believe content on the Service infringes your copyright, you may submit a notice to our designated agent at support@lifemaintained.com. Your notice must include: identification of the copyrighted work, identification of the infringing material, your contact information, a statement of good faith belief that the use is unauthorized, a statement under penalty of perjury that the information is accurate, and your physical or electronic signature. We will respond to valid notices in accordance with the Digital Millennium Copyright Act.",
+  },
+  {
+    title: "9. Prohibited Use",
     body: "You may not use the Service for unlawful activity, attempt to reverse engineer or disrupt the Service, or access or scrape data without authorization.",
   },
   {
-    title: "9. Limitation of Liability",
+    title: "10. Limitation of Liability",
     body: "To the maximum extent permitted by law, LifeMaintained is not liable for indirect, incidental, or consequential damages. This includes damages resulting from missed maintenance, incorrect schedules, or inaccurate estimates. Total liability is limited to the amount you paid for the Service in the past 12 months.",
   },
   {
-    title: "10. Indemnification",
+    title: "11. Indemnification",
     body: "You agree to indemnify and hold harmless LifeMaintained from any claims arising from your use of the Service, violation of these Terms, or reliance on Service outputs.",
   },
   {
-    title: "11. Dispute Resolution",
+    title: "12. Dispute Resolution",
     body: "Any dispute arising from or relating to these Terms or the Service shall be resolved through binding individual arbitration administered under the rules of the American Arbitration Association, except where prohibited by law. You agree to waive any right to participate in a class action lawsuit or class-wide arbitration. Either party may bring claims in small claims court as an alternative to arbitration. This section does not prevent you from bringing issues to the attention of government agencies.",
   },
   {
-    title: "12. Termination",
+    title: "13. Termination",
     body: "We may suspend or terminate access for violations, abuse, or legal reasons. You may stop using the Service at any time.",
   },
   {
-    title: "13. Changes to Terms",
+    title: "14. Changes to Terms",
     body: "We may update these Terms. Continued use after updates constitutes acceptance.",
   },
   {
-    title: "14. Governing Law",
+    title: "15. Governing Law",
     body: "These Terms are governed by the laws of the State of Illinois.",
   },
   {
-    title: "15. Contact",
+    title: "16. Contact",
     body: "support@lifemaintained.com",
   },
 ];

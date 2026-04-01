@@ -31,23 +31,27 @@ const SECTIONS = [
     body: "We retain your data until you delete your account. Some data may be retained temporarily in backups or logs for security, fraud prevention, or legal compliance.",
   },
   {
-    title: "7. Your Rights",
+    title: "7. Data Breach Notification",
+    body: "In the event of a data breach that compromises your personal information, we will notify affected users via email within 72 hours of becoming aware of the breach. We will also post a notice within the app. The notification will describe the nature of the breach, the types of data affected, and the steps we are taking to address it. If you have questions about a potential breach, contact us at support@lifemaintained.com.",
+  },
+  {
+    title: "8. Your Rights",
     body: "You may access your data, update or correct certain information within the app (subject to system constraints designed to maintain data integrity — for example, mileage values may not be reduced once recorded), delete your account and associated data, and request data export where available.",
   },
   {
-    title: "8. International Data Transfers",
+    title: "9. International Data Transfers",
     body: "Your data may be processed in countries outside your own.",
   },
   {
-    title: "9. Children's Privacy",
+    title: "10. Children's Privacy",
     body: "The Service is not intended for children under 13.",
   },
   {
-    title: "10. Changes to This Policy",
+    title: "11. Changes to This Policy",
     body: "We may update this policy. Continued use after updates constitutes acceptance.",
   },
   {
-    title: "11. Contact",
+    title: "12. Contact",
     body: "support@lifemaintained.com",
   },
 ];
