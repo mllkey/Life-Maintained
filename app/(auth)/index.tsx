@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -21,7 +21,13 @@ import * as Haptics from "expo-haptics";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { signIn } = useAuth();
+  const { signIn, session, profileLoaded } = useAuth();
+
+  useEffect(() => {
+    if (session && profileLoaded) {
+      router.replace("/");
+    }
+  }, [session, profileLoaded]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
