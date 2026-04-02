@@ -22,7 +22,7 @@ interface AuthContextValue {
   profileLoaded: boolean;
   profile: Profile | null;
   refreshProfile: () => Promise<void>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: Error | null; data?: any }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   onboardingCompleted: boolean;
@@ -166,12 +166,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Read onboarding cache before network to prevent flicker
       const cachedOnboarding = await readOnboardingCache();
-      if (!mountedRef.current || hydrateRunIdRef.current !== runId) return;
+      if (!mountedRef.current || hydrateRunIdRef.current !== runId) {
+        // Another hydration preempted us — still reset isLoading if we set it
+        if (showLoading && mountedRef.current) setIsLoading(false);
+        return;
+      }
       if (cachedOnboarding) setOnboardingCompleted(true);
 
       try {
         const fullProfile = await fetchProfileFromDb(nextSession.user.id);
-        if (!mountedRef.current || hydrateRunIdRef.current !== runId) return;
+        if (!mountedRef.current || hydrateRunIdRef.current !== runId) {
+          if (showLoading && mountedRef.current) setIsLoading(false);
+          return;
+        }
 
         if (fullProfile) {
           setProfile(fullProfile);
@@ -191,7 +198,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfileLoaded(true);
       } catch (e) {
         console.error("[AUTH] hydrateFromSession profile fetch failed:", e);
-        if (!mountedRef.current || hydrateRunIdRef.current !== runId) return;
+        if (!mountedRef.current || hydrateRunIdRef.current !== runId) {
+          if (showLoading && mountedRef.current) setIsLoading(false);
+          return;
+        }
         // Don't force onboarding=false on transient failures — keep cache value
         if (cachedOnboarding) setOnboardingCompleted(true);
         setProfileLoaded(true);
