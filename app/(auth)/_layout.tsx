@@ -1,32 +1,24 @@
-import React, { useEffect, useRef } from "react";
-import { Stack, router } from "expo-router";
-import { Colors } from "@/constants/colors";
+import React from "react";
+import { Stack, router, useSegments } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 
 export default function AuthLayout() {
   const { session, profileLoaded } = useAuth();
-  const navigatedRef = useRef(false);
+  const segments = useSegments();
 
-  useEffect(() => {
-    if (!session) {
-      navigatedRef.current = false;
-    } else if (profileLoaded && !navigatedRef.current) {
-      navigatedRef.current = true;
+  React.useEffect(() => {
+    const inAuthGroup = segments[0] === "(auth)";
+
+    if (inAuthGroup && session && profileLoaded) {
       router.replace("/");
     }
-  }, [session, profileLoaded]);
+  }, [segments, session, profileLoaded]);
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: Colors.background },
-        animation: "slide_from_right",
-      }}
-    >
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="signup" />
-      <Stack.Screen name="verify" />
+      <Stack.Screen name="forgot-password" />
     </Stack>
   );
 }
