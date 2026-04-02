@@ -300,11 +300,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signUp(email: string, password: string) {
     const { error, data } = await supabase.auth.signUp({ email, password });
+    if (!error && data?.session && data?.user) {
+      // Poll for profile row (DB trigger may not fire instantly)
+      for (let i = 0; i < 5; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        const { data: profileRow } = await supabase
+          .from("profiles")
+          .select("user_id")
+          .eq("user_id", data.user.id)
+          .maybeSingle();
+        if (profileRow) break;
+      }
+      hydrateFromSession(data.session, { showLoading: false }).catch((e) => {
+        console.error("[AUTH] signUp hydrate failed:", e);
+      });
+    }
     return { error, data };
   }
 
   async function signIn(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error, data } = await supabase.auth.signInWithPassword({ email, password });
+    if (!error && data?.session) {
+      hydrateFromSession(data.session, { showLoading: false }).catch((e) => {
+        console.error("[AUTH] signIn hydrate failed:", e);
+      });
+    }
     return { error };
   }
 
