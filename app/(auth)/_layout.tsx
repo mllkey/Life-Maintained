@@ -3,16 +3,19 @@ import { Stack, router, useSegments } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 
 export default function AuthLayout() {
-  const { session, profileLoaded } = useAuth();
+  const { session, isLoading, profileLoaded, onboardingCompleted } = useAuth();
   const segments = useSegments();
 
   React.useEffect(() => {
     const inAuthGroup = segments[0] === "(auth)";
 
-    if (inAuthGroup && session && profileLoaded) {
-      router.replace("/");
-    }
-  }, [segments, session, profileLoaded]);
+    if (!inAuthGroup) return;
+    if (!session) return;
+    if (isLoading) return;
+    if (!profileLoaded) return;
+
+    router.replace(onboardingCompleted ? "/(tabs)" : "/(onboarding)");
+  }, [segments, session, isLoading, profileLoaded, onboardingCompleted]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

@@ -55,28 +55,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionRef.current = session;
   }, [session]);
 
-  // ── Onboarding cache helpers ──────────────────────────────────────────
-
   const setOnboardingCacheTrue = useCallback(async () => {
-    try { await AsyncStorage.setItem(ONBOARDING_KEY, "true"); } catch {}
+    try {
+      await AsyncStorage.setItem(ONBOARDING_KEY, "true");
+    } catch {}
   }, []);
 
   const clearOnboardingCache = useCallback(async () => {
-    try { await AsyncStorage.removeItem(ONBOARDING_KEY); } catch {}
+    try {
+      await AsyncStorage.removeItem(ONBOARDING_KEY);
+    } catch {}
   }, []);
 
   const readOnboardingCache = useCallback(async (): Promise<boolean> => {
     try {
       const cached = await AsyncStorage.getItem(ONBOARDING_KEY);
       return cached === "true";
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   }, []);
-
-  // ── Signed-out state ──────────────────────────────────────────────────
 
   const applySignedOutState = useCallback(() => {
     if (!mountedRef.current) return;
+
+    hydrateRunIdRef.current += 1;
     userIdRef.current = null;
+    sessionRef.current = null;
+
     setSession(null);
     setProfile(null);
     setOnboardingCompleted(false);
@@ -84,26 +90,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  // ── Profile builder ───────────────────────────────────────────────────
-
-  const buildProfile = useCallback((userId: string, p: any): Profile => ({
-    user_id: userId,
-    onboarding_completed: p?.onboarding_completed ?? false,
-    subscription_tier: p?.subscription_tier ?? "trial",
-    trial_started_at: p?.trial_started_at ?? null,
-    trial_expires_at: p?.trial_expires_at ?? null,
-    subscription_expires_at: p?.subscription_expires_at ?? null,
-    revenuecat_customer_id: p?.revenuecat_customer_id ?? null,
-    push_token: p?.push_token ?? null,
-    monthly_scan_count: p?.monthly_scan_count ?? 0,
-    scan_count_reset_at: p?.scan_count_reset_at ?? null,
-  }), []);
-
-  // ── Deduplicated profile fetch ────────────────────────────────────────
+  const buildProfile = useCallback(
+    (userId: string, p: any): Profile => ({
+      user_id: userId,
+      onboarding_completed: p?.onboarding_completed ?? false,
+      subscription_tier: p?.subscription_tier ?? "trial",
+      trial_started_at: p?.trial_started_at ?? null,
+      trial_expires_at: p?.trial_expires_at ?? null,
+      subscription_expires_at: p?.subscription_expires_at ?? null,
+      revenuecat_customer_id: p?.revenuecat_customer_id ?? null,
+      push_token: p?.push_token ?? null,
+      monthly_scan_count: p?.monthly_scan_count ?? 0,
+      scan_count_reset_at: p?.scan_count_reset_at ?? null,
+    }),
+    []
+  );
 
   const fetchProfileFromDb = useCallback(
     async (userId: string, attempt = 0): Promise<Profile | null> => {
-      // If there's already an in-flight fetch for the same user, reuse it
       if (profileFetchPromiseRef.current && profileFetchUserIdRef.current === userId) {
         return profileFetchPromiseRef.current;
       }
@@ -118,11 +122,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (error) throw error;
           if (!data) return null;
+
           return buildProfile(userId, data);
         } catch (error: any) {
           if (attempt === 0) {
-            // Token may have been mid-refresh — force a session check then retry
-            try { await supabase.auth.getSession(); } catch {}
+            try {
+              await supabase.auth.getSession();
+            } catch {}
             await new Promise((r) => setTimeout(r, 500));
             return fetchProfileFromDb(userId, 1);
           }
@@ -142,15 +148,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [buildProfile],
+    [buildProfile]
   );
-
-  // ── Core hydration: session → profile → routing state ─────────────────
 
   const hydrateFromSession = useCallback(
     async (
       nextSession: Session,
-      options?: { showLoading?: boolean; quiet?: boolean },
+      options?: { showLoading?: boolean; quiet?: boolean }
     ) => {
       const showLoading = options?.showLoading ?? true;
       const quiet = options?.quiet ?? false;
@@ -158,23 +162,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!mountedRef.current) return;
 
+      sessionRef.current = nextSession;
       setSession(nextSession);
       userIdRef.current = nextSession.user.id;
 
       if (showLoading) setIsLoading(true);
       if (!quiet) setProfileLoaded(false);
 
-      // Read onboarding cache before network to prevent flicker
       const cachedOnboarding = await readOnboardingCache();
+
       if (!mountedRef.current || hydrateRunIdRef.current !== runId) {
-        // Another hydration preempted us — still reset isLoading if we set it
         if (showLoading && mountedRef.current) setIsLoading(false);
         return;
       }
+
       if (cachedOnboarding) setOnboardingCompleted(true);
 
       try {
         const fullProfile = await fetchProfileFromDb(nextSession.user.id);
+
         if (!mountedRef.current || hydrateRunIdRef.current !== runId) {
           if (showLoading && mountedRef.current) setIsLoading(false);
           return;
@@ -182,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (fullProfile) {
           setProfile(fullProfile);
+
           if (fullProfile.onboarding_completed) {
             setOnboardingCompleted(true);
             setOnboardingCacheTrue().catch(() => {});
@@ -189,20 +196,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setOnboardingCompleted(false);
             clearOnboardingCache().catch(() => {});
           }
+
           checkAndResetScanCount(nextSession.user.id, fullProfile).catch(() => {});
         } else {
-          // No profile row yet — respect cache if it exists
           setProfile(null);
           setOnboardingCompleted(cachedOnboarding);
         }
+
         setProfileLoaded(true);
       } catch (e) {
         console.error("[AUTH] hydrateFromSession profile fetch failed:", e);
+
         if (!mountedRef.current || hydrateRunIdRef.current !== runId) {
           if (showLoading && mountedRef.current) setIsLoading(false);
           return;
         }
-        // Don't force onboarding=false on transient failures — keep cache value
+
         if (cachedOnboarding) setOnboardingCompleted(true);
         setProfileLoaded(true);
       } finally {
@@ -211,17 +220,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [clearOnboardingCache, fetchProfileFromDb, readOnboardingCache, setOnboardingCacheTrue],
+    [clearOnboardingCache, fetchProfileFromDb, readOnboardingCache, setOnboardingCacheTrue]
   );
 
-  // ── Public refresh ────────────────────────────────────────────────────
-
   const refreshProfile = useCallback(async () => {
-    if (!userIdRef.current || !session) return;
-    await hydrateFromSession(session, { showLoading: false, quiet: true });
-  }, [hydrateFromSession, session]);
-
-  // ── Bootstrap + auth listener + app state ─────────────────────────────
+    if (!userIdRef.current || !sessionRef.current) return;
+    await hydrateFromSession(sessionRef.current, { showLoading: false, quiet: true });
+  }, [hydrateFromSession]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -229,7 +234,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const bootstrap = async () => {
       try {
         setIsLoading(true);
-        const { data: { session: existingSession } } = await supabase.auth.getSession();
+
+        const {
+          data: { session: existingSession },
+        } = await supabase.auth.getSession();
+
         if (!mountedRef.current) return;
 
         if (existingSession?.user) {
@@ -245,11 +254,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!mountedRef.current) return;
 
-      // We bootstrap from getSession() ourselves.
-      // Ignoring INITIAL_SESSION avoids routing off a transient/null initial event.
       if (event === "INITIAL_SESSION") return;
 
       if (event === "SIGNED_OUT") {
@@ -258,12 +267,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!nextSession?.user) {
-        applySignedOutState();
         return;
       }
 
       if (event === "SIGNED_IN") {
-        hydrateFromSession(nextSession, { showLoading: true, quiet: false }).catch((e) => {
+        hydrateFromSession(nextSession, { showLoading: false, quiet: false }).catch((e) => {
           console.error("[AUTH] SIGNED_IN hydrate failed:", e);
         });
         return;
@@ -279,6 +287,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const appStateSub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
       const prev = appStateRef.current;
       appStateRef.current = nextState;
+
       const currentSession = sessionRef.current;
       if (nextState === "active" && prev !== "active" && currentSession?.user) {
         hydrateFromSession(currentSession, { showLoading: false, quiet: true }).catch((e) => {
@@ -296,64 +305,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [applySignedOutState, hydrateFromSession]);
 
-  // ── Auth actions ──────────────────────────────────────────────────────
-
   async function signUp(email: string, password: string) {
     const { error, data } = await supabase.auth.signUp({ email, password });
-    if (!error && data?.session && data?.user) {
-      // Poll for profile row (DB trigger may not fire instantly)
-      for (let i = 0; i < 5; i++) {
-        await new Promise((r) => setTimeout(r, 500));
-        const { data: profileRow } = await supabase
-          .from("profiles")
-          .select("user_id")
-          .eq("user_id", data.user.id)
-          .maybeSingle();
-        if (profileRow) break;
-      }
-      hydrateFromSession(data.session, { showLoading: false }).catch((e) => {
-        console.error("[AUTH] signUp hydrate failed:", e);
-      });
-    }
     return { error, data };
   }
 
   async function signIn(email: string, password: string) {
-    const { error, data } = await supabase.auth.signInWithPassword({ email, password });
-    if (!error && data?.session) {
-      hydrateFromSession(data.session, { showLoading: false }).catch((e) => {
-        console.error("[AUTH] signIn hydrate failed:", e);
-      });
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
   }
 
   async function signOut() {
     await clearOnboardingCache();
+
+    hydrateRunIdRef.current += 1;
     userIdRef.current = null;
+    sessionRef.current = null;
+
     setProfile(null);
     setOnboardingCompleted(false);
     setProfileLoaded(false);
     setSession(null);
+
     await supabase.auth.signOut();
     setIsLoading(false);
   }
 
-  // ── Context value ─────────────────────────────────────────────────────
-
-  const value = useMemo(() => ({
-    session,
-    user: session?.user ?? null,
-    isLoading,
-    profileLoaded,
-    profile,
-    refreshProfile,
-    signUp,
-    signIn,
-    signOut,
-    onboardingCompleted,
-    setOnboardingCompleted,
-  }), [session, isLoading, profileLoaded, profile, refreshProfile, onboardingCompleted]);
+  const value = useMemo(
+    () => ({
+      session,
+      user: session?.user ?? null,
+      isLoading,
+      profileLoaded,
+      profile,
+      refreshProfile,
+      signUp,
+      signIn,
+      signOut,
+      onboardingCompleted,
+      setOnboardingCompleted,
+    }),
+    [session, isLoading, profileLoaded, profile, refreshProfile, onboardingCompleted]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
