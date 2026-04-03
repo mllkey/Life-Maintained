@@ -47,6 +47,8 @@ export default function LogServiceScreen() {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
 
+  const scrollRef = useRef<any>(null);
+  const scrollOffset = useRef(0);
   const [showPaywall, setShowPaywall] = useState(false);
   const [showScanPack, setShowScanPack] = useState(false);
   const [task, setTask] = useState("");
@@ -389,6 +391,9 @@ export default function LogServiceScreen() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
+          onScroll={e => { scrollOffset.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={16}
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -560,6 +565,7 @@ export default function LogServiceScreen() {
                   value={date}
                   onChange={setDate}
                   maximumDate={new Date()}
+                  onClose={() => { const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}
                 />
               </Field>
               {vehicleData && (isMileageTracked(vehicleData) || isHoursTracked(vehicleData)) && usageMode !== "both" && (
@@ -648,18 +654,18 @@ export default function LogServiceScreen() {
         </ScrollView>
       </View>
       {showPaywall && (
-        <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
+        <Modal visible animationType="slide" onRequestClose={() => { setShowPaywall(false); const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}>
           <Paywall
             canDismiss
             subtitle="Upgrade to scan receipts with AI"
-            onDismiss={() => setShowPaywall(false)}
+            onDismiss={() => { setShowPaywall(false); const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}
           />
         </Modal>
       )}
       <ScanPackModal
         visible={showScanPack}
-        onClose={() => setShowScanPack(false)}
-        onSuccess={() => setShowScanPack(false)}
+        onClose={() => { setShowScanPack(false); const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}
+        onSuccess={() => { setShowScanPack(false); const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}
       />
     </KeyboardAvoidingView>
   );

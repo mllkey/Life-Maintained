@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -47,6 +47,8 @@ export default function AddPropertyTaskScreen() {
   const [nextDueDate, setNextDueDate] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<any>(null);
+  const scrollOffset = useRef(0);
 
   function applyTemplate(t: typeof TEMPLATE_TASKS[0]) {
     Haptics.selectionAsync();
@@ -110,7 +112,7 @@ export default function AddPropertyTaskScreen() {
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollRef} onScroll={e => { scrollOffset.current = e.nativeEvent.contentOffset.y; }} scrollEventThrottle={16} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {error && <View style={styles.errorBox}><Ionicons name="alert-circle" size={16} color={Colors.overdue} /><Text style={styles.errorText}>{error}</Text></View>}
 
           <View style={styles.section}>
@@ -179,6 +181,7 @@ export default function AddPropertyTaskScreen() {
                 onChange={setNextDueDate}
                 maximumDate={new Date(new Date().setFullYear(new Date().getFullYear() + 5))}
                 minimumDate={new Date()}
+                onClose={() => { const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}
               />
             </View>
           </View>

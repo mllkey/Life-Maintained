@@ -99,7 +99,7 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
           <View style={styles.titleIconWrap}>
             <Ionicons name="scan-outline" size={22} color={Colors.accent} />
           </View>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.title}>Need More Scans?</Text>
             <Text style={styles.subtitle}>You've used all your receipt scans for this month</Text>
           </View>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -64,6 +64,8 @@ export default function AddAppointmentScreen() {
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<any>(null);
+  const scrollOffset = useRef(0);
 
   const { data: familyMembers } = useQuery({
     queryKey: ["family_members", user?.id],
@@ -193,7 +195,7 @@ export default function AddAppointmentScreen() {
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollRef} onScroll={e => { scrollOffset.current = e.nativeEvent.contentOffset.y; }} scrollEventThrottle={16} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {error && <View style={styles.errorBox}><Ionicons name="alert-circle" size={16} color={Colors.overdue} /><Text style={styles.errorText}>{error}</Text></View>}
 
           <Section title="Appointment Type">
@@ -279,6 +281,7 @@ export default function AddAppointmentScreen() {
               onChange={setNextDueDate}
               maximumDate={new Date(new Date().setFullYear(new Date().getFullYear() + 5))}
               minimumDate={new Date()}
+              onClose={() => { const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}
             />
           </Section>
 
