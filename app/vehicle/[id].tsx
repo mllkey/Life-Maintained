@@ -750,12 +750,13 @@ export default function VehicleDetailScreen() {
     handleCloseMarkComplete();
 
     try {
-      const vehicleUsageUpdate =
-        usageNum != null
-          ? tracksHrs
-            ? supabase.from("vehicles").update({ hours: usageNum }).eq("id", id!)
-            : supabase.from("vehicles").update({ mileage: usageNum }).eq("id", id!)
-          : Promise.resolve({ error: null });
+      const currentVehicleReading = tracksHrs ? (vehicle.hours ?? 0) : (vehicle.mileage ?? 0);
+      const shouldUpdateVehicle = usageNum != null && usageNum > currentVehicleReading;
+      const vehicleUsageUpdate = shouldUpdateVehicle
+        ? tracksHrs
+          ? supabase.from("vehicles").update({ hours: usageNum, updated_at: now }).eq("id", id!)
+          : supabase.from("vehicles").update({ mileage: usageNum, updated_at: now }).eq("id", id!)
+        : Promise.resolve({ error: null });
 
       const [taskRes, vehicleRes] = await Promise.all([
         supabase.from("user_vehicle_maintenance_tasks").update({
@@ -789,6 +790,15 @@ export default function VehicleDetailScreen() {
       if (logErr) console.warn("[markComplete] maintenance_logs insert:", logErr.message);
 
       if (taskRes.error || vehicleRes.error) throw taskRes.error ?? vehicleRes.error;
+
+      if (shouldUpdateVehicle && !tracksHrs) {
+        supabase.from("vehicle_mileage_history").insert({
+          vehicle_id: id,
+          mileage: usageNum,
+          recorded_at: completeDate,
+          created_at: now,
+        }).then(({ error }) => { if (error) console.warn("[markComplete] mileage_history insert:", error.message); });
+      }
 
       queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
@@ -1861,7 +1871,7 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, isLast, c
           </Text>
         )}
         {costEstimate && !isCompleted && (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
             <Ionicons name="cash-outline" size={12} color={Colors.good} />
             <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
               {Number(costEstimate.shop_low) === 0 && Number(costEstimate.shop_high) === 0 ? "Free shop" : Number(costEstimate.shop_low) === Number(costEstimate.shop_high) ? `$${Number(costEstimate.shop_low)} shop` : `$${Number(costEstimate.shop_low)}-$${Number(costEstimate.shop_high)} shop`}
@@ -2264,7 +2274,7 @@ function MarkCompleteSheet({
           <View style={styles.sheetFields}>
             {(showMileage || tracksHours) && (
               <View style={styles.sheetField}>
-                <Text style={styles.sheetFieldLabel}>{tracksHours ? "Current Hours" : "Current Mileage"}</Text>
+                <Text style={styles.sheetFieldLabel}>{tracksHours ? "Hours at Service" : "Mileage at Service"}</Text>
                 <TextInput
                   style={styles.sheetInput}
                   value={mileage}

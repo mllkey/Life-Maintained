@@ -304,22 +304,28 @@ export default function LogServiceScreen() {
 
       const nowIso = new Date().toISOString();
       if (hoursVal != null) {
-        await supabase.from("vehicles").update({
-          hours: hoursVal,
-          updated_at: nowIso,
-        }).eq("id", vehicleId);
+        const currentHours = vehicleData?.hours ?? 0;
+        if (hoursVal > currentHours) {
+          await supabase.from("vehicles").update({
+            hours: hoursVal,
+            updated_at: nowIso,
+          }).eq("id", vehicleId);
+        }
       }
       if (milesVal != null) {
-        await supabase.from("vehicles").update({
-          mileage: milesVal,
-          updated_at: nowIso,
-        }).eq("id", vehicleId);
-        await supabase.from("vehicle_mileage_history").insert({
-          vehicle_id: vehicleId,
-          mileage: milesVal,
-          recorded_at: date || new Date().toISOString(),
-          created_at: new Date().toISOString(),
-        });
+        const currentMiles = vehicleData?.mileage ?? 0;
+        if (milesVal > currentMiles) {
+          await supabase.from("vehicles").update({
+            mileage: milesVal,
+            updated_at: nowIso,
+          }).eq("id", vehicleId);
+          await supabase.from("vehicle_mileage_history").insert({
+            vehicle_id: vehicleId,
+            mileage: milesVal,
+            recorded_at: date || new Date().toISOString(),
+            created_at: new Date().toISOString(),
+          });
+        }
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

@@ -288,21 +288,27 @@ function ConfirmCard({
 
       if (isVehicle && item.asset_id && mileage) {
         if (tracksHours) {
-          await supabase.from("vehicles").update({
-            hours: parseFloat(mileage),
-            updated_at: now,
-          }).eq("id", item.asset_id);
+          const currentHours = vehicleData?.hours ?? 0;
+          if (parseFloat(mileage) > currentHours) {
+            await supabase.from("vehicles").update({
+              hours: parseFloat(mileage),
+              updated_at: now,
+            }).eq("id", item.asset_id);
+          }
         } else {
-          await supabase.from("vehicles").update({
-            mileage: parseInt(mileage),
-            updated_at: now,
-          }).eq("id", item.asset_id);
-          await supabase.from("vehicle_mileage_history").insert({
-            vehicle_id: item.asset_id,
-            mileage: parseInt(mileage),
-            recorded_at: date || now,
-            created_at: now,
-          });
+          const currentMiles = vehicleData?.mileage ?? 0;
+          if (parseInt(mileage) > currentMiles) {
+            await supabase.from("vehicles").update({
+              mileage: parseInt(mileage),
+              updated_at: now,
+            }).eq("id", item.asset_id);
+            await supabase.from("vehicle_mileage_history").insert({
+              vehicle_id: item.asset_id,
+              mileage: parseInt(mileage),
+              recorded_at: date || now,
+              created_at: now,
+            });
+          }
         }
       }
 
