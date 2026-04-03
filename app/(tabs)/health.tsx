@@ -290,8 +290,15 @@ export default function HealthScreen() {
     setIsSavingComplete(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    const intervalMonths = appt.interval_months ?? 12;
-    const nextDate = format(addMonths(parseISO(completeDate), intervalMonths), "yyyy-MM-dd");
+    let nextDate: string;
+    if (appt.interval_type === "weekly") {
+      nextDate = format(addDays(parseISO(completeDate), 7), "yyyy-MM-dd");
+    } else if (appt.interval_type === "biweekly") {
+      nextDate = format(addDays(parseISO(completeDate), 14), "yyyy-MM-dd");
+    } else {
+      const intervalMonths = appt.interval_months ?? 12;
+      nextDate = format(addMonths(parseISO(completeDate), intervalMonths), "yyyy-MM-dd");
+    }
     const now = new Date().toISOString();
     const completedAt = new Date(completeDate + "T12:00:00").toISOString();
 

@@ -39,7 +39,11 @@ const APPOINTMENT_TYPES = [
   "Other",
 ];
 
-const INTERVALS = [
+type IntervalValue = number | "weekly" | "biweekly";
+
+const INTERVALS: { value: IntervalValue; label: string }[] = [
+  { value: "weekly", label: "Weekly" },
+  { value: "biweekly", label: "Every 2 weeks" },
   { value: 1, label: "Monthly" },
   { value: 3, label: "Quarterly" },
   { value: 6, label: "Every 6 months" },
@@ -58,7 +62,7 @@ export default function AddAppointmentScreen() {
 
   const [appointmentType, setAppointmentType] = useState("");
   const [providerName, setProviderName] = useState("");
-  const [intervalMonths, setIntervalMonths] = useState(12);
+  const [intervalSelection, setIntervalSelection] = useState<IntervalValue>(12);
   const [nextDueDate, setNextDueDate] = useState("");
   const [familyMemberId, setFamilyMemberId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
@@ -152,12 +156,21 @@ export default function AddAppointmentScreen() {
     setIsLoading(true);
     setError(null);
 
+    const intervalMonths = typeof intervalSelection === "number" ? intervalSelection : null;
+    const intervalType = typeof intervalSelection === "string" ? intervalSelection : null;
+
     let nextDate: string | null = null;
     if (nextDueDate && nextDueDate.length === 10) {
       nextDate = nextDueDate;
     } else {
       const next = new Date();
-      next.setMonth(next.getMonth() + intervalMonths);
+      if (intervalSelection === "weekly") {
+        next.setDate(next.getDate() + 7);
+      } else if (intervalSelection === "biweekly") {
+        next.setDate(next.getDate() + 14);
+      } else {
+        next.setMonth(next.getMonth() + intervalSelection);
+      }
       nextDate = next.toISOString().split("T")[0];
     }
 
@@ -167,6 +180,7 @@ export default function AddAppointmentScreen() {
       appointment_type: appointmentType.trim(),
       provider_name: providerName.trim() || null,
       interval_months: intervalMonths,
+      interval_type: intervalType,
       next_due_date: nextDate,
       notes: notes.trim() || null,
       created_at: new Date().toISOString(),
@@ -268,8 +282,8 @@ export default function AddAppointmentScreen() {
           <Section title="Reminder Interval">
             <View style={styles.intervalGrid}>
               {INTERVALS.map(iv => (
-                <Pressable key={iv.value} style={[styles.intervalChip, intervalMonths === iv.value && styles.intervalChipSelected]} onPress={() => { Haptics.selectionAsync(); setIntervalMonths(iv.value); }}>
-                  <Text style={[styles.intervalChipText, intervalMonths === iv.value && styles.intervalChipTextSelected]}>{iv.label}</Text>
+                <Pressable key={String(iv.value)} style={[styles.intervalChip, intervalSelection === iv.value && styles.intervalChipSelected]} onPress={() => { Haptics.selectionAsync(); setIntervalSelection(iv.value); }}>
+                  <Text style={[styles.intervalChipText, intervalSelection === iv.value && styles.intervalChipTextSelected]}>{iv.label}</Text>
                 </Pressable>
               ))}
             </View>

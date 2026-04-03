@@ -209,6 +209,7 @@ export type Database = {
           appointment_type: string;
           provider_name: string | null;
           interval_months: number | null;
+          interval_type: string | null;
           next_due_date: string | null;
           last_completed_at: string | null;
           notes: string | null;

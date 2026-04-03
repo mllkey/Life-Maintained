@@ -433,15 +433,19 @@ export default function FamilyMemberDetailScreen() {
                                 <Text style={styles.expandedNotes}>{appt.notes}</Text>
                               </View>
                             ) : null}
-                            {appt.interval_months ? (
+                            {(appt.interval_type || appt.interval_months) ? (
                               <View style={styles.expandedRow}>
                                 <Ionicons name="repeat-outline" size={14} color={Colors.textSecondary} />
                                 <Text style={styles.expandedText}>
-                                  Every {appt.interval_months === 1 ? "month" : appt.interval_months === 12 ? "year" : `${appt.interval_months} months`}
+                                  {appt.interval_type === "weekly" ? "Every week"
+                                    : appt.interval_type === "biweekly" ? "Every 2 weeks"
+                                    : appt.interval_months === 1 ? "Every month"
+                                    : appt.interval_months === 12 ? "Every year"
+                                    : `Every ${appt.interval_months} months`}
                                 </Text>
                               </View>
                             ) : null}
-                            {!appt.notes && !appt.interval_months && (
+                            {!appt.notes && !appt.interval_type && !appt.interval_months && (
                               <Text style={styles.expandedEmpty}>No additional details.</Text>
                             )}
                             <View style={styles.expandedActions}>
