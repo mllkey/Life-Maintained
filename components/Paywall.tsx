@@ -19,6 +19,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
+import { rcReady } from "@/lib/revenuecat";
 
 type Billing = "monthly" | "annual";
 type TierKey = "personal" | "pro" | "business";
@@ -124,15 +125,21 @@ export default function Paywall({
     loadOfferings();
   }, []);
 
-  async function loadOfferings() {
+  async function loadOfferings(retried = false) {
     setLoadingOfferings(true);
     setOfferingsError(false);
     try {
+      await rcReady;
       const Purchases = (await import("react-native-purchases")).default;
       const offerings = await Purchases.getOfferings();
       setLoadedOfferings(offerings);
-    } catch {
-      setOfferingsError(true);
+    } catch (e) {
+      console.error("[Paywall] getOfferings failed:", e);
+      if (!retried) {
+        setTimeout(() => loadOfferings(true), 3000);
+      } else {
+        setOfferingsError(true);
+      }
     } finally {
       setLoadingOfferings(false);
     }

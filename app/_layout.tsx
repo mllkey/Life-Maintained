@@ -17,6 +17,7 @@ import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
 import { supabase } from "@/lib/supabase";
 import { setPendingResetUrl } from "@/lib/pendingResetUrl";
+import { signalRcReady, rcReady } from "@/lib/revenuecat";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -68,6 +69,7 @@ function RootLayoutNav() {
 
     (async () => {
       try {
+        await rcReady;
         const Purchases = (await import("react-native-purchases")).default;
         await Purchases.logIn(userId);
 
@@ -139,7 +141,7 @@ function RootLayoutNav() {
         Purchases.addCustomerInfoUpdateListener(listener);
         rcListenerRef.current = () => Purchases.removeCustomerInfoUpdateListener(listener);
       } catch (e) {
-        console.error("[RevenueCat] Initialization failed:", e);
+        console.error("[RevenueCat] logIn failed:", e);
       }
     })();
 
@@ -250,9 +252,14 @@ export default function RootLayout() {
           if (__DEV__ && apiKey.startsWith("test_")) {
             console.warn("[RevenueCat] Using TEST key — replace with production key (appl_) before App Store submission");
           }
+          Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
           Purchases.configure({ apiKey });
+          signalRcReady();
         }
-      } catch {}
+      } catch (e) {
+        console.error("[RevenueCat] Configure failed:", e);
+        signalRcReady();
+      }
     })();
   }, []);
 
