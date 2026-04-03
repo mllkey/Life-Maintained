@@ -11,7 +11,6 @@ export default function OnboardingLayout() {
       }}
     >
       <Stack.Screen name="index" />
-      <Stack.Screen name="vehicle-quick-add" />
       <Stack.Screen name="building-plan" />
       <Stack.Screen name="value-reveal" />
     </Stack>

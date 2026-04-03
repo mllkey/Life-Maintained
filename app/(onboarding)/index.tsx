@@ -67,7 +67,7 @@ export default function OnboardingStartScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (selected === "vehicle") {
       // Use push so user can go back to this screen
-      router.push("/(onboarding)/vehicle-quick-add");
+      router.push("/add-vehicle?onboarding=true");
     } else if (selected === "home") {
       // Complete onboarding, go to tabs, then open add-property
       completeAndGo("/(tabs)", "/add-property");

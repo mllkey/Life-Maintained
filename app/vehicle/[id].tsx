@@ -1317,12 +1317,15 @@ export default function VehicleDetailScreen() {
                   {scheduleInsight && (
                     <Pressable
                       onPress={() => { if (insightTaskName) { setHighlightedTask(insightTaskName); setTimeout(() => setHighlightedTask(null), 2000); } }}
-                      style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}
+                      style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, flexDirection: "column", alignItems: "flex-start", gap: 4 }}
                     >
-                      <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary }}>
-                        {scheduleInsight}
-                      </Text>
-                      <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 }}>
+                      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+                        <Ionicons name="bulb-outline" size={16} color={Colors.textSecondary} style={{ marginTop: 1 }} />
+                        <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary, flex: 1 }}>
+                          {scheduleInsight}
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 }}>
                         Based on your vehicle and usage
                       </Text>
                     </Pressable>

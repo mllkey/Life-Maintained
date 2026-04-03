@@ -107,6 +107,11 @@ export default function ValueRevealScreen() {
     setTimeout(() => router.push("/add-property"), 400);
   }
 
+  function handleAddAnotherVehicle() {
+    Haptics.selectionAsync();
+    router.replace({ pathname: "/add-vehicle", params: { onboarding: "true" } });
+  }
+
   const tasksToShow = (topTasks ?? []).slice(0, 3);
   const hasTasks = tasksToShow.length > 0;
   const displayName = vehicleName || "vehicle";
@@ -158,17 +163,17 @@ export default function ValueRevealScreen() {
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text style={styles.taskName}>{task.name}</Text>
                     <Text style={styles.taskMeta}>
-                      {task.next_due_date && task.next_due_date.length > 0
-                        ? "Due " + new Date(task.next_due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                        : task.next_due_miles
-                          ? "Due at " + Number(task.next_due_miles).toLocaleString() + " mi"
-                          : task.next_due_hours
-                            ? "Due at " + Number(task.next_due_hours).toLocaleString() + " hrs"
-                            : task.interval_months
-                              ? "Every " + task.interval_months + " months"
-                              : task.interval_miles
-                                ? "Every " + Number(task.interval_miles).toLocaleString() + " mi"
-                                : ""}
+                      {(() => {
+                        const dateStr = task.next_due_date != null ? String(task.next_due_date).trim() : "";
+                        const parsedDate = dateStr.length > 0 ? new Date(dateStr + (dateStr.includes("T") ? "" : "T12:00:00")) : null;
+                        const isValidDate = parsedDate != null && !isNaN(parsedDate.getTime());
+                        return isValidDate ? "Due " + parsedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                          : task.next_due_miles != null ? "Due at " + Number(task.next_due_miles).toLocaleString() + " mi"
+                          : task.next_due_hours != null ? "Due at " + Number(task.next_due_hours).toLocaleString() + " hrs"
+                          : task.interval_months != null ? "Every " + task.interval_months + " months"
+                          : task.interval_miles != null ? "Every " + Number(task.interval_miles).toLocaleString() + " mi"
+                          : "";
+                      })()}
                     </Text>
                   </View>
                   {costStr && (
@@ -206,16 +211,21 @@ export default function ValueRevealScreen() {
         )}
 
         {/* CTAs — always available even if tasks never loaded */}
+        <Pressable onPress={handleAddHome} style={styles.secondary}>
+          <Ionicons name="home-outline" size={16} color={Colors.home} />
+          <Text style={styles.secondaryText}>Add home next</Text>
+        </Pressable>
+
+        <Pressable onPress={handleAddAnotherVehicle} style={styles.secondary}>
+          <Ionicons name="car-outline" size={16} color={Colors.vehicle} />
+          <Text style={[styles.secondaryText, { color: Colors.vehicle }]}>Add another vehicle</Text>
+        </Pressable>
+
         <Pressable
           style={({ pressed }) => [styles.cta, { opacity: pressed ? 0.85 : 1 }]}
           onPress={handleOpenDashboard}
         >
           <Text style={styles.ctaText}>Open my dashboard</Text>
-        </Pressable>
-
-        <Pressable onPress={handleAddHome} style={styles.secondary}>
-          <Ionicons name="home-outline" size={16} color={Colors.home} />
-          <Text style={styles.secondaryText}>Add home next</Text>
         </Pressable>
       </ScrollView>
     </View>

@@ -685,9 +685,11 @@ export default function PropertyDetailScreen() {
                 <Animated.View style={{ opacity: scheduleOpacity }}>
                   {insightText && (
                     <View style={styles.insightCard}>
-                      <Ionicons name="bulb-outline" size={16} color={Colors.home} />
-                      <Text style={styles.insightText}>{insightText}</Text>
-                      <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", marginBottom: 8 }}>
+                      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+                        <Ionicons name="bulb-outline" size={16} color={Colors.home} style={{ marginTop: 2 }} />
+                        <Text style={styles.insightText}>{insightText}</Text>
+                      </View>
+                      <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2, paddingLeft: 0 }}>
                         Based on your property type and age
                       </Text>
                     </View>
@@ -1296,7 +1298,7 @@ const styles = StyleSheet.create({
   skeletonLine: { height: 14, borderRadius: 7, backgroundColor: Colors.surface, width: "80%" },
 
   insightCard: {
-    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    flexDirection: "column", alignItems: "flex-start", gap: 4,
     backgroundColor: Colors.homeMuted, borderRadius: 14,
     padding: 14, borderWidth: 1, borderColor: Colors.home + "30",
   },

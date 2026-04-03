@@ -8,6 +8,7 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
+  Keyboard,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
@@ -226,7 +227,7 @@ export default function AddAppointmentScreen() {
                   {matches.map(suggestion => (
                     <Pressable
                       key={suggestion}
-                      onPress={() => { Haptics.selectionAsync(); setProviderName(suggestion); }}
+                      onPress={() => { Keyboard.dismiss(); Haptics.selectionAsync(); setProviderName(suggestion); }}
                       style={({ pressed }) => ({
                         paddingVertical: 8,
                         paddingHorizontal: 12,

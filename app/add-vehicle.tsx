@@ -15,7 +15,7 @@ import {
   Keyboard,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -571,6 +571,8 @@ export default function AddVehicleScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
+  const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
+  const isOnboarding = onboarding === "true";
 
   const { data: walletCandidates } = useQuery<{ id: string; year: number; make: string; model: string; nickname: string | null }[]>({
     queryKey: ["wallet_copy_candidates", user?.id],
@@ -869,29 +871,32 @@ export default function AddVehicleScreen() {
   }
 
   function selectYear(yr: number) {
+    Keyboard.dismiss();
     const savedOffset = scrollOffset.current;
     setYear(String(yr));
     setYearPickerVisible(false);
-    setTimeout(() => scrollRef.current?.scrollTo({ y: savedOffset, animated: false }), 0);
+    setTimeout(() => scrollRef.current?.scrollTo({ y: savedOffset, animated: false }), 100);
     Haptics.selectionAsync();
   }
 
   function selectMake(selectedMake: string) {
+    Keyboard.dismiss();
     const savedOffset = scrollOffset.current;
     setMake(selectedMake);
     setMakePickerVisible(false);
     setMakeSearch("");
     setModel("");
-    setTimeout(() => scrollRef.current?.scrollTo({ y: savedOffset, animated: false }), 0);
+    setTimeout(() => scrollRef.current?.scrollTo({ y: savedOffset, animated: false }), 100);
     Haptics.selectionAsync();
   }
 
   function selectModel(selectedModel: string) {
+    Keyboard.dismiss();
     const savedOffset = scrollOffset.current;
     setModel(selectedModel);
     setModelPickerVisible(false);
     setModelSearch("");
-    setTimeout(() => scrollRef.current?.scrollTo({ y: savedOffset, animated: false }), 0);
+    setTimeout(() => scrollRef.current?.scrollTo({ y: savedOffset, animated: false }), 100);
     Haptics.selectionAsync();
   }
 
@@ -980,7 +985,7 @@ export default function AddVehicleScreen() {
       engine_cylinders: engineCylinders,
     };
 
-    if (!hasCandidates) {
+    if (!hasCandidates || isOnboarding) {
       setIsLoading(true);
       try {
         const { data: inserted, error: err } = await supabase
@@ -993,6 +998,29 @@ export default function AddVehicleScreen() {
           Alert.alert("Save Failed", err?.message ?? "Failed to save vehicle. Please try again.");
           return;
         }
+
+        if (isOnboarding) {
+          // Onboarding path: navigate to building-plan which handles schedule generation
+          queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          router.replace({
+            pathname: "/(onboarding)/building-plan",
+            params: {
+              vehicleId: inserted.id,
+              vehicleName: `${yearNum} ${make.trim()} ${model.trim()}`,
+              make: make.trim(),
+              model: model.trim(),
+              year: String(yearNum),
+              currentMileage: String(mileage ? parseInt(mileage, 10) : 0),
+              currentHours: String(vehicleData.hours ?? 0),
+              trackingMode: inferredMode,
+              fuelType: fuelType,
+              vehicleCategory: selectedVehicleCategory,
+            },
+          });
+          return;
+        }
+
         // Fire-and-forget: generate schedule + prefetch estimates in background
         (async () => {
           try {
@@ -1099,12 +1127,21 @@ export default function AddVehicleScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
-          <Pressable onPress={() => router.back()} style={styles.closeBtn} hitSlop={8}>
-            <Ionicons name="close" size={22} color={Colors.text} />
-          </Pressable>
-          <Text style={styles.title}>Add Vehicle</Text>
+          {isOnboarding ? (
+            <View style={{ width: 44 }} />
+          ) : (
+            <Pressable onPress={() => router.back()} style={styles.closeBtn} hitSlop={8}>
+              <Ionicons name="close" size={22} color={Colors.text} />
+            </Pressable>
+          )}
+          <Text style={styles.title}>{isOnboarding ? "Tell us about your vehicle" : "Add Vehicle"}</Text>
           <View style={{ width: 44 }} />
         </View>
+        {isOnboarding && (
+          <View style={{ height: 3, borderRadius: 2, backgroundColor: Colors.border, overflow: "hidden", marginHorizontal: 20, marginBottom: 4 }}>
+            <View style={{ height: 3, borderRadius: 2, backgroundColor: Colors.accent, width: "50%" }} />
+          </View>
+        )}
 
         <ScrollView
           ref={scrollRef}
@@ -1179,6 +1216,7 @@ export default function AddVehicleScreen() {
                     key={t.value}
                     style={[styles.typeCard, isSelected && styles.typeCardSelected, { width: "auto", minWidth: 80, paddingHorizontal: 12 }]}
                     onPress={() => {
+                      Keyboard.dismiss();
                       Haptics.selectionAsync();
                       setVehicleType(t.value);
                       setMake("");
@@ -1534,7 +1572,7 @@ export default function AddVehicleScreen() {
                         <Pressable
                           key={ft.value}
                           style={[styles.segOption, isSelected && styles.segOptionSelected]}
-                          onPress={() => { Haptics.selectionAsync(); setFuelType(ft.value); }}
+                          onPress={() => { Keyboard.dismiss(); Haptics.selectionAsync(); setFuelType(ft.value); }}
                         >
                           <Text style={[styles.segOptionText, isSelected && styles.segOptionTextSelected]}>
                             {ft.label}

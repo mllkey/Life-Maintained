@@ -14,6 +14,7 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  Keyboard,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
@@ -209,6 +210,7 @@ export default function AddPropertyScreen() {
   }, []);
 
   async function onSelectSuggestion(suggestion: PlaceSuggestion) {
+    Keyboard.dismiss();
     Haptics.selectionAsync();
     setStreet(suggestion.mainText);
     setShowSuggestions(false);
@@ -405,44 +407,46 @@ export default function AddPropertyScreen() {
           <FieldGroup label="Address">
             <View style={{ gap: 5 }}>
               <Text style={styles.fieldLabel}>Street Address *</Text>
-              <TextInput
-                style={styles.input}
-                value={street}
-                onChangeText={onStreetChange}
-                onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
-                placeholder="123 Main St"
-                placeholderTextColor={Colors.textTertiary}
-                autoCapitalize="words"
-                returnKeyType="next"
-              />
-              {isFetchingSuggestions && (
-                <View style={styles.suggestionsCard}>
-                  <ActivityIndicator size="small" color={Colors.accent} style={{ padding: 12 }} />
-                </View>
-              )}
-              {showSuggestions && suggestions.length > 0 && (
-                <View style={styles.suggestionsCard}>
-                  {suggestions.map((s, idx) => (
-                    <Pressable
-                      key={s.placeId}
-                      style={({ pressed }) => [
-                        styles.suggestionRow,
-                        idx < suggestions.length - 1 && styles.suggestionRowBorder,
-                        { opacity: pressed ? 0.7 : 1 },
-                      ]}
-                      onPress={() => onSelectSuggestion(s)}
-                    >
-                      <Ionicons name="location-outline" size={16} color={Colors.textTertiary} style={{ marginTop: 2 }} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.suggestionMain} numberOfLines={1}>{s.mainText}</Text>
-                        {!!s.secondaryText && (
-                          <Text style={styles.suggestionSub} numberOfLines={1}>{s.secondaryText}</Text>
-                        )}
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
+              <View style={{ position: "relative" }}>
+                <TextInput
+                  style={styles.input}
+                  value={street}
+                  onChangeText={onStreetChange}
+                  onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+                  placeholder="123 Main St"
+                  placeholderTextColor={Colors.textTertiary}
+                  autoCapitalize="words"
+                  returnKeyType="next"
+                />
+                {isFetchingSuggestions && (
+                  <View style={[styles.suggestionsCard, styles.suggestionsOverlay]}>
+                    <ActivityIndicator size="small" color={Colors.accent} style={{ padding: 12 }} />
+                  </View>
+                )}
+                {showSuggestions && suggestions.length > 0 && (
+                  <View style={[styles.suggestionsCard, styles.suggestionsOverlay]}>
+                    {suggestions.map((s, idx) => (
+                      <Pressable
+                        key={s.placeId}
+                        style={({ pressed }) => [
+                          styles.suggestionRow,
+                          idx < suggestions.length - 1 && styles.suggestionRowBorder,
+                          { opacity: pressed ? 0.7 : 1 },
+                        ]}
+                        onPress={() => onSelectSuggestion(s)}
+                      >
+                        <Ionicons name="location-outline" size={16} color={Colors.textTertiary} style={{ marginTop: 2 }} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.suggestionMain} numberOfLines={1}>{s.mainText}</Text>
+                          {!!s.secondaryText && (
+                            <Text style={styles.suggestionSub} numberOfLines={1}>{s.secondaryText}</Text>
+                          )}
+                        </View>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </View>
             </View>
 
             <Field label="Unit / Apt (optional)">
@@ -561,7 +565,7 @@ export default function AddPropertyScreen() {
       <StatePickerModal
         visible={statePickerVisible}
         selected={stateCode}
-        onSelect={(abbr) => { setStateCode(abbr); setStatePickerVisible(false); }}
+        onSelect={(abbr) => { Keyboard.dismiss(); setStateCode(abbr); setStatePickerVisible(false); }}
         onClose={() => setStatePickerVisible(false)}
         insets={insets}
       />
@@ -730,6 +734,14 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     overflow: "hidden",
     zIndex: 100,
+  },
+  suggestionsOverlay: {
+    position: "absolute",
+    top: 52,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    elevation: 8,
   },
   suggestionRow: {
     flexDirection: "row",
