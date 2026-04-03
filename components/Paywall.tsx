@@ -41,7 +41,7 @@ const TIER_CONFIG: Record<TierKey, {
     rcOffering: "default",
     annualPrice: "$49.99/year",
     annualMonthly: "$4.17/mo",
-    monthlyPrice: "$6.99/month",
+    monthlyPrice: "$7.99/month",
     features: [
       "3 vehicles + 2 properties",
       "1 person + 1 pet",
@@ -74,7 +74,7 @@ const TIER_CONFIG: Record<TierKey, {
     rcOffering: "business",
     annualPrice: "$249.99/year",
     annualMonthly: "$20.83/mo",
-    monthlyPrice: "$29.99/month",
+    monthlyPrice: "$34.99/month",
     features: [
       "Unlimited vehicles & properties",
       "Unlimited people & pets",
