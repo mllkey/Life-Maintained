@@ -832,6 +832,11 @@ function HealthScoreCard({ score, overdue, dueSoon, onTrack }: { score: number; 
       </View>
       <Text style={styles.scoreTitle}>Maintenance Score</Text>
       <Text style={styles.scoreMessage}>{message}</Text>
+      {score === 100 && (
+        <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.good, marginTop: 2 }}>
+          You're all caught up!
+        </Text>
+      )}
       <Text style={styles.scoreDetail}>{onTrack} on track · {dueSoon} due soon · {overdue} overdue</Text>
     </View>
   );
@@ -1368,8 +1373,8 @@ const styles = StyleSheet.create({
 
   scoreHero: {
     alignItems: "center",
-    paddingVertical: 24,
-    gap: 8,
+    paddingVertical: 16,
+    gap: 6,
   },
   scoreTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
   scoreMessage: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },

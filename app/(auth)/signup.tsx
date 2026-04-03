@@ -35,8 +35,25 @@ export default function SignUpScreen() {
       setError("Please fill in all fields");
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setError("Please enter a valid email address");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setError("Password must contain at least one uppercase letter");
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      setError("Password must contain at least one lowercase letter");
+      return;
+    }
+    if (!/[0-9]/.test(password)) {
+      setError("Password must contain at least one number");
       return;
     }
     if (password !== confirmPassword) {
@@ -122,7 +139,7 @@ export default function SignUpScreen() {
                   style={[styles.input, { flex: 1 }]}
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="Min. 6 characters"
+                  placeholder="Min. 8 characters, with uppercase and number"
                   placeholderTextColor={Colors.textTertiary}
                   secureTextEntry={!showPassword}
                   textContentType="newPassword"

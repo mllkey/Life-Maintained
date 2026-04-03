@@ -2688,6 +2688,9 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
           ) : null}
         </Pressable>
       </Modal>
+      <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, lineHeight: 16 }}>
+        Photos stored here are for personal reference only. Check your local laws regarding acceptable identification documents.
+      </Text>
     </View>
   );
 }

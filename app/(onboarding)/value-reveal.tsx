@@ -158,13 +158,17 @@ export default function ValueRevealScreen() {
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text style={styles.taskName}>{task.name}</Text>
                     <Text style={styles.taskMeta}>
-                      {task.next_due_date
-                        ? `Due ${new Date(task.next_due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                      {task.next_due_date && task.next_due_date.length > 0
+                        ? "Due " + new Date(task.next_due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })
                         : task.next_due_miles
-                          ? `Due at ${Number(task.next_due_miles).toLocaleString()} mi`
+                          ? "Due at " + Number(task.next_due_miles).toLocaleString() + " mi"
                           : task.next_due_hours
-                            ? `Due at ${Number(task.next_due_hours).toLocaleString()} hrs`
-                            : ""}
+                            ? "Due at " + Number(task.next_due_hours).toLocaleString() + " hrs"
+                            : task.interval_months
+                              ? "Every " + task.interval_months + " months"
+                              : task.interval_miles
+                                ? "Every " + Number(task.interval_miles).toLocaleString() + " mi"
+                                : ""}
                     </Text>
                   </View>
                   {costStr && (

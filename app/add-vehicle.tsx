@@ -54,6 +54,8 @@ const MAKES_BY_TYPE: Record<string, string[]> = {
     "Pontiac", "Saturn", "Mercury", "Scion", "Hummer", "Fiat", "Saab",
     "Suzuki", "Isuzu", "Oldsmobile", "Plymouth", "Polestar", "VinFast",
     "Smart", "Fisker",
+    "Aston Martin", "Bentley", "Ferrari", "Lamborghini", "Maserati", "McLaren",
+    "Renault", "Rolls-Royce",
   ],
   motorcycle: [
     "Harley-Davidson", "Honda", "Kawasaki", "Yamaha", "Suzuki", "Ducati",
@@ -119,20 +121,20 @@ type MakeSection = { title: string; data: string[] };
 
 const CAR_MAKE_SECTIONS: MakeSection[] = [
   { title: "Most Popular", data: ["Toyota", "Ford", "Chevrolet", "Honda", "Nissan", "Jeep", "RAM", "GMC", "Subaru", "Hyundai", "Kia"] },
-  { title: "A", data: ["Acura", "Alfa Romeo", "Audi"] },
-  { title: "B", data: ["BMW", "Buick"] },
+  { title: "A", data: ["Acura", "Alfa Romeo", "Aston Martin", "Audi"] },
+  { title: "B", data: ["Bentley", "BMW", "Buick"] },
   { title: "C", data: ["Cadillac", "Chrysler"] },
   { title: "D", data: ["Dodge"] },
-  { title: "F", data: ["Fiat", "Fisker"] },
+  { title: "F", data: ["Ferrari", "Fiat", "Fisker"] },
   { title: "G", data: ["Genesis"] },
   { title: "H", data: ["Hummer"] },
   { title: "I", data: ["Infiniti", "Isuzu"] },
   { title: "J", data: ["Jaguar"] },
-  { title: "L", data: ["Land Rover", "Lexus", "Lincoln", "Lucid"] },
-  { title: "M", data: ["Mazda", "Mercedes-Benz", "Mercury", "Mini", "Mitsubishi"] },
+  { title: "L", data: ["Lamborghini", "Land Rover", "Lexus", "Lincoln", "Lucid"] },
+  { title: "M", data: ["Maserati", "Mazda", "McLaren", "Mercedes-Benz", "Mercury", "Mini", "Mitsubishi"] },
   { title: "O", data: ["Oldsmobile"] },
   { title: "P", data: ["Plymouth", "Polestar", "Pontiac", "Porsche"] },
-  { title: "R", data: ["Rivian"] },
+  { title: "R", data: ["Renault", "Rivian", "Rolls-Royce"] },
   { title: "S", data: ["Saab", "Saturn", "Scion", "Scout", "Smart", "Suzuki"] },
   { title: "T", data: ["Tesla"] },
   { title: "V", data: ["VinFast", "Volkswagen", "Volvo"] },
@@ -185,6 +187,40 @@ const SNOWMOBILE_MAKE_SECTIONS: MakeSection[] = [
   { title: "Y", data: ["Yamaha"] },
 ];
 
+const BOAT_MAKE_SECTIONS: MakeSection[] = [
+  { title: "Most Popular", data: ["Sea Ray", "Bayliner", "Boston Whaler", "Malibu", "MasterCraft", "Grady-White", "Lund", "Tracker"] },
+  { title: "A", data: ["Alumacraft"] },
+  { title: "B", data: ["Bennington"] },
+  { title: "C", data: ["Carolina Skiff", "Chaparral", "Cobalt", "Crestliner"] },
+  { title: "G", data: ["Godfrey"] },
+  { title: "K", data: ["Key West"] },
+  { title: "N", data: ["Nitro"] },
+  { title: "R", data: ["Ranger", "Regulator", "Robalo"] },
+  { title: "S", data: ["Scout Boats", "Skeeter", "Stingray", "Sun Tracker", "Sylvan"] },
+  { title: "T", data: ["Tracker", "Triton"] },
+  { title: "W", data: ["Wellcraft"] },
+  { title: "Y", data: ["Yamaha"] },
+];
+
+const RV_MAKE_SECTIONS: MakeSection[] = [
+  { title: "Most Popular", data: ["Winnebago", "Airstream", "Thor Industries", "Forest River", "Coachmen", "Keystone", "Grand Design", "Jayco"] },
+  { title: "C", data: ["Coachmen", "CrossRoads"] },
+  { title: "D", data: ["Dutchmen"] },
+  { title: "E", data: ["Entegra"] },
+  { title: "F", data: ["Fleetwood", "Forest River"] },
+  { title: "G", data: ["Grand Design"] },
+  { title: "H", data: ["Heartland"] },
+  { title: "J", data: ["Jayco"] },
+  { title: "K", data: ["Keystone"] },
+  { title: "L", data: ["Lance"] },
+  { title: "N", data: ["Newmar", "nuCamp"] },
+  { title: "P", data: ["Palomino", "Pleasure-Way"] },
+  { title: "R", data: ["Roadtrek"] },
+  { title: "T", data: ["Tiffin"] },
+  { title: "V", data: ["Venture RV"] },
+  { title: "W", data: ["Winnebago"] },
+];
+
 const MAKE_SECTIONS_BY_TYPE: Record<string, MakeSection[]> = {
   car: CAR_MAKE_SECTIONS,
   motorcycle: MOTO_MAKE_SECTIONS,
@@ -192,6 +228,8 @@ const MAKE_SECTIONS_BY_TYPE: Record<string, MakeSection[]> = {
   utv: UTV_MAKE_SECTIONS,
   pwc: PWC_MAKE_SECTIONS,
   snowmobile: SNOWMOBILE_MAKE_SECTIONS,
+  boat: BOAT_MAKE_SECTIONS,
+  rv: RV_MAKE_SECTIONS,
 };
 
 
@@ -1704,6 +1742,7 @@ export default function AddVehicleScreen() {
         filteredMakes={filteredMakes}
         showCustomMake={showCustomMake}
         vehicleType={vehicleType}
+        year={year}
         onSelect={selectMake}
         onClose={() => { setMakePickerVisible(false); setMakeSearch(""); }}
         insets={insets}
@@ -1922,13 +1961,14 @@ function MakeRow({ mk, onSelect }: { mk: string; onSelect: (m: string) => void }
   );
 }
 
-function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showCustomMake, vehicleType, onSelect, onClose, insets }: {
+function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showCustomMake, vehicleType, year, onSelect, onClose, insets }: {
   visible: boolean;
   search: string;
   onSearchChange: (s: string) => void;
   filteredMakes: string[];
   showCustomMake: boolean;
   vehicleType: string;
+  year: string;
   onSelect: (m: string) => void;
   onClose: () => void;
   insets: { bottom: number };
@@ -1936,6 +1976,8 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
   const sections = MAKE_SECTIONS_BY_TYPE[vehicleType];
   const isSearching = search.trim().length > 0;
   const useSections = !!sections && !isSearching;
+  const yearNum = year ? parseInt(year, 10) : null;
+  const showOldVehicleBanner = yearNum !== null && !isNaN(yearNum) && yearNum < 1995;
 
   const customFooter = showCustomMake ? (
     <Pressable
@@ -1955,6 +1997,15 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
       <Text style={styles.listEmptyText}>No matches. Type your make above.</Text>
     </View>
   );
+
+  const oldVehicleBanner = showOldVehicleBanner ? (
+    <View style={{ backgroundColor: Colors.card, borderRadius: 10, padding: 12, marginHorizontal: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <Ionicons name="information-circle-outline" size={16} color={Colors.textTertiary} />
+      <Text style={[styles.modelHint, { fontStyle: "normal", textAlign: "left", paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0, flex: 1 }]}>
+        Some makes may not have model data for older vehicles. You can always type a custom make.
+      </Text>
+    </View>
+  ) : null;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -1992,6 +2043,7 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
               style={{ maxHeight: 380 }}
               contentContainerStyle={{ paddingBottom: 20 }}
               stickySectionHeadersEnabled={false}
+              ListHeaderComponent={oldVehicleBanner}
               renderSectionHeader={({ section }) => (
                 <MakeSectionHeader title={section.title} />
               )}
@@ -2009,6 +2061,7 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
               showsVerticalScrollIndicator={false}
               style={{ maxHeight: 380 }}
               contentContainerStyle={{ paddingBottom: 20 }}
+              ListHeaderComponent={oldVehicleBanner}
               renderItem={({ item: mk }) => (
                 <MakeRow mk={mk} onSelect={onSelect} />
               )}

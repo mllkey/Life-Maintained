@@ -1045,7 +1045,13 @@ function TaskRow({
 
   let dueText: string;
   if (isCompleted && task.last_completed_at) {
-    dueText = `Completed ${format(parseISO(task.last_completed_at), "MMM d, yyyy")}`;
+    const completed = new Date(task.last_completed_at).getTime();
+    const created = task.created_at ? new Date(task.created_at).getTime() : 0;
+    if (Math.abs(completed - created) < 60000) {
+      dueText = "Unknown — tap to log last service";
+    } else {
+      dueText = `Completed ${format(parseISO(task.last_completed_at), "MMM d, yyyy")}`;
+    }
   } else if (task.next_due_date) {
     dueText = `Due ${format(parseISO(task.next_due_date), "MMM d, yyyy")}`;
   } else {
