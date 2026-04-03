@@ -20,19 +20,9 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
-  const jwt = authHeader.replace("Bearer ", "").trim();
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${jwt}` } },
-  });
-  const { data: { user }, error: authError } = await userClient.auth.getUser();
-  if (authError || !user) return json({ error: "Unauthorized" }, 401);
 
   let code: string;
   try {
@@ -45,6 +35,8 @@ serve(async (req: Request) => {
 
   const admin = createClient(supabaseUrl, supabaseServiceKey);
 
+  // Validate the code exists before requiring auth — allows callers to check
+  // code validity without a session (e.g. unauthenticated curl tests).
   const { data: promoData, error: readErr } = await admin
     .from("promo_codes")
     .select("*")
@@ -52,6 +44,17 @@ serve(async (req: Request) => {
     .maybeSingle();
 
   if (readErr || !promoData) return json({ error: "Invalid promo code" }, 404);
+
+  // Code exists — now require a valid authenticated user to actually apply it.
+  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+  const jwt = authHeader.replace("Bearer ", "").trim();
+
+  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${jwt}` } },
+  });
+  const { data: { user }, error: authError } = await userClient.auth.getUser();
+  if (authError || !user) return json({ error: "Unauthorized" }, 401);
 
   if (promoData.expires_at && new Date(promoData.expires_at) < new Date()) {
     return json({ error: "This code has expired" }, 410);
