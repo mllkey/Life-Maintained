@@ -1,8 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -25,6 +23,13 @@ type ProfileRow = {
   monthly_scan_count: number | null;
   scan_count_reset_at: string | null;
 };
+
+function jsonResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 function detectMediaType(base64: string): string {
   const prefix = base64.substring(0, 16);
@@ -57,130 +62,128 @@ serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: "Method not allowed" }, 405);
   }
-
-  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  const jwt = authHeader.replace("Bearer ", "").trim();
-  const authClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-    { global: { headers: { Authorization: `Bearer ${jwt}` } } },
-  );
-  const { data: { user }, error: authError } = await authClient.auth.getUser();
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const adminClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-  );
-  const { data: profileRaw } = await adminClient
-    .from("profiles")
-    .select("subscription_tier, monthly_scan_count, scan_count_reset_at")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!profileRaw) {
-    return new Response(JSON.stringify({ error: "Profile not found" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const profile = profileRaw as ProfileRow;
-
-  const isPaid = profile.subscription_tier && profile.subscription_tier !== "free";
-  if (!isPaid) {
-    return new Response(JSON.stringify({ error: "Receipt scanning requires a paid subscription. Upgrade to unlock this feature." }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  // ── Monthly scan limits by tier ────────────────────────────────────
-  const TIER_SCAN_LIMITS: Record<string, number> = {
-    personal: 15,
-    pro: 30,
-    business: 100,
-    trial: 5,
-  };
-  const monthlyLimit = TIER_SCAN_LIMITS[profile.subscription_tier] ?? 5;
-  const now = new Date();
-  const resetAt = profile.scan_count_reset_at ? new Date(profile.scan_count_reset_at) : null;
-  let currentCount = profile.monthly_scan_count ?? 0;
-
-  if (!resetAt || resetAt.getMonth() !== now.getMonth() || resetAt.getFullYear() !== now.getFullYear()) {
-    currentCount = 0;
-    await adminClient.from("profiles").update({
-      monthly_scan_count: 0,
-      scan_count_reset_at: now.toISOString(),
-    }).eq("user_id", user.id);
-  }
-
-  if (currentCount >= monthlyLimit) {
-    return new Response(JSON.stringify({
-      error: `You've used all ${monthlyLimit} scans this month. Upgrade your plan for more.`,
-      scans_used: currentCount,
-      scans_limit: monthlyLimit,
-    }), {
-      status: 429,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  // Atomically increment BEFORE processing to prevent race conditions
-  // Two simultaneous requests will both see the count go up immediately
-  await adminClient.from("profiles").update({
-    monthly_scan_count: currentCount + 1,
-  }).eq("user_id", user.id);
-
-  const refundScan = async () => {
-    await adminClient.from("profiles").update({
-      monthly_scan_count: Math.max(0, currentCount),
-    }).eq("user_id", user.id).catch(() => {});
-  };
 
   try {
+    // ── Validate required env vars ──────────────────────────────────────
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("scan-receipt: missing required Supabase env vars");
+      return jsonResponse({ error: "Server configuration error: missing Supabase credentials" }, 500);
+    }
     if (!ANTHROPIC_API_KEY) {
-      console.error("ANTHROPIC_API_KEY is not set");
-      await refundScan();
-      return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY secret is not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("scan-receipt: ANTHROPIC_API_KEY is not set");
+      return jsonResponse({ error: "ANTHROPIC_API_KEY secret is not configured" }, 500);
     }
 
+    // ── Auth ────────────────────────────────────────────────────────────
+    const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return jsonResponse({ error: "Unauthorized" }, 401);
+    }
+    const jwt = authHeader.replace("Bearer ", "").trim();
+
+    const authClient = createClient(
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY,
+      { global: { headers: { Authorization: `Bearer ${jwt}` } } },
+    );
+    const { data: { user }, error: authError } = await authClient.auth.getUser();
+    if (authError || !user) {
+      console.error("scan-receipt: auth failed:", authError?.message);
+      return jsonResponse({ error: "Unauthorized" }, 401);
+    }
+
+    // ── Profile lookup ──────────────────────────────────────────────────
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { data: profileRaw, error: profileError } = await adminClient
+      .from("profiles")
+      .select("subscription_tier, monthly_scan_count, scan_count_reset_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("scan-receipt: profile query error:", profileError.message);
+      return jsonResponse({ error: "Failed to load user profile" }, 500);
+    }
+    if (!profileRaw) {
+      return jsonResponse({ error: "Profile not found" }, 403);
+    }
+
+    const profile = profileRaw as ProfileRow;
+
+    // ── Subscription check ──────────────────────────────────────────────
+    const isPaid = profile.subscription_tier && profile.subscription_tier !== "free";
+    if (!isPaid) {
+      return jsonResponse({ error: "Receipt scanning requires a paid subscription. Upgrade to unlock this feature." }, 403);
+    }
+
+    // ── Monthly scan limits ─────────────────────────────────────────────
+    const TIER_SCAN_LIMITS: Record<string, number> = {
+      personal: 15,
+      pro: 30,
+      business: 100,
+      trial: 5,
+    };
+    const monthlyLimit = TIER_SCAN_LIMITS[profile.subscription_tier] ?? 5;
+    const now = new Date();
+    const resetAt = profile.scan_count_reset_at ? new Date(profile.scan_count_reset_at) : null;
+    let currentCount = profile.monthly_scan_count ?? 0;
+
+    if (!resetAt || resetAt.getMonth() !== now.getMonth() || resetAt.getFullYear() !== now.getFullYear()) {
+      currentCount = 0;
+      const { error: resetError } = await adminClient.from("profiles").update({
+        monthly_scan_count: 0,
+        scan_count_reset_at: now.toISOString(),
+      }).eq("user_id", user.id);
+      if (resetError) {
+        console.error("scan-receipt: scan count reset error:", resetError.message);
+      }
+    }
+
+    if (currentCount >= monthlyLimit) {
+      return jsonResponse({
+        error: `You've used all ${monthlyLimit} scans this month. Upgrade your plan for more.`,
+        scans_used: currentCount,
+        scans_limit: monthlyLimit,
+      }, 429);
+    }
+
+    // Atomically increment BEFORE processing to prevent race conditions
+    const { error: incrementError } = await adminClient.from("profiles").update({
+      monthly_scan_count: currentCount + 1,
+    }).eq("user_id", user.id);
+    if (incrementError) {
+      console.error("scan-receipt: scan count increment error:", incrementError.message);
+    }
+
+    const refundScan = async () => {
+      await adminClient.from("profiles").update({
+        monthly_scan_count: Math.max(0, currentCount),
+      }).eq("user_id", user.id).catch(() => {});
+    };
+
+    // ── Parse request body ──────────────────────────────────────────────
     let rawImage: string;
     try {
       const body = await req.json();
       rawImage = body.image;
       if (!rawImage) throw new Error("No image provided");
     } catch (err) {
-      console.error("Bad request body:", err);
+      console.error("scan-receipt: bad request body:", err);
       await refundScan();
-      return new Response(JSON.stringify({ error: "Invalid request body — expected { image: base64string }" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Invalid request body — expected { image: base64string }" }, 400);
     }
 
     const base64 = stripDataUrlPrefix(rawImage);
     const mediaType = detectMediaType(base64);
 
+    // ── Anthropic call ──────────────────────────────────────────────────
     const prompt = `You are analyzing a service receipt or invoice image. Extract the following fields exactly as they appear:
 
 1. date — The service or transaction date. Format as YYYY-MM-DD. Return null if not found.
@@ -200,7 +203,7 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
 }`;
 
     const requestBody = {
-      model: "claude-3-5-haiku-20241022",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 512,
       messages: [
         {
@@ -223,7 +226,14 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
       ],
     };
 
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+    const anthropicUrl = "https://api.anthropic.com/v1/messages";
+    console.log("[scan-receipt anthropic request]", {
+      model: requestBody.model,
+      url: anthropicUrl,
+      hasApiKey: !!ANTHROPIC_API_KEY,
+    });
+
+    const anthropicRes = await fetch(anthropicUrl, {
       method: "POST",
       headers: {
         "x-api-key": ANTHROPIC_API_KEY,
@@ -235,15 +245,18 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
 
     if (!anthropicRes.ok) {
       const errText = await anthropicRes.text();
-      console.error(`Anthropic API error ${anthropicRes.status}:`, errText);
+      let parsedErr: unknown = null;
+      try { parsedErr = JSON.parse(errText); } catch { /* raw text fallback */ }
+      console.error("[scan-receipt anthropic error]", {
+        status: anthropicRes.status,
+        parsed: parsedErr,
+        raw: parsedErr ? undefined : errText,
+      });
       await refundScan();
-      return new Response(
-        JSON.stringify({
-          error: `Anthropic API returned ${anthropicRes.status}: ${errText}`,
-          date: null, cost: null, provider: null, serviceType: null, rawText: "",
-        }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return jsonResponse({
+        error: `Anthropic API returned ${anthropicRes.status}: ${errText}`,
+        date: null, cost: null, provider: null, serviceType: null, rawText: "",
+      }, 502);
     }
 
     const anthropicData = await anthropicRes.json();
@@ -265,7 +278,7 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
         rawText: typeof obj.rawText === "string" ? obj.rawText : rawContent.slice(0, 300),
       };
     } catch (parseErr) {
-      console.error("Failed to parse Anthropic JSON response:", parseErr, "Raw:", rawContent);
+      console.error("scan-receipt: failed to parse Anthropic response:", parseErr, "Raw:", rawContent);
       parsed = {
         date: null, cost: null, provider: null, serviceType: null, mileage: null, task: null,
         rawText: rawContent.slice(0, 300),
@@ -273,16 +286,12 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
       };
     }
 
-    return new Response(JSON.stringify(parsed), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse(parsed, 200);
   } catch (err) {
-    console.error("scan-receipt unexpected error:", err);
-    await refundScan();
-    return new Response(
-      JSON.stringify({ error: "Internal server error", date: null, cost: null, provider: null, serviceType: null, mileage: null, task: null, rawText: "" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    console.error("scan-receipt: unexpected top-level error:", err instanceof Error ? err.message : String(err));
+    return jsonResponse(
+      { error: "Internal server error", date: null, cost: null, provider: null, serviceType: null, mileage: null, task: null, rawText: "" },
+      500,
     );
   }
 });

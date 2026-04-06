@@ -22,6 +22,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+import { formatShopAndDiy } from "@/lib/costFormat";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
@@ -1091,13 +1092,13 @@ function TaskRow({
             const shopHigh = Number(est.shop_high);
             const diyLow = est.diy_low != null ? Number(est.diy_low) : null;
             const diyHigh = est.diy_high != null ? Number(est.diy_high) : null;
-            const shopStr = shopLow === 0 && shopHigh === 0 ? "Free" : shopLow === shopHigh ? `$${shopLow} shop` : `$${shopLow}-$${shopHigh} shop`;
-            const diyStr = diyLow == null ? "" : diyLow === 0 && diyHigh === 0 ? " · Free DIY" : diyLow === diyHigh ? ` · $${diyLow} DIY` : ` · $${diyLow}-$${diyHigh} DIY`;
+            const costLine = formatShopAndDiy(shopLow, shopHigh, diyLow, diyHigh);
+            if (!costLine) return null;
             return (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
                 <Ionicons name="cash-outline" size={12} color={Colors.good} />
                 <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
-                  {shopStr}{diyStr}
+                  {costLine}
                 </Text>
                 {est.difficulty != null && (
                   <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: est.difficulty === 1 ? Colors.good : est.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: est.difficulty === 1 ? Colors.goodMuted : est.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>

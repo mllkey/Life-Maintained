@@ -7,6 +7,7 @@ import { Colors } from "@/constants/colors";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
+import { formatCostDisplay } from "@/lib/costFormat";
 import { useAuth } from "@/context/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
@@ -154,9 +155,10 @@ export default function ValueRevealScreen() {
             {tasksToShow.map((task, i) => {
               const est = estimates?.[task.name.toLowerCase().trim()];
               const costStr = est
-                ? Number(est.shop_low) === Number(est.shop_high)
-                  ? `$${Number(est.shop_low)}`
-                  : `$${Number(est.shop_low)}\u2013$${Number(est.shop_high)}`
+                ? formatCostDisplay(
+                    est.shop_low != null ? Number(est.shop_low) : null,
+                    est.shop_high != null ? Number(est.shop_high) : null,
+                  ) || null
                 : null;
               return (
                 <View key={i} style={styles.taskCard}>

@@ -22,8 +22,7 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import ReceiptScanButton from "@/components/ReceiptScanButton";
 import Paywall from "@/components/Paywall";
-import ScanPackModal from "@/components/ScanPackModal";
-import { isFreeTier, scansRemaining } from "@/lib/subscription";
+import { isFreeTier } from "@/lib/subscription";
 import { ReceiptScanResult } from "@/lib/receiptScanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import DatePicker from "@/components/DatePicker";
@@ -50,7 +49,6 @@ export default function LogServiceScreen() {
   const scrollRef = useRef<any>(null);
   const scrollOffset = useRef(0);
   const [showPaywall, setShowPaywall] = useState(false);
-  const [showScanPack, setShowScanPack] = useState(false);
   const [task, setTask] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [mileage, setMileage] = useState("");
@@ -189,9 +187,11 @@ export default function LogServiceScreen() {
       setScannedItems([]);
     }
 
-    setOcrApplied(true);
+    if (!result.error) {
+      setOcrApplied(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
     setReceiptWarning(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
   async function uploadReceiptImage(localUri: string, userId: string, assetId: string): Promise<string | null> {
@@ -426,10 +426,14 @@ export default function LogServiceScreen() {
                 <Text style={styles.ocrSuccessText}>Receipt scanned. Fields auto-filled below.</Text>
               </View>
             ) : null}
+
             {isFreeTier(profile) ? (
               <Pressable
                 style={styles.scanGateBtn}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPaywall(true); }}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowPaywall(true);
+                }}
               >
                 <Ionicons name="camera-outline" size={16} color={Colors.accent} />
                 <Text style={styles.scanGateBtnText}>Scan Receipt</Text>
@@ -438,27 +442,13 @@ export default function LogServiceScreen() {
                   <Text style={styles.scanLockedText}>Upgrade</Text>
                 </View>
               </Pressable>
-            ) : scansRemaining(profile) <= 0 ? (
-              <Pressable
-                style={styles.scanGateBtn}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowScanPack(true); }}
-              >
-                <Ionicons name="camera-outline" size={16} color={Colors.accent} />
-                <Text style={styles.scanGateBtnText}>Scan Receipt</Text>
-                <View style={[styles.scanLockedBadge, { backgroundColor: Colors.dueSoon }]}>
-                  <Text style={styles.scanLockedText}>0 left</Text>
-                </View>
-              </Pressable>
             ) : (
-              <View>
-                {scansRemaining(profile) <= 5 && (
-                  <View style={styles.scanBadgeRow}>
-                    <Ionicons name="information-circle-outline" size={13} color={Colors.dueSoon} />
-                    <Text style={styles.scanBadgeText}>{scansRemaining(profile)} scan{scansRemaining(profile) !== 1 ? "s" : ""} left this month</Text>
-                  </View>
-                )}
-                <ReceiptScanButton onScanComplete={handleScanComplete} />
-              </View>
+              <ReceiptScanButton
+                assetType="vehicle"
+                assetId={vehicleId}
+                onScanComplete={handleScanComplete}
+                onScanLimitReached={() => setShowPaywall(true)}
+              />
             )}
           </View>
 
@@ -668,11 +658,6 @@ export default function LogServiceScreen() {
           />
         </Modal>
       )}
-      <ScanPackModal
-        visible={showScanPack}
-        onClose={() => { setShowScanPack(false); const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}
-        onSuccess={() => { setShowScanPack(false); const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}
-      />
     </KeyboardAvoidingView>
   );
 }

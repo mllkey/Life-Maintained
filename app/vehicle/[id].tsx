@@ -36,6 +36,7 @@ import { hasPersonalOrAbove } from "@/lib/subscription";
 import { SaveToast } from "@/components/SaveToast";
 import DatePicker from "@/components/DatePicker";
 import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
+import { formatShopAndDiy } from "@/lib/costFormat";
 import {
   resolveTrackingMode,
   isHoursTracked,
@@ -1870,13 +1871,20 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, isLast, c
             {lastServicedText}
           </Text>
         )}
-        {costEstimate && !isCompleted && (
+        {costEstimate && !isCompleted && (() => {
+          const costLine = formatShopAndDiy(
+            costEstimate.shop_low != null ? Number(costEstimate.shop_low) : null,
+            costEstimate.shop_high != null ? Number(costEstimate.shop_high) : null,
+            costEstimate.diy_low != null ? Number(costEstimate.diy_low) : null,
+            costEstimate.diy_high != null ? Number(costEstimate.diy_high) : null,
+          );
+          if (!costLine && !costEstimate.difficulty) return null;
+          return (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
-            <Ionicons name="cash-outline" size={12} color={Colors.good} />
-            <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
-              {Number(costEstimate.shop_low) === 0 && Number(costEstimate.shop_high) === 0 ? "Free shop" : Number(costEstimate.shop_low) === Number(costEstimate.shop_high) ? `$${Number(costEstimate.shop_low)} shop` : `$${Number(costEstimate.shop_low)}-$${Number(costEstimate.shop_high)} shop`}
-              {costEstimate.diy_low == null ? "" : Number(costEstimate.diy_low) === 0 && Number(costEstimate.diy_high) === 0 ? " · Free DIY" : Number(costEstimate.diy_low) === Number(costEstimate.diy_high) ? ` · $${Number(costEstimate.diy_low)} DIY` : ` · $${Number(costEstimate.diy_low)}-$${Number(costEstimate.diy_high)} DIY`}
-            </Text>
+            {!!costLine && <Ionicons name="cash-outline" size={12} color={Colors.good} />}
+            {!!costLine && <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
+              {costLine}
+            </Text>}
             {costEstimate.difficulty && (
               <>
                 <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: costEstimate.difficulty === 1 ? Colors.good : costEstimate.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: costEstimate.difficulty === 1 ? Colors.goodMuted : costEstimate.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
@@ -1888,7 +1896,8 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, isLast, c
               </>
             )}
           </View>
-        )}
+          );
+        })()}
         {showCompletedInfo && (
           <Text style={styles.scheduleCardCompletedInfo}>
             Already completed. To undo, delete the entry from the History tab.
