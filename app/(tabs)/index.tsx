@@ -837,7 +837,7 @@ function HealthScoreCard({ score, overdue, dueSoon, onTrack }: { score: number; 
           You're all caught up!
         </Text>
       )}
-      <Text style={styles.scoreDetail}>{onTrack} on track · {dueSoon} due soon · {overdue} overdue</Text>
+      <Text style={styles.scoreDetail}>{score === 100 ? `${onTrack} on track` : [`${onTrack} on track`, dueSoon > 0 ? `${dueSoon} due soon` : null, overdue > 0 ? `${overdue} overdue` : null].filter(Boolean).join(" · ")}</Text>
     </View>
   );
 }

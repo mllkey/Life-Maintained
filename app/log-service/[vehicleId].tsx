@@ -62,6 +62,7 @@ export default function LogServiceScreen() {
   const [error, setError] = useState<string | null>(null);
   const [receiptLocalUri, setReceiptLocalUri] = useState<string | null>(null);
   const [receiptWarning, setReceiptWarning] = useState(false);
+  const [historicalReceiptDate, setHistoricalReceiptDate] = useState<string | null>(null);
   const [pricingInsight, setPricingInsight] = useState<PricingInsight | null>(null);
   const insightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [vehicleType, setVehicleType] = useState<string | null>(null);
@@ -190,6 +191,17 @@ export default function LogServiceScreen() {
     if (!result.error) {
       setOcrApplied(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    if (result.date) {
+      const scannedMs = parseISO(result.date).getTime();
+      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+      if (!isNaN(scannedMs) && Date.now() - scannedMs > thirtyDaysMs) {
+        setHistoricalReceiptDate(result.date);
+      } else {
+        setHistoricalReceiptDate(null);
+      }
+    } else {
+      setHistoricalReceiptDate(null);
     }
     setReceiptWarning(false);
   }
@@ -350,6 +362,11 @@ export default function LogServiceScreen() {
         if (result) updatedTasks.push(result);
       }
 
+      const savedDate = date || new Date().toISOString().split("T")[0];
+      const savedDateMs = parseISO(savedDate).getTime();
+      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+      const isHistorical = !isNaN(savedDateMs) && Date.now() - savedDateMs > thirtyDaysMs;
+
       if (updatedTasks.length > 0) {
         queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", vehicleId] });
         queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
@@ -363,9 +380,12 @@ export default function LogServiceScreen() {
         const warnSuffix = storedReceiptPath === null && receiptLocalUri
           ? "\n\nNote: Receipt saved but photo could not be uploaded."
           : "";
-        Alert.alert("Maintenance Updated", lines + warnSuffix, [{ text: "OK", onPress: () => router.back() }]);
+        const historicalSuffix = isHistorical ? "\n\nLogged as historical service. Schedule updated from this record." : "";
+        Alert.alert("Maintenance Updated", lines + warnSuffix + historicalSuffix, [{ text: "OK", onPress: () => router.back() }]);
       } else if (storedReceiptPath === null && receiptLocalUri) {
         Alert.alert("Receipt Upload Failed", "Receipt couldn't be saved. Please try again.", [{ text: "OK", onPress: () => router.back() }]);
+      } else if (isHistorical) {
+        Alert.alert("Service Logged", "Logged as historical service. Schedule updated from this record.", [{ text: "OK", onPress: () => router.back() }]);
       } else {
         router.back();
       }
@@ -563,13 +583,23 @@ export default function LogServiceScreen() {
                   maximumDate={new Date()}
                   onClose={() => { const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}
                 />
+                {historicalReceiptDate && (
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.needsAttention, marginTop: 4 }}>
+                    {`This receipt is from ${format(parseISO(historicalReceiptDate), "MMM d, yyyy")}. It will be logged as a historical service.`}
+                  </Text>
+                )}
               </Field>
               {vehicleData && (isMileageTracked(vehicleData) || isHoursTracked(vehicleData)) && usageMode !== "both" && (
                 <Field label={isHoursTracked(vehicleData) ? "Hours" : "Mileage"} style={{ flex: 1 }}>
                   <TextInput
                     style={styles.input}
                     value={mileage}
-                    onChangeText={setMileage}
+                    onChangeText={(t) => {
+                      if (/[eE]/.test(t)) return;
+                      const n = parseFloat(t.replace(/,/g, ""));
+                      if (!isNaN(n) && n > 999999) return;
+                      setMileage(t);
+                    }}
                     placeholder={isHoursTracked(vehicleData) ? "e.g. 150" : "45000"}
                     placeholderTextColor={Colors.textTertiary}
                     keyboardType={isHoursTracked(vehicleData) ? "decimal-pad" : "numeric"}
@@ -582,7 +612,12 @@ export default function LogServiceScreen() {
                     <TextInput
                       style={styles.input}
                       value={mileage}
-                      onChangeText={setMileage}
+                      onChangeText={(t) => {
+                        if (/[eE]/.test(t)) return;
+                        const n = parseInt(t.replace(/,/g, ""), 10);
+                        if (!isNaN(n) && n > 999999) return;
+                        setMileage(t);
+                      }}
                       placeholder="45000"
                       placeholderTextColor={Colors.textTertiary}
                       keyboardType="numeric"
@@ -592,7 +627,12 @@ export default function LogServiceScreen() {
                     <TextInput
                       style={styles.input}
                       value={hoursReading}
-                      onChangeText={setHoursReading}
+                      onChangeText={(t) => {
+                        if (/[eE]/.test(t)) return;
+                        const n = parseFloat(t.replace(/,/g, ""));
+                        if (!isNaN(n) && n > 999999) return;
+                        setHoursReading(t);
+                      }}
                       placeholder="e.g. 125.5"
                       placeholderTextColor={Colors.textTertiary}
                       keyboardType="decimal-pad"

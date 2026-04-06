@@ -27,6 +27,8 @@ export const Colors = {
   overdueMuted: "rgba(255, 69, 58, 0.15)",
   dueSoon: YELLOW,
   dueSoonMuted: "rgba(255, 214, 10, 0.15)",
+  needsAttention: "#FFB340",
+  needsAttentionMuted: "rgba(255, 179, 64, 0.15)",
   good: GREEN,
   goodMuted: "rgba(50, 215, 75, 0.15)",
 

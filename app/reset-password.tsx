@@ -100,8 +100,20 @@ export default function ResetPasswordScreen() {
       setError("Please fill in both fields");
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setError("Password must include an uppercase letter");
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      setError("Password must include a lowercase letter");
+      return;
+    }
+    if (!/[0-9]/.test(password)) {
+      setError("Password must include a number");
       return;
     }
     if (password !== confirmPassword) {
@@ -113,7 +125,10 @@ export default function ResetPasswordScreen() {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
       setIsLoading(false);
-      setError(error.message);
+      const msg = error.message?.toLowerCase().includes("password")
+        ? "Password doesn't meet requirements. Use at least 8 characters with uppercase, lowercase, and a number."
+        : error.message;
+      setError(msg);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }

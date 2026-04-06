@@ -61,7 +61,7 @@ function taskUsesHoursUsage(task: any, mode: TrackingMode): boolean {
 function calcStatus(
   task: any,
   vehicle: any,
-): "overdue" | "due_soon" | "upcoming" | "completed" {
+): "overdue" | "needs_attention" | "due_soon" | "upcoming" | "completed" {
   if (task.status === "completed") return "completed";
   const today = new Date();
   const dueDate = task.next_due_date ? parseISO(task.next_due_date) : null;
@@ -75,7 +75,12 @@ function calcStatus(
   if (
     (nextDueUsage != null && currentUsage != null && currentUsage >= nextDueUsage) ||
     (dueDate != null && dueDate <= today)
-  ) return "overdue";
+  ) {
+    if (task.updated_at && (Date.now() - new Date(task.updated_at).getTime() < 48 * 60 * 60 * 1000)) {
+      return "needs_attention";
+    }
+    return "overdue";
+  }
   if (
     (nextDueUsage != null && currentUsage != null && nextDueUsage - currentUsage <= dueSoonThreshold) ||
     (dueDate != null && differenceInDays(dueDate, today) <= 30)
@@ -107,10 +112,11 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
 };
 
 const STATUS_BORDER: Record<string, string> = {
-  upcoming:  Colors.border,
-  due_soon:  Colors.dueSoon,
-  overdue:   Colors.overdue,
-  completed: Colors.good,
+  upcoming:        Colors.border,
+  due_soon:        Colors.dueSoon,
+  overdue:         Colors.overdue,
+  needs_attention: Colors.needsAttention,
+  completed:       Colors.good,
 };
 
 export default function VehicleDetailScreen() {
@@ -398,9 +404,9 @@ export default function VehicleDetailScreen() {
   }, [processedScheduleTasks, scheduleTasks]);
 
   const actionNeededTasks = useMemo(
-    () => processedScheduleTasks.filter(t => t.status === "overdue" || t.status === "due_soon")
+    () => processedScheduleTasks.filter(t => t.status === "overdue" || t.status === "needs_attention" || t.status === "due_soon")
       .sort((a, b) => {
-        if (a.status !== b.status) return a.status === "overdue" ? -1 : 1;
+        if (a.status !== b.status) return a.status === "overdue" ? -1 : a.status === "needs_attention" && b.status !== "overdue" ? -1 : 1;
         return nextUsageSortKey(a, vehicleMode) - nextUsageSortKey(b, vehicleMode);
       }),
     [processedScheduleTasks, vehicleMode],
@@ -422,7 +428,7 @@ export default function VehicleDetailScreen() {
   React.useEffect(() => {
     if (!processedScheduleTasks || processedScheduleTasks.length === 0) { setScheduleInsight(null); setInsightTaskName(null); return; }
     if (processedScheduleTasks.some(t => t.last_completed_date != null)) { setScheduleInsight(null); setInsightTaskName(null); return; }
-    const overdue = processedScheduleTasks.filter(t => t.status === "overdue");
+    const overdue = processedScheduleTasks.filter(t => t.status === "overdue" || t.status === "needs_attention");
     const dueSoon = processedScheduleTasks.filter(t => t.status === "due_soon");
     const highPri = processedScheduleTasks.filter(t => t.priority === "high");
     let insight: string | null = null;
@@ -901,7 +907,7 @@ export default function VehicleDetailScreen() {
   function buildCsv(logsData: any[]) {
     const tracksHrs = isHoursTracked(vehicle);
     const usageLabel = tracksHrs ? "Hours" : "Mileage";
-    const header = `Date,Service,${usageLabel},Cost,Provider,Notes`;
+    const header = `Date,Service,${usageLabel},Cost,Provider,Notes,Receipt`;
     const rows = logsData.map(log => {
       const date = log.service_date ?? "";
       const task = (log.service_name ?? "").replace(/,/g, ";");
@@ -909,14 +915,19 @@ export default function VehicleDetailScreen() {
       const cost = log.cost != null ? `$${log.cost.toFixed(2)}` : "";
       const provider = (log.provider_name ?? "").replace(/,/g, ";");
       const notes = (log.notes ?? "").replace(/,/g, ";").replace(/\n/g, " ");
-      return `${date},${task},${usage},${cost},${provider},${notes}`;
+      const receipt = log.receipt_url ? `https://fqblqrrgjpwysrsiolcn.supabase.co/storage/v1/object/public/receipts/${log.receipt_url}` : "-";
+      return `${date},${task},${usage},${cost},${provider},${notes},${receipt}`;
     });
     return [header, ...rows, "", "Usage data is self-reported by the owner and has not been independently verified."].join("\n");
   }
 
   function buildHtml(logsData: any[], vehicleData: any) {
     const name = vehicleData?.nickname ?? `${vehicleData?.year} ${vehicleData?.make} ${vehicleData?.model}`;
-    const rows = logsData.map(log => `
+    const rows = logsData.map(log => {
+      const receiptCell = log.receipt_url
+        ? `<a href="https://fqblqrrgjpwysrsiolcn.supabase.co/storage/v1/object/public/receipts/${log.receipt_url}" target="_blank">View Receipt</a>`
+        : "-";
+      return `
       <tr>
         <td>${log.service_date ? format(parseISO(log.service_date), "MMM d, yyyy") : "-"}</td>
         <td>${log.service_name ?? "Service"}</td>
@@ -924,7 +935,9 @@ export default function VehicleDetailScreen() {
         <td>${log.cost != null ? "$" + log.cost.toFixed(2) : "-"}</td>
         <td>${log.provider_name ?? "-"}</td>
         <td>${log.notes ?? ""}</td>
-      </tr>`).join("");
+        <td>${receiptCell}</td>
+      </tr>`;
+    }).join("");
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Service History</title>
     <style>
       body { font-family: -apple-system, Helvetica, sans-serif; padding: 32px; color: #111; }
@@ -939,7 +952,7 @@ export default function VehicleDetailScreen() {
     <h1>Service History: ${name}</h1>
     <div class="sub">Exported from LifeMaintained · ${format(new Date(), "MMMM d, yyyy")}</div>
     <table>
-      <thead><tr><th>Date</th><th>Service</th><th>${isHoursTracked(vehicle) ? "Hours" : "Mileage"}</th><th>Cost</th><th>Provider</th><th>Notes</th></tr></thead>
+      <thead><tr><th>Date</th><th>Service</th><th>${isHoursTracked(vehicle) ? "Hours" : "Mileage"}</th><th>Cost</th><th>Provider</th><th>Notes</th><th>Receipt</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div class="footer">Generated by LifeMaintained · lifemaintained.app<br/>Usage data is self-reported by the owner and has not been independently verified.</div>
@@ -1815,11 +1828,13 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, isLast, c
 
   const barColor = task.status === "overdue"
     ? Colors.overdue
-    : task.status === "due_soon"
-      ? Colors.dueSoon
-      : task.status === "completed"
-        ? Colors.good
-        : Colors.borderSubtle;
+    : task.status === "needs_attention"
+      ? Colors.needsAttention
+      : task.status === "due_soon"
+        ? Colors.dueSoon
+        : task.status === "completed"
+          ? Colors.good
+          : Colors.borderSubtle;
 
   const nextDueUsage = taskNextDueUsage(task, vehicle);
   const lastCompletedUsage = taskLastCompletedUsage(task, vehicle);

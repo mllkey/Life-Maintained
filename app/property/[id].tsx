@@ -33,15 +33,16 @@ import { SaveToast } from "@/components/SaveToast";
 import DatePicker from "@/components/DatePicker";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
-function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): "overdue" | "due_soon" | "good" {
+function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): "overdue" | "due_soon" | "upcoming" | "good" {
   const now = new Date();
   const soon = addDays(now, 30);
   if (nextDueDate) {
     const due = parseISO(nextDueDate);
     if (isBefore(due, now)) return "overdue";
     if (isBefore(due, soon)) return "due_soon";
+    return "upcoming";
   }
-  if (!lastCompletedAt) return "due_soon";
+  if (!lastCompletedAt) return "upcoming";
   return "good";
 }
 
@@ -60,6 +61,7 @@ export default function PropertyDetailScreen() {
   const [activeTab, setActiveTab] = useState<"tasks" | "history">("tasks");
   const [actionNeededExpanded, setActionNeededExpanded] = useState(true);
   const [upToDateExpanded, setUpToDateExpanded] = useState(false);
+  const [upcomingExpanded, setUpcomingExpanded] = useState(false);
 
   const [markCompleteTask, setMarkCompleteTask] = useState<any | null>(null);
   const [completeDate, setCompleteDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -499,6 +501,10 @@ export default function PropertyDetailScreen() {
     () => tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "good") ?? [],
     [tasks],
   );
+  const upcomingTasks = useMemo(
+    () => tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "upcoming") ?? [],
+    [tasks],
+  );
   const actionNeededTasks = useMemo(() => [...overdueTasks, ...dueSoonTasks], [overdueTasks, dueSoonTasks]);
 
   const groupedHistory = useMemo(() => {
@@ -723,6 +729,17 @@ export default function PropertyDetailScreen() {
                       expanded={upToDateExpanded}
                       onToggle={() => { Haptics.selectionAsync(); setUpToDateExpanded(v => !v); }}
                       tasks={goodTasks}
+                      onMarkComplete={handleOpenMarkComplete}
+                      costEstimates={costEstimates}
+                    />
+                  )}
+                  {upcomingTasks.length > 0 && (
+                    <TaskSection
+                      title={`Upcoming (${upcomingTasks.length})`}
+                      titleColor={Colors.textSecondary}
+                      expanded={upcomingExpanded}
+                      onToggle={() => { Haptics.selectionAsync(); setUpcomingExpanded(v => !v); }}
+                      tasks={upcomingTasks}
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
                     />
@@ -1042,7 +1059,7 @@ function TaskRow({
   costEstimates?: Record<string, any>;
 }) {
   const status = getStatus(task.next_due_date, task.last_completed_at);
-  const barColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : Colors.good;
+  const barColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : status === "upcoming" ? Colors.textSecondary : Colors.good;
   const isCompleted = status === "good";
   const [showCompletedInfo, setShowCompletedInfo] = useState(false);
 

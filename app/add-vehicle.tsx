@@ -120,7 +120,7 @@ const ALL_MAKES = [...new Set(Object.values(MAKES_BY_TYPE).flat())];
 type MakeSection = { title: string; data: string[] };
 
 const CAR_MAKE_SECTIONS: MakeSection[] = [
-  { title: "Most Popular", data: ["Toyota", "Ford", "Chevrolet", "Honda", "Nissan", "Jeep", "RAM", "GMC", "Subaru", "Hyundai", "Kia"] },
+  { title: "Most Popular", data: ["BMW", "Chevrolet", "Ford", "GMC", "Honda", "Hyundai", "Jeep", "Kia", "Mercedes-Benz", "Nissan", "RAM", "Subaru", "Tesla", "Toyota", "Volkswagen"] },
   { title: "A", data: ["Acura", "Alfa Romeo", "Aston Martin", "Audi"] },
   { title: "B", data: ["Bentley", "BMW", "Buick"] },
   { title: "C", data: ["Cadillac", "Chrysler"] },
@@ -969,7 +969,7 @@ export default function AddVehicleScreen() {
       fuel_type: fuelType,
       is_awd: isAwd,
       tracking_mode: inferredMode,
-      mileage: mileage ? parseInt(mileage, 10) : null,
+      mileage: mileage ? parseInt(mileage.replace(/,/g, ""), 10) : null,
       hours:
         inferredMode === "hours" && engineHours.trim()
           ? parseFloat(engineHours.replace(/,/g, ""))
@@ -1011,7 +1011,7 @@ export default function AddVehicleScreen() {
               make: make.trim(),
               model: model.trim(),
               year: String(yearNum),
-              currentMileage: String(mileage ? parseInt(mileage, 10) : 0),
+              currentMileage: String(mileage ? parseInt(mileage.replace(/,/g, ""), 10) : 0),
               currentHours: String(vehicleData.hours ?? 0),
               trackingMode: inferredMode,
               fuelType: fuelType,
@@ -1032,7 +1032,7 @@ export default function AddVehicleScreen() {
                   make: make.trim(),
                   model: model.trim(),
                   year: yearNum,
-                  current_mileage: mileage ? parseInt(mileage, 10) : 0,
+                  current_mileage: mileage ? parseInt(mileage.replace(/,/g, ""), 10) : 0,
                   current_hours: vehicleData.hours ?? 0,
                   tracking_mode: inferTrackingMode(selectedVehicleCategory),
                   vehicle_type: fuelType,
@@ -1091,7 +1091,7 @@ export default function AddVehicleScreen() {
                 make: make.trim(),
                 model: model.trim(),
                 year: yearNum,
-                current_mileage: mileage ? parseInt(mileage, 10) : 0,
+                current_mileage: mileage ? parseInt(mileage.replace(/,/g, ""), 10) : 0,
                 current_hours: vehicleData.hours ?? 0,
                 tracking_mode: inferTrackingMode(selectedVehicleCategory),
                 vehicle_type: fuelType,
@@ -1608,7 +1608,12 @@ export default function AddVehicleScreen() {
                 <TextInput
                   style={styles.fieldInput}
                   value={mileage}
-                  onChangeText={setMileage}
+                  onChangeText={(t) => {
+                    if (/[eE]/.test(t)) return;
+                    const n = parseInt(t.replace(/,/g, ""), 10);
+                    if (!isNaN(n) && n > 999999) return;
+                    setMileage(t);
+                  }}
                   placeholder="45000"
                   placeholderTextColor={Colors.textTertiary}
                   keyboardType="numeric"
