@@ -102,20 +102,21 @@ serve(async (req: Request) => {
     const explicitTracking = typeof reqTrackingMode === "string" ? reqTrackingMode.toLowerCase().trim() : reqTrackingMode;
     const trackingMode = resolveTrackingMode(explicitTracking, vehicleCategory);
 
-    // Tracking mode behavior in this version:
-    // - "mileage": full mileage support (interval_miles, next_due_miles)
-    // - "hours": full hours support (interval_hours, next_due_hours)
-    // - "both": treated as hours-primary — generates hours intervals, nulls mileage fields
-    //           Full dual-meter support (writing both miles and hours) is deferred.
+    // Tracking mode behavior:
+    // - "mileage": mileage-primary (interval_miles, next_due_miles)
+    // - "hours": hours-primary (interval_hours, next_due_hours; interval_miles = null)
+    // - "both": dual-meter capable (preserves both miles and hours intervals)
     // - "time_only": date-based intervals only, no usage tracking
-    const isHoursMode = trackingMode === "hours" || trackingMode === "both";
+    const isHoursOnlyMode = trackingMode === "hours";
     const isMileageMode = trackingMode === "mileage";
+    const isBothMode = trackingMode === "both";
     const isTimeOnlyMode = trackingMode === "time_only";
+    const isHoursCapableMode = isHoursOnlyMode || isBothMode;
 
     const resolvedCurrentMileage = typeof current_mileage === "number" ? current_mileage : 0;
 
     let resolvedCurrentHours = 0;
-    if (isHoursMode) {
+    if (isHoursCapableMode) {
       if (typeof current_hours === "number" && Number.isFinite(current_hours)) {
         resolvedCurrentHours = current_hours;
       } else if (current_hours === undefined || current_hours === null) {
@@ -621,7 +622,7 @@ serve(async (req: Request) => {
         const fuelHint = resolvedVehicleType !== "gas" ? ` (fuel type: ${resolvedVehicleType})` : "";
         const awdHint = resolvedIsAwd ? " (AWD/4WD)" : "";
 
-        const isHoursAsset = isHoursMode;
+        const isHoursAsset = isHoursOnlyMode;
         const usageWord = isHoursAsset ? "engine hours" : "miles";
         const intervalField = isHoursAsset ? "interval_hours" : "interval_miles";
         const currentUsageDesc = isHoursAsset
@@ -717,8 +718,8 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               task: t.task.trim(),
               description: typeof t.description === "string" ? t.description : "",
               category: typeof t.category === "string" ? t.category : "General",
-              interval_miles: isHoursMode ? null : (typeof t.interval_miles === "number" && t.interval_miles > 0 ? t.interval_miles : null),
-              interval_hours: isHoursMode ? (typeof t.interval_hours === "number" && t.interval_hours > 0 ? t.interval_hours : null) : null,
+              interval_miles: isHoursOnlyMode ? null : (typeof t.interval_miles === "number" && t.interval_miles > 0 ? t.interval_miles : null),
+              interval_hours: isHoursCapableMode ? (typeof t.interval_hours === "number" && t.interval_hours > 0 ? t.interval_hours : null) : null,
               interval_months: typeof t.interval_months === "number" && t.interval_months > 0 ? t.interval_months : null,
               priority: typeof t.priority === "string" ? t.priority : "medium",
             }));
@@ -727,7 +728,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
             // ══════════════════════════════════════════════════════════════
             // POST-PROCESSING: Task family dedup, merge, cleanup, trimming
             // ══════════════════════════════════════════════════════════════
-            if (validatedTasks && !isHoursMode) {
+            if (validatedTasks && !isHoursOnlyMode) {
               const isSmallMoto = (vehicleCategory === "motorcycle" || vehicleCategory === "atv" || vehicleCategory === "utv" || vehicleCategory === "snowmobile");
 
               interface TaskFamily {
@@ -775,7 +776,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
                 const fam = families[fi];
                 for (let ti = 0; ti < validatedTasks.length; ti++) {
                   if (matched.has(ti)) continue;
-                  if (fam.patterns.some(p => p.test(validatedTasks[ti].task))) {
+                  if (fam.patterns.some(p => p.test(validatedTasks![ti].task))) {
                     const arr = familyGroups.get(fi) || [];
                     arr.push(ti);
                     familyGroups.set(fi, arr);
@@ -859,8 +860,8 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               for (const [miles, idxs] of mileageCounts.entries()) {
                 if (idxs.length > 2) {
                   const sortedIdxs = [...idxs].sort((a, b) => {
-                    const pa = validatedTasks[a].priority === "high" ? 3 : validatedTasks[a].priority === "medium" ? 2 : 1;
-                    const pb = validatedTasks[b].priority === "high" ? 3 : validatedTasks[b].priority === "medium" ? 2 : 1;
+                    const pa = validatedTasks![a].priority === "high" ? 3 : validatedTasks![a].priority === "medium" ? 2 : 1;
+                    const pb = validatedTasks![b].priority === "high" ? 3 : validatedTasks![b].priority === "medium" ? 2 : 1;
                     return pa - pb;
                   });
                   let adjusted = 0;
@@ -899,6 +900,37 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
                 console.warn(`[POST-PROCESS] Only ${validatedTasks.length} tasks after cleanup`);
               }
             }
+
+            // ══════════════════════════════════════════════════════════════
+            // UNIVERSAL CLEANUP: trim + name-dedup for ALL vehicles
+            // (mileage vehicles already went through the full family pipeline
+            //  above; hours vehicles only get these lightweight passes)
+            // ══════════════════════════════════════════════════════════════
+            if (validatedTasks) {
+              // Trim to max 18 tasks (preserve high-priority first)
+              if (validatedTasks.length > 18) {
+                const scored = validatedTasks.map((t, i) => {
+                  const priScore = t.priority === "high" ? 3 : t.priority === "medium" ? 2 : 1;
+                  return { idx: i, score: priScore };
+                });
+                scored.sort((a, b) => a.score - b.score);
+                const removeCount = validatedTasks.length - 18;
+                const removeIdxs = new Set(scored.slice(0, removeCount).map((s: { idx: number; score: number }) => s.idx));
+                validatedTasks = validatedTasks.filter((_: ValidatedTask, i: number) => !removeIdxs.has(i));
+              }
+              // Deduplicate by normalized name
+              const seenNames = new Set<string>();
+              validatedTasks = validatedTasks.filter((t: ValidatedTask) => {
+                const k = t.task.toLowerCase().trim();
+                if (seenNames.has(k)) return false;
+                seenNames.add(k);
+                return true;
+              });
+              if (isHoursOnlyMode && validatedTasks.length < 5) {
+                console.warn(`[POST-PROCESS] Hours vehicle: only ${validatedTasks.length} tasks after cleanup`);
+              }
+            }
+
             if (validatedTasks.length >= 5) {
               await adminClient.from("ai_schedule_cache").upsert({ cache_key: cacheKey, vehicle_desc: vehicleDesc, vehicle_category: vehicleCategory, fuel_type: resolvedVehicleType, tasks_json: JSON.stringify(validatedTasks), task_count: validatedTasks.length }, { onConflict: "cache_key" });
             }
@@ -915,8 +947,8 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
           name: t.task, description: t.description, category: t.category,
           interval_miles: t.interval_miles, interval_hours: t.interval_hours, interval_months: t.interval_months,
           last_completed_date: null, last_completed_miles: null, last_completed_hours: null,
-          next_due_miles: (!isHoursMode && t.interval_miles !== null) ? Math.round(resolvedCurrentMileage) + t.interval_miles : null,
-          next_due_hours: (isHoursMode && t.interval_hours !== null) ? Math.round(resolvedCurrentHours) + t.interval_hours : null,
+          next_due_miles: (!isHoursOnlyMode && t.interval_miles !== null) ? Math.round(resolvedCurrentMileage) + t.interval_miles : null,
+          next_due_hours: (isHoursCapableMode && t.interval_hours !== null) ? Math.round(resolvedCurrentHours) + t.interval_hours : null,
           next_due_date: t.interval_months !== null ? addMonths(today, t.interval_months).toISOString() : null,
           status: "upcoming", priority: t.priority, is_custom: false, source: "ai",
         }));
@@ -968,7 +1000,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     // (interval_months + next_due_date). Hours intervals are only generated by
     // the AI path. This is intentional — mileage templates cannot be safely
     // reinterpreted as engine hours.
-    if (isHoursMode) {
+    if (isHoursOnlyMode) {
       console.warn(`[TEMPLATE FALLBACK] Hours-tracked asset ${vehicleCategory} falling back to time-only templates. AI generation failed or was unavailable.`);
     }
 
@@ -1234,13 +1266,13 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
         name: t.task as string,
         description: (t.description as string | null) ?? null,
         category: t.category as string,
-        interval_miles: isHoursMode ? null : resolvedMiles,
+        interval_miles: isHoursOnlyMode ? null : resolvedMiles,
         interval_hours: null,  // Template fallback does not generate hours intervals — only AI path does
         interval_months: resolvedMonths,
         last_completed_date: null,
         last_completed_miles: null,
         last_completed_hours: null,
-        next_due_miles: isHoursMode ? null : nextDueMiles,
+        next_due_miles: isHoursOnlyMode ? null : nextDueMiles,
         next_due_hours: null,  // Template fallback uses time-only intervals for hours assets
         next_due_date: nextDueDate,
         status: "upcoming",

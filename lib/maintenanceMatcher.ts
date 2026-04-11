@@ -1,7 +1,12 @@
 import { supabase } from "./supabase";
-import { resolveTrackingMode } from "./usageHelpers";
 
-export type MatchResult = { taskId: string; taskName: string; nextDue: string | null };
+export type MatchResult = {
+  taskId: string;
+  taskName: string;
+  nextDueDate: string | null;
+  nextDueMiles: number | null;
+  nextDueHours: number | null;
+};
 
 export const CATEGORY_GROUPS: string[][] = [
   ["oil", "lube", "motor oil", "synthetic"],
@@ -172,123 +177,38 @@ export async function matchAndUpdateVehicleTask(
   if (!serviceName.trim()) return null;
 
   try {
-    const [{ data: tasks }, { data: vehicle }] = await Promise.all([
-      supabase.from("user_vehicle_maintenance_tasks").select("*").eq("vehicle_id", vehicleId),
-      supabase
-        .from("vehicles")
-        .select("average_miles_per_month, tracking_mode, vehicle_type")
-        .eq("id", vehicleId)
-        .single(),
-    ]);
+    const { data: tasks } = await supabase
+      .from("user_vehicle_maintenance_tasks")
+      .select("*")
+      .eq("vehicle_id", vehicleId);
 
     if (!tasks || tasks.length === 0) return null;
 
     const matched = fuzzyMatchTask(serviceName, tasks);
     if (!matched) return null;
 
-    const mode = resolveTrackingMode(
-      (vehicle ?? {}) as { tracking_mode?: string | null; vehicle_type?: string | null }
-    );
+    // Route through canonical RPC — it handles tracking mode, interval
+    // computation, vehicle usage update, and mileage history atomically.
+    const { data: rpcData, error: rpcErr } = await supabase.rpc("complete_vehicle_task", {
+      p_task_id: matched.id,
+      p_mileage: serviceMileage,
+      p_hours: serviceHours,
+      p_completed_date: new Date(serviceDate + "T12:00:00").toISOString(),
+      p_skip_log: true,
+    });
 
-    const intervalStr =
-      matched.interval_months != null
-        ? `${matched.interval_months}_months`
-        : (matched.interval ?? null);
-
-    const mileageInterval = matched.interval_miles ?? matched.mileage_interval ?? null;
-    const hoursInterval = matched.interval_hours ?? null;
-    const asNeeded = isAsNeededInterval(intervalStr);
-
-    const updatePayload: Record<string, unknown> = {
-      last_completed_date: new Date(serviceDate + "T12:00:00").toISOString().split("T")[0],
-      updated_at: new Date().toISOString(),
-    };
-
-    let nextDue: string | null = null;
-
-    const hasHoursReading = serviceHours != null && Number.isFinite(serviceHours);
-    const hasMileageReading = serviceMileage != null && Number.isFinite(serviceMileage);
-
-    if (hasHoursReading && (mode === "hours" || mode === "both")) {
-      const completedHours = Number(serviceHours);
-
-      updatePayload.last_completed_hours = completedHours;
-      updatePayload.last_completed_miles = null;
-      updatePayload.next_due_miles = null;
-
-      if (!asNeeded && hoursInterval != null && hoursInterval > 0) {
-        updatePayload.next_due_hours = completedHours + hoursInterval;
-      } else {
-        updatePayload.next_due_hours = null;
-      }
-
-      if (!asNeeded && matched.interval_months != null && matched.interval_months > 0) {
-        const d = new Date(serviceDate + "T12:00:00");
-        d.setMonth(d.getMonth() + matched.interval_months);
-        updatePayload.next_due_date = d.toISOString().split("T")[0];
-        nextDue = d.toISOString();
-      } else {
-        updatePayload.next_due_date = null;
-      }
-    } else if (hasMileageReading && (mode === "mileage" || mode === "both")) {
-      const completedMileage = Number(serviceMileage);
-
-      updatePayload.last_completed_miles = completedMileage;
-      updatePayload.last_completed_hours = null;
-      updatePayload.next_due_hours = null;
-
-      if (!asNeeded && mileageInterval != null && mileageInterval > 0) {
-        updatePayload.next_due_miles = completedMileage + mileageInterval;
-      } else {
-        updatePayload.next_due_miles = null;
-      }
-
-      if (!asNeeded) {
-        nextDue = calculateNextDue(
-          intervalStr,
-          mileageInterval,
-          serviceDate,
-          completedMileage,
-          (vehicle as { average_miles_per_month?: number | null })?.average_miles_per_month ?? null,
-        );
-        updatePayload.next_due_date = nextDue ? nextDue.split("T")[0] : null;
-      } else {
-        updatePayload.next_due_date = null;
-      }
-    } else if (!asNeeded && matched.interval_months != null && matched.interval_months > 0) {
-      const d = new Date(serviceDate + "T12:00:00");
-      d.setMonth(d.getMonth() + matched.interval_months);
-      updatePayload.next_due_date = d.toISOString().split("T")[0];
-      nextDue = d.toISOString();
-
-      updatePayload.last_completed_miles = null;
-      updatePayload.last_completed_hours = null;
-      updatePayload.next_due_miles = null;
-      updatePayload.next_due_hours = null;
-    } else {
-      if (mode === "hours" || mode === "both") {
-        updatePayload.last_completed_miles = null;
-        updatePayload.next_due_miles = null;
-      }
-      if (mode === "mileage") {
-        updatePayload.last_completed_hours = null;
-        updatePayload.next_due_hours = null;
-      }
-      if (mode === "time_only") {
-        updatePayload.last_completed_miles = null;
-        updatePayload.last_completed_hours = null;
-        updatePayload.next_due_miles = null;
-        updatePayload.next_due_hours = null;
-      }
-      updatePayload.next_due_date = null;
+    if (rpcErr) {
+      console.warn("[matcher] complete_vehicle_task RPC error:", rpcErr.message);
+      return null;
     }
 
-    await supabase
-      .from("user_vehicle_maintenance_tasks")
-      .update(updatePayload)
-      .eq("id", matched.id);
-
-    return { taskId: matched.id, taskName: matched.name, nextDue };
+    return {
+      taskId: matched.id,
+      taskName: matched.name,
+      nextDueDate: rpcData?.next_due_date ? new Date(rpcData.next_due_date + "T12:00:00").toISOString() : null,
+      nextDueMiles: rpcData?.next_due_miles ?? null,
+      nextDueHours: rpcData?.next_due_hours ?? null,
+    };
   } catch {
     return null;
   }
@@ -328,7 +248,7 @@ export async function matchAndUpdatePropertyTask(
 
     await supabase.from("property_maintenance_tasks").update(updatePayload).eq("id", matched.id);
 
-    return { taskId: matched.id, taskName: matched.task, nextDue };
+    return { taskId: matched.id, taskName: matched.task, nextDueDate: nextDue, nextDueMiles: null, nextDueHours: null };
   } catch {
     return null;
   }

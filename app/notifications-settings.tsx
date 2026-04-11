@@ -18,41 +18,17 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { upsertPushToken, resolveAuthUserId } from "@/lib/notificationScheduler";
+import { loadNotifPrefs, saveNotifPrefs, type NotifPrefs, DEFAULT_NOTIF_PREFS } from "@/lib/notificationPrefs";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
-
-const STORAGE_KEY = "notification_prefs";
-const DEFAULT_PREFS = {
-  pushEnabled: false,
-  advanceDays: 14,
-  quietHoursStart: "22:00",
-  quietHoursEnd: "08:00",
-  mutedVehicles: [] as string[],
-  mutedProperties: [] as string[],
-};
-
-type NotifPrefs = typeof DEFAULT_PREFS;
-
-async function loadPrefs(): Promise<NotifPrefs> {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULT_PREFS, ...JSON.parse(raw) } : DEFAULT_PREFS;
-  } catch {
-    return DEFAULT_PREFS;
-  }
-}
-
-async function savePrefs(prefs: NotifPrefs) {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
-}
 
 export default function NotificationsSettingsScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const [prefs, setPrefs] = useState<NotifPrefs>(DEFAULT_PREFS);
+  const [prefs, setPrefs] = useState<NotifPrefs>(DEFAULT_NOTIF_PREFS);
   const [isLoading, setIsLoading] = useState(true);
   const [budgetAmount, setBudgetAmount] = useState("");
   const [budgetSaved, setBudgetSaved] = useState(false);
@@ -92,7 +68,7 @@ export default function NotificationsSettingsScreen() {
   });
 
   useEffect(() => {
-    loadPrefs().then(p => { setPrefs(p); setIsLoading(false); });
+    loadNotifPrefs().then(p => { setPrefs(p); setIsLoading(false); });
   }, []);
 
   useEffect(() => {
@@ -104,7 +80,7 @@ export default function NotificationsSettingsScreen() {
   async function updatePref<K extends keyof NotifPrefs>(key: K, value: NotifPrefs[K]) {
     const next = { ...prefs, [key]: value };
     setPrefs(next);
-    await savePrefs(next);
+    await saveNotifPrefs(next);
   }
 
   async function togglePush() {
@@ -119,9 +95,97 @@ export default function NotificationsSettingsScreen() {
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      await updatePref("pushEnabled", true);
+
+      const resolvedUserId = await resolveAuthUserId();
+      if (!resolvedUserId) return;
+
+      const tokenResult = await upsertPushToken(resolvedUserId);
+      if (!tokenResult.ok) {
+        console.warn("[NotifSettings] upsertPushToken failed:", tokenResult.reason);
+        return;
+      }
+
+      let prefDbOk = false;
+      try {
+        const { error } = await (supabase.from("user_notification_preferences") as any)
+          .upsert(
+            { user_id: resolvedUserId, push_enabled: true, updated_at: new Date().toISOString() },
+            { onConflict: "user_id" }
+          );
+        if (error) {
+          console.warn("[NotifSettings] push_enabled DB upsert failed:", error.message);
+        } else {
+          try {
+            const { data: readback } = await (supabase.from("user_notification_preferences") as any)
+              .select("push_enabled")
+              .eq("user_id", resolvedUserId)
+              .maybeSingle();
+            if (readback?.push_enabled === true) {
+              prefDbOk = true;
+            } else {
+              console.warn("[NotifSettings] push_enabled readback mismatch");
+            }
+          } catch {
+            console.warn("[NotifSettings] push_enabled readback threw");
+          }
+        }
+      } catch (e) {
+        console.warn("[NotifSettings] push_enabled DB upsert threw:", e);
+      }
+      if (!prefDbOk) return;
+
+      try {
+        await saveNotifPrefs({ ...prefs, pushEnabled: true });
+      } catch (e) {
+        console.warn("[NotifSettings] AsyncStorage pushEnabled write failed:", e);
+      }
+      setPrefs(p => ({ ...p, pushEnabled: true }));
+
     } else {
-      await updatePref("pushEnabled", false);
+      // ── Disable path ─────────────────────────────────────────────────────
+      // Resolve authenticated user id live from Supabase auth
+      const resolvedUserId = await resolveAuthUserId();
+      if (!resolvedUserId) return;
+
+      // Step 1: DB upsert for push_enabled with readback — must confirm before AsyncStorage or UI
+      let prefDbOk = false;
+      try {
+        const { error } = await (supabase.from("user_notification_preferences") as any)
+          .upsert(
+            { user_id: resolvedUserId, push_enabled: false, updated_at: new Date().toISOString() },
+            { onConflict: "user_id" }
+          );
+        if (error) {
+          console.warn("[NotifSettings] push_enabled DB upsert failed:", error.message);
+        } else {
+          try {
+            const { data: readback } = await (supabase.from("user_notification_preferences") as any)
+              .select("push_enabled")
+              .eq("user_id", resolvedUserId)
+              .maybeSingle();
+            if (readback?.push_enabled === false) {
+              prefDbOk = true;
+            } else {
+              console.warn("[NotifSettings] push_enabled readback mismatch");
+            }
+          } catch {
+            console.warn("[NotifSettings] push_enabled readback threw");
+          }
+        }
+      } catch (e) {
+        console.warn("[NotifSettings] push_enabled DB upsert threw:", e);
+      }
+      if (!prefDbOk) return;
+
+      // Step 2: AsyncStorage only after DB committed and verified
+      try {
+        await saveNotifPrefs({ ...prefs, pushEnabled: false });
+      } catch (e) {
+        console.warn("[NotifSettings] AsyncStorage pushEnabled write failed:", e);
+        // DB already verified — sync UI to match committed DB intent
+      }
+      // Step 3: UI always reflects committed DB intent, regardless of AsyncStorage result
+      setPrefs(p => ({ ...p, pushEnabled: false }));
     }
   }
 

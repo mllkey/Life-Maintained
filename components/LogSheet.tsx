@@ -20,8 +20,10 @@ import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SaveToast } from "@/components/SaveToast";
 import { matchAndUpdateVehicleTask, matchAndUpdatePropertyTask } from "@/lib/maintenanceMatcher";
-import { isHoursTracked } from "@/lib/usageHelpers";
+import { isHoursTracked, resolveTrackingMode } from "@/lib/usageHelpers";
+import { updateVehicleUsage } from "@/lib/vehicleUsageHelper";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import DatePicker from "@/components/DatePicker";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
@@ -228,17 +230,19 @@ function FieldRow({
 // ─── Confirm Card ────────────────────────────────────────────────────────────
 
 function ConfirmCard({
-  item, userId, onDone,
+  item, userId, onDone, onSuccess,
 }: {
   item: ExtractedItem;
   userId: string;
   onDone: () => void;
+  onSuccess?: (title: string, subtitle?: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [serviceName, setServiceName] = useState(item.service_name);
   const [date, setDate] = useState(item.service_date);
   const [cost, setCost] = useState(item.cost != null ? String(item.cost) : "");
   const [mileage, setMileage] = useState(item.mileage != null ? String(item.mileage) : "");
+  const [hoursReading, setHoursReading] = useState("");
   const [provider, setProvider] = useState(item.provider_name ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
   const [saving, setSaving] = useState(false);
@@ -255,7 +259,10 @@ function ConfirmCard({
     enabled: isVehicle && !!item.asset_id,
     staleTime: 1000 * 60 * 5,
   });
-  const tracksHours = isHoursTracked(vehicleData);
+  const usageMode = vehicleData ? resolveTrackingMode(vehicleData) : "mileage";
+  const tracksHours = usageMode === "hours";
+  const tracksBoth = usageMode === "both";
+  const tracksMileage = usageMode === "mileage";
   const catIcon = item.category === "vehicle" ? "car-outline" : item.category === "property" ? "home-outline" : "heart-outline";
   const catColor = item.category === "vehicle" ? Colors.blue : item.category === "property" ? Colors.good : Colors.health;
 
@@ -270,13 +277,25 @@ function ConfirmCard({
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const now = new Date().toISOString();
+      let milesVal: number | null = null;
+      let hoursVal: number | null = null;
+      if (tracksBoth) {
+        if (mileage.trim()) milesVal = parseInt(mileage.replace(/,/g, ""), 10);
+        if (hoursReading.trim()) hoursVal = parseFloat(hoursReading.replace(/,/g, ""));
+      } else if (tracksHours) {
+        if (mileage.trim()) hoursVal = parseFloat(mileage.replace(/,/g, ""));
+      } else {
+        if (mileage.trim()) milesVal = parseInt(mileage.replace(/,/g, ""), 10);
+      }
+      const logMeter = milesVal ?? hoursVal ?? null;
+
       const { error: insertErr } = await supabase.from("maintenance_logs").insert({
         user_id: userId,
         vehicle_id: isVehicle && item.asset_id ? item.asset_id : null,
         property_id: item.category === "property" && item.asset_id ? item.asset_id : null,
         service_name: serviceName.trim(),
         service_date: date || now.split("T")[0],
-        mileage: mileage ? parseInt(mileage) : null,
+        mileage: logMeter,
         cost: cost ? parseFloat(cost) : null,
         provider_name: provider.trim() || null,
         notes: notes.trim() || null,
@@ -286,39 +305,27 @@ function ConfirmCard({
       });
       if (insertErr) throw insertErr;
 
-      if (isVehicle && item.asset_id && mileage) {
-        if (tracksHours) {
-          const currentHours = vehicleData?.hours ?? 0;
-          if (parseFloat(mileage) > currentHours) {
-            await supabase.from("vehicles").update({
-              hours: parseFloat(mileage),
-              updated_at: now,
-            }).eq("id", item.asset_id);
-          }
-        } else {
-          const currentMiles = vehicleData?.mileage ?? 0;
-          if (parseInt(mileage) > currentMiles) {
-            await supabase.from("vehicles").update({
-              mileage: parseInt(mileage),
-              updated_at: now,
-            }).eq("id", item.asset_id);
-            await supabase.from("vehicle_mileage_history").insert({
-              vehicle_id: item.asset_id,
-              mileage: parseInt(mileage),
-              recorded_at: date || now,
-              created_at: now,
-            });
-          }
-        }
+      // 2. Update vehicle usage reading and history
+      if (isVehicle && item.asset_id && (milesVal != null || hoursVal != null)) {
+        await updateVehicleUsage(
+          item.asset_id,
+          milesVal,
+          hoursVal,
+          date || now,
+          vehicleData?.mileage ?? null,
+          vehicleData?.hours ?? null,
+        );
       }
 
+      // 3. Match and update maintenance tasks
       if (isVehicle && item.asset_id) {
         try {
           await matchAndUpdateVehicleTask(
             item.asset_id,
             serviceName.trim(),
             date || now.split("T")[0],
-            mileage ? parseInt(mileage) : null,
+            milesVal,
+            hoursVal,
           );
         } catch (matchErr) {
           console.error("matchAndUpdateVehicleTask failed (non-blocking):", matchErr);
@@ -335,12 +342,7 @@ function ConfirmCard({
         }
       }
 
-      try {
-        await scheduleMaintenanceNotifications(userId);
-      } catch (notifErr) {
-        console.error("scheduleMaintenanceNotifications failed (non-blocking):", notifErr);
-      }
-
+      // 4. Invalidate queries
       queryClient.invalidateQueries({ queryKey: ["maintenance_logs"] });
       queryClient.invalidateQueries({ queryKey: ["maintenance_logs", item.asset_id] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -355,7 +357,15 @@ function ConfirmCard({
         queryClient.invalidateQueries({ queryKey: ["property_logs", item.asset_id] });
       }
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // 5. Schedule notifications (after queries invalidated, non-blocking)
+      try {
+        await scheduleMaintenanceNotifications(userId);
+      } catch (notifErr) {
+        console.error("scheduleMaintenanceNotifications failed (non-blocking):", notifErr);
+      }
+
+      // Haptic fires via onSuccess (synced with toast visibility in parent)
+      onSuccess?.(`${serviceName.trim()} logged`);
       onDone();
     } catch (err) {
       console.error("ConfirmCard save error:", err);
@@ -390,8 +400,17 @@ function ConfirmCard({
           />
         </View>
         <FieldRow label="Cost" value={cost} onChange={setCost} placeholder="0.00" keyboard="decimal-pad" prefix="$" />
-        {isVehicle && (
-          <FieldRow label={tracksHours ? "Hours" : "Mileage"} value={mileage} onChange={setMileage} placeholder="0" keyboard="number-pad" suffix={tracksHours ? " hrs" : " mi"} />
+        {isVehicle && tracksBoth && (
+          <>
+            <FieldRow label="Mileage" value={mileage} onChange={setMileage} placeholder="0" keyboard="number-pad" suffix=" mi" />
+            <FieldRow label="Hours" value={hoursReading} onChange={setHoursReading} placeholder="0" keyboard="decimal-pad" suffix=" hrs" />
+          </>
+        )}
+        {isVehicle && tracksHours && (
+          <FieldRow label="Hours" value={mileage} onChange={setMileage} placeholder="0" keyboard="decimal-pad" suffix=" hrs" />
+        )}
+        {isVehicle && tracksMileage && (
+          <FieldRow label="Mileage" value={mileage} onChange={setMileage} placeholder="0" keyboard="number-pad" suffix=" mi" />
         )}
         <FieldRow label="Provider" value={provider} onChange={setProvider} placeholder="Shop or clinic name" />
         <FieldRow label="Notes" value={notes} onChange={setNotes} placeholder="Optional" />
@@ -432,6 +451,17 @@ export function LogSheet({
   const [items, setItems] = useState<ExtractedItem[]>([]);
   const [doneCount, setDoneCount] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
+  const [logToastVisible, setLogToastVisible] = useState(false);
+  const [logToastTitle, setLogToastTitle] = useState("");
+  const [logToastSubtitle, setLogToastSubtitle] = useState<string | undefined>(undefined);
+
+  function fireLogSuccessToast(title: string, subtitle?: string) {
+    setLogToastTitle(title);
+    setLogToastSubtitle(subtitle);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setLogToastVisible(true);
+    setTimeout(() => setLogToastVisible(false), 2800);
+  }
 
   // Normalized 0-1 amplitude written by metering updates, read by WaveformCircle each RAF frame
   const amplitudeRef = useRef<number>(0);
@@ -773,7 +803,7 @@ export function LogSheet({
                 {phase === "results" && (
                   <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }}>
                     {items.map((item, idx) => (
-                      <ConfirmCard key={idx} item={item} userId={userId} onDone={markDone} />
+                      <ConfirmCard key={idx} item={item} userId={userId} onDone={markDone} onSuccess={fireLogSuccessToast} />
                     ))}
                   </ScrollView>
                 )}
@@ -781,6 +811,7 @@ export function LogSheet({
             </KeyboardAvoidingView>
           </>
         )}
+        <SaveToast visible={logToastVisible} message={logToastTitle} subtitle={logToastSubtitle} />
       </View>
     </Modal>
   );

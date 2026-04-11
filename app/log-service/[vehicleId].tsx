@@ -27,8 +27,10 @@ import { ReceiptScanResult } from "@/lib/receiptScanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import DatePicker from "@/components/DatePicker";
 import { parseISO, format } from "date-fns";
+import { SaveToast } from "@/components/SaveToast";
 import { matchAndUpdateVehicleTask, CATEGORY_GROUPS, type MatchResult } from "@/lib/maintenanceMatcher";
 import { resolveTrackingMode, isHoursTracked, isMileageTracked } from "@/lib/usageHelpers";
+import { updateVehicleUsage } from "@/lib/vehicleUsageHelper";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 type PricingInsight = {
@@ -69,6 +71,17 @@ export default function LogServiceScreen() {
   const [vehicleData, setVehicleData] = useState<any>(null);
   const [trackingMode, setTrackingMode] = useState<string | null>(null);
   const [hoursReading, setHoursReading] = useState("");
+  const [successToastVisible, setSuccessToastVisible] = useState(false);
+  const [successToastTitle, setSuccessToastTitle] = useState("");
+  const [successToastSubtitle, setSuccessToastSubtitle] = useState<string | undefined>(undefined);
+
+  function fireSuccessToast(title: string, subtitle?: string) {
+    setSuccessToastTitle(title);
+    setSuccessToastSubtitle(subtitle);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setSuccessToastVisible(true);
+    setTimeout(() => setSuccessToastVisible(false), 2800);
+  }
 
   useEffect(() => {
     if (!vehicleId) return;
@@ -86,7 +99,7 @@ export default function LogServiceScreen() {
       });
   }, [vehicleId]);
 
-  const usageMode = resolveTrackingMode({ vehicle_type: vehicleType, tracking_mode: trackingMode });
+  const usageMode = resolveTrackingMode({ vehicle_type: vehicleType, tracking_mode: trackingMode as import("@/lib/usageHelpers").TrackingMode | null });
 
   const itemsTotal = scannedItems.length > 0
     ? scannedItems.reduce((sum, item) => sum + (item.cost ?? 0), 0)
@@ -314,45 +327,17 @@ export default function LogServiceScreen() {
         if (err) throw err;
       }
 
-      const nowIso = new Date().toISOString();
-      if (hoursVal != null) {
-        const currentHours = vehicleData?.hours ?? 0;
-        if (hoursVal > currentHours) {
-          await supabase.from("vehicles").update({
-            hours: hoursVal,
-            updated_at: nowIso,
-          }).eq("id", vehicleId);
-        }
-      }
-      if (milesVal != null) {
-        const currentMiles = vehicleData?.mileage ?? 0;
-        if (milesVal > currentMiles) {
-          await supabase.from("vehicles").update({
-            mileage: milesVal,
-            updated_at: nowIso,
-          }).eq("id", vehicleId);
-          await supabase.from("vehicle_mileage_history").insert({
-            vehicle_id: vehicleId,
-            mileage: milesVal,
-            recorded_at: date || new Date().toISOString(),
-            created_at: new Date().toISOString(),
-          });
-        }
-      }
+      // 2. Update vehicle usage reading and history
+      await updateVehicleUsage(
+        vehicleId,
+        milesVal,
+        hoursVal,
+        date || new Date().toISOString(),
+        vehicleData?.mileage ?? null,
+        vehicleData?.hours ?? null,
+      );
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      queryClient.invalidateQueries({ queryKey: ["maintenance_logs", vehicleId] });
-      queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
-      queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", vehicleId] });
-      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
-      queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-
-      if (user?.id) {
-        scheduleMaintenanceNotifications(user.id);
-      }
-
-      // Try to auto-update matching maintenance tasks
+      // 3. Auto-match and update maintenance tasks
       const serviceNames = scannedItems.length > 0
         ? scannedItems.map(i => i.name).filter(Boolean)
         : [task.trim()].filter(Boolean);
@@ -362,32 +347,44 @@ export default function LogServiceScreen() {
         if (result) updatedTasks.push(result);
       }
 
-      const savedDate = date || new Date().toISOString().split("T")[0];
-      const savedDateMs = parseISO(savedDate).getTime();
-      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-      const isHistorical = !isNaN(savedDateMs) && Date.now() - savedDateMs > thirtyDaysMs;
+      // 4. Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["maintenance_logs", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
 
-      if (updatedTasks.length > 0) {
-        queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", vehicleId] });
-        queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
-        const fmt = (iso: string | null) => iso
-          ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-          : null;
-        const lines = updatedTasks.map(t => {
-          const due = fmt(t.nextDue);
-          return due ? `• ${t.taskName}\n  Next due: ${due}` : `• ${t.taskName}`;
-        }).join("\n\n");
-        const warnSuffix = storedReceiptPath === null && receiptLocalUri
-          ? "\n\nNote: Receipt saved but photo could not be uploaded."
-          : "";
-        const historicalSuffix = isHistorical ? "\n\nLogged as historical service. Schedule updated from this record." : "";
-        Alert.alert("Maintenance Updated", lines + warnSuffix + historicalSuffix, [{ text: "OK", onPress: () => router.back() }]);
-      } else if (storedReceiptPath === null && receiptLocalUri) {
+      // 5. Schedule notifications (after queries invalidated)
+      if (user?.id) {
+        scheduleMaintenanceNotifications(user.id);
+      }
+
+      const firstServiceName = (scannedItems.length > 0 ? scannedItems[0]?.name?.trim() : "") || task.trim();
+      const firstMatch = updatedTasks[0] ?? null;
+      const nextDueMiles = firstMatch?.nextDueMiles ?? null;
+      const nextDueHours = firstMatch?.nextDueHours ?? null;
+      const nextDueDate = firstMatch?.nextDueDate ?? null;
+      let dueSub: string | undefined;
+      if (nextDueMiles != null) {
+        dueSub = `Next due at ${Number(nextDueMiles).toLocaleString()} mi`;
+      } else if (nextDueHours != null) {
+        dueSub = `Next due at ${Number(nextDueHours).toLocaleString()} hrs`;
+      } else if (nextDueDate) {
+        dueSub = `Next due ${new Date(nextDueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+      }
+
+      if (updatedTasks.length === 0 && storedReceiptPath === null && receiptLocalUri) {
+        // Pure receipt failure with no other success — keep blocking Alert
         Alert.alert("Receipt Upload Failed", "Receipt couldn't be saved. Please try again.", [{ text: "OK", onPress: () => router.back() }]);
-      } else if (isHistorical) {
-        Alert.alert("Service Logged", "Logged as historical service. Schedule updated from this record.", [{ text: "OK", onPress: () => router.back() }]);
       } else {
-        router.back();
+        // Success — toast synced with haptic, then navigate back
+        fireSuccessToast(`${firstServiceName} logged`, dueSub);
+        if (storedReceiptPath === null && receiptLocalUri) {
+          // Non-blocking receipt warning alongside a successful save
+          Alert.alert("Receipt Upload Failed", "Service was saved, but the receipt photo couldn't be uploaded.", [{ text: "OK" }]);
+        }
+        setTimeout(() => router.back(), 1200);
       }
     } catch (err: any) {
       setError(err.message);
@@ -698,6 +695,7 @@ export default function LogServiceScreen() {
           />
         </Modal>
       )}
+      <SaveToast visible={successToastVisible} message={successToastTitle} subtitle={successToastSubtitle} />
     </KeyboardAvoidingView>
   );
 }

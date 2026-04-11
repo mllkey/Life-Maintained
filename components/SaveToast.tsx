@@ -6,10 +6,11 @@ import { Colors } from "@/constants/colors";
 interface SaveToastProps {
   visible: boolean;
   message?: string;
+  subtitle?: string;
   isError?: boolean;
 }
 
-export function SaveToast({ visible, message = "Saved!", isError = false }: SaveToastProps) {
+export function SaveToast({ visible, message = "Saved!", subtitle, isError = false }: SaveToastProps) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
 
@@ -35,7 +36,10 @@ export function SaveToast({ visible, message = "Saved!", isError = false }: Save
           size={18}
           color={isError ? Colors.overdue : "#34C759"}
         />
-        <Text style={[styles.text, isError && { color: Colors.overdue }]}>{message}</Text>
+        <View style={styles.textBlock}>
+          <Text style={[styles.text, isError && { color: Colors.overdue }]}>{message}</Text>
+          {!!subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+        </View>
       </View>
     </Animated.View>
   );
@@ -64,9 +68,18 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
+  textBlock: {
+    flexShrink: 1,
+  },
   text: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     color: Colors.text,
+  },
+  subtitle: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    marginTop: 1,
   },
 });

@@ -450,6 +450,126 @@ function formatMileageAge(updatedAt: string | null): string {
   return `Updated ${days}d ago`;
 }
 
+type UsageInputsProps = {
+  v: MileageVehicle;
+  hideName?: boolean;
+  inputs: Record<string, string>;
+  saving: Record<string, boolean>;
+  saved: Record<string, boolean>;
+  errors: Record<string, string>;
+  setInputs: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  handleSave: (v: MileageVehicle, field: "mileage" | "hours") => void;
+  fieldKey: (v: MileageVehicle, field: "mileage" | "hours") => string;
+  getInput: (v: MileageVehicle, field: "mileage" | "hours") => string;
+  isStale: (v: MileageVehicle) => boolean;
+};
+
+type UsageInputsBaseProps = Omit<UsageInputsProps, "v" | "hideName">;
+
+function UsageInputRow({
+  v, field, label, placeholder, keyboard, mode,
+  inputs, saving, saved, errors,
+  setInputs, setErrors, handleSave, fieldKey, getInput,
+}: {
+  v: MileageVehicle;
+  field: "mileage" | "hours";
+  label: string;
+  placeholder: string;
+  keyboard: "number-pad" | "decimal-pad";
+  mode: ReturnType<typeof resolveTrackingMode>;
+} & Omit<UsageInputsBaseProps, "isStale">) {
+  const fk = fieldKey(v, field);
+  const inputVal = getInput(v, field);
+  const isSaving = saving[fk] ?? false;
+  const isSaved = saved[fk] ?? false;
+  const err = errors[fk];
+  return (
+    <View style={{ gap: 6 }}>
+      {mode === "both" && (
+        <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textTertiary }}>{label}</Text>
+      )}
+      <View style={styles.qmInputRow}>
+        <TextInput
+          style={styles.qmInput}
+          value={inputVal}
+          onChangeText={t => {
+            setInputs(i => ({ ...i, [fk]: t }));
+            if (errors[fk]) setErrors(e => ({ ...e, [fk]: "" }));
+          }}
+          keyboardType={keyboard}
+          returnKeyType="done"
+          onSubmitEditing={() => handleSave(v, field)}
+          selectTextOnFocus
+          placeholder={placeholder}
+          placeholderTextColor={Colors.textTertiary}
+        />
+        <Pressable
+          style={[styles.qmSaveBtn, isSaved && { backgroundColor: Colors.good }]}
+          onPress={() => { if (!isSaving && !isSaved) handleSave(v, field); }}
+          disabled={isSaving}
+        >
+          {isSaved ? (
+            <Ionicons name="checkmark" size={14} color="#fff" />
+          ) : isSaving ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.qmSaveBtnText}>Save</Text>
+          )}
+        </Pressable>
+      </View>
+      {!!err && <Text style={styles.qmError}>{err}</Text>}
+    </View>
+  );
+}
+
+function UsageInputs({
+  v, hideName, inputs, saving, saved, errors,
+  setInputs, setErrors, handleSave, fieldKey, getInput, isStale,
+}: UsageInputsProps) {
+  const mode = resolveTrackingMode(v);
+  const vehicleName = v.nickname ?? [v.year, v.make, v.model].filter(Boolean).join(" ");
+  const stale = isStale(v);
+
+  const nameBlock = !hideName && (
+    <View style={styles.qmVehicleInfo}>
+      <Text style={styles.qmVehicleName} numberOfLines={1}>{vehicleName}</Text>
+      <Text style={[styles.qmVehicleAge, { color: stale ? Colors.dueSoon : Colors.good }]}>
+        {formatMileageAge(v.updated_at)}
+      </Text>
+    </View>
+  );
+
+  const rowProps = {
+    v, inputs, saving, saved, errors,
+    setInputs, setErrors, handleSave, fieldKey, getInput, mode,
+  };
+
+  if (mode === "hours") {
+    return (
+      <View style={styles.qmVehicleRow}>
+        {nameBlock}
+        <UsageInputRow {...rowProps} field="hours" label="Hours" placeholder="hours" keyboard="decimal-pad" />
+      </View>
+    );
+  }
+  if (mode === "mileage") {
+    return (
+      <View style={styles.qmVehicleRow}>
+        {nameBlock}
+        <UsageInputRow {...rowProps} field="mileage" label="Mileage" placeholder="miles" keyboard="number-pad" />
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.qmVehicleRow, { flexDirection: "column", alignItems: "stretch" }]}>
+      {nameBlock}
+      <UsageInputRow {...rowProps} field="mileage" label="Mileage" placeholder="miles" keyboard="number-pad" />
+      <UsageInputRow {...rowProps} field="hours" label="Hours" placeholder="hours" keyboard="decimal-pad" />
+    </View>
+  );
+}
+
 function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; userId: string }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
@@ -544,89 +664,10 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
     }
   }
 
-  function UsageInputs({ v, hideName }: { v: MileageVehicle; hideName?: boolean }) {
-    const mode = resolveTrackingMode(v);
-    const vehicleName = v.nickname ?? [v.year, v.make, v.model].filter(Boolean).join(" ");
-    const stale = isStale(v);
-
-    const row = (field: "mileage" | "hours", label: string, placeholder: string, keyboard: "number-pad" | "decimal-pad") => {
-      const fk = fieldKey(v, field);
-      const inputVal = getInput(v, field);
-      const isSaving = saving[fk] ?? false;
-      const isSaved = saved[fk] ?? false;
-      const err = errors[fk];
-      return (
-        <View style={{ gap: 6 }}>
-          {mode === "both" && (
-            <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textTertiary }}>{label}</Text>
-          )}
-          <View style={styles.qmInputRow}>
-            <TextInput
-              style={styles.qmInput}
-              value={inputVal}
-              onChangeText={t => {
-                setInputs(i => ({ ...i, [fk]: t }));
-                if (errors[fk]) setErrors(e => ({ ...e, [fk]: "" }));
-              }}
-              keyboardType={keyboard}
-              returnKeyType="done"
-              onSubmitEditing={() => handleSave(v, field)}
-              selectTextOnFocus
-              placeholder={placeholder}
-              placeholderTextColor={Colors.textTertiary}
-            />
-            <Pressable
-              style={[styles.qmSaveBtn, isSaved && { backgroundColor: Colors.good }]}
-              onPress={() => { if (!isSaving && !isSaved) handleSave(v, field); }}
-              disabled={isSaving}
-            >
-              {isSaved ? (
-                <Ionicons name="checkmark" size={14} color="#fff" />
-              ) : isSaving ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.qmSaveBtnText}>Save</Text>
-              )}
-            </Pressable>
-          </View>
-          {!!err && <Text style={styles.qmError}>{err}</Text>}
-        </View>
-      );
-    };
-
-    const nameBlock = !hideName && (
-      <View style={styles.qmVehicleInfo}>
-        <Text style={styles.qmVehicleName} numberOfLines={1}>{vehicleName}</Text>
-        <Text style={[styles.qmVehicleAge, { color: stale ? Colors.dueSoon : Colors.good }]}>
-          {formatMileageAge(v.updated_at)}
-        </Text>
-      </View>
-    );
-
-    if (mode === "hours") {
-      return (
-        <View style={styles.qmVehicleRow}>
-          {nameBlock}
-          {row("hours", "Hours", "hours", "decimal-pad")}
-        </View>
-      );
-    }
-    if (mode === "mileage") {
-      return (
-        <View style={styles.qmVehicleRow}>
-          {nameBlock}
-          {row("mileage", "Mileage", "miles", "number-pad")}
-        </View>
-      );
-    }
-    return (
-      <View style={[styles.qmVehicleRow, { flexDirection: "column", alignItems: "stretch" }]}>
-        {nameBlock}
-        {row("mileage", "Mileage", "miles", "number-pad")}
-        {row("hours", "Hours", "hours", "decimal-pad")}
-      </View>
-    );
-  }
+  const usageProps: UsageInputsBaseProps = {
+    inputs, saving, saved, errors,
+    setInputs, setErrors, handleSave, fieldKey, getInput, isStale,
+  };
 
   const anyHours = vehicles.some(v => isHoursTrackedMode(resolveTrackingMode(v)));
   const anyMiles = vehicles.some(v => isMileageTrackedMode(resolveTrackingMode(v)));
@@ -644,7 +685,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
           </View>
         </View>
         <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
-          <UsageInputs v={v} hideName />
+          <UsageInputs {...usageProps} v={v} hideName />
         </View>
       </View>
     );
@@ -681,7 +722,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
         <View style={styles.qmVehicleList}>
           {sortedVehicles.map((v, idx) => (
             <View key={v.id} style={idx < sortedVehicles.length - 1 ? styles.qmVehicleRowBorder : undefined}>
-              <UsageInputs v={v} />
+              <UsageInputs {...usageProps} v={v} />
             </View>
           ))}
         </View>

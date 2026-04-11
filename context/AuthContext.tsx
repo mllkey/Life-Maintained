@@ -34,7 +34,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const PROFILE_SELECT =
   "onboarding_completed, subscription_tier, trial_started_at, trial_expires_at, subscription_expires_at, revenuecat_customer_id, push_token, monthly_scan_count, scan_count_reset_at";
 
-const ONBOARDING_KEY = "@onboarding_completed";
+export const getOnboardingKey = (userId: string) => `@onboarding_completed_${userId}`;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -55,22 +55,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionRef.current = session;
   }, [session]);
 
-  const setOnboardingCacheTrue = useCallback(async () => {
+  const setOnboardingCacheTrue = useCallback(async (userId: string) => {
     try {
-      await AsyncStorage.setItem(ONBOARDING_KEY, "true");
+      await AsyncStorage.setItem(getOnboardingKey(userId), "true");
     } catch {}
   }, []);
 
-  const clearOnboardingCache = useCallback(async () => {
+  const clearOnboardingCache = useCallback(async (userId: string) => {
     try {
-      await AsyncStorage.removeItem(ONBOARDING_KEY);
+      await AsyncStorage.removeItem(getOnboardingKey(userId));
     } catch {}
   }, []);
 
-  const readOnboardingCache = useCallback(async (): Promise<boolean> => {
+  const readOnboardingCache = useCallback(async (userId: string): Promise<boolean> => {
     try {
-      const cached = await AsyncStorage.getItem(ONBOARDING_KEY);
-      return cached === "true";
+      const scoped = await AsyncStorage.getItem(getOnboardingKey(userId));
+      return scoped === "true";
     } catch {
       return false;
     }
@@ -169,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (showLoading) setIsLoading(true);
       if (!quiet) setProfileLoaded(false);
 
-      const cachedOnboarding = await readOnboardingCache();
+      const cachedOnboarding = await readOnboardingCache(nextSession.user.id);
 
       if (!mountedRef.current || hydrateRunIdRef.current !== runId) {
         if (showLoading && mountedRef.current) setIsLoading(false);
@@ -191,10 +191,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (fullProfile.onboarding_completed) {
             setOnboardingCompleted(true);
-            setOnboardingCacheTrue().catch(() => {});
+            setOnboardingCacheTrue(nextSession.user.id).catch(() => {});
           } else {
             setOnboardingCompleted(false);
-            clearOnboardingCache().catch(() => {});
+            clearOnboardingCache(nextSession.user.id).catch(() => {});
           }
 
           checkAndResetScanCount(nextSession.user.id, fullProfile).catch(() => {});
@@ -316,7 +316,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    await clearOnboardingCache();
+    const userIdToClear = sessionRef.current?.user?.id ?? userIdRef.current;
+    if (userIdToClear) {
+      await clearOnboardingCache(userIdToClear);
+    }
 
     hydrateRunIdRef.current += 1;
     userIdRef.current = null;

@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, getOnboardingKey } from "@/context/AuthContext";
 
 const STEPS = [
   "Analyzing your vehicle",
@@ -152,7 +152,9 @@ export default function BuildingPlanScreen() {
         return;
       }
     }
-    await AsyncStorage.setItem("@onboarding_completed", "true");
+    if (user) {
+      await AsyncStorage.setItem(getOnboardingKey(user.id), "true");
+    }
     setOnboardingCompleted(true);
     router.replace("/(tabs)");
   }

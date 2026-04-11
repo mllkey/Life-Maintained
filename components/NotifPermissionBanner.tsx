@@ -14,14 +14,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
+import { upsertPushToken, resolveAuthUserId } from "@/lib/notificationScheduler";
+import { loadNotifPrefs, saveNotifPrefs } from "@/lib/notificationPrefs";
+import { supabase } from "@/lib/supabase";
 
 const DISMISSED_KEY = "notif_banner_dismissed";
 
 interface Props {
+  userId?: string | null;
   onDismiss?: () => void;
 }
 
-export default function NotifPermissionBanner({ onDismiss }: Props) {
+export default function NotifPermissionBanner({ userId, onDismiss }: Props) {
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(-200)).current;
   const [visible, setVisible] = useState(false);
@@ -70,6 +74,57 @@ export default function NotifPermissionBanner({ onDismiss }: Props) {
     if (permStatus === "undetermined") {
       const result = await Notifications.requestPermissionsAsync();
       if (result.status !== "denied") {
+        const resolvedUserId = await resolveAuthUserId();
+        if (!resolvedUserId) {
+          dismiss();
+          return;
+        }
+
+        const tokenResult = await upsertPushToken(resolvedUserId);
+        if (!tokenResult.ok) {
+          console.warn("[Banner] upsertPushToken failed:", tokenResult.reason);
+          dismiss();
+          return;
+        }
+
+        let prefDbOk = false;
+        try {
+          const { error } = await (supabase.from("user_notification_preferences") as any)
+            .upsert(
+              { user_id: resolvedUserId, push_enabled: true, updated_at: new Date().toISOString() },
+              { onConflict: "user_id" }
+            );
+          if (error) {
+            console.warn("[Banner] push_enabled DB upsert failed:", error.message);
+          } else {
+            try {
+              const { data: readback } = await (supabase.from("user_notification_preferences") as any)
+                .select("push_enabled")
+                .eq("user_id", resolvedUserId)
+                .maybeSingle();
+              if (readback?.push_enabled === true) {
+                prefDbOk = true;
+              } else {
+                console.warn("[Banner] push_enabled readback mismatch");
+              }
+            } catch {
+              console.warn("[Banner] push_enabled readback threw");
+            }
+          }
+        } catch (e) {
+          console.warn("[Banner] push_enabled DB upsert threw:", e);
+        }
+        if (!prefDbOk) {
+          dismiss();
+          return;
+        }
+
+        try {
+          const existing = await loadNotifPrefs();
+          await saveNotifPrefs({ ...existing, pushEnabled: true });
+        } catch (e) {
+          console.warn("[Banner] AsyncStorage pushEnabled write failed:", e);
+        }
         dismiss();
         return;
       }

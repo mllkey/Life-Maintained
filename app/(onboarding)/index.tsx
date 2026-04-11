@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, getOnboardingKey } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 
 const VERTICALS = [
@@ -55,7 +55,9 @@ export default function OnboardingStartScreen() {
         return;
       }
     }
-    await AsyncStorage.setItem("@onboarding_completed", "true");
+    if (user) {
+      await AsyncStorage.setItem(getOnboardingKey(user.id), "true");
+    }
     setOnboardingCompleted(true);
     router.replace(destination as any);
     if (thenPush) {

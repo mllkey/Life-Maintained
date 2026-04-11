@@ -1,30 +1,8 @@
 import * as Notifications from "expo-notifications";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 import { supabase } from "./supabase";
-
-const PREFS_KEY = "notification_prefs";
-
-const DEFAULT_PREFS = {
-  pushEnabled: false,
-  advanceDays: 14,
-  quietHoursStart: "22:00",
-  quietHoursEnd: "08:00",
-  notificationTime: "09:00",
-  mutedVehicles: [] as string[],
-  mutedProperties: [] as string[],
-};
-
-type NotifPrefs = typeof DEFAULT_PREFS;
-
-async function loadPrefs(): Promise<NotifPrefs> {
-  try {
-    const raw = await AsyncStorage.getItem(PREFS_KEY);
-    return raw ? { ...DEFAULT_PREFS, ...JSON.parse(raw) } : DEFAULT_PREFS;
-  } catch {
-    return DEFAULT_PREFS;
-  }
-}
+import { loadNotifPrefs } from "./notificationPrefs";
 
 function parseNotifTime(timeStr: string): { hour: number; minute: number } {
   const parts = (timeStr ?? "09:00").split(":");
@@ -36,17 +14,94 @@ function parseNotifTime(timeStr: string): { hour: number; minute: number } {
   };
 }
 
-async function upsertPushToken(userId: string): Promise<void> {
+function parseDueDateAnchor(dueDateInput: string | null | undefined): Date | null {
+  if (!dueDateInput) return null;
+  const raw = String(dueDateInput).trim();
+  if (!raw) return null;
+  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!ymd) return null;
+  const year = Number(ymd[1]);
+  const month = Number(ymd[2]) - 1;
+  const day = Number(ymd[3]);
+  const anchored = new Date(year, month, day, 12, 0, 0, 0);
+  return Number.isNaN(anchored.getTime()) ? null : anchored;
+}
+
+export type UpsertPushTokenResult = {
+  ok: boolean;
+  token: string | null;
+  reason: string | null;
+};
+
+export async function resolveAuthUserId(): Promise<string | null> {
   try {
-    if (Platform.OS === "web") return;
-    const tokenData = await Notifications.getExpoPushTokenAsync();
-    if (tokenData?.data) {
-      await (supabase.from("profiles") as any)
-        .update({ push_token: tokenData.data })
-        .eq("user_id", userId);
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) {
+      console.warn("[NotifSetup] resolveAuthUserId threw:", error);
+      return null;
     }
-  } catch {
+    if (!user?.id) {
+      console.warn("[NotifSetup] no authenticated user");
+      return null;
+    }
+    return user.id;
+  } catch (err) {
+    console.warn("[NotifSetup] resolveAuthUserId threw:", err);
+    return null;
   }
+}
+
+export async function upsertPushToken(userId: string): Promise<UpsertPushTokenResult> {
+  if (Platform.OS === "web") return { ok: false, token: null, reason: "web platform" };
+  const projectId =
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    (Constants as any).easConfig?.projectId ??
+    "2b817e52-5d6d-43c4-9855-966f7ded10ad";
+
+  let tokenData: Awaited<ReturnType<typeof Notifications.getExpoPushTokenAsync>> | null = null;
+  try {
+    tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+  } catch (err) {
+    console.warn("[PushToken] getExpoPushTokenAsync threw:", err);
+    return { ok: false, token: null, reason: "getExpoPushTokenAsync threw" };
+  }
+
+  const token = tokenData?.data ?? null;
+  if (!token) {
+    console.warn("[PushToken] Empty token returned");
+    return { ok: false, token: null, reason: "empty token" };
+  }
+
+  // Attempt first profiles update — log error but always proceed to readback regardless
+  try {
+    const { error } = await (supabase.from("profiles") as any)
+      .update({ push_token: token })
+      .eq("user_id", userId);
+    if (error) {
+      console.warn("[PushToken] profiles update failed:", error.message);
+    }
+  } catch (err) {
+    console.warn("[PushToken] profiles update threw:", err);
+  }
+
+  // Readback 1: verify token was actually persisted via user_id selector
+  let verified = false;
+  try {
+    const { data: readback } = await (supabase.from("profiles") as any)
+      .select("push_token")
+      .eq("user_id", userId)
+      .maybeSingle();
+    verified = readback?.push_token === token;
+  } catch (err) {
+    console.warn("[PushToken] profiles readback threw:", err);
+  }
+
+  if (!verified) {
+    console.warn("[PushToken] profiles readback mismatch");
+    return { ok: false, token, reason: "profiles readback mismatch" };
+  }
+
+  return { ok: true, token, reason: null };
 }
 
 type Candidate = {
@@ -59,18 +114,42 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
   if (Platform.OS === "web") return;
 
   try {
+    const warmupStart = Date.now();
+    let warmedUp = false;
+    while (Date.now() - warmupStart < 2000) {
+      try {
+        await Notifications.getAllScheduledNotificationsAsync();
+        warmedUp = true;
+        break;
+      } catch {
+        await new Promise(r => setTimeout(r, 100));
+      }
+    }
+    if (!warmedUp) {
+      console.warn("[NotifScheduler] aborting scheduling run: native module warmup failed after 2s");
+      return;
+    }
+
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== "granted") return;
 
-    const prefs = await loadPrefs();
+    // Register/refresh the push token whenever OS permission is granted,
+    // regardless of the in-app pushEnabled toggle.
+    const tokenRefreshResult = await upsertPushToken(userId);
+    if (!tokenRefreshResult.ok) {
+      console.warn("[NotificationScheduler] upsertPushToken failed:", tokenRefreshResult.reason);
+    }
+
+    const prefs = await loadNotifPrefs();
 
     if (!prefs.pushEnabled) {
+      if (__DEV__) {
+        console.log("[NotifScheduler] skipped scheduling:", { pushEnabled: false, reason: "push disabled" });
+      }
       await Notifications.cancelAllScheduledNotificationsAsync();
       await Notifications.setBadgeCountAsync(0);
       return;
     }
-
-    upsertPushToken(userId);
 
     const [vehiclesRes, propertiesRes] = await Promise.all([
       supabase
@@ -113,13 +192,21 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     const { hour, minute } = parseNotifTime(prefs.notificationTime ?? "09:00");
     const now = new Date();
     const msPerDay = 1000 * 60 * 60 * 24;
+    const MAX_FUTURE_MS = 5 * 365 * 24 * 60 * 60 * 1000;
 
     const candidates: Candidate[] = [];
 
     function enqueue(taskName: string, assetName: string, dueDateStr: string, isMuted: boolean) {
       if (isMuted) return;
 
-      const dueDate = new Date(dueDateStr + "T12:00:00");
+      const dueDate = parseDueDateAnchor(dueDateStr);
+      if (!dueDate) {
+        if (__DEV__) {
+          console.warn("[NotifScheduler] skipped invalid due date:", { taskName, assetName, dueDateStr });
+        }
+        return;
+      }
+
       const daysUntilDue = Math.floor((dueDate.getTime() - now.getTime()) / msPerDay);
 
       const priority =
@@ -139,10 +226,25 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       ];
 
       for (const { days, label } of OFFSETS) {
-        const triggerDate = new Date(dueDate);
+        const triggerDate = new Date(dueDate.getTime());
         triggerDate.setDate(triggerDate.getDate() + days);
         triggerDate.setHours(hour, minute, 0, 0);
+
+        const t = triggerDate.getTime();
+        if (!Number.isFinite(t)) {
+          if (__DEV__) {
+            console.warn("[NotifScheduler] skipped invalid trigger date:", { taskName, assetName, dueDateStr, days });
+          }
+          continue;
+        }
+        if (t - now.getTime() > MAX_FUTURE_MS) {
+          if (__DEV__) {
+            console.warn("[NotifScheduler] skipped far-future trigger date:", { taskName, assetName, dueDateStr, days });
+          }
+          continue;
+        }
         if (triggerDate <= now) continue;
+
         candidates.push({
           body: `🔧 ${taskName} on ${assetName} ${label}`,
           triggerDate,
@@ -208,7 +310,8 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       // Only add usage notification if no date-based notification already covers this urgency,
       // OR if the task has no date at all
       const hasDateNotif = task.next_due_date != null;
-      const dateOverdue = hasDateNotif && new Date(task.next_due_date + "T12:00:00") < now;
+      const dateAnchor = hasDateNotif ? parseDueDateAnchor(task.next_due_date) : null;
+      const dateOverdue = !!dateAnchor && dateAnchor.getTime() < now.getTime();
       const usageOverdue = usageRemaining <= 0;
       const usageDueSoon = usageUnit === "hours" ? usageRemaining <= 25 : usageRemaining <= 500;
 
@@ -296,26 +399,100 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
 
     const toSchedule = candidates.slice(0, 64);
 
+    if (__DEV__) {
+      console.log("[NotifScheduler] scheduling run:", {
+        pushEnabled: prefs.pushEnabled,
+        advanceDays: prefs.advanceDays,
+        quietHoursStart: prefs.quietHoursStart,
+        quietHoursEnd: prefs.quietHoursEnd,
+        notificationTime: prefs.notificationTime,
+        mutedVehiclesCount: (prefs.mutedVehicles ?? []).length,
+        mutedPropertiesCount: (prefs.mutedProperties ?? []).length,
+        candidateCount: candidates.length,
+        scheduledCount: toSchedule.length,
+      });
+    }
+
     await Notifications.cancelAllScheduledNotificationsAsync();
 
     for (const { body, triggerDate } of toSchedule) {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "LifeMaintained",
-          body,
-          sound: true,
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: triggerDate,
-        },
-      });
+      const tt = triggerDate.getTime();
+      if (!Number.isFinite(tt)) {
+        if (__DEV__) {
+          console.warn("[NotifScheduler] skipped scheduleNotificationAsync for invalid trigger:", { body });
+        }
+        continue;
+      }
+      if (tt - now.getTime() > MAX_FUTURE_MS) {
+        if (__DEV__) {
+          console.warn("[NotifScheduler] skipped scheduleNotificationAsync for far-future trigger:", { body });
+        }
+        continue;
+      }
+      try {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "LifeMaintained",
+            body,
+            sound: true,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: triggerDate,
+          },
+        });
+      } catch (err) {
+        console.warn("[NotifScheduler] scheduleNotificationAsync threw:", err);
+      }
+    }
+
+    if (__DEV__) {
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      const normalized = scheduled
+        .map((n: any) => {
+          const triggerValue = n?.trigger?.value;
+          const rawDate =
+            (typeof triggerValue === "number" ? triggerValue : null) ??
+            (triggerValue && typeof triggerValue === "object" ? triggerValue.date : null) ??
+            n?.trigger?.date ??
+            n?.trigger?.timestamp ??
+            null;
+
+          let ts: number | null = null;
+
+          if (typeof rawDate === "number") {
+            ts = rawDate > 1e12 ? rawDate : rawDate * 1000;
+          } else if (typeof rawDate === "string") {
+            const parsed = Date.parse(rawDate);
+            ts = Number.isFinite(parsed) ? parsed : null;
+          } else if (rawDate instanceof Date) {
+            ts = rawDate.getTime();
+          }
+
+          return {
+            body: n?.content?.body ?? "(no body)",
+            title: n?.content?.title ?? "(no title)",
+            ts,
+          };
+        })
+        .filter((x: any) => x.ts != null)
+        .sort((a: any, b: any) => a.ts - b.ts);
+
+      console.log("[NotifScheduler] next scheduled reminders:", normalized.slice(0, 5).map((x: any) => ({
+        title: x.title,
+        body: x.body,
+        iso: new Date(x.ts).toISOString(),
+        local: new Date(x.ts).toString(),
+      })));
     }
 
     const overdueVehicle = vehicleTasks.filter(t => {
       if ((prefs.mutedVehicles ?? []).includes(t.vehicle_id)) return false;
       // Date-based overdue
-      if (t.next_due_date && new Date(t.next_due_date + "T12:00:00") < now) return true;
+      {
+        const dueDate = parseDueDateAnchor(t.next_due_date);
+        if (dueDate && dueDate.getTime() < now.getTime()) return true;
+      }
       // Usage-based overdue
       const vehicle = vehicleMap.get(t.vehicle_id);
       if (vehicle) {
@@ -335,12 +512,14 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     const overdueProperty = propertyTasks.filter(t => {
       if (!t.next_due_date) return false;
       if ((prefs.mutedProperties ?? []).includes(t.property_id)) return false;
-      return new Date(t.next_due_date + "T12:00:00") < now;
+      const dueDate = parseDueDateAnchor(t.next_due_date);
+      return !!dueDate && dueDate.getTime() < now.getTime();
     }).length;
 
-    const overdueHealth = healthApptsData.filter(a =>
-      a.next_due_date && new Date(a.next_due_date + "T12:00:00") < now
-    ).length;
+    const overdueHealth = healthApptsData.filter(a => {
+      const dueDate = parseDueDateAnchor(a.next_due_date);
+      return !!dueDate && dueDate.getTime() < now.getTime();
+    }).length;
 
     await Notifications.setBadgeCountAsync(overdueVehicle + overdueProperty + overdueHealth);
 

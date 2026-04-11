@@ -50,6 +50,7 @@ import {
 } from "@/lib/usageHelpers";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 import UpdateBanner from "@/components/UpdateBanner";
+import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 
 function taskUsesHoursUsage(task: any, mode: TrackingMode): boolean {
   if (mode === "hours" || mode === "both") {
@@ -138,6 +139,7 @@ export default function VehicleDetailScreen() {
   const [scheduleToast, setScheduleToast] = useState("");
   const [showScheduleToast, setShowScheduleToast] = useState(false);
   const [scheduleToastIsError, setScheduleToastIsError] = useState(false);
+  const [scheduleToastSubtitle, setScheduleToastSubtitle] = useState<string | undefined>(undefined);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showDifficultyInfo, setShowDifficultyInfo] = useState(false);
   const [scheduleInsight, setScheduleInsight] = useState<string | null>(null);
@@ -552,8 +554,9 @@ export default function VehicleDetailScreen() {
     );
   }
 
-  function showToast(msg: string, isError = false) {
+  function showToast(msg: string, isError = false, subtitle?: string) {
     setScheduleToast(msg);
+    setScheduleToastSubtitle(subtitle);
     setScheduleToastIsError(isError);
     setShowScheduleToast(true);
     setTimeout(() => setShowScheduleToast(false), 2800);
@@ -690,13 +693,14 @@ export default function VehicleDetailScreen() {
   async function handleSaveMarkComplete() {
     if (!markCompleteTask || !vehicle) return;
     const task = markCompleteTask;
-    const tracksHrs = isHoursTracked(vehicle);
-    const tracksMiles = isMileageTracked(vehicle);
+    const mode = resolveTrackingMode(vehicle);
+    const taskUsesHours = taskUsesHoursUsage(task, mode) || mode === "hours";
+    const taskUsesMiles = !taskUsesHours && (mode === "mileage" || mode === "both");
     let usageNum: number | null = null;
-    if (tracksMiles || tracksHrs) {
-      const parsed = tracksHrs ? parseFloat(completeMileage.replace(/,/g, "")) : parseInt(completeMileage.replace(/,/g, ""), 10);
+    if (taskUsesMiles || taskUsesHours) {
+      const parsed = taskUsesHours ? parseFloat(completeMileage.replace(/,/g, "")) : parseInt(completeMileage.replace(/,/g, ""), 10);
       if (!completeMileage.trim() || isNaN(parsed) || parsed < 0) {
-        showToast(tracksHrs ? "Please enter a valid hours value." : "Please enter a valid mileage.", true);
+        showToast(taskUsesHours ? "Please enter a valid hours value." : "Please enter a valid mileage.", true);
         return;
       }
       usageNum = parsed;
@@ -726,103 +730,60 @@ export default function VehicleDetailScreen() {
       }
       return parts.length ? parts.join("\n\n") : null;
     })();
+
     setIsSavingComplete(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    const newNextDueUsage = tracksHrs
-      ? (task.interval_hours != null && usageNum != null ? usageNum + task.interval_hours : null)
-      : (task.interval_miles != null && usageNum != null ? usageNum + task.interval_miles : null);
-    const newNextDueDate = task.interval_months != null
-      ? format(addMonths(parseISO(completeDate), task.interval_months), "yyyy-MM-dd")
-      : null;
-    const now = new Date().toISOString();
-
-    const updatedTask = {
-      ...task,
-      last_completed_date: completeDate,
-      last_completed_miles: tracksHrs ? null : usageNum,
-      last_completed_hours: tracksHrs ? usageNum : null,
-      next_due_miles: tracksHrs ? null : newNextDueUsage,
-      next_due_hours: tracksHrs ? newNextDueUsage : null,
-      next_due_date: newNextDueDate,
-      status: "upcoming",
-      updated_at: now,
-    };
-
-    queryClient.setQueryData(["user_vehicle_maintenance_tasks", id], (old: any[] | undefined) => {
-      if (!old) return old;
-      return old.map(t => t.id === task.id ? updatedTask : t);
-    });
-
-    handleCloseMarkComplete();
 
     try {
-      const currentVehicleReading = tracksHrs ? (vehicle.hours ?? 0) : (vehicle.mileage ?? 0);
-      const shouldUpdateVehicle = usageNum != null && usageNum > currentVehicleReading;
-      const vehicleUsageUpdate = shouldUpdateVehicle
-        ? tracksHrs
-          ? supabase.from("vehicles").update({ hours: usageNum, updated_at: now }).eq("id", id!)
-          : supabase.from("vehicles").update({ mileage: usageNum, updated_at: now }).eq("id", id!)
-        : Promise.resolve({ error: null });
-
-      const [taskRes, vehicleRes] = await Promise.all([
-        supabase.from("user_vehicle_maintenance_tasks").update({
-          last_completed_date: completeDate,
-          last_completed_miles: tracksHrs ? null : usageNum,
-          last_completed_hours: tracksHrs ? usageNum : null,
-          next_due_miles: tracksHrs ? null : newNextDueUsage,
-          next_due_hours: tracksHrs ? newNextDueUsage : null,
-          next_due_date: newNextDueDate,
-          status: "upcoming",
-          updated_at: now,
-        }).eq("id", task.id),
-        vehicleUsageUpdate,
-      ]);
-
-      const logInsert = supabase.from("maintenance_logs").insert({
-        user_id: user!.id,
-        vehicle_id: id,
-        property_id: null,
-        service_name: task.name,
-        service_date: completeDate,
-        cost: completeCost.trim() ? parseFloat(completeCost) : null,
-        mileage: usageNum,
-        provider_name: completeProvider.trim() || null,
-        provider_contact: null,
-        receipt_url: null,
-        notes: notesForLog,
-        did_it_myself: completeDiy,
+      // 1. RPC — all writes are atomic; no success UI until this resolves
+      const { data: rpcResult, error: rpcErr } = await supabase.rpc("complete_vehicle_task", {
+        p_task_id: task.id,
+        p_mileage: taskUsesMiles ? usageNum : null,
+        p_hours: taskUsesHours ? usageNum : null,
+        p_completed_date: completeDate,
+        p_notes: notesForLog,
+        p_cost: costTrim ? parseFloat(completeCost) : null,
+        p_skip_log: false,
+        p_provider_name: completeProvider.trim() || null,
+        p_did_it_myself: completeDiy,
       });
-      const { error: logErr } = await logInsert;
-      if (logErr) console.warn("[markComplete] maintenance_logs insert:", logErr.message);
+      if (rpcErr) throw rpcErr;
 
-      if (taskRes.error || vehicleRes.error) throw taskRes.error ?? vehicleRes.error;
+      handleCloseMarkComplete();
 
-      if (shouldUpdateVehicle && !tracksHrs) {
-        supabase.from("vehicle_mileage_history").insert({
-          vehicle_id: id,
-          mileage: usageNum,
-          recorded_at: completeDate,
-          created_at: now,
-        }).then(({ error }) => { if (error) console.warn("[markComplete] mileage_history insert:", error.message); });
-      }
-
+      // 2. Invalidate/refetch queries
       queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["maintenance_logs", id] });
+      queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", id] });
 
-      let toastMsg = `${task.name} marked complete!`;
-      if (newNextDueUsage != null) {
-        const unitLabel = tracksHrs ? "hrs" : "mi";
-        toastMsg += ` Next due at ${newNextDueUsage.toLocaleString()} ${unitLabel}.`;
-      } else if (newNextDueDate != null) {
-        toastMsg += ` Next due ${format(parseISO(newNextDueDate), "MMM d, yyyy")}.`;
+      // 3. Schedule notifications — await so they reflect the new state, but
+      //    failures must not block the success toast
+      if (user?.id) {
+        try {
+          await scheduleMaintenanceNotifications(user.id);
+        } catch {
+          // non-blocking — notification scheduling failure is not fatal
+        }
       }
-      showToast(toastMsg);
+
+      // 4. Success haptics + toast — haptic fires at the exact moment toast becomes visible
+      const toastTitle = `${rpcResult?.task_name ?? task.name} marked complete`;
+      let toastSubtitle: string | undefined;
+      if (rpcResult?.next_due_miles != null) {
+        toastSubtitle = `Next due at ${Number(rpcResult.next_due_miles).toLocaleString()} mi`;
+      } else if (rpcResult?.next_due_hours != null) {
+        toastSubtitle = `Next due at ${Number(rpcResult.next_due_hours).toLocaleString()} hrs`;
+      } else if (rpcResult?.next_due_date) {
+        toastSubtitle = `Next due ${format(parseISO(rpcResult.next_due_date), "MMM d, yyyy")}`;
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(toastTitle, false, toastSubtitle);
     } catch (e) {
       queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", id] });
       showToast("Failed to save. Please try again.", true);
+    } finally {
+      setIsSavingComplete(false);
     }
   }
 
@@ -1135,6 +1096,11 @@ export default function VehicleDetailScreen() {
   }, [logs]);
 
   const scheduleAttentionCount = actionNeededTasks.length;
+
+  const markCompleteMode = vehicle ? resolveTrackingMode(vehicle) : "mileage";
+  const markCompleteUsesHours = markCompleteTask
+    ? (taskUsesHoursUsage(markCompleteTask, markCompleteMode) || markCompleteMode === "hours")
+    : isHoursTracked(vehicle);
 
   return (
     <View style={[styles.container, { backgroundColor: Colors.background }]}>
@@ -1612,7 +1578,7 @@ export default function VehicleDetailScreen() {
         </View>
       )}
 
-      <SaveToast visible={showScheduleToast} message={scheduleToast} isError={scheduleToastIsError} />
+      <SaveToast visible={showScheduleToast} message={scheduleToast} subtitle={scheduleToastSubtitle} isError={scheduleToastIsError} />
 
       <EditTaskSheet
         visible={editTaskSheet != null}
@@ -1631,7 +1597,7 @@ export default function VehicleDetailScreen() {
         mileage={completeMileage}
         onMileageChange={setCompleteMileage}
         showMileage={isMileageTracked(vehicle) || isHoursTracked(vehicle)}
-        tracksHours={isHoursTracked(vehicle)}
+        tracksHours={markCompleteUsesHours}
         date={completeDate}
         onDateChange={setCompleteDate}
         notes={completeNotes}

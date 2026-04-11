@@ -8,7 +8,7 @@ import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import { formatCostDisplay } from "@/lib/costFormat";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, getOnboardingKey } from "@/context/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 
@@ -91,7 +91,9 @@ export default function ValueRevealScreen() {
         return;
       }
     }
-    await AsyncStorage.setItem("@onboarding_completed", "true");
+    if (user) {
+      await AsyncStorage.setItem(getOnboardingKey(user.id), "true");
+    }
     setOnboardingCompleted(true);
   }
 

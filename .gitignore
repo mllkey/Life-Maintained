@@ -43,4 +43,7 @@ scripts/.preload-progress.json
 *.tsbuildinfo
 .vercel
 
-.env b
+.env b.sentryclirc
+
+.env
+.sentryclirc

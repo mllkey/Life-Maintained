@@ -1045,9 +1045,10 @@ export default function AddVehicleScreen() {
               const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
               if (httpStatus !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
             }
-            queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", inserted.id] });
           } catch (scheduleErr) {
             console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
+          } finally {
+            queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", inserted.id] });
           }
         })();
         queryClient.invalidateQueries({ queryKey: ["vehicles"] });
@@ -1104,9 +1105,10 @@ export default function AddVehicleScreen() {
             const httpStatus = ((scheduleError as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
             if (httpStatus !== 409) console.warn("[generate-maintenance-schedule] Error:", scheduleError.message);
           }
-          queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", inserted.id] });
         } catch (scheduleErr) {
           console.warn("[generate-maintenance-schedule] Caught:", scheduleErr);
+        } finally {
+          queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", inserted.id] });
         }
       })();
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });

@@ -1,3 +1,12 @@
+import * as Sentry from '@sentry/react-native';
+
+Sentry.init({
+  dsn: 'https://05c15f13d8ae3d3e968e67a0dc95b647@o4511203460841472.ingest.us.sentry.io/4511203468509184',
+  enableAutoSessionTracking: true,
+  tracesSampleRate: 0.2,
+  enabled: !__DEV__,
+});
+
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -23,11 +32,10 @@ SplashScreen.preventAutoHideAsync();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
     shouldShowBanner: true,
     shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
   }),
 });
 
@@ -49,7 +57,9 @@ function RootLayoutNav() {
     const userId = session.user.id;
 
     Notifications.setBadgeCountAsync(0).catch(() => {});
-    scheduleMaintenanceNotifications(userId);
+    const initialScheduleTimer = setTimeout(() => {
+      scheduleMaintenanceNotifications(userId);
+    }, 800);
 
     const sub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
       const prev = appStateRef.current;
@@ -60,7 +70,10 @@ function RootLayoutNav() {
       }
     });
 
-    return () => sub.remove();
+    return () => {
+      clearTimeout(initialScheduleTimer);
+      sub.remove();
+    };
   }, [session?.user?.id, onboardingCompleted]);
 
   useEffect(() => {
@@ -222,13 +235,13 @@ function RootLayoutNav() {
           <Stack.Screen name="privacy-policy" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="reset-password" options={{ headerShown: false, presentation: "fullScreenModal" }} />
         </Stack>
-        {showBanner && <NotifPermissionBanner />}
+        {showBanner && <NotifPermissionBanner userId={session?.user?.id} />}
       </View>
     </BudgetAlertProvider>
   );
 }
 
-export default function RootLayout() {
+function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -266,7 +279,9 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary onError={(error, componentStack) => {
+        Sentry.captureException(error, { extra: { componentStack } });
+      }}>
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <KeyboardProvider>
@@ -279,3 +294,5 @@ export default function RootLayout() {
     </ErrorBoundary>
   );
 }
+
+export default Sentry.wrap(RootLayout);

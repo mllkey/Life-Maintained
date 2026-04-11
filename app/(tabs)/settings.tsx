@@ -20,6 +20,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
+import { scheduleMaintenanceNotifications, upsertPushToken, resolveAuthUserId } from "@/lib/notificationScheduler";
+import { loadNotifPrefs, saveNotifPrefs, type NotifPrefs, DEFAULT_NOTIF_PREFS } from "@/lib/notificationPrefs";
 import { parseISO, differenceInDays, format, addDays } from "date-fns";
 import {
   hasPersonalOrAbove,
@@ -30,16 +32,10 @@ import {
 const SETTINGS_KEY = "app_settings_v2";
 
 type AppSettings = {
-  pushEnabled: boolean;
-  emailEnabled: boolean;
-  smsEnabled: boolean;
   budgetThreshold: string;
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
-  pushEnabled: false,
-  emailEnabled: true,
-  smsEnabled: false,
   budgetThreshold: "",
 };
 
@@ -120,6 +116,9 @@ export default function SettingsScreen() {
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const savedRef = useRef<AppSettings>(DEFAULT_SETTINGS);
+  const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(DEFAULT_NOTIF_PREFS);
+  const [isPushTogglePending, setIsPushTogglePending] = useState(false);
+  const pushTogglePendingRef = useRef(false);
   const isDeletingAccountRef = useRef(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -196,6 +195,31 @@ export default function SettingsScreen() {
   }, []);
 
   useEffect(() => {
+    // Load notification prefs from the canonical shared key.
+    // One-time migration: if the canonical key has pushEnabled:false but the
+    // legacy app_settings_v2 key had pushEnabled:true, carry it forward so the
+    // user doesn't lose their preference after this architecture correction.
+    (async () => {
+      const prefs = await loadNotifPrefs();
+      if (!prefs.pushEnabled) {
+        try {
+          const raw = await AsyncStorage.getItem(SETTINGS_KEY);
+          const legacy = raw ? JSON.parse(raw) : null;
+          if (legacy?.pushEnabled === true) {
+            const migrated = { ...prefs, pushEnabled: true };
+            await saveNotifPrefs(migrated);
+            setNotifPrefs(migrated);
+            return;
+          }
+        } catch {
+          // migration errors are non-fatal; fall through to set loaded prefs
+        }
+      }
+      setNotifPrefs(prefs);
+    })();
+  }, []);
+
+  useEffect(() => {
     if (budgetTier?.threshold_amount != null && isLoaded) {
       const threshold = String(budgetTier.threshold_amount);
       setSettings(prev => {
@@ -213,6 +237,10 @@ export default function SettingsScreen() {
   }
 
   async function togglePush(next: boolean) {
+    if (pushTogglePendingRef.current) return;
+
+    const previousPushEnabled = notifPrefs.pushEnabled;
+
     if (next) {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== "granted") {
@@ -220,8 +248,77 @@ export default function SettingsScreen() {
         return;
       }
     }
-    updateSetting("pushEnabled", next);
+
+    pushTogglePendingRef.current = true;
+    setIsPushTogglePending(true);
+    setNotifPrefs(p => ({ ...p, pushEnabled: next }));
     Haptics.selectionAsync();
+
+    try {
+      const resolvedUserId = await resolveAuthUserId();
+      if (!resolvedUserId) {
+        setNotifPrefs(p => ({ ...p, pushEnabled: previousPushEnabled }));
+        return;
+      }
+
+      if (next) {
+        const tokenResult = await upsertPushToken(resolvedUserId);
+        if (!tokenResult.ok) {
+          console.warn("[NotifSettings] upsertPushToken failed:", tokenResult.reason);
+          setNotifPrefs(p => ({ ...p, pushEnabled: previousPushEnabled }));
+          return;
+        }
+      }
+
+      let prefDbOk = false;
+      try {
+        const { error } = await (supabase.from("user_notification_preferences") as any)
+          .upsert(
+            { user_id: resolvedUserId, push_enabled: next, updated_at: new Date().toISOString() },
+            { onConflict: "user_id" }
+          );
+        if (error) {
+          console.warn("[NotifSettings] push_enabled DB upsert failed:", error.message);
+        } else {
+          try {
+            const { data: readback } = await (supabase.from("user_notification_preferences") as any)
+              .select("push_enabled")
+              .eq("user_id", resolvedUserId)
+              .maybeSingle();
+            if (readback?.push_enabled === next) {
+              prefDbOk = true;
+            } else {
+              console.warn("[NotifSettings] push_enabled readback mismatch");
+            }
+          } catch {
+            console.warn("[NotifSettings] push_enabled readback threw");
+          }
+        }
+      } catch (e) {
+        console.warn("[NotifSettings] push_enabled DB upsert threw:", e);
+      }
+
+      if (!prefDbOk) {
+        setNotifPrefs(p => ({ ...p, pushEnabled: previousPushEnabled }));
+        return;
+      }
+
+      try {
+        await saveNotifPrefs({ ...notifPrefs, pushEnabled: next });
+      } catch (e) {
+        console.warn("[NotifSettings] AsyncStorage pushEnabled write failed:", e);
+      }
+
+      if (next) {
+        scheduleMaintenanceNotifications(resolvedUserId).catch(() => {});
+      } else {
+        Notifications.cancelAllScheduledNotificationsAsync().catch(() => {});
+        Notifications.setBadgeCountAsync(0).catch(() => {});
+      }
+    } finally {
+      pushTogglePendingRef.current = false;
+      setIsPushTogglePending(false);
+    }
   }
 
   async function handleSave() {
@@ -421,25 +518,12 @@ export default function SettingsScreen() {
             <ToggleRow
               label="Push Notifications"
               sublabel="In-app alerts and banners"
-              value={settings.pushEnabled}
-              onToggle={() => togglePush(!settings.pushEnabled)}
-            />
-            <View style={styles.groupDivider} />
-            <ToggleRow
-              label="Email"
-              sublabel="Sent to your registered email"
-              value={settings.emailEnabled}
-              onToggle={() => { Haptics.selectionAsync(); updateSetting("emailEnabled", !settings.emailEnabled); }}
-            />
-            <View style={styles.groupDivider} />
-            <ToggleRow
-              label="SMS"
-              sublabel="Text message reminders"
-              value={settings.smsEnabled}
-              onToggle={() => { Haptics.selectionAsync(); updateSetting("smsEnabled", !settings.smsEnabled); }}
+              value={notifPrefs.pushEnabled}
+              onToggle={() => togglePush(!notifPrefs.pushEnabled)}
+              disabled={isPushTogglePending}
+              loading={isPushTogglePending}
             />
           </View>
-
           {/* BUDGET */}
           <Text style={styles.sectionLabel}>Budget Notifications</Text>
           <SectionCard
@@ -682,6 +766,7 @@ export default function SettingsScreen() {
               </Text>
             </Pressable>
           )}
+
         </View>
       </ScrollView>
 
@@ -722,21 +807,33 @@ function SectionCard({ title, subtitle, children }: {
   );
 }
 
-function ToggleRow({ label, sublabel, value, onToggle }: {
+function ToggleRow({ label, sublabel, value, onToggle, disabled = false, loading = false }: {
   label: string;
   sublabel: string;
   value: boolean;
   onToggle: () => void;
+  disabled?: boolean;
+  loading?: boolean;
 }) {
   return (
-    <Pressable style={styles.toggleRow} onPress={onToggle} hitSlop={4}>
+    <Pressable
+      style={styles.toggleRow}
+      onPress={disabled ? undefined : onToggle}
+      hitSlop={4}
+      disabled={disabled}
+    >
       <View style={styles.toggleRowInfo}>
         <Text style={styles.toggleRowLabel}>{label}</Text>
         <Text style={styles.toggleRowSub}>{sublabel}</Text>
       </View>
-      <Pressable onPress={onToggle} style={styles.toggleHitArea} hitSlop={8}>
-        <View style={[styles.toggle, value && styles.toggleOn]}>
-          <View style={[styles.toggleThumb, value && styles.toggleThumbOn]} />
+      <Pressable
+        onPress={disabled ? undefined : onToggle}
+        style={styles.toggleHitArea}
+        hitSlop={8}
+        disabled={disabled}
+      >
+        <View style={[styles.toggle, value && styles.toggleOn, disabled && styles.toggleDisabled, loading && styles.toggleLoading]}>
+          <View style={[styles.toggleThumb, value && styles.toggleThumbOn, loading && styles.toggleThumbLoading]} />
         </View>
       </Pressable>
     </Pressable>
@@ -848,10 +945,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.border,
     justifyContent: "center",
     paddingHorizontal: 2,
+    overflow: "hidden",
   },
   toggleOn: { backgroundColor: Colors.accent },
+  toggleDisabled: { opacity: 1 },
+  toggleLoading: { opacity: 0.82 },
   toggleThumb: { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.text, alignSelf: "flex-start" },
   toggleThumbOn: { alignSelf: "flex-end" },
+  toggleThumbLoading: { opacity: 0.72 },
 
   deleteAccountBtn: { alignItems: "center", paddingVertical: 12, minHeight: 44, justifyContent: "center" },
   deleteAccountText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.overdue },
