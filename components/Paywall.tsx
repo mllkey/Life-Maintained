@@ -119,6 +119,18 @@ export default function Paywall({
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("Welcome to LifeMaintained Premium!");
   const purchaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestProfileTierRef = useRef<string | null>(profile?.subscription_tier ?? null);
+  useEffect(() => {
+    latestProfileTierRef.current = profile?.subscription_tier ?? null;
+  }, [profile?.subscription_tier]);
+
+  const waitForWebhookProfileTier = async (expectedTier: string): Promise<void> => {
+    for (let i = 0; i < 8; i++) {
+      await refreshProfile();
+      if (latestProfileTierRef.current === expectedTier) return;
+      if (i < 7) await new Promise(r => setTimeout(r, 1000));
+    }
+  };
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -192,24 +204,7 @@ export default function Paywall({
         : active["personal_access"] ? "personal" : null;
 
       if (tier) {
-        const entKey = `${tier}_access`;
-        const expiry: string | null = active[entKey]?.expirationDate ?? null;
-        const periodType: string | undefined = active[entKey]?.periodType;
-        const isTrialing = periodType === "TRIAL";
-
-        const update: Record<string, any> = {
-          subscription_tier: tier,
-          subscription_expires_at: expiry,
-          revenuecat_customer_id: customerInfo.originalAppUserId ?? null,
-        };
-        if (isTrialing && expiry) {
-          update.trial_started_at = new Date().toISOString();
-          update.trial_expires_at = expiry;
-        }
-
-        const { error: profileErr } = await supabase.from("profiles").update(update).eq("user_id", user.id);
-        if (profileErr) throw profileErr;
-        await refreshProfile();
+        await waitForWebhookProfileTier(tier);
 
         setToastMessage("Welcome to LifeMaintained Premium!");
         setToastVisible(true);
@@ -245,13 +240,7 @@ export default function Paywall({
         : active["personal_access"] ? "personal" : null;
 
       if (tier && user) {
-        const entKey = `${tier}_access`;
-        await supabase.from("profiles").update({
-          subscription_tier: tier,
-          subscription_expires_at: active[entKey]?.expirationDate ?? null,
-          revenuecat_customer_id: customerInfo.originalAppUserId ?? null,
-        }).eq("user_id", user.id);
-        await refreshProfile();
+        await waitForWebhookProfileTier(tier);
         setToastMessage("Purchases restored!");
         setToastVisible(true);
         setTimeout(() => { setToastVisible(false); onDismiss?.(); }, 1600);

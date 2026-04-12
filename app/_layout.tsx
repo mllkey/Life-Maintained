@@ -24,7 +24,6 @@ import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { BudgetAlertProvider } from "@/context/BudgetAlertContext";
 import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
-import { supabase } from "@/lib/supabase";
 import { setPendingResetUrl } from "@/lib/pendingResetUrl";
 import { signalRcReady, rcReady } from "@/lib/revenuecat";
 
@@ -42,9 +41,8 @@ Notifications.setNotificationHandler({
 const VOICE_LOG_URL = "lifemaintained://voice-log";
 
 function RootLayoutNav() {
-  const { session, isLoading, onboardingCompleted, refreshProfile } = useAuth();
+  const { session, isLoading, onboardingCompleted } = useAuth();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const rcListenerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!isLoading) {
@@ -85,85 +83,10 @@ function RootLayoutNav() {
         await rcReady;
         const Purchases = (await import("react-native-purchases")).default;
         await Purchases.logIn(userId);
-
-        if (rcListenerRef.current) {
-          rcListenerRef.current();
-          rcListenerRef.current = null;
-        }
-
-        const doWrite = async (info: any) => {
-          const active = info?.entitlements?.active ?? {};
-          const expiry = (key: string) =>
-            active[key]?.expirationDate ?? null;
-
-          let newTier: string | null = null;
-          let newExpiry: string | null = null;
-
-          if (active["business_access"] != null) {
-            newTier = "business";
-            newExpiry = expiry("business_access");
-          } else if (active["pro_access"] != null) {
-            newTier = "pro";
-            newExpiry = expiry("pro_access");
-          } else if (active["personal_access"] != null) {
-            newTier = "personal";
-            newExpiry = expiry("personal_access");
-          }
-
-          if (newTier) {
-            const { error } = await supabase.from("profiles").update({
-              subscription_tier: newTier,
-              subscription_expires_at: newExpiry,
-              revenuecat_customer_id: info.originalAppUserId ?? null,
-            }).eq("user_id", userId);
-            if (error) throw error;
-          } else {
-            const { data: prof, error: fetchError } = await supabase
-              .from("profiles")
-              .select("trial_expires_at")
-              .eq("user_id", userId)
-              .maybeSingle();
-            if (fetchError) throw fetchError;
-            const stillTrial =
-              prof &&
-              (prof as any).trial_expires_at &&
-              new Date((prof as any).trial_expires_at) > new Date();
-            if (!stillTrial) {
-              const { error } = await supabase.from("profiles").update({
-                subscription_tier: "free",
-              }).eq("user_id", userId);
-              if (error) throw error;
-            }
-          }
-          refreshProfile().catch(() => {});
-        };
-
-        const listener = async (info: any) => {
-          try {
-            await doWrite(info);
-          } catch (e) {
-            console.error("[RevenueCat] Subscription write failed, retrying:", e);
-            try {
-              await doWrite(info);
-            } catch (e2) {
-              console.error("[RevenueCat] Subscription write retry failed:", e2);
-            }
-          }
-        };
-
-        Purchases.addCustomerInfoUpdateListener(listener);
-        rcListenerRef.current = () => Purchases.removeCustomerInfoUpdateListener(listener);
       } catch (e) {
         console.error("[RevenueCat] logIn failed:", e);
       }
     })();
-
-    return () => {
-      if (rcListenerRef.current) {
-        rcListenerRef.current();
-        rcListenerRef.current = null;
-      }
-    };
   }, [session?.user?.id]);
 
   // Deep link: lifemaintained://reset-password → password reset (no session gate)
