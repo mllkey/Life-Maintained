@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import Constants from "expo-constants";
 import { supabase } from "./supabase";
 import { loadNotifPrefs } from "./notificationPrefs";
+import * as Sentry from "@sentry/react-native";
 
 function parseNotifTime(timeStr: string): { hour: number; minute: number } {
   const parts = (timeStr ?? "09:00").split(":");
@@ -25,6 +26,33 @@ function parseDueDateAnchor(dueDateInput: string | null | undefined): Date | nul
   const day = Number(ymd[3]);
   const anchored = new Date(year, month, day, 12, 0, 0, 0);
   return Number.isNaN(anchored.getTime()) ? null : anchored;
+}
+
+function parseMedicationTime(timeStr: string | null | undefined): { hour: number; minute: number } | null {
+  if (!timeStr) return null;
+  const trimmed = timeStr.trim();
+  // Match formats like "8:00 AM", "12:30 PM", "8:00", "08:00"
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) return null;
+
+  let hour = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+  const meridiem = match[3]?.toUpperCase();
+
+  if (isNaN(hour) || isNaN(minute)) return null;
+  if (minute < 0 || minute > 59) return null;
+
+  if (meridiem === "AM") {
+    if (hour < 1 || hour > 12) return null;
+    if (hour === 12) hour = 0;
+  } else if (meridiem === "PM") {
+    if (hour < 1 || hour > 12) return null;
+    if (hour !== 12) hour += 12;
+  } else {
+    if (hour < 0 || hour > 23) return null;
+  }
+
+  return { hour, minute };
 }
 
 export type UpsertPushTokenResult = {
@@ -151,7 +179,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       return;
     }
 
-    const [vehiclesRes, propertiesRes] = await Promise.all([
+    const [vehiclesRes, propertiesRes, medicationsRes] = await Promise.all([
       supabase
         .from("vehicles")
         .select("id, year, make, model, nickname, mileage, hours, tracking_mode, vehicle_type")
@@ -160,10 +188,16 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         .from("properties")
         .select("id, address, nickname")
         .eq("user_id", userId),
+      supabase
+        .from("medications")
+        .select("id, name, reminder_time, reminders_enabled, family_member_id, family_members(name)")
+        .eq("user_id", userId)
+        .eq("reminders_enabled", true),
     ]);
 
     const vehicles = vehiclesRes.data ?? [];
     const properties = propertiesRes.data ?? [];
+    const medications = medicationsRes.data ?? [];
     const vehicleIds = vehicles.map(v => v.id);
     const propertyIds = properties.map(p => p.id);
 
@@ -193,6 +227,13 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     const now = new Date();
     const msPerDay = 1000 * 60 * 60 * 24;
     const MAX_FUTURE_MS = 5 * 365 * 24 * 60 * 60 * 1000;
+
+    // iOS allows 64 scheduled local notifications total. DAILY repeating
+    // triggers count as 1 slot. Medications and maintenance share this pool.
+    // 4 slots reserved for ad-hoc notifications outside this scheduler
+    // (BudgetAlertContext, etc.). Medications take priority over maintenance
+    // because missing a dose has real health consequences.
+    const TOTAL_NOTIFICATION_BUDGET = 60;
 
     const candidates: Candidate[] = [];
 
@@ -397,7 +438,106 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       }
     }
 
-    const toSchedule = candidates.slice(0, 64);
+    await Notifications.cancelAllScheduledNotificationsAsync();
+
+    // ── Medication daily reminders (priority over maintenance) ──────────
+    // Medications get whatever they need from the budget first.
+    // Maintenance fills whatever's left.
+    const enabledMedications = medications.filter(
+      (m: any) => m.reminders_enabled && m.reminder_time
+    );
+    let medicationsScheduled = 0;
+    let medicationsParseSkipped = 0;
+
+    for (const med of enabledMedications) {
+      if (medicationsScheduled >= TOTAL_NOTIFICATION_BUDGET) {
+        const dropped = enabledMedications.length - medicationsScheduled;
+        console.error(
+          `[NotifScheduler] iOS cap reached with medications alone. Dropping ${dropped} medication reminder(s) and ALL maintenance reminders.`
+        );
+        try {
+          Sentry.captureMessage("Medication reminder cap exceeded", {
+            level: "warning",
+            extra: {
+              userId,
+              enabledMedicationCount: enabledMedications.length,
+              scheduled: medicationsScheduled,
+              dropped,
+              cap: TOTAL_NOTIFICATION_BUDGET,
+            },
+          });
+        } catch {}
+        break;
+      }
+
+      const parsed = parseMedicationTime(med.reminder_time);
+      if (!parsed) {
+        medicationsParseSkipped++;
+        console.warn("[NotifScheduler] skipped medication with unparseable reminder_time:", {
+          medId: med.id,
+          name: med.name,
+          reminder_time: med.reminder_time,
+        });
+        try {
+          Sentry.captureMessage("Medication reminder_time unparseable", {
+            level: "warning",
+            extra: {
+              userId,
+              medId: med.id,
+              name: med.name,
+              reminder_time: med.reminder_time,
+            },
+          });
+        } catch {}
+        continue;
+      }
+
+      // Quiet hours filter for medications.
+      let medHour = parsed.hour;
+      let medMinute = parsed.minute;
+      const medTrigMin = medHour * 60 + medMinute;
+      const inQuiet = qsMin < qeMin
+        ? (medTrigMin >= qsMin && medTrigMin < qeMin)
+        : (medTrigMin >= qsMin || medTrigMin < qeMin);
+      if (inQuiet) {
+        medHour = qeH;
+        medMinute = qeM || 0;
+      }
+
+      const memberName = (med as any).family_members?.name;
+      const subjectPrefix = memberName ? `${memberName}: ` : "";
+
+      try {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Medication Reminder",
+            body: `${subjectPrefix}Time to take ${med.name}`,
+            sound: true,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            hour: medHour,
+            minute: medMinute,
+          },
+        });
+        medicationsScheduled++;
+      } catch (err) {
+        console.warn("[NotifScheduler] medication scheduleNotificationAsync threw:", { medId: med.id, err });
+        try {
+          Sentry.captureException(err, {
+            extra: {
+              context: "medication scheduleNotificationAsync",
+              userId,
+              medId: med.id,
+            },
+          });
+        } catch {}
+      }
+    }
+
+    // ── Date-based maintenance notifications (fills remaining budget) ──
+    const maintenanceBudget = Math.max(0, TOTAL_NOTIFICATION_BUDGET - medicationsScheduled);
+    const toSchedule = candidates.slice(0, maintenanceBudget);
 
     if (__DEV__) {
       console.log("[NotifScheduler] scheduling run:", {
@@ -409,11 +549,14 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         mutedVehiclesCount: (prefs.mutedVehicles ?? []).length,
         mutedPropertiesCount: (prefs.mutedProperties ?? []).length,
         candidateCount: candidates.length,
+        enabledMedications: enabledMedications.length,
+        medicationsScheduled,
+        medicationsParseSkipped,
+        maintenanceBudget,
         scheduledCount: toSchedule.length,
+        totalBudget: TOTAL_NOTIFICATION_BUDGET,
       });
     }
-
-    await Notifications.cancelAllScheduledNotificationsAsync();
 
     for (const { body, triggerDate } of toSchedule) {
       const tt = triggerDate.getTime();

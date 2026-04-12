@@ -21,9 +21,8 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import * as Notifications from "expo-notifications";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { parseISO, isBefore, addDays, addMonths, format } from "date-fns";
+import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { personLimit, petLimit } from "@/lib/subscription";
@@ -32,30 +31,6 @@ import DatePicker from "@/components/DatePicker";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
-async function scheduleMedicationNotification(medId: string, medName: string, reminderTime: string): Promise<boolean> {
-  const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== "granted") return false;
-  const [hourStr, minuteStr] = reminderTime.split(":");
-  const hour = parseInt(hourStr ?? "8");
-  const minute = parseInt(minuteStr ?? "0");
-  if (isNaN(hour) || isNaN(minute)) return false;
-
-  const storageKey = `@med_notif_${medId}`;
-  try {
-    const prevId = await AsyncStorage.getItem(storageKey);
-    if (prevId) {
-      await Notifications.cancelScheduledNotificationAsync(prevId);
-    }
-  } catch {}
-
-  const newId = await Notifications.scheduleNotificationAsync({
-    content: { title: "Medication Reminder", body: `Time to take your ${medName}`, sound: true },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute },
-  });
-
-  await AsyncStorage.setItem(storageKey, newId).catch(() => {});
-  return true;
-}
 
 function getStatus(nextDueDate: string | null, lastCompletedAt?: string | null): "overdue" | "due_soon" | "good" {
   if (nextDueDate) {
@@ -233,38 +208,40 @@ export default function HealthScreen() {
     setSchedulingMed(med.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      // If already enabled, toggle off — cancel the notification and update DB
-      if (med.reminders_enabled) {
-        const storageKey = `@med_notif_${med.id}`;
-        try {
-          const prevId = await AsyncStorage.getItem(storageKey);
-          if (prevId) {
-            await Notifications.cancelScheduledNotificationAsync(prevId);
-            await AsyncStorage.removeItem(storageKey);
-          }
-        } catch {}
-        await supabase.from("medications").update({ reminders_enabled: false, updated_at: new Date().toISOString() }).eq("id", med.id);
+      const newEnabled = !med.reminders_enabled;
+
+      // Optimistic local cache update so the UI flips immediately.
+      queryClient.setQueryData(["medications", user?.id], (old: any[] | undefined) =>
+        old?.map((m: any) => m.id === med.id ? { ...m, reminders_enabled: newEnabled } : m),
+      );
+
+      const { error } = await supabase
+        .from("medications")
+        .update({ reminders_enabled: newEnabled, updated_at: new Date().toISOString() })
+        .eq("id", med.id);
+
+      if (error) {
+        // Roll back optimistic update on failure.
         queryClient.setQueryData(["medications", user?.id], (old: any[] | undefined) =>
-          old?.map((m: any) => m.id === med.id ? { ...m, reminders_enabled: false } : m),
+          old?.map((m: any) => m.id === med.id ? { ...m, reminders_enabled: med.reminders_enabled } : m),
         );
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Reminder Off", `Daily reminder for ${med.name} has been turned off.`);
+        throw error;
+      }
+
+      // Trigger the central scheduler so the change takes effect immediately
+      // instead of waiting for the next foreground event.
+      if (user?.id) {
+        scheduleMaintenanceNotifications(user.id).catch(() => {});
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (newEnabled) {
+        Alert.alert("Reminder Set", `You'll be reminded to take ${med.name} daily at ${med.reminder_time}.`);
       } else {
-        const success = await scheduleMedicationNotification(med.id, med.name, med.reminder_time);
-        if (success) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          // Update DB and local cache so the status dot turns green immediately
-          await supabase.from("medications").update({ reminders_enabled: true, updated_at: new Date().toISOString() }).eq("id", med.id);
-          queryClient.setQueryData(["medications", user?.id], (old: any[] | undefined) =>
-            old?.map((m: any) => m.id === med.id ? { ...m, reminders_enabled: true } : m),
-          );
-          Alert.alert("Reminder Set", `You'll be reminded to take ${med.name} daily at ${med.reminder_time}.`);
-        } else {
-          Alert.alert("Permission Required", "Please enable notifications in Settings to receive medication reminders.");
-        }
+        Alert.alert("Reminder Off", `Daily reminder for ${med.name} has been turned off.`);
       }
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      Alert.alert("Error", e.message ?? "Could not update reminder. Please try again.");
     } finally {
       setSchedulingMed(null);
     }
