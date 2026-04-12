@@ -304,28 +304,16 @@ export default function PropertyDetailScreen() {
         return parts.length ? parts.join("\n\n") : null;
       })();
 
-      const [taskRes, logRes] = await Promise.all([
-        supabase
-          .from("property_maintenance_tasks")
-          .update({ last_completed_at: completedAt, next_due_date: nextDate, updated_at: now })
-          .eq("id", task.id),
-        supabase.from("maintenance_logs").insert({
-          user_id: user.id,
-          vehicle_id: null,
-          property_id: id,
-          service_name: task.task,
-          service_date: completeDate,
-          cost: costNum,
-          mileage: null,
-          provider_name: completeProvider.trim() || null,
-          provider_contact: null,
-          receipt_url: null,
-          notes: notesForLog,
-          did_it_myself: completeDiy,
-        }),
-      ]);
+      const { error: rpcError } = await supabase.rpc("complete_property_task", {
+        p_task_id: task.id,
+        p_completed_date: completedAt,
+        p_notes: notesForLog,
+        p_cost: costNum,
+        p_provider_name: completeProvider.trim() || null,
+        p_did_it_myself: completeDiy,
+      });
 
-      if (taskRes.error || logRes.error) throw taskRes.error ?? logRes.error;
+      if (rpcError) throw rpcError;
 
       queryClient.invalidateQueries({ queryKey: ["property_tasks", id] });
       queryClient.invalidateQueries({ queryKey: ["property_logs", id] });
