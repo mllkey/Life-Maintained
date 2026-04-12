@@ -273,19 +273,45 @@ Respond ONLY with valid JSON, no other text. Use this exact format:
 "parts_list": "<comma-separated list of parts needed with approximate individual costs>"
 }
 Base your estimates on current 2025-2026 market prices. Be accurate for this specific ${entityLabel}.`;
-    const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: claudeModel,
-        max_tokens: 500,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+    const TIMEOUT_MS = 45_000;
+    const aiController = new AbortController();
+    const aiTimeoutId = setTimeout(() => aiController.abort(), TIMEOUT_MS);
+    const aiStartedAt = Date.now();
+    let aiResponse: Response;
+    try {
+      aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: claudeModel,
+          max_tokens: 500,
+          messages: [{ role: "user", content: prompt }],
+        }),
+        signal: aiController.signal,
+      });
+      clearTimeout(aiTimeoutId);
+      const elapsedMs = Date.now() - aiStartedAt;
+      console.log(`[estimate-repair-cost] AI call completed in ${elapsedMs}ms, status=${aiResponse.status}`);
+    } catch (fetchErr) {
+      clearTimeout(aiTimeoutId);
+      const elapsedMs = Date.now() - aiStartedAt;
+      if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
+        console.error(`[estimate-repair-cost] AI call timed out after ${elapsedMs}ms (limit ${TIMEOUT_MS}ms)`);
+        return new Response(JSON.stringify({ error: "Estimate service timed out. Please try again." }), {
+          status: 504,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      console.error(`[estimate-repair-cost] AI call threw after ${elapsedMs}ms:`, fetchErr);
+      return new Response(JSON.stringify({ error: "Internal server error" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const aiData = await aiResponse.json();
     if (!aiResponse.ok) {

@@ -138,6 +138,8 @@ Return an array of objects. Each object must have exactly these fields:
 Match assets generously — "my Ninja" matches a Kawasaki Ninja vehicle, "the house" matches a property, a person's name matches a family member.
 Return the JSON array directly with no wrapper object, no explanation, no markdown code fences.`;
 
+  const TIMEOUT_MS = 45_000;
+
   try {
     const requestBody = {
       model: Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-4-20250514",
@@ -151,16 +153,35 @@ Return the JSON array directly with no wrapper object, no explanation, no markdo
       ],
     };
 
+    const aiController = new AbortController();
+    const aiTimeoutId = setTimeout(() => aiController.abort(), TIMEOUT_MS);
+    const aiStartedAt = Date.now();
+    let anthropicRes: Response;
     console.log("Calling Anthropic API for text extraction...");
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
+    try {
+      anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+        signal: aiController.signal,
+      });
+      clearTimeout(aiTimeoutId);
+      const elapsedMs = Date.now() - aiStartedAt;
+      console.log(`[extract-maintenance-data] AI call completed in ${elapsedMs}ms, status=${anthropicRes.status}`);
+    } catch (fetchErr) {
+      clearTimeout(aiTimeoutId);
+      const elapsedMs = Date.now() - aiStartedAt;
+      if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
+        console.error(`[extract-maintenance-data] AI call timed out after ${elapsedMs}ms (limit ${TIMEOUT_MS}ms)`);
+        return json({ items: [], error: "AI service timed out. Please try again.", raw_text: inputText }, 504);
+      }
+      console.error(`[extract-maintenance-data] AI call threw after ${elapsedMs}ms:`, fetchErr);
+      return json({ items: [], error: "Internal server error", raw_text: inputText }, 500);
+    }
 
     if (!anthropicRes.ok) {
       const errText = await anthropicRes.text();

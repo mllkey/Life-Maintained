@@ -89,14 +89,34 @@ serve(async (req: Request) => {
     formData.append("model", "whisper-1");
     formData.append("language", "en");
 
+    const TIMEOUT_MS = 30_000;
+    const aiController = new AbortController();
+    const aiTimeoutId = setTimeout(() => aiController.abort(), TIMEOUT_MS);
+    const aiStartedAt = Date.now();
+    let whisperRes: Response;
     console.log("[transcribe-audio] Calling OpenAI Whisper API...");
-    const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: formData,
-    });
+    try {
+      whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: formData,
+        signal: aiController.signal,
+      });
+      clearTimeout(aiTimeoutId);
+      const elapsedMs = Date.now() - aiStartedAt;
+      console.log(`[transcribe-audio] AI call completed in ${elapsedMs}ms, status=${whisperRes.status}`);
+    } catch (fetchErr) {
+      clearTimeout(aiTimeoutId);
+      const elapsedMs = Date.now() - aiStartedAt;
+      if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
+        console.error(`[transcribe-audio] AI call timed out after ${elapsedMs}ms (limit ${TIMEOUT_MS}ms)`);
+        return json({ error: "Transcription timed out. Please try again." }, 504);
+      }
+      console.error(`[transcribe-audio] AI call threw after ${elapsedMs}ms:`, fetchErr);
+      return json({ error: "Internal server error" }, 500);
+    }
 
     if (!whisperRes.ok) {
       const errText = await whisperRes.text();

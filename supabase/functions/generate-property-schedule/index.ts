@@ -428,11 +428,19 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
 ]`;
 
       try {
+        const TIMEOUT_MS = 90_000;
+        const aiController = new AbortController();
+        const aiTimeoutId = setTimeout(() => aiController.abort(), TIMEOUT_MS);
+        const aiStartedAt = Date.now();
         const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
           body: JSON.stringify({ model: claudeModel, max_tokens: 4000, messages: [{ role: "user", content: prompt }] }),
+          signal: aiController.signal,
         });
+        clearTimeout(aiTimeoutId);
+        const aiElapsedMs = Date.now() - aiStartedAt;
+        console.log(`[generate-property-schedule] AI call completed in ${aiElapsedMs}ms, status=${aiResponse.status}`);
 
         if (aiResponse.ok) {
           const aiData = await aiResponse.json();
@@ -474,7 +482,11 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
           console.error("[AI] Claude API error:", aiResponse.status);
         }
       } catch (aiErr) {
-        console.error("[AI] Error, falling through to templates:", aiErr instanceof Error ? aiErr.message : aiErr);
+        if (aiErr instanceof Error && aiErr.name === "AbortError") {
+          console.error("[AI] AI call timed out, falling through to templates");
+        } else {
+          console.error("[AI] Error, falling through to templates:", aiErr instanceof Error ? aiErr.message : aiErr);
+        }
       }
     }
 

@@ -699,11 +699,19 @@ Respond ONLY with a valid JSON array, no markdown, no backticks, no explanation.
 Generate 12-16 tasks. Quality over quantity. Every task should be something a knowledgeable owner would actually schedule and track.
 Every task MUST have at least one of ${intervalField} or interval_months.`;
 
+        const TIMEOUT_MS = 90_000;
+        const aiController = new AbortController();
+        const aiTimeoutId = setTimeout(() => aiController.abort(), TIMEOUT_MS);
+        const aiStartedAt = Date.now();
         const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
           body: JSON.stringify({ model: claudeModel, max_tokens: 4000, messages: [{ role: "user", content: prompt }] }),
+          signal: aiController.signal,
         });
+        clearTimeout(aiTimeoutId);
+        const aiElapsedMs = Date.now() - aiStartedAt;
+        console.log(`[generate-maintenance-schedule] AI call completed in ${aiElapsedMs}ms, status=${aiResponse.status}`);
 
         if (aiResponse.ok) {
           const aiData = await aiResponse.json();
@@ -992,7 +1000,11 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
         console.error("[AI] Insert failed:", aiInsertErr.message);
       }
     } catch (aiBlockErr) {
-      console.error("[AI BLOCK] Error, falling back to templates:", aiBlockErr instanceof Error ? aiBlockErr.message : aiBlockErr);
+      if (aiBlockErr instanceof Error && aiBlockErr.name === "AbortError") {
+        console.error("[AI BLOCK] AI call timed out, falling back to templates");
+      } else {
+        console.error("[AI BLOCK] Error, falling back to templates:", aiBlockErr instanceof Error ? aiBlockErr.message : aiBlockErr);
+      }
     }
 
     // ── TEMPLATE FALLBACK ──────────────────────────────────────────────

@@ -167,6 +167,18 @@ serve(async (req: Request) => {
         monthly_scan_count: Math.max(0, currentCount),
       }).eq("user_id", user.id).catch(() => {});
     };
+    let scanRefunded = false;
+    const refundOnce = async () => {
+      if (scanRefunded) return;
+      scanRefunded = true;
+      try {
+        await refundScan();
+      } catch (refundErr) {
+        // Refund failed but the user still needs the error response.
+        // Surface the failure in logs so we can reconcile manually.
+        console.error("[scan-receipt] refundScan threw — credit may not be restored:", refundErr instanceof Error ? refundErr.message : refundErr);
+      }
+    };
 
     // ── Parse request body ──────────────────────────────────────────────
     let rawImage: string;
@@ -176,7 +188,7 @@ serve(async (req: Request) => {
       if (!rawImage) throw new Error("No image provided");
     } catch (err) {
       console.error("scan-receipt: bad request body:", err);
-      await refundScan();
+      await refundOnce();
       return jsonResponse({ error: "Invalid request body — expected { image: base64string }" }, 400);
     }
 
@@ -233,15 +245,37 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
       hasApiKey: !!ANTHROPIC_API_KEY,
     });
 
-    const anthropicRes = await fetch(anthropicUrl, {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
+    const TIMEOUT_MS = 60_000;
+    const aiController = new AbortController();
+    const aiTimeoutId = setTimeout(() => aiController.abort(), TIMEOUT_MS);
+    const aiStartedAt = Date.now();
+    let anthropicRes: Response;
+    try {
+      anthropicRes = await fetch(anthropicUrl, {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+        signal: aiController.signal,
+      });
+      clearTimeout(aiTimeoutId);
+      const elapsedMs = Date.now() - aiStartedAt;
+      console.log(`[scan-receipt] AI call completed in ${elapsedMs}ms, status=${anthropicRes.status}`);
+    } catch (fetchErr) {
+      clearTimeout(aiTimeoutId);
+      const elapsedMs = Date.now() - aiStartedAt;
+      if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
+        console.error(`[scan-receipt] AI call timed out after ${elapsedMs}ms (limit ${TIMEOUT_MS}ms)`);
+        await refundOnce();
+        return jsonResponse({ error: "Scan timed out. Please try again.", date: null, cost: null, provider: null, serviceType: null, mileage: null, task: null, rawText: "" }, 504);
+      }
+      console.error(`[scan-receipt] AI call threw after ${elapsedMs}ms:`, fetchErr);
+      await refundOnce();
+      return jsonResponse({ error: "Internal server error", date: null, cost: null, provider: null, serviceType: null, mileage: null, task: null, rawText: "" }, 500);
+    }
 
     if (!anthropicRes.ok) {
       const errText = await anthropicRes.text();
@@ -252,7 +286,7 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
         parsed: parsedErr,
         raw: parsedErr ? undefined : errText,
       });
-      await refundScan();
+      await refundOnce();
       return jsonResponse({
         error: `Anthropic API returned ${anthropicRes.status}: ${errText}`,
         date: null, cost: null, provider: null, serviceType: null, rawText: "",
