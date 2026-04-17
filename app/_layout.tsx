@@ -7,7 +7,7 @@ Sentry.init({
   enabled: !__DEV__,
 });
 
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
@@ -39,6 +39,13 @@ Notifications.setNotificationHandler({
 });
 
 const VOICE_LOG_URL = "lifemaintained://voice-log";
+
+focusManager.setEventListener((handleFocus) => {
+  const subscription = AppState.addEventListener("change", (state: AppStateStatus) => {
+    handleFocus(state === "active");
+  });
+  return () => subscription.remove();
+});
 
 function RootLayoutNav() {
   const { session, isLoading, onboardingCompleted } = useAuth();
