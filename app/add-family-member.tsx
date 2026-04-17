@@ -83,7 +83,7 @@ export default function AddFamilyMemberScreen() {
       if (month && day && year) dateOfBirth = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
     }
 
-    const { error: err } = await supabase.from("family_members").insert({
+    const { data: newMember, error: err } = await supabase.from("family_members").insert({
       user_id: user.id,
       name: name.trim(),
       member_type: memberType,
@@ -92,11 +92,24 @@ export default function AddFamilyMemberScreen() {
       date_of_birth: dateOfBirth,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    });
+    }).select("id").single();
 
     if (err) { setIsLoading(false); setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
     else {
       queryClient.invalidateQueries({ queryKey: ["family_members"] });
+      (async () => {
+        try {
+          await supabase.functions.invoke("generate-health-schedule", {
+            body: { family_member_id: newMember?.id, user_id: user.id },
+          });
+        } catch (scheduleErr) {
+          console.error("[generate-health-schedule] Caught:", scheduleErr);
+        } finally {
+          queryClient.invalidateQueries({ queryKey: ["health_appointments", user.id] });
+          queryClient.invalidateQueries({ queryKey: ["member_appointments", newMember?.id] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        }
+      })();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowToast(true);
       setTimeout(() => router.back(), 900);
