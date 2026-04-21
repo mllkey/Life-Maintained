@@ -109,6 +109,7 @@ export default function EditVehicleScreen() {
         return;
       }
       updates.mileage = newMileage;
+      (updates as Record<string, unknown>).last_mileage_update = new Date().toISOString();
     }
 
     if (tracksHours && hours.trim()) {

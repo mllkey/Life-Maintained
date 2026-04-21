@@ -133,13 +133,12 @@ export default function SettingsScreen() {
     enabled: !!user,
   });
 
-  const { data: budgetTier } = useQuery({
-    queryKey: ["budget_tier", user?.id],
+  const { data: budgetPref } = useQuery({
+    queryKey: ["budget_threshold", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase
-        .from("budget_notification_tiers")
-        .select("*")
+      const { data } = await (supabase.from("user_notification_preferences") as any)
+        .select("budget_threshold")
         .eq("user_id", user.id)
         .maybeSingle();
       return data;
@@ -220,15 +219,15 @@ export default function SettingsScreen() {
   }, []);
 
   useEffect(() => {
-    if (budgetTier?.threshold_amount != null && isLoaded) {
-      const threshold = String(budgetTier.threshold_amount);
+    if (budgetPref?.budget_threshold != null && isLoaded) {
+      const threshold = String(budgetPref.budget_threshold);
       setSettings(prev => {
         const next = { ...prev, budgetThreshold: threshold };
         savedRef.current = { ...savedRef.current, budgetThreshold: threshold };
         return next;
       });
     }
-  }, [budgetTier, isLoaded]);
+  }, [budgetPref, isLoaded]);
 
   const hasChanges = isLoaded && JSON.stringify(settings) !== JSON.stringify(savedRef.current);
 
@@ -331,23 +330,19 @@ export default function SettingsScreen() {
 
       const threshold = parseFloat(settings.budgetThreshold);
       if (!isNaN(threshold) && threshold > 0) {
-        const payload = {
-          user_id: user.id,
-          threshold_amount: threshold,
-          updated_at: new Date().toISOString(),
-        };
-        if (budgetTier) {
-          await supabase.from("budget_notification_tiers").update(payload).eq("user_id", user.id);
-        } else {
-          await supabase.from("budget_notification_tiers").insert({ ...payload, created_at: new Date().toISOString() });
-        }
-        queryClient.invalidateQueries({ queryKey: ["budget_tier"] });
+        const { error: budgetErr } = await (supabase.from("user_notification_preferences") as any).upsert(
+          { user_id: user.id, budget_threshold: threshold, updated_at: new Date().toISOString() },
+          { onConflict: "user_id" }
+        );
+        if (budgetErr) throw budgetErr;
+        queryClient.setQueryData(["budget_threshold", user.id], { budget_threshold: threshold });
+        queryClient.invalidateQueries({ queryKey: ["budget_threshold"] });
       }
 
       savedRef.current = { ...settings };
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e: any) {
-      Alert.alert("Error saving settings", e.message);
+    } catch {
+      Alert.alert("Could not save settings", "Please check your connection and try again.");
     } finally {
       setIsSaving(false);
     }
@@ -549,9 +544,9 @@ export default function SettingsScreen() {
                 </View>
                 <Text style={styles.budgetLabel}>monthly threshold</Text>
               </View>
-              {budgetTier?.threshold_amount != null && (
+              {budgetPref?.budget_threshold != null && (
                 <Text style={styles.budgetSaved}>
-                  Current: ${Number(budgetTier.threshold_amount).toLocaleString()}/mo
+                  Current: ${Number(budgetPref.budget_threshold).toLocaleString()}/mo
                 </Text>
               )}
             </View>

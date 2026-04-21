@@ -504,9 +504,6 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
       return json({ success: true, source: "preload", cached: true, task_count: validatedTasks.length });
     }
 
-    // Insert tasks — NOTE: do NOT include `priority` in the insert since the
-    // property_maintenance_tasks table may not have that column in all environments.
-    // The priority is used for AI validation/sorting only.
     const tasksToInsert = validatedTasks.map(t => ({
       user_id: authUserId,
       property_id,
@@ -515,6 +512,7 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
       category: t.category,
       interval: intervalToString(t.interval_months),
       estimated_cost: Math.round((t.estimated_cost_low + t.estimated_cost_high) / 2),
+      priority: t.priority,
       next_due_date: addMonths(today, t.interval_months).toISOString().split("T")[0],
       is_completed: false,
       created_at: today.toISOString(),

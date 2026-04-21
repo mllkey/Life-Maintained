@@ -47,3 +47,5 @@ scripts/.preload-progress.json
 
 .env
 .sentryclirc
+lib/supabase-types.ts.*.bak
+supabase/.temp/

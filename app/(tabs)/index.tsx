@@ -69,6 +69,8 @@ type MileageVehicle = {
   vehicle_type: string | null;
   tracking_mode: string | null;
   updated_at: string | null;
+  average_miles_per_month: number | null;
+  last_mileage_update: string | null;
 };
 
 
@@ -262,7 +264,7 @@ export default function DashboardScreen() {
       if (!user) return [];
       const { data } = await supabase
         .from("vehicles")
-        .select("id, year, make, model, nickname, mileage, hours, vehicle_type, tracking_mode, updated_at")
+        .select("id, year, make, model, nickname, mileage, hours, vehicle_type, tracking_mode, updated_at, average_miles_per_month, last_mileage_update")
         .eq("user_id", user.id);
       const rows = (data ?? []) as MileageVehicle[];
       return rows.filter(v => !isTimeOnly(v));
@@ -645,7 +647,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
         if (updateErr) throw updateErr;
       } else {
         const newM = parseInt(input, 10);
-        const { error: updateErr } = await supabase.from("vehicles").update({ mileage: newM, updated_at: now }).eq("id", v.id);
+        const { error: updateErr } = await supabase.from("vehicles").update({ mileage: newM, last_mileage_update: now, updated_at: now }).eq("id", v.id);
         if (updateErr) throw updateErr;
         const { error: histErr } = await supabase.from("vehicle_mileage_history").insert({ vehicle_id: v.id, user_id: userId, mileage: newM, recorded_at: now });
         if (histErr && !histErr.message.includes("does not exist")) throw histErr;

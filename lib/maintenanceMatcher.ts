@@ -191,8 +191,8 @@ export async function matchAndUpdateVehicleTask(
     // computation, vehicle usage update, and mileage history atomically.
     const { data: rpcData, error: rpcErr } = await supabase.rpc("complete_vehicle_task", {
       p_task_id: matched.id,
-      p_mileage: serviceMileage,
-      p_hours: serviceHours,
+      p_mileage: serviceMileage ?? undefined,
+      p_hours: serviceHours ?? undefined,
       p_completed_date: new Date(serviceDate + "T12:00:00").toISOString(),
       p_skip_log: true,
     });

@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import DatePicker from "@/components/DatePicker";
@@ -37,6 +38,7 @@ const TEMPLATE_TASKS: { task: string; category: string; interval: string; cost: 
 export default function AddPropertyTaskScreen() {
   const { propertyId } = useLocalSearchParams<{ propertyId: string }>();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const [task, setTask] = useState("");
@@ -60,7 +62,7 @@ export default function AddPropertyTaskScreen() {
 
   async function handleSave() {
     if (isLoading) return;
-    if (!propertyId) return;
+    if (!propertyId || !user) return;
     if (!task.trim()) { setError("Task name is required"); return; }
     setIsLoading(true);
     setError(null);
@@ -79,6 +81,7 @@ export default function AddPropertyTaskScreen() {
     }
 
     const { error: err } = await supabase.from("property_maintenance_tasks").insert({
+      user_id: user.id,
       property_id: propertyId,
       task: task.trim(),
       category,

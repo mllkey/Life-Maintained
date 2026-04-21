@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import Constants from "expo-constants";
 import { supabase } from "./supabase";
 import { loadNotifPrefs } from "./notificationPrefs";
+import { currentUsageValue } from "./usageHelpers";
 import * as Sentry from "@sentry/react-native";
 
 function parseNotifTime(timeStr: string): { hour: number; minute: number } {
@@ -182,7 +183,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     const [vehiclesRes, propertiesRes, medicationsRes] = await Promise.all([
       supabase
         .from("vehicles")
-        .select("id, year, make, model, nickname, mileage, hours, tracking_mode, vehicle_type")
+        .select("id, year, make, model, nickname, mileage, hours, tracking_mode, vehicle_type, average_miles_per_month, last_mileage_update")
         .eq("user_id", userId),
       supabase
         .from("properties")
@@ -320,10 +321,13 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         hoursRemaining = Number(task.next_due_hours) - Number((vehicle as any).hours);
       }
 
-      // Check miles
+      // Check miles (use estimated mileage for pure mileage-tracked vehicles)
       let milesRemaining: number | null = null;
-      if (isMilesMode && (vehicle as any).mileage != null && task.next_due_miles != null) {
-        milesRemaining = Number(task.next_due_miles) - Number((vehicle as any).mileage);
+      const effectiveMileage: number | null = trackingMode === "mileage"
+        ? currentUsageValue(vehicle)
+        : ((vehicle as any).mileage ?? null);
+      if (isMilesMode && effectiveMileage != null && task.next_due_miles != null) {
+        milesRemaining = Number(task.next_due_miles) - effectiveMileage;
       }
 
       // Pick the more urgent usage dimension
@@ -645,8 +649,11 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         if (isH && (vehicle as any).hours != null && t.next_due_hours != null) {
           if (Number((vehicle as any).hours) >= Number(t.next_due_hours)) return true;
         }
-        if (isM && (vehicle as any).mileage != null && t.next_due_miles != null) {
-          if (Number((vehicle as any).mileage) >= Number(t.next_due_miles)) return true;
+        const effectiveBadgeMileage: number | null = (vehicle as any).tracking_mode === "mileage"
+          ? currentUsageValue(vehicle)
+          : ((vehicle as any).mileage ?? null);
+        if (isM && effectiveBadgeMileage != null && t.next_due_miles != null) {
+          if (effectiveBadgeMileage >= Number(t.next_due_miles)) return true;
         }
       }
       return false;

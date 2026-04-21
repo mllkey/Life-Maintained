@@ -8,7 +8,6 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
@@ -31,6 +30,7 @@ export default function HealthProfileScreen() {
   const [dob, setDob] = useState("");
   const [sex, setSex] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: profile } = useQuery({
     queryKey: ["health_profile", user?.id],
@@ -61,27 +61,66 @@ export default function HealthProfileScreen() {
 
   async function handleSave() {
     if (isLoading) return;
+
     if (!user) {
-      Alert.alert("Session Error", "Session unavailable. Please close and reopen this screen.");
+      setError("Session unavailable. Please close and reopen this screen.");
       return;
     }
-    setIsLoading(true);
 
+    // Parse and validate date_of_birth — required NOT NULL with no DB default
     let dateOfBirth: string | null = null;
     if (dob && dob.length === 10) {
       const [month, day, year] = dob.split("/");
-      if (month && day && year) dateOfBirth = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      if (month && day && year) {
+        const m = parseInt(month, 10);
+        const d = parseInt(day, 10);
+        const y = parseInt(year, 10);
+        const parsed = new Date(y, m - 1, d);
+        if (
+          !isNaN(parsed.getTime()) &&
+          parsed.getFullYear() === y &&
+          parsed.getMonth() === m - 1 &&
+          parsed.getDate() === d &&
+          y >= 1900 &&
+          y <= new Date().getFullYear()
+        ) {
+          dateOfBirth = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+        }
+      }
     }
 
-    await supabase.from("health_profiles").upsert({
+    if (!dateOfBirth) {
+      setError("Please enter a valid date of birth (MM/DD/YYYY).");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
+    // sex_at_birth is required NOT NULL with no DB default
+    if (!sex) {
+      setError("Please select your sex at birth.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    const { error: upsertErr } = await supabase.from("health_profiles").upsert({
       user_id: user.id,
       date_of_birth: dateOfBirth,
       sex_at_birth: sex,
       updated_at: new Date().toISOString(),
     });
 
+    if (upsertErr) {
+      setIsLoading(false);
+      setError("Unable to save your health profile. Please check your connection and try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    queryClient.invalidateQueries({ queryKey: ["health_profile"] });
+    queryClient.invalidateQueries({ queryKey: ["health_profile", user.id] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     router.back();
   }
@@ -100,6 +139,13 @@ export default function HealthProfileScreen() {
         </View>
 
         <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {error && (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+
           <View style={styles.infoBox}>
             <Ionicons name="heart-outline" size={18} color={Colors.health} />
             <Text style={styles.infoText}>Used to surface personalized health screening recommendations on your dashboard.</Text>
@@ -137,6 +183,8 @@ const styles = StyleSheet.create({
   saveBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   saveBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
   scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 24 },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: 10, padding: 12 },
+  errorText: { flex: 1, fontSize: 13, color: Colors.overdue, fontFamily: "Inter_400Regular" },
   infoBox: { flexDirection: "row", gap: 10, backgroundColor: Colors.healthMuted, borderRadius: 12, padding: 14, alignItems: "flex-start" },
   infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 20 },
   section: { gap: 8 },

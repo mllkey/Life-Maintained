@@ -735,17 +735,22 @@ export default function VehicleDetailScreen() {
 
     try {
       // 1. RPC — all writes are atomic; no success UI until this resolves
-      const { data: rpcResult, error: rpcErr } = await supabase.rpc("complete_vehicle_task", {
+      const rpcPromise = supabase.rpc("complete_vehicle_task", {
         p_task_id: task.id,
-        p_mileage: taskUsesMiles ? usageNum : null,
-        p_hours: taskUsesHours ? usageNum : null,
+        p_mileage: taskUsesMiles ? (usageNum ?? undefined) : undefined,
+        p_hours: taskUsesHours ? (usageNum ?? undefined) : undefined,
         p_completed_date: completeDate,
-        p_notes: notesForLog,
-        p_cost: costTrim ? parseFloat(completeCost) : null,
+        p_notes: notesForLog ?? undefined,
+        p_cost: costTrim ? parseFloat(completeCost) : undefined,
         p_skip_log: false,
-        p_provider_name: completeProvider.trim() || null,
+        p_provider_name: completeProvider.trim() || undefined,
         p_did_it_myself: completeDiy,
       });
+      const timeoutMs = 15000;
+      let timeoutId: ReturnType<typeof setTimeout>;
+      const timeout = new Promise<never>((_, reject) => { timeoutId = setTimeout(() => reject(new Error(`[MarkComplete] RPC timed out after ${timeoutMs}ms`)), timeoutMs); });
+      const { data: rpcResult, error: rpcErr } = await Promise.race([rpcPromise, timeout]) as Awaited<typeof rpcPromise>;
+      clearTimeout(timeoutId!);
       if (rpcErr) throw rpcErr;
 
       handleCloseMarkComplete();
@@ -757,17 +762,7 @@ export default function VehicleDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["maintenance_logs", id] });
       queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", id] });
 
-      // 3. Schedule notifications — await so they reflect the new state, but
-      //    failures must not block the success toast
-      if (user?.id) {
-        try {
-          await scheduleMaintenanceNotifications(user.id);
-        } catch {
-          // non-blocking — notification scheduling failure is not fatal
-        }
-      }
-
-      // 4. Success haptics + toast — haptic fires at the exact moment toast becomes visible
+      // 3. Success haptics + toast — fire immediately, don't wait for notifications
       const toastTitle = `${rpcResult?.task_name ?? task.name} marked complete`;
       let toastSubtitle: string | undefined;
       if (rpcResult?.next_due_miles != null) {
@@ -779,7 +774,14 @@ export default function VehicleDetailScreen() {
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast(toastTitle, false, toastSubtitle);
+
+      // 4. Schedule notifications — fire-and-forget, never blocks UI
+      if (user?.id) {
+        try { scheduleMaintenanceNotifications(user.id).catch(() => {}); } catch {}
+      }
     } catch (e) {
+      console.error("[MarkComplete] RPC failed:", e);
+      handleCloseMarkComplete();
       queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", id] });
       showToast("Failed to save. Please try again.", true);
     } finally {

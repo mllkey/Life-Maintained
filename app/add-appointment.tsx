@@ -39,19 +39,12 @@ const APPOINTMENT_TYPES = [
   "Other",
 ];
 
-type IntervalValue = number | "weekly" | "biweekly";
-
-const INTERVALS: { value: IntervalValue; label: string }[] = [
-  { value: "weekly", label: "Weekly" },
-  { value: "biweekly", label: "Every 2 weeks" },
-  { value: 1, label: "Monthly" },
-  { value: 3, label: "Quarterly" },
-  { value: 6, label: "Every 6 months" },
-  { value: 12, label: "Annually" },
-  { value: 24, label: "Every 2 years" },
-  { value: 60, label: "Every 5 years" },
-  { value: 120, label: "Every 10 years" },
-];
+function intervalToDB(count: number, unit: "weeks" | "months" | "years"): { interval_months: number | null; interval_type: string | null } {
+  if (unit === "weeks" && count === 1) return { interval_months: null, interval_type: "weekly" };
+  if (unit === "weeks" && count === 2) return { interval_months: null, interval_type: "biweekly" };
+  if (unit === "years") return { interval_months: count * 12, interval_type: null };
+  return { interval_months: count, interval_type: null };
+}
 
 export default function AddAppointmentScreen() {
   const insets = useSafeAreaInsets();
@@ -62,7 +55,8 @@ export default function AddAppointmentScreen() {
 
   const [appointmentType, setAppointmentType] = useState("");
   const [providerName, setProviderName] = useState("");
-  const [intervalSelection, setIntervalSelection] = useState<IntervalValue>(12);
+  const [intervalCount, setIntervalCount] = useState(1);
+  const [intervalUnit, setIntervalUnit] = useState<"weeks" | "months" | "years">("years");
   const [nextDueDate, setNextDueDate] = useState("");
   const [familyMemberId, setFamilyMemberId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
@@ -156,20 +150,19 @@ export default function AddAppointmentScreen() {
     setIsLoading(true);
     setError(null);
 
-    const intervalMonths = typeof intervalSelection === "number" ? intervalSelection : null;
-    const intervalType = typeof intervalSelection === "string" ? intervalSelection : null;
+    const { interval_months: intervalMonths, interval_type: intervalType } = intervalToDB(intervalCount, intervalUnit);
 
     let nextDate: string | null = null;
     if (nextDueDate && nextDueDate.length === 10) {
       nextDate = nextDueDate;
     } else {
       const next = new Date();
-      if (intervalSelection === "weekly") {
-        next.setDate(next.getDate() + 7);
-      } else if (intervalSelection === "biweekly") {
-        next.setDate(next.getDate() + 14);
+      if (intervalUnit === "weeks") {
+        next.setDate(next.getDate() + intervalCount * 7);
+      } else if (intervalUnit === "years") {
+        next.setFullYear(next.getFullYear() + intervalCount);
       } else {
-        next.setMonth(next.getMonth() + intervalSelection);
+        next.setMonth(next.getMonth() + intervalCount);
       }
       nextDate = next.toISOString().split("T")[0];
     }
@@ -195,6 +188,13 @@ export default function AddAppointmentScreen() {
       router.back();
     }
   }
+
+  const intervalPreviewLabel = (() => {
+    const singular = intervalCount === 1;
+    if (intervalUnit === "weeks") return singular ? "1 week" : `${intervalCount} weeks`;
+    if (intervalUnit === "months") return singular ? "1 month" : `${intervalCount} months`;
+    return singular ? "1 year" : `${intervalCount} years`;
+  })();
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -279,14 +279,46 @@ export default function AddAppointmentScreen() {
             </Section>
           )}
 
-          <Section title="Reminder Interval">
-            <View style={styles.intervalGrid}>
-              {INTERVALS.map(iv => (
-                <Pressable key={String(iv.value)} style={[styles.intervalChip, intervalSelection === iv.value && styles.intervalChipSelected]} onPress={() => { Haptics.selectionAsync(); setIntervalSelection(iv.value); }}>
-                  <Text style={[styles.intervalChipText, intervalSelection === iv.value && styles.intervalChipTextSelected]}>{iv.label}</Text>
+          <Section title="Repeat Every">
+            <View style={styles.stepperRow}>
+              <View style={styles.stepperControl}>
+                <Pressable
+                  hitSlop={8}
+                  disabled={intervalCount <= 1}
+                  style={{ opacity: intervalCount <= 1 ? 0.3 : 1 }}
+                  onPress={() => { setIntervalCount(prev => prev - 1); Haptics.selectionAsync(); }}
+                >
+                  <Ionicons name="remove-circle-outline" size={26} color={Colors.health} />
                 </Pressable>
-              ))}
+                <Text style={styles.stepperCount}>{intervalCount}</Text>
+                <Pressable
+                  hitSlop={8}
+                  disabled={intervalCount >= 99 || (intervalUnit === "weeks" && intervalCount >= 2)}
+                  style={{ opacity: (intervalCount >= 99 || (intervalUnit === "weeks" && intervalCount >= 2)) ? 0.3 : 1 }}
+                  onPress={() => { setIntervalCount(prev => prev + 1); Haptics.selectionAsync(); }}
+                >
+                  <Ionicons name="add-circle-outline" size={26} color={Colors.health} />
+                </Pressable>
+              </View>
+              <View style={styles.unitRow}>
+                {(["weeks", "months", "years"] as const).map(unit => (
+                  <Pressable
+                    key={unit}
+                    style={[styles.unitChip, intervalUnit === unit && styles.unitChipSelected]}
+                    onPress={() => {
+                      setIntervalUnit(unit);
+                      if (unit === "weeks") setIntervalCount(prev => Math.min(prev, 2));
+                      Haptics.selectionAsync();
+                    }}
+                  >
+                    <Text style={[styles.unitChipText, intervalUnit === unit && styles.unitChipTextSelected]}>
+                      {unit.charAt(0).toUpperCase() + unit.slice(1)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
+            <Text style={styles.intervalPreview}>Repeats every {intervalPreviewLabel}</Text>
           </Section>
 
           <Section title="Next Due Date (optional)">
@@ -341,9 +373,13 @@ const styles = StyleSheet.create({
   memberChipSelected: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
   memberChipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
   memberChipTextSelected: { color: Colors.health },
-  intervalGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  intervalChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
-  intervalChipSelected: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
-  intervalChipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  intervalChipTextSelected: { color: Colors.health },
+  stepperRow: { flexDirection: "row", alignItems: "center", gap: 16 },
+  stepperControl: { flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: Colors.card, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 6, paddingVertical: 4 },
+  stepperCount: { fontSize: 20, fontFamily: "Inter_600SemiBold", color: Colors.text, minWidth: 36, textAlign: "center" },
+  unitRow: { flexDirection: "row", gap: 6, flex: 1 },
+  unitChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
+  unitChipSelected: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
+  unitChipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  unitChipTextSelected: { color: Colors.health },
+  intervalPreview: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 8 },
 });

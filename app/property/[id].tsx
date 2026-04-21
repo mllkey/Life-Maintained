@@ -307,9 +307,9 @@ export default function PropertyDetailScreen() {
       const { error: rpcError } = await supabase.rpc("complete_property_task", {
         p_task_id: task.id,
         p_completed_date: completedAt,
-        p_notes: notesForLog,
-        p_cost: costNum,
-        p_provider_name: completeProvider.trim() || null,
+        p_notes: notesForLog ?? undefined,
+        p_cost: costNum ?? undefined,
+        p_provider_name: completeProvider.trim() || undefined,
         p_did_it_myself: completeDiy,
       });
 

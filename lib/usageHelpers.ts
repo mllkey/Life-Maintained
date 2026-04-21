@@ -23,6 +23,8 @@ export interface VehicleRow {
   tracking_mode?: TrackingMode | null;
   mileage?: number | null;
   hours?: number | null;
+  average_miles_per_month?: number | null;
+  last_mileage_update?: string | null;
 }
 
 export interface TaskRow {
@@ -99,8 +101,31 @@ export function usageUnitShort(vehicle: VehicleRow | null | undefined): string {
 export function currentUsageValue(vehicle: VehicleRow | null | undefined): number | null {
   if (!vehicle) return null;
   const mode = resolveTrackingMode(vehicle);
-  if (mode === "hours" || mode === "both") return vehicle.hours ?? null;
-  if (mode === "mileage") return vehicle.mileage ?? null;
+
+  if (mode === "hours" || mode === "both") {
+    return vehicle.hours ?? null;
+  }
+
+  if (mode === "mileage") {
+    const stored = vehicle.mileage ?? null;
+    if (stored == null) return null;
+
+    const avg = Math.max(0, vehicle.average_miles_per_month ?? 0);
+    const lastUpdateRaw = vehicle.last_mileage_update;
+
+    if (avg > 0 && lastUpdateRaw) {
+      const lastUpdateMs = new Date(lastUpdateRaw).getTime();
+      if (Number.isFinite(lastUpdateMs)) {
+        const nowMs = Date.now();
+        const monthsElapsed = Math.max(0, (nowMs - lastUpdateMs) / (1000 * 60 * 60 * 24 * 30.44));
+        const estimated = stored + Math.round(avg * monthsElapsed);
+        return Math.max(stored, estimated);
+      }
+    }
+
+    return stored;
+  }
+
   return null;
 }
 

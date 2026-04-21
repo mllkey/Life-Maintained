@@ -18,8 +18,16 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
-const REMINDER_TIMES = ["6:00 AM", "7:00 AM", "8:00 AM", "9:00 AM", "12:00 PM", "1:00 PM", "6:00 PM", "8:00 PM", "9:00 PM", "10:00 PM"];
+function formatTimeForDB(date: Date): string {
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const h = hours % 12 || 12;
+  const m = minutes.toString().padStart(2, "0");
+  return `${h}:${m} ${ampm}`;
+}
 
 export default function AddMedicationScreen() {
   const insets = useSafeAreaInsets();
@@ -27,7 +35,7 @@ export default function AddMedicationScreen() {
   const queryClient = useQueryClient();
 
   const [name, setName] = useState("");
-  const [reminderTime, setReminderTime] = useState("8:00 AM");
+  const [reminderTime, setReminderTime] = useState<Date>(new Date(new Date().setHours(8, 0, 0, 0)));
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [familyMemberId, setFamilyMemberId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -57,7 +65,7 @@ export default function AddMedicationScreen() {
       user_id: user.id,
       family_member_id: familyMemberId,
       name: name.trim(),
-      reminder_time: remindersEnabled ? reminderTime : null,
+      reminder_time: remindersEnabled ? formatTimeForDB(reminderTime) : null,
       reminders_enabled: remindersEnabled,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -125,13 +133,18 @@ export default function AddMedicationScreen() {
           {remindersEnabled && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Reminder Time</Text>
-              <View style={styles.timeGrid}>
-                {REMINDER_TIMES.map(t => (
-                  <Pressable key={t} style={[styles.timeChip, reminderTime === t && styles.timeChipSelected]} onPress={() => { Haptics.selectionAsync(); setReminderTime(t); }}>
-                    <Text style={[styles.timeChipText, reminderTime === t && styles.timeChipTextSelected]}>{t}</Text>
-                  </Pressable>
-                ))}
+              <View style={{ backgroundColor: Colors.card, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, overflow: "hidden", height: 180 }}>
+                <DateTimePicker
+                  mode="time"
+                  display="spinner"
+                  value={reminderTime}
+                  onChange={(_, selectedDate) => { if (selectedDate) { setReminderTime(selectedDate); Haptics.selectionAsync(); } }}
+                  textColor={Colors.text}
+                  themeVariant="dark"
+                  style={{ height: 180 }}
+                />
               </View>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 6, textAlign: "center" }}>Scroll to set your reminder time</Text>
             </View>
           )}
         </ScrollView>
@@ -165,9 +178,4 @@ const styles = StyleSheet.create({
   toggleOn: { backgroundColor: Colors.health },
   toggleThumb: { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.text, alignSelf: "flex-start" },
   toggleThumbOn: { alignSelf: "flex-end" },
-  timeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  timeChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
-  timeChipSelected: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
-  timeChipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  timeChipTextSelected: { color: Colors.health },
 });

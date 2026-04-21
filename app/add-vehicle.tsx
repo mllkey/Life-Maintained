@@ -975,6 +975,7 @@ export default function AddVehicleScreen() {
           ? parseFloat(engineHours.replace(/,/g, ""))
           : null,
       average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth, 10) : null,
+      last_mileage_update: new Date().toISOString(),
       is_seasonal: isSeasonal,
       season_start_month: isSeasonal ? seasonStartMonth : null,
       season_end_month: isSeasonal ? seasonEndMonth : null,

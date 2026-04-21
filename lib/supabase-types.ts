@@ -952,6 +952,7 @@ export type Database = {
           last_completed_at: string | null
           next_due_date: string | null
           notes: string | null
+          priority: string
           property_id: string
           service_notes: string | null
           service_type: string | null
@@ -970,6 +971,7 @@ export type Database = {
           last_completed_at?: string | null
           next_due_date?: string | null
           notes?: string | null
+          priority?: string
           property_id: string
           service_notes?: string | null
           service_type?: string | null
@@ -988,6 +990,7 @@ export type Database = {
           last_completed_at?: string | null
           next_due_date?: string | null
           notes?: string | null
+          priority?: string
           property_id?: string
           service_notes?: string | null
           service_type?: string | null
@@ -1839,6 +1842,45 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_events: {
+        Row: {
+          app_user_id: string | null
+          error: string | null
+          event_id: string
+          event_type: string
+          id: string
+          payload: Json
+          processed_at: string | null
+          received_at: string
+          source: string
+          status: string
+        }
+        Insert: {
+          app_user_id?: string | null
+          error?: string | null
+          event_id: string
+          event_type: string
+          id?: string
+          payload: Json
+          processed_at?: string | null
+          received_at?: string
+          source: string
+          status?: string
+        }
+        Update: {
+          app_user_id?: string | null
+          error?: string | null
+          event_id?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          received_at?: string
+          source?: string
+          status?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1853,6 +1895,17 @@ export type Database = {
         Returns: string
       }
       _lm_table_exists: { Args: { p_table: string }; Returns: boolean }
+      complete_property_task: {
+        Args: {
+          p_completed_date?: string
+          p_cost?: number
+          p_did_it_myself?: boolean
+          p_notes?: string
+          p_provider_name?: string
+          p_task_id: string
+        }
+        Returns: Json
+      }
       complete_receipt_scan: {
         Args: {
           p_duplicate_hash?: string
