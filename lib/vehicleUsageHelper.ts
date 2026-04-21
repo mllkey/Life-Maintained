@@ -39,12 +39,18 @@ export async function updateVehicleUsage(
       .update({ mileage: milesVal, updated_at: now })
       .eq("id", vehicleId);
 
-    await supabase.from("vehicle_mileage_history").insert({
-      vehicle_id: vehicleId,
-      mileage: milesVal,
-      recorded_at: recordedAt,
-      created_at: now,
-    });
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      console.warn("[vehicleUsageHelper] skipping mileage history insert: no auth user");
+    } else {
+      await supabase.from("vehicle_mileage_history").insert({
+        user_id: user.id,
+        vehicle_id: vehicleId,
+        mileage: milesVal,
+        recorded_at: recordedAt,
+        created_at: now,
+      });
+    }
   }
 
   if (hoursVal != null && hoursVal > (currentHours ?? 0)) {

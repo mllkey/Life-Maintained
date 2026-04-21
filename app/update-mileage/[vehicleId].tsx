@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { isHoursTracked } from "@/lib/usageHelpers";
@@ -23,6 +24,7 @@ import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 export default function UpdateMileageScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [mileage, setMileage] = useState("");
   const [mileageWarning, setMileageWarning] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export default function UpdateMileageScreen() {
 
   async function handleSave() {
     if (isLoading) return;
-    if (!vehicleId || !mileage) return;
+    if (!vehicleId || !mileage || !user) return;
     const mileageValue = mileage.replace(/,/g, "");
     const currentMileage = tracksHours ? vehicle?.hours ?? 0 : vehicle?.mileage ?? 0;
     const newMileage = tracksHours ? parseFloat(mileageValue) : parseInt(mileageValue, 10);
@@ -64,6 +66,7 @@ export default function UpdateMileageScreen() {
         if (updateErr) throw updateErr;
 
         const { error: histErr } = await supabase.from("vehicle_mileage_history").insert({
+          user_id: user.id,
           vehicle_id: vehicleId,
           mileage: newMileage,
           recorded_at: new Date().toISOString(),
