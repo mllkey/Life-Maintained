@@ -313,7 +313,8 @@ serve(async (req: Request) => {
         const { count: existingCount, error: countError } = await adminClient
           .from("user_vehicle_maintenance_tasks")
           .select("id", { count: "exact", head: true })
-          .eq("vehicle_id", vehicle_id);
+          .eq("vehicle_id", vehicle_id)
+          .eq("user_id", authUserId);
 
         if (countError) {
           console.error("Count query error:", countError);

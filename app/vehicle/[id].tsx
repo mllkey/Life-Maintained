@@ -1395,6 +1395,16 @@ export default function VehicleDetailScreen() {
                       This usually takes about 10–20 seconds
                     </Text>
                   </View>
+                  {!generatingSchedule && (
+                    <Pressable
+                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); generateSchedule(); }}
+                      style={({ pressed }) => [{ marginTop: 16, marginHorizontal: 16, paddingVertical: 14, paddingHorizontal: 20, backgroundColor: '#E8943A', borderRadius: 12, alignItems: 'center', opacity: pressed ? 0.85 : 1 }]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Generate maintenance schedule"
+                    >
+                      <Text style={{ color: '#0C111B', fontSize: 16, fontFamily: 'Inter_600SemiBold' }}>Generate Schedule</Text>
+                    </Pressable>
+                  )}
                   <ScheduleSkeleton />
                 </View>
               ) : (
