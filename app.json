@@ -70,7 +70,15 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "@sentry/react-native"
+      "@sentry/react-native",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "frameworkuno",
+          "project": "lifemaintained",
+          "url": "https://sentry.io/"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -82,7 +90,8 @@
       },
       "eas": {
         "projectId": "2b817e52-5d6d-43c4-9855-966f7ded10ad"
-      }
+      },
+      "sentryDsn": "${SENTRY_DSN}"
     }
   }
 }

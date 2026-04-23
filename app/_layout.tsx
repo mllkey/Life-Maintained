@@ -1,10 +1,15 @@
 import * as Sentry from '@sentry/react-native';
 
 Sentry.init({
-  dsn: 'https://05c15f13d8ae3d3e968e67a0dc95b647@o4511203460841472.ingest.us.sentry.io/4511203468509184',
-  enableAutoSessionTracking: true,
-  tracesSampleRate: 0.2,
+  dsn: Constants.expoConfig?.extra?.sentryDsn,
   enabled: !__DEV__,
+  environment: __DEV__ ? 'development' : 'production',
+  release:
+    nativeApplicationVersion && nativeBuildVersion
+      ? `com.lifemaintained.app@${nativeApplicationVersion}+${nativeBuildVersion}`
+      : undefined,
+  dist: nativeBuildVersion ?? undefined,
+  tracesSampleRate: 0.2,
 });
 
 import { QueryClientProvider, focusManager } from "@tanstack/react-query";
@@ -26,6 +31,8 @@ import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
 import { setPendingResetUrl } from "@/lib/pendingResetUrl";
 import { signalRcReady, rcReady } from "@/lib/revenuecat";
+import Constants from 'expo-constants';
+import { nativeApplicationVersion, nativeBuildVersion } from 'expo-application';
 
 SplashScreen.preventAutoHideAsync();
 
