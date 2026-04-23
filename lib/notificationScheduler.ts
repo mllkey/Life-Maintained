@@ -310,7 +310,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       }
 
       // Usage-based notifications (new)
-      const trackingMode = (vehicle as any).tracking_mode ?? "";
+      const trackingMode = vehicle.tracking_mode ?? "";
       const isBoth = trackingMode === "both";
       const isHoursMode = trackingMode === "hours" || isBoth;
       const isMilesMode = trackingMode === "mileage" || isBoth;
@@ -643,13 +643,13 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       // Usage-based overdue
       const vehicle = vehicleMap.get(t.vehicle_id);
       if (vehicle) {
-        const tm = (vehicle as any).tracking_mode ?? "";
+        const tm = vehicle.tracking_mode ?? "";
         const isH = tm === "hours" || tm === "both";
         const isM = tm === "mileage" || tm === "both";
         if (isH && (vehicle as any).hours != null && t.next_due_hours != null) {
           if (Number((vehicle as any).hours) >= Number(t.next_due_hours)) return true;
         }
-        const effectiveBadgeMileage: number | null = (vehicle as any).tracking_mode === "mileage"
+        const effectiveBadgeMileage: number | null = vehicle.tracking_mode === "mileage"
           ? currentUsageValue(vehicle)
           : ((vehicle as any).mileage ?? null);
         if (isM && effectiveBadgeMileage != null && t.next_due_miles != null) {

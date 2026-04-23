@@ -20,7 +20,7 @@ export type TrackingMode = "mileage" | "hours" | "both" | "time_only";
 
 export interface VehicleRow {
   vehicle_type?: string | null;
-  tracking_mode?: TrackingMode | null;
+  tracking_mode?: string | null;
   mileage?: number | null;
   hours?: number | null;
   average_miles_per_month?: number | null;
