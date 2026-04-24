@@ -956,35 +956,61 @@ export default function AddVehicleScreen() {
     } catch {}
 
     const hasCandidates = walletCandidates && walletCandidates.length > 0;
-    const inferredMode = inferTrackingMode(selectedVehicleCategory);
-    const vehicleData = {
-      user_id: user.id,
-      year: yearNum,
-      make: make.trim(),
-      model: model.trim(),
-      trim: trim.trim() || null,
-      nickname: nickname.trim() || null,
-      vehicle_type: vehicleType,
-      vehicle_category: selectedVehicleCategory,
-      fuel_type: fuelType,
-      is_awd: isAwd,
-      tracking_mode: inferredMode,
-      mileage: mileage ? parseInt(mileage.replace(/,/g, ""), 10) : null,
-      hours:
-        inferredMode === "hours" && engineHours.trim()
-          ? parseFloat(engineHours.replace(/,/g, ""))
-          : null,
-      average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth, 10) : null,
-      last_mileage_update: new Date().toISOString(),
-      is_seasonal: isSeasonal,
-      season_start_month: isSeasonal ? seasonStartMonth : null,
-      season_end_month: isSeasonal ? seasonEndMonth : null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      vin: vin.trim().toUpperCase() || null,
-      engine_size: engineSize,
-      engine_cylinders: engineCylinders,
-    };
+    const inferredMode = isOnboarding ? "mileage" : inferTrackingMode(selectedVehicleCategory);
+    const vehicleData = isOnboarding
+      ? {
+          user_id: user.id,
+          year: yearNum,
+          make: make.trim(),
+          model: model.trim(),
+          trim: null,
+          nickname: null,
+          vehicle_type: "car",
+          vehicle_category: "car",
+          fuel_type: "gas",
+          is_awd: false,
+          tracking_mode: "mileage",
+          mileage: mileage ? parseInt(mileage.replace(/,/g, ""), 10) : null,
+          hours: null,
+          average_miles_per_month: 1000,
+          last_mileage_update: new Date().toISOString(),
+          is_seasonal: false,
+          season_start_month: null,
+          season_end_month: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          vin: null,
+          engine_size: null,
+          engine_cylinders: null,
+        }
+      : {
+          user_id: user.id,
+          year: yearNum,
+          make: make.trim(),
+          model: model.trim(),
+          trim: trim.trim() || null,
+          nickname: nickname.trim() || null,
+          vehicle_type: vehicleType,
+          vehicle_category: selectedVehicleCategory,
+          fuel_type: fuelType,
+          is_awd: isAwd,
+          tracking_mode: inferredMode,
+          mileage: mileage ? parseInt(mileage.replace(/,/g, ""), 10) : null,
+          hours:
+            inferredMode === "hours" && engineHours.trim()
+              ? parseFloat(engineHours.replace(/,/g, ""))
+              : null,
+          average_miles_per_month: avgMilesPerMonth ? parseInt(avgMilesPerMonth, 10) : null,
+          last_mileage_update: new Date().toISOString(),
+          is_seasonal: isSeasonal,
+          season_start_month: isSeasonal ? seasonStartMonth : null,
+          season_end_month: isSeasonal ? seasonEndMonth : null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          vin: vin.trim().toUpperCase() || null,
+          engine_size: engineSize,
+          engine_cylinders: engineCylinders,
+        };
 
     if (!hasCandidates || isOnboarding) {
       setIsLoading(true);
@@ -1154,8 +1180,78 @@ export default function AddVehicleScreen() {
           onScroll={(e) => { scrollOffset.current = e.nativeEvent.contentOffset.y; }}
           scrollEventThrottle={16}
         >
-          {/* ── VIN Lookup ────────────────────────────────────── */}
-          <FieldGroup label="VIN Lookup (Optional)">
+          {isOnboarding ? (
+              <>
+                <FieldGroup label="Basic Info">
+                  <View style={styles.row}>
+                    <View style={{ flex: 1 }}>
+                      <PickerField
+                        label="Year *"
+                        value={year}
+                        placeholder="Year"
+                        onPress={() => setYearPickerVisible(true)}
+                      />
+                    </View>
+                    <View style={{ flex: 2 }}>
+                      <PickerField
+                        label="Make *"
+                        value={make}
+                        placeholder="Select make"
+                        onPress={() => { setMakeSearch(""); setMakePickerVisible(true); }}
+                      />
+                    </View>
+                  </View>
+
+                  {modelLoadFailed && nhtsaModels.length === 0 ? (
+                    <View style={styles.field}>
+                      <Text style={styles.fieldLabel}>Model *</Text>
+                      <TextInput
+                        style={styles.fieldInput}
+                        value={model}
+                        onChangeText={setModel}
+                        placeholder="Type your model name"
+                        placeholderTextColor={Colors.textTertiary}
+                      />
+                    </View>
+                  ) : (
+                    <ModelPickerField
+                      label="Model *"
+                      value={model}
+                      isLoadingModels={isLoadingModels}
+                      hasModels={nhtsaModels.length > 0}
+                      yearAndMakeSet={!!year && !!make}
+                      onPress={() => { setModelSearch(""); setModelPickerVisible(true); }}
+                    />
+                  )}
+                </FieldGroup>
+
+                <FieldGroup label="Mileage">
+                  <View style={styles.field}>
+                    <Text style={styles.fieldLabel}>Current Mileage *</Text>
+                    <TextInput
+                      style={styles.fieldInput}
+                      value={mileage}
+                      onChangeText={(t) => {
+                        if (/[eE]/.test(t)) return;
+                        const n = parseInt(t.replace(/,/g, ""), 10);
+                        if (!isNaN(n) && n > 999999) return;
+                        setMileage(t);
+                      }}
+                      placeholder="45000"
+                      placeholderTextColor={Colors.textTertiary}
+                      keyboardType="numeric"
+                      returnKeyType="done"
+                    />
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 4 }}>
+                      Enter your current odometer reading.
+                    </Text>
+                  </View>
+                </FieldGroup>
+              </>
+            ) : (
+              <>
+            {/* ── VIN Lookup ────────────────────────────────────── */}
+            <FieldGroup label="VIN Lookup (Optional)">
             <View style={styles.vinRow}>
               <TextInput
                 style={styles.vinInput}
@@ -1745,13 +1841,15 @@ export default function AddVehicleScreen() {
               </View>
             )}
           </FieldGroup>
+              </>
+            )}
 
-          {error && (
-            <View style={{ backgroundColor: "rgba(255,69,58,0.15)", borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
-              <Ionicons name="alert-circle" size={18} color="#FF453A" />
-              <Text style={{ flex: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: "#FF453A", lineHeight: 20 }}>{error}</Text>
-            </View>
-          )}
+            {error && (
+              <View style={{ backgroundColor: "rgba(255,69,58,0.15)", borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+                <Ionicons name="alert-circle" size={18} color="#FF453A" />
+                <Text style={{ flex: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: "#FF453A", lineHeight: 20 }}>{error}</Text>
+              </View>
+            )}
 
       <Pressable
         style={({ pressed }) => [{
@@ -1768,7 +1866,7 @@ export default function AddVehicleScreen() {
       >
         {isLoading
           ? <ActivityIndicator size="small" color="#0C111B" />
-          : <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: "#0C111B" }}>Save Vehicle</Text>}
+          : <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: "#0C111B" }}>Continue</Text>}
       </Pressable>
         </ScrollView>
       </View>
