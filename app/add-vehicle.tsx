@@ -1001,7 +1001,7 @@ export default function AddVehicleScreen() {
           fuel_type: fuelType,
           is_awd: false,
           tracking_mode: (MILEAGE_TRACKED_TYPES.has(vehicleType) ? 'mileage' : HOURS_TRACKED_TYPES.has(vehicleType) ? 'hours' : 'time'),
-          mileage: mileage ? parseInt(mileage.replace(/,/g, ""), 10) : null,
+          mileage: HOURS_TRACKED_TYPES.has(vehicleType) ? null : (mileage ? parseInt(mileage.replace(/,/g, ""), 10) : null),
           hours: null,
           average_miles_per_month: (MILEAGE_TRACKED_TYPES.has(vehicleType) || HOURS_TRACKED_TYPES.has(vehicleType)) ? Number(avgMilesPerMonth) : null,
           last_mileage_update: new Date().toISOString(),
@@ -1277,6 +1277,7 @@ export default function AddVehicleScreen() {
                   </View>
                 </Pressable>
 
+                {!HOURS_TRACKED_TYPES.has(vehicleType) && (
                 <FieldGroup label="Mileage">
                   <View style={styles.field}>
                     <Text style={styles.fieldLabel}>Current Mileage *</Text>
@@ -1347,6 +1348,7 @@ export default function AddVehicleScreen() {
                     </View>
                   ) : null}
                 </FieldGroup>
+                )}
 
                 <Modal
                   visible={onboardingTypeSheetVisible}
