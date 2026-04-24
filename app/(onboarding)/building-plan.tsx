@@ -1,22 +1,32 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import * as Haptics from "expo-haptics";
 import { supabase } from "@/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth, getOnboardingKey } from "@/context/AuthContext";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withDelay,
+  withSequence,
+  withRepeat,
+  Easing,
+  runOnJS,
+  interpolate,
+  type SharedValue,
+} from "react-native-reanimated";
 
-const STEPS = [
-  "Analyzing your vehicle",
-  "Building your schedule",
-  "Pricing common jobs",
-  "Preparing your dashboard",
-];
+const MIN_SCENE_MS = 6000;
+const POST_READY_HOLD_MS = 700;
+const MAX_WAIT_MS = 25000;
+const PARTICLE_COUNT = 12;
 
 function oneParam(v: string | string[] | undefined): string {
   if (v == null) return "";
@@ -39,12 +49,6 @@ export default function BuildingPlanScreen() {
   }>();
   const queryClient = useQueryClient();
   const { setOnboardingCompleted, user } = useAuth();
-  const skeletonAnim = usePulse();
-  const [currentStep, setCurrentStep] = useState(0);
-  const [failed, setFailed] = useState(false);
-  const stepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTime = useRef(Date.now());
-  const hasAttempted = useRef(false);
 
   const vehicleId = oneParam(params.vehicleId);
   const vehicleName = oneParam(params.vehicleName);
@@ -57,13 +61,47 @@ export default function BuildingPlanScreen() {
   const fuelType = oneParam(params.fuelType) || "gas";
   const vehicleCategory = oneParam(params.vehicleCategory);
 
+  const displayName = (vehicleName || `${yearStr} ${make} ${model}`).trim();
+
+  const [typedName, setTypedName] = React.useState("");
+  const [subtitleText, setSubtitleText] = React.useState("Reading the factory service manual");
+  const [ready, setReady] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
+
+  const hasAttempted = useRef(false);
+  const hasFinalized = useRef(false);
+  const sceneStart = useRef(Date.now());
+  const scheduleDone = useRef(false);
+  const maxWaitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Shared values
+  const titleGlow = useSharedValue(0);
+  const chip1Opacity = useSharedValue(0);
+  const chip1Y = useSharedValue(12);
+  const chip2Opacity = useSharedValue(0);
+  const chip2Y = useSharedValue(12);
+  const chip3Opacity = useSharedValue(0);
+  const chip3Y = useSharedValue(12);
+  const gearRotate = useSharedValue(0);
+  const pinBounce = useSharedValue(0);
+  const bookShimmer = useSharedValue(0);
+
+  const docScale = useSharedValue(0);
+  const docOpacity = useSharedValue(0);
+  const docGlow = useSharedValue(0);
+  const readyOpacity = useSharedValue(0);
+
+  const particleProgress = useMemo(
+    () => Array.from({ length: PARTICLE_COUNT }, () => useSharedValue(0)),
+    []
+  );
+
   const generateSchedule = useCallback(async () => {
     if (!vehicleId) {
       setFailed(true);
       return;
     }
     try {
-      // CRITICAL: Match the exact invoke body shape from app/add-vehicle.tsx
       const { error } = await supabase.functions.invoke("generate-maintenance-schedule", {
         body: {
           vehicle_id: vehicleId,
@@ -80,7 +118,7 @@ export default function BuildingPlanScreen() {
       });
 
       if (error) {
-        const httpStatus = ((error as { context?: { status?: number } })?.context?.status);
+        const httpStatus = (error as { context?: { status?: number } })?.context?.status;
         if (httpStatus !== 409) {
           if (__DEV__) console.warn("[onboarding] schedule generation error:", error.message);
           setFailed(true);
@@ -88,60 +126,157 @@ export default function BuildingPlanScreen() {
         }
       }
 
-      // Wait a beat for animation
-      await new Promise(r => setTimeout(r, 1500));
-      setCurrentStep(STEPS.length - 1);
-      await new Promise(r => setTimeout(r, 800));
-
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
+      scheduleDone.current = true;
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", vehicleId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
 
-      // Navigate to value reveal
-      setTimeout(() => {
-        router.replace({
-          pathname: "/(onboarding)/value-reveal",
-          params: {
-            vehicleId,
-            vehicleName: vehicleName || `${yearStr} ${make} ${model}`.trim(),
-          },
-        });
-      }, 600);
+      const elapsed = Date.now() - sceneStart.current;
+      const remaining = Math.max(MIN_SCENE_MS - elapsed, 0);
+      setTimeout(finalizeReveal, remaining);
     } catch (e) {
       if (__DEV__) console.error("[onboarding] generation failed:", e);
       setFailed(true);
     }
-  }, [vehicleId, vehicleName, make, model, yearStr, currentMileageStr, currentHoursStr, trackingMode, fuelType, vehicleCategory, queryClient]);
+  }, [vehicleId, make, model, yearStr, currentMileageStr, currentHoursStr, trackingMode, fuelType, vehicleCategory, queryClient]);
 
+  const finalizeReveal = useCallback(() => {
+    if (failed) return;
+    if (hasFinalized.current) return;
+    hasFinalized.current = true;
+    setReady(true);
+    setSubtitleText("Your plan is ready.");
+    docScale.value = withSpring(1.15, { damping: 10, stiffness: 140 }, () => {
+      docScale.value = withSpring(1, { damping: 14, stiffness: 180 });
+    });
+    docGlow.value = withTiming(1, { duration: 400 });
+    readyOpacity.value = withTiming(1, { duration: 300 });
+    runOnJS(Haptics.notificationAsync)(Haptics.NotificationFeedbackType.Success);
+
+    setTimeout(() => {
+      router.replace({
+        pathname: "/(onboarding)/value-reveal",
+        params: {
+          vehicleId,
+          vehicleName: displayName,
+        },
+      });
+    }, POST_READY_HOLD_MS);
+  }, [failed, vehicleId, displayName, docScale, docGlow, readyOpacity]);
+
+  // Typewriter
+  useEffect(() => {
+    if (!displayName) return;
+    let i = 0;
+    const interval = setInterval(() => {
+      i++;
+      setTypedName(displayName.slice(0, i));
+      if (i >= displayName.length) {
+        clearInterval(interval);
+        titleGlow.value = withSequence(
+          withTiming(1, { duration: 280, easing: Easing.out(Easing.ease) }),
+          withTiming(0.3, { duration: 400 })
+        );
+      }
+    }, Math.max(40, Math.min(80, 1200 / displayName.length)));
+    return () => clearInterval(interval);
+  }, [displayName, titleGlow]);
+
+  // Scene orchestration
   useEffect(() => {
     if (hasAttempted.current) return;
     hasAttempted.current = true;
-    startTime.current = Date.now();
-    stepTimer.current = setInterval(() => {
-      setCurrentStep(prev => {
-        if (prev < STEPS.length - 1) return prev + 1;
-        return prev;
-      });
-    }, 4000);
+    sceneStart.current = Date.now();
 
+    // Stage 2: chips stagger in
+    chip1Opacity.value = withDelay(1400, withTiming(1, { duration: 400 }));
+    chip1Y.value = withDelay(1400, withSpring(0, { damping: 14, stiffness: 180 }));
+    bookShimmer.value = withDelay(1400, withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.ease) }), -1, true));
+
+    chip2Opacity.value = withDelay(1700, withTiming(1, { duration: 400 }));
+    chip2Y.value = withDelay(1700, withSpring(0, { damping: 14, stiffness: 180 }));
+    pinBounce.value = withDelay(1700, withSequence(
+      withTiming(-8, { duration: 200 }),
+      withSpring(0, { damping: 6, stiffness: 200 })
+    ));
+
+    chip3Opacity.value = withDelay(2000, withTiming(1, { duration: 400 }));
+    chip3Y.value = withDelay(2000, withSpring(0, { damping: 14, stiffness: 180 }));
+    gearRotate.value = withDelay(2000, withRepeat(withTiming(1, { duration: 4000, easing: Easing.linear }), -1));
+
+    // Stage 3: particle convergence starting at 3600ms
+    particleProgress.forEach((p, i) => {
+      p.value = withDelay(
+        3600 + i * 100,
+        withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic) })
+      );
+    });
+
+    // Stage 4 pre-emergence: doc scaffolds in lightly at 4.8s so it's ready to catch particles
+    docOpacity.value = withDelay(4800, withTiming(0.6, { duration: 500 }));
+    docScale.value = withDelay(4800, withTiming(0.85, { duration: 500 }));
+
+    // Kick off edge function
     void generateSchedule();
 
+    // Safety ceiling
+    maxWaitTimer.current = setTimeout(() => {
+      if (!scheduleDone.current && !failed) {
+        finalizeReveal();
+      }
+    }, MAX_WAIT_MS);
+
     return () => {
-      if (stepTimer.current) clearInterval(stepTimer.current);
+      if (maxWaitTimer.current) clearTimeout(maxWaitTimer.current);
     };
-  }, [generateSchedule]);
+  }, []);
 
   async function handleRetry() {
     setFailed(false);
-    setCurrentStep(0);
-    startTime.current = Date.now();
+    setReady(false);
+    setTypedName("");
+    setSubtitleText("Reading the factory service manual");
+    scheduleDone.current = false;
+    hasFinalized.current = false;
+    hasAttempted.current = false;
+    sceneStart.current = Date.now();
+
+    titleGlow.value = 0;
+    chip1Opacity.value = 0; chip1Y.value = 12;
+    chip2Opacity.value = 0; chip2Y.value = 12;
+    chip3Opacity.value = 0; chip3Y.value = 12;
+    gearRotate.value = 0;
+    pinBounce.value = 0;
+    bookShimmer.value = 0;
+    docScale.value = 0;
+    docOpacity.value = 0;
+    docGlow.value = 0;
+    readyOpacity.value = 0;
+    particleProgress.forEach((p) => { p.value = 0; });
+
+    chip1Opacity.value = withDelay(1400, withTiming(1, { duration: 400 }));
+    chip1Y.value = withDelay(1400, withSpring(0, { damping: 14, stiffness: 180 }));
+    bookShimmer.value = withDelay(1400, withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.ease) }), -1, true));
+    chip2Opacity.value = withDelay(1700, withTiming(1, { duration: 400 }));
+    chip2Y.value = withDelay(1700, withSpring(0, { damping: 14, stiffness: 180 }));
+    pinBounce.value = withDelay(1700, withSequence(
+      withTiming(-8, { duration: 200 }),
+      withSpring(0, { damping: 6, stiffness: 200 })
+    ));
+    chip3Opacity.value = withDelay(2000, withTiming(1, { duration: 400 }));
+    chip3Y.value = withDelay(2000, withSpring(0, { damping: 14, stiffness: 180 }));
+    gearRotate.value = withDelay(2000, withRepeat(withTiming(1, { duration: 4000, easing: Easing.linear }), -1));
+    particleProgress.forEach((p, i) => {
+      p.value = withDelay(3600 + i * 100, withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic) }));
+    });
+    docOpacity.value = withDelay(4800, withTiming(0.6, { duration: 500 }));
+    docScale.value = withDelay(4800, withTiming(0.85, { duration: 500 }));
+
+    hasAttempted.current = true;
     await generateSchedule();
   }
 
   async function handleContinueAnyway() {
-    // Complete onboarding and go to dashboard — vehicle is saved even if schedule failed
     if (user) {
       const { error } = await supabase.from("profiles").upsert(
         { user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() },
@@ -151,66 +286,116 @@ export default function BuildingPlanScreen() {
         Alert.alert("Something went wrong", "Could not save your progress. Please try again.");
         return;
       }
-    }
-    if (user) {
       await AsyncStorage.setItem(getOnboardingKey(user.id), "true");
     }
     setOnboardingCompleted(true);
     router.replace("/(tabs)");
   }
 
+  const titleGlowStyle = useAnimatedStyle(() => ({
+    opacity: titleGlow.value,
+    transform: [{ scale: interpolate(titleGlow.value, [0, 1], [0.95, 1]) }],
+  }));
+
+  const chip1Style = useAnimatedStyle(() => ({
+    opacity: chip1Opacity.value,
+    transform: [{ translateY: chip1Y.value }],
+  }));
+  const chip2Style = useAnimatedStyle(() => ({
+    opacity: chip2Opacity.value,
+    transform: [{ translateY: chip2Y.value }],
+  }));
+  const chip3Style = useAnimatedStyle(() => ({
+    opacity: chip3Opacity.value,
+    transform: [{ translateY: chip3Y.value }],
+  }));
+
+  const bookShimmerStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(bookShimmer.value, [0, 0.5, 1], [0.6, 1, 0.6]),
+  }));
+  const pinStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: pinBounce.value }],
+  }));
+  const gearStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${gearRotate.value * 360}deg` }],
+  }));
+
+  const docStyle = useAnimatedStyle(() => ({
+    opacity: docOpacity.value,
+    transform: [{ scale: docScale.value }],
+  }));
+
+  const docGlowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(docGlow.value, [0, 1], [0, 0.35]),
+    transform: [{ scale: interpolate(docGlow.value, [0, 1], [0.8, 1.4]) }],
+  }));
+
+  const readyStyle = useAnimatedStyle(() => ({ opacity: readyOpacity.value }));
+
   return (
     <View style={[styles.container, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 }]}>
-      {/* Progress */}
       <View style={[styles.progressBar, { marginHorizontal: 20 }]}>
         <View style={[styles.progressFill, { width: "75%" }]} />
       </View>
 
-      {/* Header */}
       <View style={styles.headerSection}>
-        <Text style={styles.title}>{failed ? "We couldn\u2019t finish that" : "Building your plan"}</Text>
+        <View style={styles.titleWrap}>
+          <Animated.View style={[styles.titleGlow, titleGlowStyle]} />
+          <Text style={styles.title} numberOfLines={2}>
+            {failed ? "We couldn’t finish that" : (typedName || " ")}
+          </Text>
+        </View>
         <Text style={styles.subtitle}>
           {failed
             ? "Your vehicle was saved. Try again now, or continue to the app."
-            : "This usually takes 10\u201320 seconds the first time."}
+            : subtitleText}
         </Text>
       </View>
 
-      {/* Steps */}
       {!failed && (
-        <View style={styles.steps}>
-          {STEPS.map((step, i) => (
-            <View key={i} style={styles.stepRow}>
-              {i <= currentStep ? (
-                <Ionicons name="checkmark-circle" size={20} color={i < currentStep ? Colors.good : Colors.accent} />
-              ) : (
-                <View style={styles.stepDot} />
-              )}
-              <Text style={[styles.stepText, i <= currentStep && { color: Colors.text }]}>{step}</Text>
-            </View>
-          ))}
+        <View style={styles.chipsRow}>
+          <Animated.View style={[styles.chip, chip1Style]}>
+            <Animated.View style={bookShimmerStyle}>
+              <MaterialCommunityIcons name="book-open-variant" size={15} color={Colors.accent} />
+            </Animated.View>
+            <Text style={styles.chipText}>Factory manual</Text>
+          </Animated.View>
+
+          <Animated.View style={[styles.chip, chip2Style]}>
+            <Animated.View style={pinStyle}>
+              <Ionicons name="location" size={15} color={Colors.accent} />
+            </Animated.View>
+            <Text style={styles.chipText}>Local climate</Text>
+          </Animated.View>
+
+          <Animated.View style={[styles.chip, chip3Style]}>
+            <Animated.View style={gearStyle}>
+              <Ionicons name="settings" size={15} color={Colors.accent} />
+            </Animated.View>
+            <Text style={styles.chipText}>Wear patterns</Text>
+          </Animated.View>
         </View>
       )}
 
-      {/* Skeleton preview */}
       {!failed && (
-        <View style={styles.skeletonSection}>
-          {[0, 1, 2].map(i => (
-            <View key={i} style={styles.skeletonCard}>
-              <Row>
-                <Col flex={1} gap={6}>
-                  <S anim={skeletonAnim} w="70%" h={14} r={5} />
-                  <S anim={skeletonAnim} w="45%" h={11} r={4} />
-                </Col>
-                <S anim={skeletonAnim} w={60} h={24} r={12} />
-              </Row>
-              <S anim={skeletonAnim} w="55%" h={11} r={4} />
-            </View>
+        <View style={styles.stage}>
+          <Animated.View style={[styles.docGlow, docGlowStyle]} />
+
+          {particleProgress.map((p, i) => (
+            <Particle key={i} progress={p} index={i} total={PARTICLE_COUNT} />
           ))}
+
+          <Animated.View style={[styles.doc, docStyle]}>
+            <Ionicons name="document-text" size={40} color={Colors.accent} />
+          </Animated.View>
+
+          <Animated.View style={[styles.readyBadge, readyStyle]}>
+            <Ionicons name="checkmark-circle" size={16} color={Colors.good} />
+            <Text style={styles.readyText}>Ready</Text>
+          </Animated.View>
         </View>
       )}
 
-      {/* Error buttons */}
       {failed && (
         <View style={styles.errorButtons}>
           <Pressable style={styles.cta} onPress={handleRetry}>
@@ -225,22 +410,107 @@ export default function BuildingPlanScreen() {
   );
 }
 
+const Particle = React.memo(function Particle({ progress, index, total }: { progress: SharedValue<number>; index: number; total: number }) {
+  const angle = (index / total) * Math.PI * 2;
+  const radius = 120;
+  const startX = Math.cos(angle) * radius;
+  const startY = Math.sin(angle) * radius;
+
+  const pStyle = useAnimatedStyle(() => {
+    const t = progress.value;
+    return {
+      opacity: interpolate(t, [0, 0.15, 0.85, 1], [0, 1, 1, 0]),
+      transform: [
+        { translateX: interpolate(t, [0, 1], [startX, 0]) },
+        { translateY: interpolate(t, [0, 1], [startY, 0]) },
+        { scale: interpolate(t, [0, 0.5, 1], [0.4, 1, 0.6]) },
+      ],
+    };
+  });
+
+  return <Animated.View style={[styles.particle, pStyle]} />;
+});
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background, gap: 28 },
   progressBar: { height: 3, borderRadius: 2, backgroundColor: Colors.border, overflow: "hidden" },
   progressFill: { height: 3, borderRadius: 2, backgroundColor: Colors.accent },
   headerSection: { paddingHorizontal: 20, gap: 8 },
-  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text },
-  subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
-  steps: { paddingHorizontal: 20, gap: 16 },
-  stepRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  stepDot: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: Colors.border },
-  stepText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
-  skeletonSection: { paddingHorizontal: 20, gap: 12 },
-  skeletonCard: {
-    backgroundColor: Colors.card, borderRadius: 14, padding: 14, gap: 10,
-    borderWidth: 1, borderColor: Colors.border,
+  titleWrap: { position: "relative" },
+  titleGlow: {
+    position: "absolute",
+    left: -12,
+    right: -12,
+    top: -8,
+    bottom: -8,
+    backgroundColor: Colors.accent,
+    borderRadius: 20,
+    opacity: 0,
   },
+  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 34 },
+  subtitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
+  chipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 20,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: Colors.card,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  chipText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  stage: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  docGlow: {
+    position: "absolute",
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: Colors.accent,
+  },
+  doc: {
+    width: 88,
+    height: 88,
+    borderRadius: 20,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  particle: {
+    position: "absolute",
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.accent,
+  },
+  readyBadge: {
+    position: "absolute",
+    bottom: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: Colors.card,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  readyText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.text },
   errorButtons: { paddingHorizontal: 20, gap: 12, marginTop: 20 },
   cta: { backgroundColor: Colors.accent, borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" },
   ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: "#0C111B" },
