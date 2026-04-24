@@ -49,3 +49,8 @@ scripts/.preload-progress.json
 .sentryclirc
 lib/supabase-types.ts.*.bak
 supabase/.temp/
+
+# promptforge
+tools/promptforge/.env
+tools/promptforge/.venv/
+tools/promptforge/__pycache__/

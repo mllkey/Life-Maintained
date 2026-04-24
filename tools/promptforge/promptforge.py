@@ -1,0 +1,794 @@
+#!/usr/bin/env python3
+"""
+PromptForge — Claude Code prompt generator + auditor for LifeMaintained.
+
+Modes:
+  forge "rough idea"      Build + gate + revise pipeline.
+  forge --audit            Post-implementation audit of a Claude Code run.
+
+Models (edit these two lines when you want to switch):
+"""
+
+# =============================================================================
+# MODEL CONFIG — edit these two lines to switch models
+# =============================================================================
+CLAUDE_MODEL = "claude-opus-4-7"
+GPT_MODEL = "gpt-5.4"
+# =============================================================================
+
+import argparse
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
+try:
+    from anthropic import Anthropic, APIError as AnthropicAPIError
+    from openai import OpenAI, APIError as OpenAIAPIError
+    from dotenv import load_dotenv
+except ImportError as e:
+    print(f"❌ Missing dependency: {e.name}")
+    print("➡️ Run this in macOS terminal:")
+    print("   cd ~/Life-Maintained/tools/promptforge && source .venv/bin/activate && pip install anthropic openai python-dotenv")
+    sys.exit(1)
+
+
+# -----------------------------------------------------------------------------
+# Stack context — injected into every Stage 1 build prompt
+# -----------------------------------------------------------------------------
+STACK_CONTEXT = """\
+=== LifeMaintained project context — LOCK EXACTLY AS WRITTEN ===
+
+## What this app is
+LifeMaintained is a consumer iOS app tracking vehicle, property, and health maintenance. Solo non-technical founder. Quality bar: Apple, Robinhood, Calm, Duolingo. Internal benchmark: LogSheet + VoiceOrb components — every new component must hit that bar.
+
+## Stack (exact versions)
+- React Native 0.81.5 + React 19.1.0 + TypeScript 5.9 strict
+- Expo SDK 54, Expo Router 6 (file-based routing in app/)
+- Supabase JS 2.98, TanStack Query 5.83, Zod 3 + zod-validation-error
+- RevenueCat via react-native-purchases 9.11 + react-native-purchases-ui
+- expo-notifications for push, @sentry/react-native 7 for crash reporting
+- Receipt scan: expo-image-picker → expo-image-manipulator → Supabase Edge Function (Claude Vision)
+- Native iOS project at ios/LifeMaintained.xcworkspace, EAS Build for App Store builds
+- react-native-reanimated 4, react-native-gesture-handler, react-native-safe-area-context, react-native-screens, react-native-svg
+- @react-native-async-storage/async-storage for local persistence
+- @expo-google-fonts/inter, @expo/vector-icons, expo-haptics, expo-blur, expo-linear-gradient, expo-glass-effect
+- Styling: React Native StyleSheet (NO Tailwind, NO NativeWind, NO shadcn, NO Radix)
+- Patches via patch-package in patches/ — NEVER edit node_modules directly
+- Lint: npm run lint (eslint-config-expo). Typecheck: npx tsc --noEmit. Expo health: npx expo-doctor. NO test runner. NO npm run build.
+
+## This is NOT a web app
+No Vite, no Tailwind, no shadcn, no Radix, no Capacitor, no PWA, no react-dom routing. Any output referencing those is WRONG.
+
+## Repo + infra constants
+- Working dir: ~/Life-Maintained
+- GitHub: git@github.com:mllkey/Life-Maintained.git
+- Supabase project ref: fqblqrrgjpwysrsiolcn
+- Bundle ID: com.lifemaintained.app
+- Apple Team: 7Y595M4H3Z
+- EAS project: @mllkey/lifemaintained, Project ID: 2b817e52-5d6d-43c4-9855-966f7ded10ad
+- Sentry: org `frameworkuno`, project `lifemaintained`
+
+## Brand system
+- Vehicle accent: #E8943A (orange)
+- Home/property accent: #64D2FF (cyan)
+- Health accent: #FF6B9D (pink)
+- Background: #0C111B (dark-first)
+- Typography: Inter via @expo-google-fonts/inter
+
+## Pricing (real)
+- Personal: $7.99/mo · $49.99/yr
+- Pro: $11.99/mo · $99.99/yr
+- Business: $34.99/mo · $249.99/yr
+
+## Known canonical names (use these EXACTLY)
+- Vehicle mileage column: `vehicles.mileage` (NEVER `current_mileage`)
+- Vehicle tasks table: `user_vehicle_maintenance_tasks` (NEVER `vehicle_maintenance_tasks` — that's a DEAD TABLE, never re-wire)
+- Property tasks table: `property_maintenance_tasks`
+- Vehicle type constants: MILEAGE_TRACKED_TYPES, imported from lib/vehicleTypes.ts — NEVER redefined inline
+- Canonical DB types: lib/supabase-types.ts (generated). NEVER hand-write Database types in lib/supabase.ts.
+- Dead table — never re-wire: `budget_notification_tiers`
+- Budget threshold writes go to: user_notification_preferences.budget_threshold
+- Notification scheduling entry point: lib/notificationScheduler.ts
+- Auth hook: useAuth from AuthContext (per-user AsyncStorage scoped)
+
+## TanStack Query global config (do NOT override unless task explicitly says to)
+- staleTime: 5min, gcTime: 30min, retry: 2 exponential backoff
+- refetchOnWindowFocus: true, refetchOnReconnect: true
+- React Native focusManager wired in _layout.tsx
+
+## Edge function deploy command
+npx supabase functions deploy <name> --no-verify-jwt
+
+## Build commands (NEVER omit --auto-submit on TestFlight)
+eas build --platform ios --profile production --auto-submit
+
+## Locked escape-hatch baseline (app code only, excl. supabase/functions/)
+as_any=82, as_unknown=4, as_typed=89, non_null=79, ts_ignore=0, ts_expect_error=0, ts_nocheck=0
+Current tsc error count: 110 (ceiling: 148). Every pass must assert flat before AND after. NO new `as any`, `ts-ignore`, `ts-expect-error`, `ts-nocheck`, or `!` non-null assertions without explicit founder justification.
+
+## Quality benchmarks (reference these by name when specifying visual bar)
+- LogSheet (components/LogSheet.tsx) — the nine-figure reference for sheets/modals. Reanimated springs, real haptics, real presence.
+- VoiceOrb — the nine-figure reference for animated interactive elements.
+When a task touches a UI surface, the prompt must require parity with LogSheet/VoiceOrb quality on: spring curves, haptic timing, empty/loading/error states, safe area handling, and keyboard behavior.
+
+## Commit message format
+Short lowercase imperative, no scope prefix. Example: `fix vehicle schedule empty state 409 deadlock`.
+"""
+
+
+# -----------------------------------------------------------------------------
+# Prompt A — Claude Stage 1 (build + self-critique + revise)
+# -----------------------------------------------------------------------------
+PROMPT_A_BUILD = """\
+You are writing a Claude Code prompt for LifeMaintained. Quality bar: Apple, Robinhood, Calm, Duolingo. The founder is non-technical and pastes your output directly into Claude Code running with --dangerously-skip-permissions and bash auto-approve — meaning there is no human-in-the-loop between your prompt and code execution. Phrases like "wait for approval" or "stop and report back" are MEANINGLESS because Claude Code auto-executes every turn. Every prompt you write must be 100% self-contained: all diagnostics, decision logic, edits, verification, and triage in one shot, using if/then/else branching so Claude Code never has to interpret or guess.
+
+=============================================================
+{stack_context}
+=============================================================
+
+## The founder's rough idea
+<rough_idea>
+{rough_idea}
+</rough_idea>
+
+=============================================================
+## YOUR JOB, IN THREE STAGES (do all three internally, then output)
+=============================================================
+
+### STAGE 1 — Classify the task
+
+Classify the rough idea into exactly ONE of three complexity tiers. The tier determines the structure and depth of the prompt you output.
+
+- **TRIVIAL**: single-file, single-line or single-constant edit. Examples: "fix typo on vehicles list header", "change card padding from 12 to 16", "remove unused import in X file". Scope is objectively ≤1 file and ≤5 LoC. No UI state change, no DB change, no new dependency.
+- **STANDARD**: a single coherent feature, fix, or polish pass. 1–5 files, clear user-visible outcome OR one well-scoped technical fix. Examples: "add pull-to-refresh to vehicles list", "fix Cat 3-B reminder_time INSERT nullable mismatch", "add haptic to schedule-complete button".
+- **COMPLEX**: multi-file architectural change, new flow, or signature-moment UI. 5+ files OR DB schema touch OR animation scene OR cross-vertical feature. Examples: "rebuild building-plan.tsx as a staged reveal scene", "resolve Cat 3-E tracking_mode cascade across 7 files", "build YourMonthAheadCard cross-vertical dashboard tile".
+
+When in doubt between tiers, pick the higher one. Err on the side of more rigor.
+
+### STAGE 2 — Draft the prompt, matching structure to tier
+
+All three tiers share the same non-negotiable spine (below). The tiers differ in how much diagnostic scaffolding the prompt carries.
+
+**TRIVIAL prompts** include: checkpoint, file allowlist (1 file), exact edit specified down to the line, all 5 validation commands, 9-section report, rollback. Skip: elaborate regression surface, cross-cache analysis, UX citations (unless the change IS a UX detail).
+
+**STANDARD prompts** include: all of TRIVIAL, plus: repo-grounding step with specific grep/file-read commands (cite exact search terms), named regression surface (minimum 3 flows), measurable acceptance criteria (see below), edge case matrix (minimum 6 cases), Apple HIG / NN/g / WCAG citation by section name when UI-facing.
+
+**COMPLEX prompts** include: all of STANDARD, plus: system-level regression analysis (see below), phased implementation plan with decision branches (if X, do A; if Y, do B), quality parity requirement against LogSheet/VoiceOrb for UI surfaces, explicit escape-hatch baseline check (count BEFORE and AFTER, assert flat), tsc error delta check (report BEFORE and AFTER counts), and a "staging" section where Claude Code reports findings from the grounding step before proceeding to edits (but still within the same turn — NOT a stop-and-wait).
+
+### STAGE 3 — Self-critique, revise, output
+
+After drafting, run your draft against the 16 non-negotiables below. Revise in place. Only then output.
+
+=============================================================
+## THE 16 NON-NEGOTIABLES (every prompt, every tier)
+=============================================================
+
+**1. Quality ceiling / scope floor.** The prompt must produce Claude Code work that ships at premium iOS app bar — visually, behaviorally, architecturally. This overrides speed, convenience, and brevity. A prompt may bundle multiple files/flows ONLY IF they form one coherent deliverable unit (all edits required for one user-visible outcome or one clearly-defined technical fix). FORBIDDEN: cosmetic cleanup, opportunistic refactors, dependency upgrades, architecture changes, naming cleanup, or adjacent bug fixes unless they are REQUIRED by the stated outcome.
+
+**2. Git checkpoint at top.** Exact command: `git add -A && git commit -m "checkpoint before <short-task-id>" --allow-empty`. One line.
+
+**3. File allowlist with escape valve.** Format: "Claude Code may only edit these files: [EXACT paths]. If more files are required, stop, propose an expanded allowlist with file path + reason per file in a single message, then wait for the founder's next message before proceeding."
+
+**4. Repo-grounding with EXPLICIT commands.** The prompt must specify the EXACT shell commands Claude Code runs to ground itself (e.g. `grep -rn "queryKey.*vehicles" app/ hooks/ lib/`), not generic "inspect the relevant files." Every assumption the task rests on must be verified by a named command.
+
+**5. Preserve existing behavior clause.** Verbatim: "Preserve all existing behavior in onboarding, task completion, vehicle/property/health maintenance flows, auth, subscriptions, receipt scanning, and push notifications unless explicitly listed in scope. Do not refactor opportunistically. Do not rename. Do not 'improve.' If you discover a needed out-of-scope change, append it to section 7 of the final report and do NOT make the change."
+
+**6. Named regression surface (MINIMUM 3 flows for STANDARD, 5 for COMPLEX).** Each named flow must cite the specific file(s) or feature(s) at risk AND a one-line verification step. Generic "don't break things" is a fail.
+
+**7. MEASURABLE acceptance criteria.** Every criterion must be:
+   (a) numerically measurable (fps, ms, px, dp, tap-count, LoC), OR
+   (b) UI-observable by a non-technical tester (what they see, what they feel, what they hear), OR
+   (c) terminal-observable (exact command + expected output).
+   Banned words in acceptance criteria: "smooth", "nice", "good", "works well", "feels right", "premium" — replace every one with a concrete check.
+
+**8. Edge case matrix (minimum 6 for STANDARD, 10 for COMPLEX).** Must cover: empty state, loading state, permission denied, network failure, Supabase 5xx, duplicate actions, partial success, user cancels, already-configured state, offline-then-reconnect. Each edge case must specify: trigger → expected UI/state → expected data mutation (if any).
+
+**9. UI/UX citations by section name.** If the task touches UI, cite Apple HIG section title (e.g. "Refresh Content Controls", "Modals", "Live Activities"), NN/g heuristic by number, or WCAG 2.x criterion number. Apple HIG takes precedence. For COMPLEX UI, require explicit parity with LogSheet/VoiceOrb on: spring curve type + values, haptic style + timing, safe area handling, keyboard behavior.
+
+**10. Specific library versions.** Always resolve ambiguity. "react-native-reanimated 4.x" not "Reanimated". Cite from stack context above.
+
+**11. Validation commands (run ALL five, paste raw output):**
+```
+npx tsc --noEmit
+npm run lint
+npx expo-doctor
+git diff --stat
+git diff --check
+```
+
+**12. Escape-hatch discipline.** For STANDARD + COMPLEX, require Claude Code to run:
+```
+rg -n "\\bas any\\b" app/ hooks/ lib/ components/ | wc -l
+rg -n "@ts-ignore|@ts-expect-error|@ts-nocheck" app/ hooks/ lib/ components/ | wc -l
+```
+...BEFORE and AFTER edits, and assert flat (zero new hatches) in the final report. The locked baseline from stack context applies.
+
+**13. Native/config flag.** If the task touches `app.json`, `app.config.*`, `eas.json`, `ios/` native files, `expo-notifications` config, `react-native-purchases` config, `@sentry/react-native` config, Expo plugins, or `patches/` — include this verbatim block:
+> ⚠️ This task has native/config implications. Before committing, review whether `npx expo prebuild --no-install --platform ios` should be run. Do NOT run it as part of this task. Flag it in section 9 of your final report for the founder to run in a separate session with a fresh checkpoint.
+
+**14. Mandatory 9-section final report.** In this exact order:
+1. What changed
+2. Files changed (exact paths)
+3. Commands run (every shell command, in order)
+4. Test results (RAW output of all 5 validation commands — no summarizing)
+5. Manual test checklist (each acceptance criterion, marked pass/fail/untested)
+6. Regression risks (each named flow from section 6, with verification step)
+7. Risks / assumptions / out-of-scope items discovered
+8. Rollback command
+9. Native/config flag (yes/no — if yes, list affected config)
+
+**15. System-level regression (COMPLEX only).** The prompt must require Claude Code to:
+   (a) Name every TanStack query cache key affected (primary + shared-cache siblings),
+   (b) Name every component that re-renders from that cache change,
+   (c) Name every screen in which those components appear,
+   (d) Verify each named screen still renders correctly in the manual test.
+
+**16. Rollback command** printed alongside the prompt. Format: `git reset --hard HEAD~1` (assumes one commit after checkpoint).
+
+=============================================================
+## WRITING STYLE
+=============================================================
+
+- Write the prompt in the voice of a senior engineer giving instructions to another senior engineer.
+- Use if/then/else branching for every decision point so Claude Code never interprets: "If grep returns 0 matches in app/, then search hooks/; if still 0, stop and report." NEVER: "find the file."
+- Use ordered numbered sections so Claude Code executes linearly.
+- Every file path EXPLICIT. Every command EXPLICIT. Every expected output EXPLICIT.
+- When specifying visual details: cite pixel values, spring curve constants, duration in ms, easing function by name. Banned vague words listed in non-negotiable 7.
+- When an external decision is unavoidable (e.g. "use an existing error toast or create one"), supply the decision rule: "IF components/ErrorToast.tsx exists, use it. ELSE log via Sentry and return early. Do NOT create a new toast system."
+- **Grep precision rule.** When grep is used to detect whether a JSX component IS RENDERED (not merely imported), the grep pattern must match ONLY the JSX opening tag: `grep -cE "<FlatList[ />]" <path>`. NEVER include import-line patterns (e.g. `from 'react-native'.*FlatList`) in the same count — imports match even when the component is not rendered, corrupting the detection. If you need both signals (imported AND rendered), run two separate greps with separate decision branches.
+- **No runtime-observation branches.** Every if/then rule in the generated prompt must be executable from STATIC analysis: grep output, file existence, file content, tsc/lint exit codes, env vars. FORBIDDEN: decision branches that depend on runtime observations ("IF React logs a warning during testing", "IF the animation feels janky", "IF the user reports a bug"). If a concern is only observable at runtime, handle it unconditionally with defensive code, or drop it from the prompt — never make it a conditional branch.
+
+=============================================================
+## OUTPUT FORMAT — EXACT 5 BLOCKS
+=============================================================
+
+Output MUST be exactly 5 blocks, in this order, with these literal tags. No preamble before <SELF_CRITIQUE>. No commentary between blocks.
+
+<SELF_CRITIQUE>
+Line 1: TIER = TRIVIAL | STANDARD | COMPLEX (with one-line justification)
+
+Then check each of the 16 non-negotiables. For each, write "N. Pass — <why>" or "N. Fix applied — <what changed>". Be ruthless. For TRIVIAL tier, mark non-negotiables 6, 8, 9, 15 as "Pass — not required at TRIVIAL tier per Stage 2 rules" if genuinely non-applicable.
+
+Then: "Banned-word sweep: [list any vague words in acceptance criteria and what you replaced them with, or 'clean']."
+
+Then: "Zero-interpretation sweep: [list any places a decision was left to Claude Code's judgment and the if/then rule you inserted, or 'clean']."
+
+Then: "Grep-precision sweep: [list any grep commands counting JSX-rendered components that accidentally include import-line patterns, and the tightened pattern you used, or 'clean — only JSX opening-tag patterns used']."
+
+Then: "Runtime-observation sweep: [list any if/then branches that depend on runtime observations, and how you either made them unconditional or dropped them, or 'clean — all branches are static-analysis executable']."
+</SELF_CRITIQUE>
+
+<CANDIDATE_PROMPT>
+The full Claude Code prompt. Ready to paste. No meta-commentary, no "here is the prompt" preamble — just the prompt itself. Written to a senior RN engineer. Use markdown headers + numbered sections. Include inline if/then logic.
+</CANDIDATE_PROMPT>
+
+<GIT_CHECKPOINT>
+Exact git checkpoint command. One line.
+</GIT_CHECKPOINT>
+
+<ROLLBACK>
+Exact rollback command. One line.
+</ROLLBACK>
+
+<FINAL_PROMPT_READY>
+true
+</FINAL_PROMPT_READY>
+"""
+
+
+# -----------------------------------------------------------------------------
+# Prompt B — GPT Stage 2 (PASS / REVISE gate)
+# -----------------------------------------------------------------------------
+PROMPT_B_GATE = """\
+You are a gate, not a co-author. You review a Claude Code prompt written for LifeMaintained, a premium iOS app (React Native + Expo + Supabase) targeting a nine-figure outcome.
+
+Your role: flag BLOCKING issues that would let Claude Code ship output below nine-figure quality. You NEVER rewrite the prompt. You NEVER suggest stylistic changes. You NEVER critique word choice unless a word is specifically on the banned list below.
+
+=============================================================
+## REVIEW THE PROMPT AGAINST THESE 11 CHECKS (ranked)
+=============================================================
+
+**1. Scope containment.** Can Claude Code interpret this as permission to touch unrelated features, refactor extra files, rename things, change architecture, or "clean up" nearby code? The file allowlist must be explicit AND have a clear escape valve. Any ambiguous scope = Issue.
+
+**2. Regression surface.** Does the prompt name SPECIFIC flows at risk (minimum 3 for STANDARD, 5 for COMPLEX) with file paths AND one-line verification steps per flow? Generic "don't break things" = Critical.
+
+**3. Measurable acceptance criteria (ZERO VIBES).** Every acceptance criterion must be numerically measurable (fps, ms, px, dp, tap-count), UI-observable by a non-technical tester (what they see/feel/hear), or terminal-observable (command + expected output). Scan for these BANNED WORDS in acceptance criteria: "smooth", "nice", "good", "works well", "feels right", "premium", "polished", "clean", "seamless". Any banned word used as a criterion = Issue. Two or more = Critical.
+
+**4. Zero-interpretation discipline.** Does the prompt use if/then/else branching for every decision point, or does it leave judgment calls to Claude Code? Examples of judgment calls that should be if/then'd: "find the relevant file" (should be: specific grep command), "use the existing color token" (should be: explicit fallback chain), "handle errors appropriately" (should be: exact error path per edge case). Any remaining judgment call = Issue.
+
+**5. Repo-grounding.** Does the prompt specify EXACT shell commands (grep with specific search terms, file reads by exact path) or does it say "inspect the relevant files"? Vague grounding = Issue.
+
+**6. Edge case matrix.** Minimum 6 cases for STANDARD, 10 for COMPLEX. Each case must specify: trigger → expected UI/state → expected data mutation. Required cases: empty state, loading state, permission denied, network failure, Supabase 5xx, duplicate actions, partial success, user cancels, already-configured state, offline-then-reconnect. Missing required cases = Issue. Fewer than minimum = Critical.
+
+**7. UI/UX citation specificity.** If the prompt touches UI, it must cite Apple HIG by section name, NN/g heuristic by number, or WCAG 2.x criterion by number. Generic "follow Apple HIG" = Issue. Missing entirely on a UI-touching prompt = Critical. For COMPLEX UI: must require parity with LogSheet / VoiceOrb on spring values, haptic timing, safe area, keyboard behavior.
+
+**8. Escape-hatch discipline.** For STANDARD + COMPLEX, prompt must require BEFORE/AFTER counts of `as any`, `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck` and assert flat. Missing on STANDARD/COMPLEX = Issue.
+
+**9. Validation + report discipline.** All five validation commands required (npx tsc --noEmit, npm run lint, npx expo-doctor, git diff --stat, git diff --check). Mandatory 9-section final report required. Native/config flag required. Missing any = Issue.
+
+**10. Grep precision.** Any grep command that counts JSX-rendered components must match ONLY the JSX opening tag (e.g. `<FlatList[ />]`). If a counting grep also matches import-line patterns like `from 'react-native'.*FlatList`, the count will include imports-without-renders and corrupt the decision branch downstream. Any such contaminated grep count used as a decision input = Issue.
+
+**11. No runtime-observation branches.** Every if/then rule in the prompt must be executable from static analysis (grep, file existence, tsc/lint exit codes). Any if/then branch that depends on runtime observations ("IF React logs a warning during testing", "IF the animation feels janky") = Issue. If the concern matters, the prompt must either handle it unconditionally (defensive code) or drop it — never make it a conditional.
+
+=============================================================
+## OUTPUT FORMAT
+=============================================================
+
+For each of the 11 checks, output one line:
+
+`N. <check name>: Clean` — or —
+`N. <check name>: Issue — <one-line evidence>. Required fix: <exact fix>.` — or —
+`N. <check name>: Critical — <one-line evidence>. Required fix: <exact fix>.`
+
+Then output EXACTLY one verdict line:
+
+VERDICT: PASS
+— or —
+VERDICT: REVISE
+BLOCKING ISSUES:
+1. <issue summary> — REQUIRED FIX: <exact fix>
+2. <issue summary> — REQUIRED FIX: <exact fix>
+(number as many as needed)
+
+=============================================================
+## VERDICT RULES
+=============================================================
+
+- Any check marked `Critical` → verdict is REVISE.
+- 2 or more checks marked `Issue` → verdict is REVISE.
+- All `Clean` or at most 1 `Issue` → verdict may be PASS.
+- NEVER rewrite the prompt. NEVER suggest stylistic changes. Only flag blockers.
+- When unsure: err toward REVISE. A false REVISE costs one revision pass; a false PASS costs a production regression.
+
+=============================================================
+## THE CANDIDATE PROMPT TO REVIEW
+=============================================================
+
+<candidate_prompt>
+{candidate_prompt}
+</candidate_prompt>
+"""
+
+
+# -----------------------------------------------------------------------------
+# Prompt C — Claude revision pass (anti-laundering)
+# -----------------------------------------------------------------------------
+PROMPT_C_REVISE = """\
+You previously produced this Claude Code prompt:
+
+<previous_prompt>
+{previous_prompt}
+</previous_prompt>
+
+A reviewer flagged these BLOCKING issues:
+
+<blocking_issues>
+{blocking_issues}
+</blocking_issues>
+
+You must resolve each numbered issue line-by-line. For EACH numbered issue, write exactly one of:
+
+Issue N: fixed by doing X
+— or —
+Issue N: rejected because Y (with a concrete defensible reason — not "it's fine" or "low risk")
+
+Silent drops are forbidden. Every numbered issue must be addressed explicitly.
+
+After the line-by-line resolution, output the revised prompt in the same 5-block format:
+
+<SELF_CRITIQUE>
+Line-by-line resolution of each numbered issue. Then a fresh self-critique against the 14 non-negotiables.
+</SELF_CRITIQUE>
+
+<CANDIDATE_PROMPT>
+The full revised Claude Code prompt. Ready to paste.
+</CANDIDATE_PROMPT>
+
+<GIT_CHECKPOINT>
+The exact git checkpoint command. One line.
+</GIT_CHECKPOINT>
+
+<ROLLBACK>
+The exact rollback command. One line.
+</ROLLBACK>
+
+<FINAL_PROMPT_READY>
+true   — only if every numbered issue was fixed or legitimately rejected AND the fresh self-critique surfaces no remaining gaps
+false  — otherwise, followed by a list of unresolved blockers, one per line
+</FINAL_PROMPT_READY>
+"""
+
+
+# -----------------------------------------------------------------------------
+# Prompt D — Claude audit (forge-audit)
+# -----------------------------------------------------------------------------
+PROMPT_D_AUDIT = """\
+You are an adversarial reviewer auditing a Claude Code implementation for LifeMaintained, a premium iOS app targeting a nine-figure outcome. Your posture: assume Claude Code drifted, scope-crept, or introduced regressions. Prove otherwise using evidence from the final report and the git diff.
+
+You will be given three inputs:
+
+1. The ORIGINAL prompt the founder pasted into Claude Code.
+2. Claude Code's FINAL REPORT (the mandatory 9-section format).
+3. The GIT DIFF (output of `git diff HEAD~1`).
+
+Produce an audit verdict using this EXACT format:
+
+AUDIT VERDICT: PASS
+— or —
+AUDIT VERDICT: REVISE
+
+1. Missed requirements:
+<bulleted list of requirements from the ORIGINAL prompt that the diff/report does not demonstrate were met, or "none">
+
+2. Scope creep detected:
+<bulleted list of files or changes in the diff that are OUTSIDE the allowlist or OUTSIDE the stated scope, or "none". Cite filenames.>
+
+3. Regressions introduced:
+<bulleted list of named flows at risk based on diff analysis — e.g. "lib/notificationScheduler.ts modified without corresponding regression test for medication reminders" — or "none">
+
+4. Validation gaps:
+<bulleted list of validation commands that were not run, ran and failed, or ran and were not reported in raw form, or "none">
+
+5. Recommendation:
+- If PASS: the exact commit command in this format:
+  git add -A && git commit -m "<one-line summary of what changed>"
+- If REVISE: the exact rollback command `git reset --hard HEAD~1` AND a one-line summary of what went wrong.
+
+Rules:
+- PASS requires all 4 checks (1-4) to be "none" OR for any findings to be explicitly acknowledged in the report AND defensible.
+- REVISE is the default under uncertainty. If the diff is too large to audit, REVISE.
+- If the report references files that do not appear in the diff (phantom changes), REVISE.
+- If the diff references files that do not appear in the report (silent changes), REVISE.
+- If any validation command was skipped or reported non-raw, REVISE.
+
+Here are the three inputs:
+
+<original_prompt>
+{original_prompt}
+</original_prompt>
+
+<final_report>
+{final_report}
+</final_report>
+
+<git_diff>
+{git_diff}
+</git_diff>
+"""
+
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+def load_env():
+    """Load API keys from .env next to this script."""
+    env_path = Path(__file__).parent / ".env"
+    if not env_path.exists():
+        print(f"❌ .env file not found at {env_path}")
+        print("➡️ Create it with the setup instructions from Claude's chat.")
+        sys.exit(1)
+    load_dotenv(env_path)
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not anthropic_key:
+        print("❌ ANTHROPIC_API_KEY missing from .env")
+        sys.exit(1)
+    if not openai_key:
+        print("❌ OPENAI_API_KEY missing from .env")
+        sys.exit(1)
+    return anthropic_key, openai_key
+
+
+def copy_to_clipboard(text):
+    """Copy text to macOS clipboard via pbcopy."""
+    try:
+        subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
+        return True
+    except Exception:
+        return False
+
+
+def notify_done(message="PromptForge done"):
+    """Play a system chime and post a macOS notification banner. Non-fatal if either fails."""
+    try:
+        # Glass.aiff is the default macOS chime — short, premium, not annoying.
+        subprocess.Popen(
+            ["afplay", "/System/Library/Sounds/Glass.aiff"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+    try:
+        # osascript banner in Notification Center (no clicks needed).
+        subprocess.Popen(
+            ["osascript", "-e", f'display notification "{message}" with title "PromptForge"'],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
+
+def extract_block(text, tag):
+    """Extract content between <TAG>...</TAG>."""
+    start_tag = f"<{tag}>"
+    end_tag = f"</{tag}>"
+    start = text.find(start_tag)
+    end = text.find(end_tag)
+    if start == -1 or end == -1:
+        return None
+    return text[start + len(start_tag):end].strip()
+
+
+def call_claude(client, prompt, verbose=False, label=""):
+    """Call Claude API. Returns text on success, exits on failure."""
+    if verbose:
+        print(f"\n🟣 [Claude — {label}] calling API...", file=sys.stderr)
+    try:
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=16000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.content[0].text
+        if verbose:
+            print(f"🟣 [Claude — {label}] received {len(text)} chars", file=sys.stderr)
+        return text
+    except AnthropicAPIError as e:
+        print(f"\n❌ Anthropic API error: {e}")
+        print("➡️ Check https://status.anthropic.com — if the API is up, verify your key and credits at https://console.anthropic.com/settings/billing")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ Unexpected error calling Claude: {e}")
+        sys.exit(1)
+
+
+def call_gpt(client, prompt, verbose=False, label=""):
+    """Call OpenAI API. Returns text on success, exits on failure."""
+    if verbose:
+        print(f"\n🟢 [GPT — {label}] calling API...", file=sys.stderr)
+    try:
+        response = client.chat.completions.create(
+            model=GPT_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.choices[0].message.content
+        if verbose:
+            print(f"🟢 [GPT — {label}] received {len(text)} chars", file=sys.stderr)
+        return text
+    except OpenAIAPIError as e:
+        print(f"\n❌ OpenAI API error: {e}")
+        print("➡️ Check https://status.openai.com — if the API is up, verify your key and credits at https://platform.openai.com/account/billing")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ Unexpected error calling GPT: {e}")
+        sys.exit(1)
+
+
+def parse_gpt_verdict(text):
+    """Return ('PASS', None), ('REVISE', blocking_issues_text), or ('AMBIGUOUS', None)."""
+    upper = text.upper()
+    if "VERDICT: PASS" in upper and "VERDICT: REVISE" not in upper:
+        return "PASS", None
+    if "VERDICT: REVISE" in upper:
+        idx = upper.find("BLOCKING ISSUES:")
+        if idx == -1:
+            return "REVISE", text  # send whole critique
+        return "REVISE", text[idx:]
+    return "AMBIGUOUS", None
+
+
+def read_multiline_stdin(prompt_msg):
+    """Read until Ctrl-D. Returns stripped text."""
+    print(prompt_msg)
+    print("(paste now, then press Ctrl-D on a blank line when done)")
+    print("─" * 60)
+    lines = sys.stdin.read()
+    return lines.strip()
+
+
+# -----------------------------------------------------------------------------
+# forge (build mode)
+# -----------------------------------------------------------------------------
+def run_forge(rough_idea, verbose, max_revisions):
+    anthropic_key, openai_key = load_env()
+    claude = Anthropic(api_key=anthropic_key)
+    gpt = OpenAI(api_key=openai_key)
+
+    # Stage 1 — build
+    build_prompt = PROMPT_A_BUILD.format(stack_context=STACK_CONTEXT, rough_idea=rough_idea)
+    stage1_output = call_claude(claude, build_prompt, verbose=verbose, label="Stage 1 build")
+
+    candidate = extract_block(stage1_output, "CANDIDATE_PROMPT")
+    git_checkpoint = extract_block(stage1_output, "GIT_CHECKPOINT")
+    rollback = extract_block(stage1_output, "ROLLBACK")
+    ready = extract_block(stage1_output, "FINAL_PROMPT_READY")
+
+    if candidate is None:
+        print("❌ Claude returned malformed output (no <CANDIDATE_PROMPT> block). Raw output:")
+        print(stage1_output)
+        sys.exit(1)
+
+    # Stage 2 — gate (loop up to max_revisions)
+    revision_count = 0
+    ready_flag = (ready or "false").strip().lower() == "true"
+    unresolved_blockers = None
+
+    while revision_count < max_revisions:
+        gate_prompt = PROMPT_B_GATE.format(candidate_prompt=candidate)
+        gate_output = call_gpt(gpt, gate_prompt, verbose=verbose, label=f"Stage 2 gate (round {revision_count + 1})")
+        verdict, blocking_issues = parse_gpt_verdict(gate_output)
+
+        if verbose:
+            print(f"\n🟢 [GPT verdict] {verdict}", file=sys.stderr)
+
+        if verdict == "PASS":
+            break
+
+        if verdict == "AMBIGUOUS":
+            if verbose:
+                print("⚠️  GPT returned ambiguous verdict — treating as PASS (verbose warning)", file=sys.stderr)
+            break
+
+        # REVISE path
+        revision_count += 1
+        if verbose:
+            print(f"\n🟣 [Claude — revision {revision_count}] applying GPT blockers...", file=sys.stderr)
+
+        revise_prompt = PROMPT_C_REVISE.format(
+            previous_prompt=candidate, blocking_issues=blocking_issues
+        )
+        revise_output = call_claude(claude, revise_prompt, verbose=verbose, label=f"revision {revision_count}")
+
+        new_candidate = extract_block(revise_output, "CANDIDATE_PROMPT")
+        new_git = extract_block(revise_output, "GIT_CHECKPOINT")
+        new_rollback = extract_block(revise_output, "ROLLBACK")
+        new_ready = extract_block(revise_output, "FINAL_PROMPT_READY")
+
+        if new_candidate is None:
+            print("❌ Claude revision returned malformed output. Keeping previous candidate.")
+            break
+
+        candidate = new_candidate
+        if new_git:
+            git_checkpoint = new_git
+        if new_rollback:
+            rollback = new_rollback
+
+        ready_raw = (new_ready or "false").strip()
+        ready_flag = ready_raw.lower().startswith("true")
+        if ready_flag:
+            unresolved_blockers = None
+            # Loop back to re-gate the revised prompt
+            continue
+        else:
+            # Claude couldn't resolve all blockers; stop looping.
+            unresolved_blockers = ready_raw
+            break
+
+    # Output
+    print()
+    if not ready_flag and unresolved_blockers:
+        print("=" * 60)
+        print("⚠️  UNRESOLVED BLOCKERS — review before pasting into Claude Code")
+        print("=" * 60)
+        print(unresolved_blockers)
+        print("=" * 60)
+        print()
+
+    print("➡️ NEXT STEP: first, run this git checkpoint in macOS terminal:")
+    print()
+    print(f"    {git_checkpoint}")
+    print()
+    print("─" * 60)
+    print("➡️ NEXT STEP: paste this into Claude Code (it is also in your clipboard):")
+    print("─" * 60)
+    print()
+    print(candidate)
+    print()
+    print("─" * 60)
+    print("➡️ IF THE TASK FAILS: run this in macOS terminal to roll back:")
+    print()
+    print(f"    {rollback}")
+    print()
+
+    if copy_to_clipboard(candidate):
+        print("✅ Final prompt copied to clipboard.")
+    else:
+        print("⚠️  Could not copy to clipboard (pbcopy failed). Copy manually from above.")
+
+    notify_done("Prompt ready — paste into Claude Code")
+
+
+# -----------------------------------------------------------------------------
+# forge-audit (audit mode)
+# -----------------------------------------------------------------------------
+def run_audit(verbose):
+    anthropic_key, _ = load_env()
+    claude = Anthropic(api_key=anthropic_key)
+
+    print("=" * 60)
+    print("FORGE AUDIT — post-implementation review")
+    print("=" * 60)
+    print()
+
+    original_prompt = read_multiline_stdin(
+        "STEP 1 of 3: Paste the ORIGINAL prompt you gave Claude Code."
+    )
+    print()
+    final_report = read_multiline_stdin(
+        "STEP 2 of 3: Paste Claude Code's FINAL 9-SECTION REPORT."
+    )
+    print()
+    git_diff = read_multiline_stdin(
+        "STEP 3 of 3: Paste the output of `git diff HEAD~1`."
+    )
+    print()
+
+    if not original_prompt or not final_report or not git_diff:
+        print("❌ One or more inputs was empty. Aborting audit.")
+        sys.exit(1)
+
+    audit_prompt = PROMPT_D_AUDIT.format(
+        original_prompt=original_prompt,
+        final_report=final_report,
+        git_diff=git_diff,
+    )
+
+    if verbose:
+        print(f"🟣 [Claude — audit] sending {len(audit_prompt)} chars...", file=sys.stderr)
+
+    audit_output = call_claude(claude, audit_prompt, verbose=verbose, label="audit")
+
+    print()
+    print("=" * 60)
+    print("AUDIT RESULT")
+    print("=" * 60)
+    print()
+    print(audit_output)
+    print()
+
+    if copy_to_clipboard(audit_output):
+        print("✅ Audit verdict copied to clipboard.")
+    else:
+        print("⚠️  Could not copy to clipboard (pbcopy failed).")
+
+    verdict_label = "PASS" if "AUDIT VERDICT: PASS" in audit_output.upper() else "REVISE"
+    notify_done(f"Audit complete — {verdict_label}")
+
+
+# -----------------------------------------------------------------------------
+# CLI
+# -----------------------------------------------------------------------------
+def main():
+    parser = argparse.ArgumentParser(
+        description="PromptForge — Claude Code prompt generator + auditor for LifeMaintained.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("rough_idea", nargs="?", default=None,
+                        help='Rough idea to forge into a prompt (e.g. forge "add pull to refresh on vehicles list").')
+    parser.add_argument("--audit", action="store_true",
+                        help="Run post-implementation audit instead of forge.")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Show intermediate API calls.")
+    parser.add_argument("--max-revisions", type=int, default=2,
+                        help="Max Claude revision passes after GPT REVISE (default 2, hard cap 3).")
+    args = parser.parse_args()
+
+    max_rev = max(1, min(args.max_revisions, 3))
+
+    if args.audit:
+        run_audit(verbose=args.verbose)
+        return
+
+    if not args.rough_idea:
+        print('Usage: forge "rough idea here"')
+        print("       forge --audit")
+        sys.exit(1)
+
+    run_forge(args.rough_idea, verbose=args.verbose, max_revisions=max_rev)
+
+
+if __name__ == "__main__":
+    main()
