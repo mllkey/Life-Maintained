@@ -26,8 +26,11 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import Paywall from "@/components/Paywall";
 import { SaveToast } from "@/components/SaveToast";
 import { vehicleLimit } from "@/lib/subscription";
-import { MILEAGE_TRACKED_TYPES, inferTrackingMode, inferTrackingModeFromVehicleType } from "@/lib/vehicleTypes";
+import { MILEAGE_TRACKED_TYPES, HOURS_TRACKED_TYPES, inferTrackingMode, inferTrackingModeFromVehicleType } from "@/lib/vehicleTypes";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
+import { BlurView } from "expo-blur";
+import Reanimated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_ITEM_HEIGHT = 52;
@@ -636,6 +639,34 @@ export default function AddVehicleScreen() {
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const [moreTypeSheetVisible, setMoreTypeSheetVisible] = useState(false);
+  const [onboardingTypeSheetVisible, setOnboardingTypeSheetVisible] = useState(false);
+
+  const onboardingSheetY = useSharedValue(600);
+  const onboardingSheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: onboardingSheetY.value }],
+  }));
+  useEffect(() => {
+    if (onboardingTypeSheetVisible) {
+      onboardingSheetY.value = withSpring(0, { damping: 18, stiffness: 220, mass: 1 });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    } else {
+      onboardingSheetY.value = withSpring(600, { damping: 18, stiffness: 220, mass: 1 });
+    }
+  }, [onboardingTypeSheetVisible, onboardingSheetY]);
+  const onboardingSheetPan = Gesture.Pan()
+    .onUpdate((e) => {
+      "worklet";
+      if (e.translationY > 0) onboardingSheetY.value = e.translationY;
+    })
+    .onEnd((e) => {
+      "worklet";
+      if (e.translationY > 80 || e.velocityY > 500) {
+        onboardingSheetY.value = withSpring(600, { damping: 18, stiffness: 220, mass: 1 });
+        runOnJS(setOnboardingTypeSheetVisible)(false);
+      } else {
+        onboardingSheetY.value = withSpring(0, { damping: 18, stiffness: 220, mass: 1 });
+      }
+    });
 
   const [nhtsaModels, setNhtsaModels] = useState<string[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
@@ -965,14 +996,14 @@ export default function AddVehicleScreen() {
           model: model.trim(),
           trim: null,
           nickname: null,
-          vehicle_type: "car",
-          vehicle_category: "car",
-          fuel_type: "gas",
+          vehicle_type: vehicleType,
+          vehicle_category: selectedVehicleCategory,
+          fuel_type: fuelType,
           is_awd: false,
-          tracking_mode: "mileage",
+          tracking_mode: (MILEAGE_TRACKED_TYPES.has(vehicleType) ? 'mileage' : HOURS_TRACKED_TYPES.has(vehicleType) ? 'hours' : 'time'),
           mileage: mileage ? parseInt(mileage.replace(/,/g, ""), 10) : null,
           hours: null,
-          average_miles_per_month: 1000,
+          average_miles_per_month: (MILEAGE_TRACKED_TYPES.has(vehicleType) || HOURS_TRACKED_TYPES.has(vehicleType)) ? Number(avgMilesPerMonth) : null,
           last_mileage_update: new Date().toISOString(),
           is_seasonal: false,
           season_start_month: null,
@@ -1225,6 +1256,27 @@ export default function AddVehicleScreen() {
                   )}
                 </FieldGroup>
 
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    setOnboardingTypeSheetVisible(true);
+                  }}
+                  style={{ height: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginTop: 8, marginBottom: 8 }}
+                >
+                  <View>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 15, color: "#8E93A1" }}>Vehicle type</Text>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 17, color: Colors.text, marginTop: 2 }}>
+                      {({ car: "Car", motorcycle: "Motorcycle", rv: "RV", atv: "ATV", utv: "UTV", boat: "Boat", dump_truck: "Dump Truck", semi_truck: "Semi Truck" } as Record<string, string>)[vehicleType] ?? "Car"}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 15, color: "#E8943A" }}>Change</Text>
+                    <Ionicons name="chevron-forward" size={18} color="#E8943A" />
+                  </View>
+                </Pressable>
+
                 <FieldGroup label="Mileage">
                   <View style={styles.field}>
                     <Text style={styles.fieldLabel}>Current Mileage *</Text>
@@ -1246,7 +1298,125 @@ export default function AddVehicleScreen() {
                       Enter your current odometer reading.
                     </Text>
                   </View>
+
+                  {MILEAGE_TRACKED_TYPES.has(vehicleType) ? (
+                    <View style={styles.field}>
+                      <Text style={styles.fieldLabel}>Usage</Text>
+                      <TextInput
+                        accessibilityLabel="Avg miles per month"
+                        style={styles.fieldInput}
+                        value={avgMilesPerMonth}
+                        onChangeText={setAvgMilesPerMonth}
+                        placeholder="Avg miles per month"
+                        placeholderTextColor={Colors.textTertiary}
+                        keyboardType="number-pad"
+                        returnKeyType="done"
+                      />
+                      {avgMilesPerMonth.trim().length > 0 && (() => {
+                        const n = parseInt(avgMilesPerMonth, 10);
+                        const invalid = !Number.isInteger(n) || n < 1 || n > 10000;
+                        return invalid ? (
+                          <Text accessibilityLiveRegion="polite" style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#FF6B6B", marginTop: 4 }}>
+                            Must be 1–10000
+                          </Text>
+                        ) : null;
+                      })()}
+                    </View>
+                  ) : HOURS_TRACKED_TYPES.has(vehicleType) ? (
+                    <View style={styles.field}>
+                      <Text style={styles.fieldLabel}>Usage</Text>
+                      <TextInput
+                        accessibilityLabel="Avg hours per month"
+                        style={styles.fieldInput}
+                        value={avgMilesPerMonth}
+                        onChangeText={setAvgMilesPerMonth}
+                        placeholder="Avg hours per month"
+                        placeholderTextColor={Colors.textTertiary}
+                        keyboardType="number-pad"
+                        returnKeyType="done"
+                      />
+                      {avgMilesPerMonth.trim().length > 0 && (() => {
+                        const n = parseInt(avgMilesPerMonth, 10);
+                        const invalid = !Number.isInteger(n) || n < 1 || n > 10000;
+                        return invalid ? (
+                          <Text accessibilityLiveRegion="polite" style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#FF6B6B", marginTop: 4 }}>
+                            Must be 1–10000
+                          </Text>
+                        ) : null;
+                      })()}
+                    </View>
+                  ) : null}
                 </FieldGroup>
+
+                <Modal
+                  visible={onboardingTypeSheetVisible}
+                  transparent
+                  animationType="fade"
+                  onRequestClose={() => setOnboardingTypeSheetVisible(false)}
+                >
+                  <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    behavior={Platform.OS === "ios" ? "padding" : "height"}
+                    keyboardVerticalOffset={0}
+                  >
+                    <Pressable
+                      style={StyleSheet.absoluteFillObject}
+                      onPress={() => setOnboardingTypeSheetVisible(false)}
+                    >
+                      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFillObject} />
+                    </Pressable>
+                    <View style={{ flex: 1, justifyContent: "flex-end" }} pointerEvents="box-none">
+                      <GestureDetector gesture={onboardingSheetPan}>
+                        <Reanimated.View
+                          style={[
+                            { backgroundColor: "#0C111B", borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 12, paddingBottom: Math.max(insets.bottom, 16) },
+                            onboardingSheetStyle,
+                          ]}
+                        >
+                          <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: "#2A3042", marginBottom: 10 }} />
+                          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 17, color: Colors.text, textAlign: "center", marginBottom: 8 }}>
+                            Vehicle type
+                          </Text>
+                          {([
+                            { value: "car", label: "Car", icon: "car-outline" as const },
+                            { value: "motorcycle", label: "Motorcycle", icon: "bicycle-outline" as const },
+                            { value: "rv", label: "RV", icon: "cube-outline" as const },
+                            { value: "atv", label: "ATV", icon: "cube-outline" as const },
+                            { value: "utv", label: "UTV", icon: "cube-outline" as const },
+                            { value: "boat", label: "Boat", icon: "boat-outline" as const },
+                            { value: "dump_truck", label: "Dump Truck", icon: "cube-outline" as const },
+                            { value: "semi_truck", label: "Semi Truck", icon: "cube-outline" as const },
+                          ]).map((t) => {
+                            const isSelected = vehicleType === t.value;
+                            return (
+                              <Pressable
+                                key={t.value}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: isSelected }}
+                                onPress={() => {
+                                  Haptics.selectionAsync().catch(() => {});
+                                  setVehicleType(t.value);
+                                  setMake("");
+                                  setModel("");
+                                  setAvgMilesPerMonth("");
+                                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                                  setOnboardingTypeSheetVisible(false);
+                                }}
+                                style={({ pressed }) => [{ height: 56, flexDirection: "row", alignItems: "center", paddingHorizontal: 20, gap: 14, backgroundColor: pressed ? "#141A26" : "transparent" }]}
+                              >
+                                <Ionicons name={t.icon} size={24} color={isSelected ? "#E8943A" : Colors.textSecondary} />
+                                <Text style={{ flex: 1, fontFamily: isSelected ? "Inter_600SemiBold" : "Inter_400Regular", fontSize: 17, color: isSelected ? "#E8943A" : Colors.text }}>
+                                  {t.label}
+                                </Text>
+                                {isSelected && <Ionicons name="checkmark" size={20} color="#E8943A" />}
+                              </Pressable>
+                            );
+                          })}
+                        </Reanimated.View>
+                      </GestureDetector>
+                    </View>
+                  </KeyboardAvoidingView>
+                </Modal>
               </>
             ) : (
               <>
