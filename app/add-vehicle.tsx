@@ -1277,8 +1277,8 @@ export default function AddVehicleScreen() {
                   </View>
                 </Pressable>
 
-                {!HOURS_TRACKED_TYPES.has(vehicleType) && (
                 <FieldGroup label="Mileage">
+                  {!HOURS_TRACKED_TYPES.has(vehicleType) && (
                   <View style={styles.field}>
                     <Text style={styles.fieldLabel}>Current Mileage *</Text>
                     <TextInput
@@ -1299,6 +1299,7 @@ export default function AddVehicleScreen() {
                       Enter your current odometer reading.
                     </Text>
                   </View>
+                  )}
 
                   {MILEAGE_TRACKED_TYPES.has(vehicleType) ? (
                     <View style={styles.field}>
@@ -1348,7 +1349,6 @@ export default function AddVehicleScreen() {
                     </View>
                   ) : null}
                 </FieldGroup>
-                )}
 
                 <Modal
                   visible={onboardingTypeSheetVisible}
