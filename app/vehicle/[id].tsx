@@ -24,6 +24,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+import { completeVehicleTask } from "@/lib/rpc";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
@@ -735,7 +736,7 @@ export default function VehicleDetailScreen() {
 
     try {
       // 1. RPC — all writes are atomic; no success UI until this resolves
-      const rpcPromise = supabase.rpc("complete_vehicle_task", {
+      const rpcPromise = completeVehicleTask({
         p_task_id: task.id,
         p_mileage: taskUsesMiles ? (usageNum ?? undefined) : undefined,
         p_hours: taskUsesHours ? (usageNum ?? undefined) : undefined,
@@ -749,7 +750,7 @@ export default function VehicleDetailScreen() {
       const timeoutMs = 15000;
       let timeoutId: ReturnType<typeof setTimeout>;
       const timeout = new Promise<never>((_, reject) => { timeoutId = setTimeout(() => reject(new Error(`[MarkComplete] RPC timed out after ${timeoutMs}ms`)), timeoutMs); });
-      const { data: rpcResult, error: rpcErr } = await Promise.race([rpcPromise, timeout]) as Awaited<typeof rpcPromise>;
+      const { data: rpcResult, error: rpcErr } = await Promise.race([rpcPromise, timeout]);
       clearTimeout(timeoutId!);
       if (rpcErr) throw rpcErr;
 

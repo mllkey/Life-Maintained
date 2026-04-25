@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { completeVehicleTask } from "./rpc";
 
 export type MatchResult = {
   taskId: string;
@@ -189,7 +190,7 @@ export async function matchAndUpdateVehicleTask(
 
     // Route through canonical RPC — it handles tracking mode, interval
     // computation, vehicle usage update, and mileage history atomically.
-    const { data: rpcData, error: rpcErr } = await supabase.rpc("complete_vehicle_task", {
+    const { data: rpcData, error: rpcErr } = await completeVehicleTask({
       p_task_id: matched.id,
       p_mileage: serviceMileage ?? undefined,
       p_hours: serviceHours ?? undefined,

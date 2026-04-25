@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { getScanQuota } from "./rpc";
 
 export type Profile = {
   user_id?: string;
@@ -169,7 +170,7 @@ export async function getLiveScanQuota(): Promise<{
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return null;
 
-    const { data, error } = await supabase.rpc("get_scan_quota", {
+    const { data, error } = await getScanQuota({
       p_user_id: session.user.id,
     });
 

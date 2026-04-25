@@ -22,6 +22,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+import { completePropertyTask } from "@/lib/rpc";
 import { formatShopAndDiy } from "@/lib/costFormat";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -304,7 +305,7 @@ export default function PropertyDetailScreen() {
         return parts.length ? parts.join("\n\n") : null;
       })();
 
-      const { error: rpcError } = await supabase.rpc("complete_property_task", {
+      const { error: rpcError } = await completePropertyTask({
         p_task_id: task.id,
         p_completed_date: completedAt,
         p_notes: notesForLog ?? undefined,
