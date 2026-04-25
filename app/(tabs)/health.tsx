@@ -491,8 +491,6 @@ export default function HealthScreen() {
       medRows += `<tr>
       <td>${m.name}</td>
       <td>${memberName}</td>
-      <td>${m.dosage ?? ""}</td>
-      <td>${m.frequency ?? ""}</td>
       <td>${m.reminder_time ?? ""}</td>
     </tr>`;
     }
@@ -517,7 +515,7 @@ export default function HealthScreen() {
 
     ${medRows ? `<h2>Medications</h2>
     <table>
-      <thead><tr><th>Medication</th><th>For</th><th>Dosage</th><th>Frequency</th><th>Reminder</th></tr></thead>
+      <thead><tr><th>Medication</th><th>For</th><th>Reminder</th></tr></thead>
       <tbody>${medRows}</tbody>
     </table>` : ""}
 
