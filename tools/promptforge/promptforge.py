@@ -237,17 +237,17 @@ git diff --check
 
 **12. Escape-hatch discipline.** For STANDARD + COMPLEX, require Claude Code to run:
 ```
-rg -n "\\bas any\\b" app/ hooks/ lib/ components/ | wc -l
-rg -n "@ts-ignore|@ts-expect-error|@ts-nocheck" app/ hooks/ lib/ components/ | wc -l
+rg -n "\\bas any\\b" app/ lib/ components/ | wc -l
+rg -n "@ts-ignore|@ts-expect-error|@ts-nocheck" app/ lib/ components/ | wc -l
 
-  Canonical seven-pattern escape-hatch grep (scope: app/ hooks/ lib/ components/, excluding supabase/functions/):
-    as_any:     rg -n '\\bas any\\b' app/ hooks/ lib/ components/ | wc -l
-    as_unknown: rg -n '\\bas unknown\\b' app/ hooks/ lib/ components/ | wc -l
-    as_typed:   rg -n '\\bas [A-Z]' app/ hooks/ lib/ components/ | rg -v '\\bas any\\b|\\bas unknown\\b|\\bas const\\b' | wc -l
-    non_null:   rg -n '[A-Za-z0-9_\\)\\]]\\!\\.' app/ hooks/ lib/ components/ | wc -l
-    ts_ignore:  rg -n '@ts-ignore' app/ hooks/ lib/ components/ | wc -l
-    ts_expect:  rg -n '@ts-expect-error' app/ hooks/ lib/ components/ | wc -l
-    ts_nocheck: rg -n '@ts-nocheck' app/ hooks/ lib/ components/ | wc -l
+  Canonical seven-pattern escape-hatch grep (scope: app/ lib/ components/, excluding supabase/functions/):
+    as_any:     rg -n '\\bas any\\b' app/ lib/ components/ | wc -l
+    as_unknown: rg -n '\\bas unknown\\b' app/ lib/ components/ | wc -l
+    as_typed:   rg -n '\\bas [A-Z]' app/ lib/ components/ | rg -v '\\bas any\\b|\\bas unknown\\b|\\bas const\\b' | wc -l
+    non_null:   rg -n '[A-Za-z0-9_\\)\\]]\\!\\.' app/ lib/ components/ | wc -l
+    ts_ignore:  rg -n '@ts-ignore' app/ lib/ components/ | wc -l
+    ts_expect:  rg -n '@ts-expect-error' app/ lib/ components/ | wc -l
+    ts_nocheck: rg -n '@ts-nocheck' app/ lib/ components/ | wc -l
   These seven patterns are canonical. Any pass that produces different numbers must use these exact patterns or justify the deviation in writing before the baseline is updated.
 ```
 ...BEFORE and AFTER edits, and assert flat (zero new hatches) in the final report. The locked baseline from stack context applies.
@@ -705,7 +705,7 @@ def gather_live_repo_grounding(rough_idea, verbose=False):
             safe_tok = tok.replace("'", "'\\''")
             cmd = (
                 f"grep -rn --include='*.ts' --include='*.tsx' "
-                f"-F '{safe_tok}' app/ hooks/ lib/ components/ 2>/dev/null | head -n 25"
+                f"-F '{safe_tok}' app/ lib/ components/ 2>/dev/null | head -n 25"
             )
             out = _run_readonly(cmd, REPO_ROOT)
             if out.strip():
