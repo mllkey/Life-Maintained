@@ -565,7 +565,7 @@ export type Database = {
           family_member_id: string | null
           id: string
           name: string
-          reminder_time: string
+          reminder_time: string | null
           reminders_enabled: boolean | null
           updated_at: string
           user_id: string
@@ -575,7 +575,7 @@ export type Database = {
           family_member_id?: string | null
           id?: string
           name: string
-          reminder_time: string
+          reminder_time?: string | null
           reminders_enabled?: boolean | null
           updated_at?: string
           user_id: string
@@ -585,7 +585,7 @@ export type Database = {
           family_member_id?: string | null
           id?: string
           name?: string
-          reminder_time?: string
+          reminder_time?: string | null
           reminders_enabled?: boolean | null
           updated_at?: string
           user_id?: string
