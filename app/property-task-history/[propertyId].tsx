@@ -131,6 +131,7 @@ export default function PropertyTaskHistoryScreen() {
               <View style={styles.logList}>
                 {logs!.map((log, idx) => {
                   const isExpanded = expandedId === log.id;
+                  const logReceiptUrl = log.receipt_url;
                   const isLast = idx === logs!.length - 1;
                   const formattedDate = log.service_date
                     ? format(parseISO(log.service_date), "MMMM d, yyyy")
@@ -156,9 +157,9 @@ export default function PropertyTaskHistoryScreen() {
                           </Text>
                         </View>
                         <View style={styles.logCardRight}>
-                          {log.receipt_url ? (
+                          {logReceiptUrl ? (
                             <Pressable
-                              onPress={() => openReceipt(log.receipt_url, log.id)}
+                              onPress={() => openReceipt(logReceiptUrl, log.id)}
                               hitSlop={10}
                               accessibilityLabel="View receipt"
                               style={styles.receiptIconBtn}
@@ -193,10 +194,10 @@ export default function PropertyTaskHistoryScreen() {
                             </View>
                           ) : null}
 
-                          {log.receipt_url ? (
+                          {logReceiptUrl ? (
                             <Pressable
                               style={({ pressed }) => [styles.receiptThumb, { opacity: pressed ? 0.85 : 1 }]}
-                              onPress={() => openReceipt(log.receipt_url, log.id)}
+                              onPress={() => openReceipt(logReceiptUrl, log.id)}
                               accessibilityLabel="View receipt image"
                             >
                               <View style={styles.receiptThumbInner}>
@@ -212,7 +213,7 @@ export default function PropertyTaskHistoryScreen() {
                             </Pressable>
                           ) : null}
 
-                          {!log.provider_contact && !log.notes && !log.receipt_url && (
+                          {!log.provider_contact && !log.notes && !logReceiptUrl && (
                             <Text style={styles.expandedEmpty}>No additional details recorded.</Text>
                           )}
 
