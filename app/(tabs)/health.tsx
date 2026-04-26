@@ -143,7 +143,7 @@ export default function HealthScreen() {
 
   const completingForPet = useMemo(() => {
     if (!markCompleteAppt?.family_member_id) return false;
-    return familyMembers?.find(fm => fm.id === markCompleteAppt.family_member_id)?.member_type === "pet" ?? false;
+    return familyMembers?.find(fm => fm.id === markCompleteAppt.family_member_id)?.member_type === "pet";
   }, [markCompleteAppt, familyMembers]);
 
   const { data: markCompleteProviders } = useQuery({

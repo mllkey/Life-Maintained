@@ -653,7 +653,7 @@ export default function VehicleDetailScreen() {
       showToast("Task updated");
 
       // Fire-and-forget analytics — never block the save or show errors
-      supabase.from("interval_corrections").insert({
+      Promise.resolve(supabase.from("interval_corrections").insert({
         user_id: user?.id,
         vehicle_id: id,
         task_name: task.name,
@@ -668,7 +668,7 @@ export default function VehicleDetailScreen() {
         change_method: changeMethod,
         task_had_completion: task.last_completed_date != null,
         schedule_source: task.source ?? null,
-      }).then(() => {}).catch(() => {});
+      })).then(() => {}).catch(() => {});
     } catch {
       showToast("Failed to save changes.", true);
       queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", id] });
@@ -2693,7 +2693,6 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
                 source={{ uri: viewingPhoto }}
                 style={walletStyles.photoViewerImage}
                 resizeMode="contain"
-                pointerEvents="none"
                 onError={() => {
                   setViewingPhoto(null);
                   Alert.alert("Can't load photo", "The image couldn't be loaded. Try re-uploading it.");

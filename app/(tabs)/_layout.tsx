@@ -32,7 +32,7 @@ function NativeTabLayout() {
         <Label>Health</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
-        <Icon sf={{ default: "gear", selected: "gear.fill" }} />
+        <Icon sf={{ default: "gearshape", selected: "gearshape.fill" }} />
         <Label>Settings</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
@@ -125,7 +125,7 @@ function ClassicTabLayout() {
           title: "Settings",
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="gear" tintColor={color} size={22} />
+              <SymbolView name="gearshape" tintColor={color} size={22} />
             ) : (
               <Ionicons name="settings" size={22} color={color} />
             ),
