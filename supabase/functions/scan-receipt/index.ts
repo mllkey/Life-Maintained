@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -101,6 +102,19 @@ serve(async (req: Request) => {
 
     // ── Profile lookup ──────────────────────────────────────────────────
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // ── Rate limit ──────────────────────────────────────────────────────
+    try {
+      await enforceAiRateLimit(adminClient, user.id, "scan-receipt");
+    } catch (rlErr) {
+      if (rlErr instanceof RateLimitError) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rlErr.retryAfterSeconds) },
+        });
+      }
+      throw rlErr;
+    }
     const { data: profileRaw, error: profileError } = await adminClient
       .from("profiles")
       .select("subscription_tier, monthly_scan_count, scan_count_reset_at")

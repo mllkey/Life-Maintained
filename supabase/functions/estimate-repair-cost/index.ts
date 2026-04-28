@@ -1,69 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-edge-secret",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-function jsonRes(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-/**
- * Auth: accepts either a valid user JWT or a private edge-function-to-edge-function secret.
- * Returns true if authorized, false otherwise.
- */
-async function isAuthorized(req: Request): Promise<boolean> {
-  // Path 1: x-edge-secret header from internal edge-to-edge calls
-  const edgeSecret = Deno.env.get("EDGE_FUNCTION_SECRET") ?? "";
-  const incomingSecret = req.headers.get("x-edge-secret") ?? "";
-  if (edgeSecret && incomingSecret === edgeSecret) {
-    return true;
-  }
-
-  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return false;
-  }
-  const jwt = authHeader.replace("Bearer ", "").trim();
-
-  // Path 2: Any Supabase-issued token (service_role, anon, or user session).
-  // Decode payload without signature verification — the function is deployed with
-  // --no-verify-jwt so we own the auth layer. Legitimate callers all have iss:"supabase".
-  try {
-    const parts = jwt.split(".");
-    if (parts.length === 3) {
-      const payload = JSON.parse(atob(parts[1]));
-      if (payload.iss === "supabase") {
-        // For authenticated users, additionally verify the session is active
-        if (payload.role === "authenticated") {
-          const authClient = createClient(
-            Deno.env.get("SUPABASE_URL") ?? "",
-            Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-            { global: { headers: { Authorization: `Bearer ${jwt}` } } },
-          );
-          const { error } = await authClient.auth.getUser();
-          return !error;
-        }
-        // service_role and anon tokens are trusted as-is
-        return true;
-      }
-    }
-  } catch {
-    // fall through
-  }
-
-  return false;
-}
+import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
+import { jsonResponse } from "../_shared/json.ts";
+import { requireUser, hasEdgeSecret, AuthError } from "../_shared/auth.ts";
+import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 
 /**
  * Query maintenance_logs for real user costs on a matching service + vehicle type.
- * Uses multi-word matching plus small-sample safeguards.
- * Returns null if not enough data or query fails.
  */
 async function queryCommunityData(
   supabase: any,
@@ -71,7 +14,6 @@ async function queryCommunityData(
   vehicleType: string | null,
 ): Promise<{ avg_cost: number; min_cost: number; max_cost: number; sample_size: number; avg_diy_cost: number | null; diy_count: number } | null> {
   try {
-    // Extract significant words (3+ chars) for matching
     const words = serviceKey
       .toLowerCase()
       .split(/[\s\-\/&,]+/)
@@ -80,9 +22,6 @@ async function queryCommunityData(
     if (words.length === 0) return null;
 
     const vType = (vehicleType ?? "car").toLowerCase();
-
-    // Query candidate logs using up to the 2 longest words, then dedupe in JS.
-    // This reduces bias from a single broad primary word being limited too early.
     const seedWords = [...words].sort((a, b) => b.length - a.length).slice(0, Math.min(2, words.length));
     const seen = new Map<string, any>();
 
@@ -96,38 +35,25 @@ async function queryCommunityData(
         .limit(120);
 
       for (const log of logs ?? []) {
-        if (log?.id != null) {
-          seen.set(String(log.id), log);
-        }
+        if (log?.id != null) seen.set(String(log.id), log);
       }
     }
 
     const candidates = Array.from(seen.values());
     if (candidates.length === 0) return null;
 
-    // Tight filter:
-    // 1) vehicle type must match
-    // 2) service_name must contain at least 2 significant words (or all words if only 1 exists)
     const requiredWordMatches = Math.min(2, words.length);
     const matching = candidates.filter((l: any) => {
       const logVehicleType = (l.vehicles?.vehicle_type ?? "").toLowerCase();
       if (logVehicleType !== vType) return false;
-
       const logName = (l.service_name ?? "").toLowerCase();
       const matchCount = words.filter((w) => logName.includes(w)).length;
       return matchCount >= requiredWordMatches;
     });
 
-    if (matching.length < 1) return null;
-
-    // Small-sample safeguard:
-    // - < 3 rows: not enough to blend at all
-    // - 3 rows: use all rows, skip IQR because quartiles are not meaningful
-    // - 4+ rows: apply IQR-based outlier removal
     if (matching.length < 3) return null;
 
     let filtered = matching;
-
     if (matching.length >= 4) {
       const costs = matching
         .map((l: any) => Number(l.cost))
@@ -140,39 +66,29 @@ async function queryCommunityData(
         const iqr = q3 - q1;
         const lowerBound = q1 - 2 * iqr;
         const upperBound = q3 + 2 * iqr;
-
         filtered = matching.filter((l: any) => {
           const cost = Number(l.cost);
           return Number.isFinite(cost) && cost >= lowerBound && cost <= upperBound;
         });
-
-        // Do not let outlier filtering collapse a usable set below 3
-        if (filtered.length < 3) {
-          filtered = matching;
-        }
+        if (filtered.length < 3) filtered = matching;
       }
     }
-
     if (filtered.length < 3) return null;
 
     const diyLogs = filtered.filter((l: any) => l.did_it_myself === true);
     const allCosts = filtered.map((l: any) => Number(l.cost)).filter((c: number) => Number.isFinite(c));
-
     if (allCosts.length < 3) return null;
 
-    const result = {
+    return {
       avg_cost: allCosts.reduce((s: number, c: number) => s + c, 0) / allCosts.length,
       min_cost: Math.min(...allCosts),
       max_cost: Math.max(...allCosts),
       sample_size: filtered.length,
-      avg_diy_cost:
-        diyLogs.length > 0
-          ? diyLogs.reduce((s: number, l: any) => s + Number(l.cost), 0) / diyLogs.length
-          : null,
+      avg_diy_cost: diyLogs.length > 0
+        ? diyLogs.reduce((s: number, l: any) => s + Number(l.cost), 0) / diyLogs.length
+        : null,
       diy_count: diyLogs.length,
     };
-
-    return result;
   } catch (e) {
     console.warn("[COMMUNITY] Query failed:", e);
     return null;
@@ -180,26 +96,32 @@ async function queryCommunityData(
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: corsHeaders });
-  }
+  const pre = handlePreflight(req);
+  if (pre) return pre;
+
   try {
-    if (!(await isAuthorized(req))) {
-      return jsonRes({ error: "Unauthorized" }, 401);
+    // ── Auth: edge-secret OR verified user JWT (no anon trust) ──────
+    const isInternal = hasEdgeSecret(req);
+    let userIdForRateLimit: string | null = null;
+    if (!isInternal) {
+      const { userId } = await requireUser(req);
+      userIdForRateLimit = userId;
     }
 
     const { year, make, model, service_name, vehicle_type, zip_code } = await req.json();
     if (!make || !service_name) {
-      return new Response(JSON.stringify({ error: "make and service_name required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "make and service_name required" }, 400);
     }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
+
+    // ── Rate limit only on user path. Internal preheats skip it. ────
+    if (userIdForRateLimit) {
+      await enforceAiRateLimit(supabase, userIdForRateLimit, "estimate-repair-cost");
+    }
 
     const vehicleKey = `${year ?? ""}|${make}|${model ?? ""}|${vehicle_type ?? ""}`.toLowerCase();
     const serviceKey = service_name.toLowerCase().trim();
@@ -212,11 +134,10 @@ serve(async (req: Request) => {
       .maybeSingle();
 
     if (cached) {
-      // Blend community data into cached estimate if enough real data exists
       try {
         const community = await queryCommunityData(supabase, serviceKey, vehicle_type);
         if (community && community.sample_size >= 3) {
-          const weight = Math.min(community.sample_size / 10, 0.7); // Max 70% community, always 30% AI
+          const weight = Math.min(community.sample_size / 10, 0.7);
           const blended = {
             ...cached,
             shop_low: Math.round(cached.shop_low * (1 - weight) + community.min_cost * weight),
@@ -227,24 +148,17 @@ serve(async (req: Request) => {
             } : {}),
             community_sample_size: community.sample_size,
           };
-          return new Response(JSON.stringify({ data: blended, source: "cache+community" }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return jsonResponse({ data: blended, source: "cache+community" });
         }
       } catch (e) {
         console.warn("[COMMUNITY] Cache blend failed:", e);
       }
-      return new Response(JSON.stringify({ data: cached, source: "cache" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ data: cached, source: "cache" });
     }
 
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) {
-      return new Response(JSON.stringify({ error: "API key not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "API key not configured" }, 500);
     }
 
     const claudeModel = Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-4-20250514";
@@ -301,25 +215,16 @@ Base your estimates on current 2025-2026 market prices. Be accurate for this spe
       const elapsedMs = Date.now() - aiStartedAt;
       if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
         console.error(`[estimate-repair-cost] AI call timed out after ${elapsedMs}ms (limit ${TIMEOUT_MS}ms)`);
-        return new Response(JSON.stringify({ error: "Estimate service timed out. Please try again." }), {
-          status: 504,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonResponse({ error: "Estimate service timed out. Please try again." }, 504);
       }
       console.error(`[estimate-repair-cost] AI call threw after ${elapsedMs}ms:`, fetchErr);
-      return new Response(JSON.stringify({ error: "Internal server error" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Internal server error" }, 500);
     }
 
     const aiData = await aiResponse.json();
     if (!aiResponse.ok) {
       console.error("[Anthropic] API error:", aiResponse.status, JSON.stringify(aiData));
-      return new Response(JSON.stringify({ error: "AI API error", detail: aiData?.error?.message ?? aiResponse.status }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "AI API error", detail: aiData?.error?.message ?? aiResponse.status }, 502);
     }
     const aiText = aiData.content?.[0]?.text ?? "";
 
@@ -328,14 +233,8 @@ Base your estimates on current 2025-2026 market prices. Be accurate for this spe
       estimate = JSON.parse(aiText);
     } catch {
       const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        estimate = JSON.parse(jsonMatch[0]);
-      } else {
-        return new Response(JSON.stringify({ error: "Could not parse estimate" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      if (jsonMatch) estimate = JSON.parse(jsonMatch[0]);
+      else return jsonResponse({ error: "Could not parse estimate" }, 500);
     }
 
     await supabase.from("repair_cost_cache").upsert({
@@ -350,7 +249,6 @@ Base your estimates on current 2025-2026 market prices. Be accurate for this spe
       estimated_hours: estimate.estimated_hours,
     }, { onConflict: "vehicle_key,service_name" });
 
-    // Blend community data into AI estimate if available
     try {
       const community = await queryCommunityData(supabase, serviceKey, vehicle_type);
       if (community && community.sample_size >= 3) {
@@ -367,10 +265,17 @@ Base your estimates on current 2025-2026 market prices. Be accurate for this spe
       console.warn("[COMMUNITY] AI blend failed:", e);
     }
 
-    return new Response(JSON.stringify({ data: estimate, source: estimate.community_sample_size ? "ai+community" : "ai" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ data: estimate, source: estimate.community_sample_size ? "ai+community" : "ai" });
   } catch (err) {
-    return jsonRes({ error: (err as Error).message ?? "Unknown error" }, 500);
+    if (err instanceof AuthError) {
+      return jsonResponse({ error: err.message }, err.status);
+    }
+    if (err instanceof RateLimitError) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
+      });
+    }
+    return jsonResponse({ error: (err as Error).message ?? "Unknown error" }, 500);
   }
 });

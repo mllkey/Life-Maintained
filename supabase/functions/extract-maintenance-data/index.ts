@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
@@ -67,6 +68,20 @@ serve(async (req: Request) => {
     return json({ error: "Unauthorized" }, 401);
   }
   const userId = user.id;
+
+  // --- Rate limit ---
+  try {
+    const adminClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+    await enforceAiRateLimit(adminClient, userId, "extract-maintenance-data");
+  } catch (rlErr) {
+    if (rlErr instanceof RateLimitError) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rlErr.retryAfterSeconds) },
+      });
+    }
+    throw rlErr;
+  }
 
   // --- Parse request body ---
   let inputText: string;

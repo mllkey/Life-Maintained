@@ -1,18 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
+import { jsonResponse as json } from "../_shared/json.ts";
+import { requireUser, AuthError } from "../_shared/auth.ts";
+import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
@@ -295,42 +286,24 @@ function getTemplateTasks(propType: string, yearBuilt: number | null, climateZon
 
 // ── Main handler ─────────────────────────────────────────────────────
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: corsHeaders });
-  }
+  const pre = handlePreflight(req);
+  if (pre) return pre;
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
   }
 
   try {
-    // Parse body (before auth — needed for preload mode)
+    // ── Auth FIRST. No preload bypass. ─────────────────────────────
+    const { userId: authUserId } = await requireUser(req);
+
     let body: Record<string, unknown>;
     try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
 
     const { property_id, property_type, year_built, square_footage, zip_code } = body;
     if (!property_id || typeof property_id !== "string") return json({ error: "Missing property_id" }, 400);
 
-    const isPreload = typeof property_id === "string" && property_id.startsWith("preload-");
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-    let authUserId = "preload";
-    if (!isPreload) {
-      const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return json({ error: "Unauthorized" }, 401);
-      }
-      const jwt = authHeader.replace("Bearer ", "").trim();
-
-      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: `Bearer ${jwt}` } },
-      });
-      const { data: { user }, error: authError } = await userClient.auth.getUser();
-      if (authError || !user) return json({ error: "Unauthorized" }, 401);
-      authUserId = user.id;
-    }
 
     const propType = typeof property_type === "string" ? property_type : "house";
     const yearBuilt = typeof year_built === "number" ? year_built : null;
@@ -339,13 +312,15 @@ serve(async (req: Request) => {
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    if (!isPreload) {
+    // Rate limit (per user, per fn)
+    await enforceAiRateLimit(adminClient, authUserId, "generate-property-schedule");
+
+    {
       const { data: property } = await adminClient
         .from("properties").select("id").eq("id", property_id).eq("user_id", authUserId).maybeSingle();
       if (!property) return json({ error: "Property not found or not owned by user" }, 403);
     }
-
-    if (!isPreload) {
+    {
       const { count: existingCount } = await adminClient
         .from("property_maintenance_tasks").select("id", { count: "exact", head: true }).eq("property_id", property_id);
       if ((existingCount ?? 0) > 0) return json({ error: "Schedule already exists" }, 409);
@@ -492,16 +467,9 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
 
     // Fallback
     if (!validatedTasks || validatedTasks.length < 5) {
-      if (isPreload) {
-        return json({ success: true, source: "preload-template-fallback", cached: false });
-      }
       console.warn("[FALLBACK] Using template tasks for", propertyDesc);
       validatedTasks = getTemplateTasks(propType, yearBuilt, climate.zone);
       usedAi = false;
-    }
-
-    if (isPreload) {
-      return json({ success: true, source: "preload", cached: true, task_count: validatedTasks.length });
     }
 
     const tasksToInsert = validatedTasks.map(t => ({
@@ -560,6 +528,15 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
     return json({ success: true, tasks_created: tasksToInsert.length, estimates_cached: estimatesCached, property_id, source: usedAi ? "ai" : "template" });
 
   } catch (err) {
+    if (err instanceof AuthError) {
+      return json({ error: err.message }, err.status);
+    }
+    if (err instanceof RateLimitError) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
+      });
+    }
     console.error("[ERROR]", err);
     return json({ error: "Failed to generate schedule", detail: err instanceof Error ? err.message : String(err) }, 500);
   }

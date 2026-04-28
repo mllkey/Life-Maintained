@@ -100,7 +100,7 @@ export default function AddFamilyMemberScreen() {
       (async () => {
         try {
           await supabase.functions.invoke("generate-health-schedule", {
-            body: { family_member_id: newMember?.id, user_id: user.id },
+            body: { family_member_id: newMember?.id },
           });
         } catch (scheduleErr) {
           console.error("[generate-health-schedule] Caught:", scheduleErr);

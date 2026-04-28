@@ -1,18 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
+import { jsonResponse } from "../_shared/json.ts";
+import { requireUser, AuthError } from "../_shared/auth.ts";
+import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 
 function addMonthsUTC(date: Date, months: number): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, date.getUTCDate()));
@@ -72,19 +63,13 @@ function getTemplateTasks(memberType: string, age: number, sexAtBirth: string, p
   const colonoscopy: HealthTask = { appointment_type: "Colonoscopy", interval_months: 120, priority: "high" };
   const prostate: HealthTask = { appointment_type: "Prostate Screening", interval_months: 12, priority: "medium" };
 
-  if (age <= 39) {
-    return isFemale ? [...base, obgyn] : [...base];
-  }
-  if (age <= 49) {
-    return isFemale ? [...base, obgyn, mammogram] : [...base];
-  }
-  // 50+
+  if (age <= 39) return isFemale ? [...base, obgyn] : [...base];
+  if (age <= 49) return isFemale ? [...base, obgyn, mammogram] : [...base];
   return isFemale
     ? [...base, obgyn, mammogram, colonoscopy]
     : [...base, colonoscopy, prostate];
 }
 
-// ── Clamp a single task's interval ──────────────────────────────────
 function clampInterval(appointmentType: string, intervalMonths: number, memberType: string): number {
   const mo = Math.round(intervalMonths);
   if (memberType === "person") {
@@ -95,7 +80,6 @@ function clampInterval(appointmentType: string, intervalMonths: number, memberTy
     if (appointmentType === "Mammogram") return Math.max(12, Math.min(24, mo));
     return Math.max(3, Math.min(120, mo));
   }
-  // pet
   if (appointmentType === "Annual Vet Visit") return Math.max(6, Math.min(12, mo));
   if (appointmentType === "Dental Cleaning") return Math.max(6, Math.min(24, mo));
   if (appointmentType === "Vaccinations") return Math.max(12, Math.min(36, mo));
@@ -107,7 +91,6 @@ function normalizePriority(p: unknown): "high" | "medium" | "low" {
   return "medium";
 }
 
-// ── Normalize and validate tasks regardless of source ────────────────
 function normalizeAndValidate(raw: unknown[], memberType: string): HealthTask[] {
   const result: HealthTask[] = [];
   for (const item of raw) {
@@ -124,11 +107,9 @@ function normalizeAndValidate(raw: unknown[], memberType: string): HealthTask[] 
   return result;
 }
 
-// ── Required task injection ──────────────────────────────────────────
 function injectRequired(tasks: HealthTask[], memberType: string, petType: string): HealthTask[] {
   const result = [...tasks];
   const hasType = (type: string) => result.some(t => t.appointment_type === type);
-
   if (memberType === "person") {
     if (!hasType("Annual Physical")) result.push({ appointment_type: "Annual Physical", interval_months: 12, priority: "high" });
     if (!hasType("Dental Cleaning")) result.push({ appointment_type: "Dental Cleaning", interval_months: 6, priority: "medium" });
@@ -142,7 +123,6 @@ function injectRequired(tasks: HealthTask[], memberType: string, petType: string
   return result;
 }
 
-// ── Deduplicate by appointment_type ──────────────────────────────────
 const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
 function deduplicateTasks(tasks: HealthTask[]): HealthTask[] {
@@ -162,7 +142,6 @@ function deduplicateTasks(tasks: HealthTask[]): HealthTask[] {
   return Array.from(map.values());
 }
 
-// ── Validate cached task shape ────────────────────────────────────────
 function isValidCachedTask(t: unknown): t is HealthTask {
   if (!t || typeof t !== "object") return false;
   const obj = t as Record<string, unknown>;
@@ -173,44 +152,44 @@ function isValidCachedTask(t: unknown): t is HealthTask {
   );
 }
 
-// ── Main handler ─────────────────────────────────────────────────────
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: corsHeaders });
-  }
-  if (req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
-  }
+  const pre = handlePreflight(req);
+  if (pre) return pre;
+  if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
   try {
-    let body: Record<string, unknown>;
-    try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
+    // ── Auth: verify JWT, derive user_id ───────────────────────────
+    const { userId } = await requireUser(req);
 
-    const { family_member_id, user_id } = body;
+    // ── Body: family_member_id only. user_id no longer trusted from body. ──
+    let body: Record<string, unknown>;
+    try { body = await req.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
+    const { family_member_id } = body;
     if (!family_member_id || typeof family_member_id !== "string") {
-      return json({ error: "Missing or invalid required field: family_member_id" }, 400);
-    }
-    if (!user_id || typeof user_id !== "string") {
-      return json({ error: "Missing or invalid required field: user_id" }, 400);
+      return jsonResponse({ error: "Missing or invalid required field: family_member_id" }, 400);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 1. Ownership check — two separate queries
+    // ── Rate limit (per user, per fn) ───────────────────────────────
+    await enforceAiRateLimit(adminClient, userId, "generate-health-schedule");
+
+    // 1. Ownership check against verified user
     const { data: member } = await adminClient
       .from("family_members")
       .select("id, user_id, member_type, date_of_birth, sex_at_birth, pet_type, pet_breed")
       .eq("id", family_member_id)
       .maybeSingle();
 
-    if (!member) return json({ error: "Family member not found" }, 404);
-    if (member.user_id !== user_id) return json({ error: "Forbidden: family member does not belong to this user" }, 403);
+    if (!member) return jsonResponse({ error: "Family member not found" }, 404);
+    if (member.user_id !== userId) {
+      return jsonResponse({ error: "Forbidden: family member does not belong to this user" }, 403);
+    }
 
-    // 2. Age / profile derivation
     if (!member.date_of_birth) {
-      return json({ error: "date_of_birth is required to generate a health schedule" }, 400);
+      return jsonResponse({ error: "date_of_birth is required to generate a health schedule" }, 400);
     }
 
     const memberType: string = member.member_type === "pet" ? "pet" : "person";
@@ -222,7 +201,6 @@ serve(async (req: Request) => {
     const petType: string = memberType === "pet" ? (member.pet_type ?? "unknown") : "unknown";
     const petBreed: string | null = member.pet_breed ?? null;
 
-    // 3. Cache key + check
     const cacheKey = `health|${memberType}|${age}|${sexAtBirth}|${petType}`.toLowerCase();
 
     const { data: cached } = await adminClient
@@ -247,7 +225,6 @@ serve(async (req: Request) => {
       }
     }
 
-    // 4. AI generation on cache miss
     if (!finalTasks) {
       const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
       if (anthropicKey) {
@@ -317,7 +294,6 @@ serve(async (req: Request) => {
       }
     }
 
-    // 5. Template fallback
     if (!finalTasks) {
       console.warn("[FALLBACK] Using template tasks");
       const raw = getTemplateTasks(memberType, age, sexAtBirth, petType);
@@ -327,14 +303,12 @@ serve(async (req: Request) => {
       source = "template";
     }
 
-    // 6 & 8. Re-apply normalization + dedup to cached tasks for safety
     if (source === "cache") {
       const reclamped = normalizeAndValidate(finalTasks as unknown[], memberType);
       const withRequired = injectRequired(reclamped, memberType, petType);
       finalTasks = deduplicateTasks(withRequired);
     }
 
-    // 9. Cache write (skip if already came from cache)
     if (source !== "cache") {
       await adminClient.from("ai_schedule_cache").upsert({
         cache_key: cacheKey,
@@ -346,25 +320,23 @@ serve(async (req: Request) => {
       }, { onConflict: "cache_key" });
     }
 
-    // 10. Query existing appointments
     const { data: existingAppointments } = await adminClient
       .from("health_appointments")
       .select("appointment_type")
-      .eq("user_id", user_id)
+      .eq("user_id", userId)
       .eq("family_member_id", family_member_id);
 
     const existingTypes = new Set<string>(
       (existingAppointments ?? []).map((a: { appointment_type: string }) => a.appointment_type)
     );
 
-    // 11. Insert only missing appointments
     const today = new Date();
     const toInsert = finalTasks.filter(t => !existingTypes.has(t.appointment_type));
     const skipped = finalTasks.length - toInsert.length;
 
     if (toInsert.length > 0) {
       const rows = toInsert.map(t => ({
-        user_id,
+        user_id: userId,
         family_member_id,
         appointment_type: t.appointment_type,
         interval_months: t.interval_months,
@@ -380,14 +352,13 @@ serve(async (req: Request) => {
 
       const { error: insertError } = await adminClient.from("health_appointments").insert(rows);
       if (insertError) {
-        return json({ error: "Failed to insert appointments", detail: insertError.message }, 500);
+        return jsonResponse({ error: "Failed to insert appointments", detail: insertError.message }, 500);
       }
     }
 
     console.log(`[SUCCESS] ${toInsert.length} appointments created for family_member_id=${family_member_id} (source: ${source})`);
 
-    // 12. Response
-    return json({
+    return jsonResponse({
       success: true,
       appointments_created: toInsert.length,
       appointments_skipped_existing: skipped,
@@ -396,7 +367,16 @@ serve(async (req: Request) => {
     });
 
   } catch (err) {
+    if (err instanceof AuthError) {
+      return jsonResponse({ error: err.message }, err.status);
+    }
+    if (err instanceof RateLimitError) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
+      });
+    }
     console.error("[ERROR]", err);
-    return json({ error: "Failed to generate health schedule", detail: err instanceof Error ? err.message : String(err) }, 500);
+    return jsonResponse({ error: "Failed to generate health schedule", detail: err instanceof Error ? err.message : String(err) }, 500);
   }
 });

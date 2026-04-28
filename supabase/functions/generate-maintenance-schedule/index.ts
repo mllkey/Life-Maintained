@@ -20,19 +20,10 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
+import { jsonResponse as json } from "../_shared/json.ts";
+import { requireUser, AuthError } from "../_shared/auth.ts";
+import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
@@ -41,9 +32,8 @@ function addMonths(date: Date, months: number): Date {
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: corsHeaders });
-  }
+  const pre = handlePreflight(req);
+  if (pre) return pre;
 
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
@@ -139,8 +129,7 @@ serve(async (req: Request) => {
       : (typeof vehicle_type === "string" ? vehicle_type : "gas");
     const resolvedIsAwd = typeof is_awd === "boolean" ? is_awd : false;
 
-    // ── Preload mode: skip auth/ownership/insert, just cache ────────────
-    const isPreload = typeof vehicle_id === "string" && vehicle_id.startsWith("preload-");
+    // Preload mode removed (closes PASS-B-004). Auth is mandatory below.
 
     // ── Category exclusion map ─────────────────────────────────────────────
     const CATEGORY_EXCLUSIONS: Record<string, string[]> = {
@@ -224,108 +213,86 @@ serve(async (req: Request) => {
       rv: [],
     };
 
-    // ── 2. Authenticate user from JWT (skipped in preload mode) ───────────
+    // ── 2. Authenticate user from JWT (real signature verification) ──
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-    let authUserId = "preload";
+    let authUserId = "";
     let isServiceRoleCall = false;
-    if (!isPreload) {
-      const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
 
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        console.error("[AUTH] Missing or invalid Authorization header");
-        return json({ error: "Missing or invalid Authorization header" }, 401);
-      }
-      const jwt = authHeader.replace("Bearer ", "").trim();
-
-      // Check if caller is using service role key (admin/script calls)
-      try {
-        const parts = jwt.split(".");
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1]));
-          if (payload.iss === "supabase" && payload.role === "service_role") {
-            isServiceRoleCall = true;
-          }
-        }
-      } catch {}
-
-      if (!isServiceRoleCall) {
-        const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-          global: { headers: { Authorization: `Bearer ${jwt}` } },
-        });
-
-        const { data: { user }, error: authError } = await userClient.auth.getUser();
-
-        if (authError || !user) {
-          console.error("[AUTH] Auth failed — authError:", authError?.message, "user:", user?.id);
-          return json({ error: "Unauthorized: invalid or expired token" }, 401);
-        }
-        authUserId = user.id;
-      }
+    // Distinguish service-role admin calls from user calls by detecting
+    // the service role key directly. We compare against the env var so
+    // the check is constant-time-ish and doesnt rely on parsing the JWT.
+    const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return json({ error: "Missing or invalid Authorization header" }, 401);
+    }
+    const incomingJwt = authHeader.replace("Bearer ", "").trim();
+    if (supabaseServiceKey && incomingJwt === supabaseServiceKey) {
+      isServiceRoleCall = true;
+    } else {
+      const { userId } = await requireUser(req);
+      authUserId = userId;
     }
 
     // ── 3. Verify vehicle ownership ────────────────────────────────────────
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    if (!isPreload) {
-      if (isServiceRoleCall) {
-        // Admin call: look up user_id from vehicles table instead of verifying ownership
-        const { data: vRow } = await adminClient.from("vehicles").select("user_id").eq("id", vehicle_id).maybeSingle();
-        if (!vRow?.user_id) {
-          return json({ error: "Vehicle not found" }, 404);
-        }
-        authUserId = vRow.user_id;
-      } else {
-        const { data: vehicle, error: vehicleError } = await adminClient
-          .from("vehicles")
-          .select("id")
-          .eq("id", vehicle_id)
-          .eq("user_id", authUserId)
-          .maybeSingle();
-
-        if (vehicleError) {
-          console.error("Vehicle lookup error:", vehicleError);
-          return json({ error: "Failed to verify vehicle ownership", detail: vehicleError.message }, 500);
-        }
-        if (!vehicle) {
-          return json({ error: "Forbidden: vehicle not found or does not belong to this user" }, 403);
-        }
+    if (isServiceRoleCall) {
+      // Admin call: look up user_id from vehicles table instead of verifying ownership
+      const { data: vRow } = await adminClient.from("vehicles").select("user_id").eq("id", vehicle_id).maybeSingle();
+      if (!vRow?.user_id) {
+        return json({ error: "Vehicle not found" }, 404);
       }
+      authUserId = vRow.user_id;
+    } else {
+      const { data: vehicle, error: vehicleError } = await adminClient
+        .from("vehicles")
+        .select("id")
+        .eq("id", vehicle_id)
+        .eq("user_id", authUserId)
+        .maybeSingle();
+
+      if (vehicleError) {
+        console.error("Vehicle lookup error:", vehicleError);
+        return json({ error: "Failed to verify vehicle ownership", detail: vehicleError.message }, 500);
+      }
+      if (!vehicle) {
+        return json({ error: "Forbidden: vehicle not found or does not belong to this user" }, 403);
+      }
+
+      // Rate limit on user calls only. Internal admin calls skip.
+      await enforceAiRateLimit(adminClient, authUserId, "generate-maintenance-schedule");
     }
 
     // ── 4. Check for existing tasks (prevent duplicate schedules) ──────────
-    if (!isPreload) {
-      if (isForceRefresh) {
-        // Delete only non-custom tasks — preserve tasks where is_custom = true
-        const { error: deleteErr } = await adminClient
-          .from("user_vehicle_maintenance_tasks")
-          .delete()
-          .eq("vehicle_id", vehicle_id)
-          .neq("is_custom", true);
-        if (deleteErr) {
-          console.error("[REFRESH] Delete existing tasks error:", deleteErr.message);
-          return json({ error: "Failed to clear existing schedule", detail: deleteErr.message }, 500);
-        }
-        console.log(`[REFRESH] Cleared non-custom tasks for vehicle ${vehicle_id}`);
-      } else {
-        const { count: existingCount, error: countError } = await adminClient
-          .from("user_vehicle_maintenance_tasks")
-          .select("id", { count: "exact", head: true })
-          .eq("vehicle_id", vehicle_id)
-          .eq("user_id", authUserId);
+    if (isForceRefresh) {
+      const { error: deleteErr } = await adminClient
+        .from("user_vehicle_maintenance_tasks")
+        .delete()
+        .eq("vehicle_id", vehicle_id)
+        .neq("is_custom", true);
+      if (deleteErr) {
+        console.error("[REFRESH] Delete existing tasks error:", deleteErr.message);
+        return json({ error: "Failed to clear existing schedule", detail: deleteErr.message }, 500);
+      }
+      console.log(`[REFRESH] Cleared non-custom tasks for vehicle ${vehicle_id}`);
+    } else {
+      const { count: existingCount, error: countError } = await adminClient
+        .from("user_vehicle_maintenance_tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("vehicle_id", vehicle_id)
+        .eq("user_id", authUserId);
 
-        if (countError) {
-          console.error("Count query error:", countError);
-          return json({ error: "Failed to check existing tasks", detail: countError.message }, 500);
-        }
-        if ((existingCount ?? 0) > 0) {
-          return json(
-            { error: "Maintenance schedule already exists for this vehicle. Delete existing tasks first to regenerate." },
-            409,
-          );
-        }
+      if (countError) {
+        console.error("Count query error:", countError);
+        return json({ error: "Failed to check existing tasks", detail: countError.message }, 500);
+      }
+      if ((existingCount ?? 0) > 0) {
+        return json(
+          { error: "Maintenance schedule already exists for this vehicle. Delete existing tasks first to regenerate." },
+          409,
+        );
       }
     }
 
@@ -948,9 +915,6 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
       }
 
       if (validatedTasks && validatedTasks.length >= 5) {
-        if (isPreload) {
-          return json({ success: true, source: "preload-ai", cached: true, task_count: validatedTasks.length });
-        }
         const aiTasksToInsert = validatedTasks.map(t => ({
           user_id: authUserId, vehicle_id, template_id: null,
           name: t.task, description: t.description, category: t.category,
@@ -1017,9 +981,6 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
       console.warn(`[TEMPLATE FALLBACK] Hours-tracked asset ${vehicleCategory} falling back to time-only templates. AI generation failed or was unavailable.`);
     }
 
-    if (isPreload) {
-      return json({ success: true, source: "preload-template-fallback", cached: false, message: "AI generation failed, no cache created" });
-    }
 
     // ── 5. Determine which vehicle_type values to query ────────────────────
     // Note: `maintenance_templates.vehicle_type` is used in this project for fuel-type-aware templates.
@@ -1338,6 +1299,15 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     return json({ success: true, tasks_created: tasksToInsert.length, estimates_cached: tplEstimatesCached, vehicle_id, source: "template", ...(tplEstimateWarning ? { warning: tplEstimateWarning } : {}) });
 
   } catch (err) {
+    if (err instanceof AuthError) {
+      return json({ error: err.message }, err.status);
+    }
+    if (err instanceof RateLimitError) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
+      });
+    }
     console.error("Unhandled error:", err);
     const message = err instanceof Error ? err.message : String(err);
     return json({ error: "Failed to generate schedule", detail: message }, 500);
