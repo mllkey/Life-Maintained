@@ -64,7 +64,7 @@ export default function BuildingPlanScreen() {
   const displayName = (vehicleName || `${yearStr} ${make} ${model}`).trim();
 
   const [typedName, setTypedName] = React.useState("");
-  const [subtitleText, setSubtitleText] = React.useState("Reading the factory service manual");
+  const [subtitleText, setSubtitleText] = React.useState("Reading the factory service manual");  // beat-driven swaps below override at 1.4/1.7/3.6/8.0s
   const [ready, setReady] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
 
@@ -188,6 +188,17 @@ export default function BuildingPlanScreen() {
     hasAttempted.current = true;
     sceneStart.current = Date.now();
 
+    // Beat-driven subtitle (matches chip stagger + particle convergence + slow-state warning)
+    const subtitleTimers: ReturnType<typeof setTimeout>[] = [];
+    subtitleTimers.push(setTimeout(() => setSubtitleText(`Reading ${displayName}’s service manual`), 1400));
+    subtitleTimers.push(setTimeout(() => setSubtitleText("Checking your local climate"), 1700));
+    subtitleTimers.push(setTimeout(() => setSubtitleText("Building your personalized plan"), 3600));
+    subtitleTimers.push(setTimeout(() => {
+      if (!scheduleDone.current && !hasFinalized.current) {
+        setSubtitleText("Still working on this — almost there.");
+      }
+    }, 8000));
+
     // Stage 2: chips stagger in
     chip1Opacity.value = withDelay(1400, withTiming(1, { duration: 400 }));
     chip1Y.value = withDelay(1400, withSpring(0, { damping: 14, stiffness: 180 }));
@@ -228,6 +239,7 @@ export default function BuildingPlanScreen() {
 
     return () => {
       if (maxWaitTimer.current) clearTimeout(maxWaitTimer.current);
+      subtitleTimers.forEach(clearTimeout);
     };
   }, []);
 
@@ -273,7 +285,23 @@ export default function BuildingPlanScreen() {
     docScale.value = withDelay(4800, withTiming(0.85, { duration: 500 }));
 
     hasAttempted.current = true;
-    await generateSchedule();
+
+    // Beat-driven subtitle (mirrors initial useEffect — see above)
+    const retrySubtitleTimers: ReturnType<typeof setTimeout>[] = [];
+    retrySubtitleTimers.push(setTimeout(() => setSubtitleText(`Reading ${displayName}’s service manual`), 1400));
+    retrySubtitleTimers.push(setTimeout(() => setSubtitleText("Checking your local climate"), 1700));
+    retrySubtitleTimers.push(setTimeout(() => setSubtitleText("Building your personalized plan"), 3600));
+    retrySubtitleTimers.push(setTimeout(() => {
+      if (!scheduleDone.current && !hasFinalized.current) {
+        setSubtitleText("Still working on this — almost there.");
+      }
+    }, 8000));
+
+    try {
+      await generateSchedule();
+    } finally {
+      retrySubtitleTimers.forEach(clearTimeout);
+    }
   }
 
   async function handleContinueAnyway() {
@@ -372,7 +400,7 @@ export default function BuildingPlanScreen() {
             <Animated.View style={gearStyle}>
               <Ionicons name="settings" size={15} color={Colors.accent} />
             </Animated.View>
-            <Text style={styles.chipText}>Wear patterns</Text>
+            <Text style={styles.chipText}>Mileage + wear</Text>
           </Animated.View>
         </View>
       )}
