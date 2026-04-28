@@ -14,10 +14,13 @@ interface Props {
   assetType: ReceiptAssetType;
   assetId: string;
   onScanComplete: (result: ReceiptScanResult) => void;
+  /** Free-tier or unknown-tier user hits cap — caller typically opens Paywall. */
   onScanLimitReached?: () => void;
+  /** Paid user hits cap — caller typically opens ScanPackModal. */
+  onPaidUserAtCap?: () => void;
 }
 
-export default function ReceiptScanButton({ assetType, assetId, onScanComplete, onScanLimitReached }: Props) {
+export default function ReceiptScanButton({ assetType, assetId, onScanComplete, onScanLimitReached, onPaidUserAtCap }: Props) {
   const [scanning, setScanning] = useState(false);
 
   const handleScan = async (useCamera: boolean) => {
@@ -58,16 +61,21 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
       if (result.error) {
         const isScanLimit = result.scans_used != null && result.scans_limit != null && result.scans_used >= result.scans_limit;
 
-        if (isScanLimit && onScanLimitReached) {
-          Alert.alert(
-            "Scan Limit Reached",
-            `You've used all ${result.scans_limit} scans this month. Upgrade your plan for more.`,
-            [
-              { text: "Upgrade", onPress: onScanLimitReached },
-              { text: "Enter Manually", style: "cancel" },
-            ]
-          );
-          return;
+        if (isScanLimit) {
+          // Prefer pack modal for paid users; fall back to upgrade flow.
+          const handler = onPaidUserAtCap ?? onScanLimitReached;
+          if (handler) {
+            const ctaLabel = onPaidUserAtCap ? "Get More Scans" : "Upgrade";
+            Alert.alert(
+              "Scan Limit Reached",
+              `You've used all ${result.scans_limit} scans this month.`,
+              [
+                { text: ctaLabel, onPress: handler },
+                { text: "Enter Manually", style: "cancel" },
+              ]
+            );
+            return;
+          }
         }
 
         Alert.alert(

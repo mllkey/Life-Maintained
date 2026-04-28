@@ -22,6 +22,7 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import ReceiptScanButton from "@/components/ReceiptScanButton";
 import Paywall from "@/components/Paywall";
+import ScanPackModal from "@/components/ScanPackModal";
 import { isFreeTier } from "@/lib/subscription";
 import { ReceiptScanResult } from "@/lib/receiptScanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
@@ -51,6 +52,7 @@ export default function LogServiceScreen() {
   const scrollRef = useRef<any>(null);
   const scrollOffset = useRef(0);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [showScanPackModal, setShowScanPackModal] = useState(false);
   const [task, setTask] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [mileage, setMileage] = useState("");
@@ -465,6 +467,7 @@ export default function LogServiceScreen() {
                 assetId={vehicleId}
                 onScanComplete={handleScanComplete}
                 onScanLimitReached={() => setShowPaywall(true)}
+                onPaidUserAtCap={() => setShowScanPackModal(true)}
               />
             )}
           </View>
@@ -695,6 +698,11 @@ export default function LogServiceScreen() {
           />
         </Modal>
       )}
+      <ScanPackModal
+        visible={showScanPackModal}
+        onClose={() => setShowScanPackModal(false)}
+        onSuccess={() => setShowScanPackModal(false)}
+      />
       <SaveToast visible={successToastVisible} message={successToastTitle} subtitle={successToastSubtitle} />
     </KeyboardAvoidingView>
   );

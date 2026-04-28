@@ -1008,11 +1008,33 @@ export type Database = {
           },
         ]
       }
+      rate_limit_events: {
+        Row: {
+          fn_name: string
+          id: string
+          occurred_at: string
+          user_id: string
+        }
+        Insert: {
+          fn_name: string
+          id?: string
+          occurred_at?: string
+          user_id: string
+        }
+        Update: {
+          fn_name?: string
+          id?: string
+          occurred_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       receipt_scans: {
         Row: {
           asset_id: string
           asset_type: string
           completed_at: string | null
+          consumed_credit_id: string | null
           created_at: string
           duplicate_hash: string | null
           error_message: string | null
@@ -1033,6 +1055,7 @@ export type Database = {
           asset_id: string
           asset_type: string
           completed_at?: string | null
+          consumed_credit_id?: string | null
           created_at?: string
           duplicate_hash?: string | null
           error_message?: string | null
@@ -1053,6 +1076,7 @@ export type Database = {
           asset_id?: string
           asset_type?: string
           completed_at?: string | null
+          consumed_credit_id?: string | null
           created_at?: string
           duplicate_hash?: string | null
           error_message?: string | null
@@ -1069,7 +1093,15 @@ export type Database = {
           user_confirmed_output?: Json | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "receipt_scans_consumed_credit_id_fkey"
+            columns: ["consumed_credit_id"]
+            isOneToOne: false
+            referencedRelation: "scan_credits"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       referral_leads: {
         Row: {
@@ -1175,6 +1207,39 @@ export type Database = {
           shop_high?: number | null
           shop_low?: number | null
           vehicle_key?: string
+        }
+        Relationships: []
+      }
+      scan_credits: {
+        Row: {
+          exhausted_at: string | null
+          granted_at: string
+          id: string
+          scans_consumed: number
+          scans_granted: number
+          source: string
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          exhausted_at?: string | null
+          granted_at?: string
+          id?: string
+          scans_consumed?: number
+          scans_granted: number
+          source: string
+          transaction_id: string
+          user_id: string
+        }
+        Update: {
+          exhausted_at?: string | null
+          granted_at?: string
+          id?: string
+          scans_consumed?: number
+          scans_granted?: number
+          source?: string
+          transaction_id?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -1895,6 +1960,15 @@ export type Database = {
         Returns: string
       }
       _lm_table_exists: { Args: { p_table: string }; Returns: boolean }
+      check_rate_limit: {
+        Args: {
+          p_fn_name: string
+          p_max_calls?: number
+          p_user_id: string
+          p_window_seconds?: number
+        }
+        Returns: boolean
+      }
       complete_property_task: {
         Args: {
           p_completed_date?: string
@@ -1941,6 +2015,15 @@ export type Database = {
         Returns: Json
       }
       get_scan_quota: { Args: { p_user_id: string }; Returns: Json }
+      grant_scan_pack_credits: {
+        Args: {
+          p_scans_granted: number
+          p_source: string
+          p_transaction_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

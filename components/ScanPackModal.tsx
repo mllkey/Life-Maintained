@@ -51,20 +51,35 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const Purchases = (await import("react-native-purchases")).default;
-      await Purchases.purchaseProduct(pack.id);
+      const purchaseResult = await Purchases.purchaseProduct(pack.id);
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("monthly_scan_count")
-        .eq("user_id", user.id)
-        .single();
+      // Pull StoreKit transaction id for idempotency.
+      // Do NOT fall back to productIdentifier — two purchases of the same pack
+      // would collide on the same key and the second purchase would be silently
+      // ignored, taking the user's money without granting credits.
+      const txId =
+        (purchaseResult as any)?.transaction?.transactionIdentifier ??
+        null;
+      if (!txId || typeof txId !== "string") {
+        throw new Error("Missing transaction id from purchase result");
+      }
 
-      const current = (profile as any)?.monthly_scan_count ?? 0;
-      const newCount = Math.max(0, current - pack.scans);
-      await supabase
-        .from("profiles")
-        .update({ monthly_scan_count: newCount })
-        .eq("user_id", user.id);
+      const source = pack.id === "scan_pack_10" ? "pack_10" : "pack_25";
+      const { data: rpcData, error: rpcErr } = await supabase.rpc("grant_scan_pack_credits", {
+        p_user_id: user.id,
+        p_source: source,
+        p_transaction_id: txId,
+        p_scans_granted: pack.scans,
+      });
+
+      if (rpcErr) {
+        throw new Error(rpcErr.message ?? "Failed to grant credits");
+      }
+      const rpc = (rpcData ?? {}) as { ok?: boolean; idempotent?: boolean; error?: string; credits_granted?: number };
+      if (rpc.error) {
+        throw new Error(`Credit grant failed: ${rpc.error}`);
+      }
+
       await refreshProfile();
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
