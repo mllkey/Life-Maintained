@@ -419,13 +419,6 @@ const HARDCODED_MODELS: Record<string, Record<string, string[]>> = {
   },
 };
 
-type MfrTask = {
-  task: string;
-  mileage_interval: number | null;
-  interval_days: number | null;
-  estimated_cost: number;
-  priority: string;
-};
 
 function normalizeMake(raw: string): string {
   const upper = raw.toUpperCase();
@@ -674,7 +667,6 @@ export default function AddVehicleScreen() {
   const [showSaveToast, setShowSaveToast] = useState(false);
 
   const [hasManufacturerSchedule, setHasManufacturerSchedule] = useState(false);
-  const [manufacturerTasks, setManufacturerTasks] = useState<MfrTask[]>([]);
   const [isCheckingSchedule, setIsCheckingSchedule] = useState(false);
   const selectedVehicleCategory = vehicleType === "dump_truck" ? dumpTruckSubtype : vehicleType;
 
@@ -704,7 +696,6 @@ export default function AddVehicleScreen() {
     const yearNum = parseInt(year);
     if (!year || !make.trim() || isNaN(yearNum)) {
       setHasManufacturerSchedule(false);
-      setManufacturerTasks([]);
       setNhtsaModels([]);
       setModelLoadFailed(false);
       return;
@@ -714,22 +705,14 @@ export default function AddVehicleScreen() {
     setIsCheckingSchedule(true);
 
     supabase
-      .from("manufacturer_schedules")
-      .select("tasks")
-      .ilike("make", make.trim())
-      .lte("year_from", yearNum)
-      .or(`year_to.is.null,year_to.gte.${yearNum}`)
-      .maybeSingle()
-      .then(({ data }) => {
+      .from("maintenance_templates")
+      .select("id", { count: "exact", head: true })
+      .eq("make", "ALL")
+      .in("vehicle_type", [selectedVehicleCategory, "all"])
+      .then(({ count }) => {
         if (schedCancelled) return;
         setIsCheckingSchedule(false);
-        if (data) {
-          setHasManufacturerSchedule(true);
-          setManufacturerTasks((data.tasks as MfrTask[]) ?? []);
-        } else {
-          setHasManufacturerSchedule(false);
-          setManufacturerTasks([]);
-        }
+        setHasManufacturerSchedule((count ?? 0) > 0);
       });
 
     let modelCancelled = false;
@@ -837,7 +820,7 @@ export default function AddVehicleScreen() {
       schedCancelled = true;
       modelCancelled = true;
     };
-  }, [year, make, vehicleType]);
+  }, [year, make, vehicleType, selectedVehicleCategory]);
 
   useEffect(() => {
     if (!AWD_TYPES.has(vehicleType)) {
@@ -1760,7 +1743,7 @@ export default function AddVehicleScreen() {
                       <Text style={styles.scheduleBadgeText}>Manufacturer schedule available</Text>
                     </View>
                     <Text style={styles.scheduleTaskCount}>
-                      {manufacturerTasks.length} task{manufacturerTasks.length !== 1 ? "s" : ""} will be added
+                      Tasks will be added on save
                     </Text>
                   </>
                 )}
