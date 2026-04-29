@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -91,10 +91,27 @@ export default function BuildingPlanScreen() {
   const docGlow = useSharedValue(0);
   const readyOpacity = useSharedValue(0);
 
-  const particleProgress = useMemo(
-    () => Array.from({ length: PARTICLE_COUNT }, () => useSharedValue(0)),
-    []
-  );
+  // PASS-D-002 fix: useSharedValue must be called at top level on EVERY render.
+  // Previous useMemo([]) wrapper called these 12 hooks only on first render,
+  // causing a hook-count mismatch on re-renders that surfaced as a Reanimated
+  // ".length of undefined" crash. Each line below is a stable hook position.
+  const particle0 = useSharedValue(0);
+  const particle1 = useSharedValue(0);
+  const particle2 = useSharedValue(0);
+  const particle3 = useSharedValue(0);
+  const particle4 = useSharedValue(0);
+  const particle5 = useSharedValue(0);
+  const particle6 = useSharedValue(0);
+  const particle7 = useSharedValue(0);
+  const particle8 = useSharedValue(0);
+  const particle9 = useSharedValue(0);
+  const particle10 = useSharedValue(0);
+  const particle11 = useSharedValue(0);
+  const particleProgress = [
+    particle0, particle1, particle2, particle3,
+    particle4, particle5, particle6, particle7,
+    particle8, particle9, particle10, particle11,
+  ];
 
   const generateSchedule = useCallback(async () => {
     if (!vehicleId) {

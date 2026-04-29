@@ -40,7 +40,9 @@ export default function ValueRevealScreen() {
         .eq("vehicle_id", vehicleId)
         .order("next_due_date", { ascending: true, nullsFirst: false })
         .limit(5);
-      return data ?? [];
+      // PASS-D-002 defensive: skip rows with null/non-string name so downstream
+      // .toLowerCase() and .length accesses cannot throw.
+      return (data ?? []).filter(t => typeof t.name === "string" && t.name.length > 0);
     },
     enabled: !!vehicleId && !pollTimedOut,
     refetchInterval: query => {
