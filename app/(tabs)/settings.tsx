@@ -392,13 +392,21 @@ export default function SettingsScreen() {
                     if (error || !data?.success) {
                       throw new Error(data?.error ?? error?.message ?? "Something went wrong.");
                     }
+                    try {
+                      const Purchases = (await import("react-native-purchases")).default;
+                      await Purchases.logOut();
+                    } catch (rcErr) {
+                      const rcMessage = rcErr instanceof Error ? rcErr.message : String(rcErr);
+                      console.warn("[delete-account] Purchases.logOut failed:", rcMessage);
+                    }
                     await AsyncStorage.clear();
                     queryClient.clear();
                     await supabase.auth.signOut();
                     router.replace("/(auth)");
-                  } catch (err: any) {
+                  } catch (err) {
                     isDeletingAccountRef.current = false;
-                    Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+                    const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+                    Alert.alert("Delete Failed", message);
                   }
                 },
               },

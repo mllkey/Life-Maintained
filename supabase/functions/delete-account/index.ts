@@ -7,11 +7,51 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const RC_DELETE_TIMEOUT_MS = 8000;
+const GENERIC_ERROR_MESSAGE = "Failed to delete account. Please try again.";
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+type RcDeleteOutcome =
+  | { kind: "success"; status: number }
+  | { kind: "not_found"; status: number }
+  | { kind: "skipped"; reason: string }
+  | { kind: "failure"; status: number | null; body: string };
+
+async function attemptRcDelete(
+  rcApiKey: string,
+  appUserId: string,
+): Promise<RcDeleteOutcome> {
+  if (!appUserId) return { kind: "skipped", reason: "empty app_user_id" };
+
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), RC_DELETE_TIMEOUT_MS);
+
+  try {
+    const encoded = encodeURIComponent(appUserId);
+    const res = await fetch(`https://api.revenuecat.com/v1/subscribers/${encoded}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${rcApiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+    });
+    if (res.ok) return { kind: "success", status: res.status };
+    if (res.status === 404) return { kind: "not_found", status: 404 };
+    const body = await res.text().catch(() => "");
+    return { kind: "failure", status: res.status, body: body.slice(0, 1000) };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { kind: "failure", status: null, body: msg.slice(0, 1000) };
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
 }
 
 serve(async (req: Request) => {
@@ -25,8 +65,8 @@ serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const rcApiKey = Deno.env.get("REVENUECAT_REST_API_KEY") ?? "";
 
-  // Verify the JWT and get the user
   const userClient = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   });
@@ -40,88 +80,88 @@ serve(async (req: Request) => {
   });
 
   try {
-    // Fetch vehicle IDs and property IDs upfront for join-based deletes
-    const { data: vehicles, error: vehiclesErr } = await adminClient
-      .from("vehicles")
-      .select("id")
-      .eq("user_id", userId);
-    if (vehiclesErr) return json({ error: `Failed to fetch vehicles: ${vehiclesErr.message}` }, 500);
-    const vehicleIds = (vehicles ?? []).map((v: { id: string }) => v.id);
-
-    const { data: properties, error: propertiesErr } = await adminClient
-      .from("properties")
-      .select("id")
-      .eq("user_id", userId);
-    if (propertiesErr) return json({ error: `Failed to fetch properties: ${propertiesErr.message}` }, 500);
-    const propertyIds = (properties ?? []).map((p: { id: string }) => p.id);
-
-    // 1. maintenance_logs
-    const { error: e1 } = await adminClient.from("maintenance_logs").delete().eq("user_id", userId);
-    if (e1) return json({ error: `Failed to delete maintenance_logs: ${e1.message}` }, 500);
-
-    // 2. user_vehicle_maintenance_tasks
-    const { error: e2 } = await adminClient.from("user_vehicle_maintenance_tasks").delete().eq("user_id", userId);
-    if (e2) return json({ error: `Failed to delete user_vehicle_maintenance_tasks: ${e2.message}` }, 500);
-
-    // 3. vehicle_mileage_history (joined via vehicle_id)
-    if (vehicleIds.length > 0) {
-      const { error: e3 } = await adminClient.from("vehicle_mileage_history").delete().in("vehicle_id", vehicleIds);
-      if (e3) return json({ error: `Failed to delete vehicle_mileage_history: ${e3.message}` }, 500);
+    // Step 1: prepare — fetch RC customer ID before profiles cascades away.
+    const { data: prepData, error: prepErr } = await adminClient.rpc(
+      "prepare_user_account_deletion",
+      { p_user_id: userId },
+    );
+    if (prepErr) {
+      console.error("[delete-account] prepare_user_account_deletion failed:", prepErr);
+      return json({ error: GENERIC_ERROR_MESSAGE }, 500);
     }
+    const prepResult = (prepData ?? {}) as { revenuecat_customer_id: string | null };
+    const rcCustomerId = prepResult.revenuecat_customer_id ?? null;
 
-    // 4. vehicle_wallet_documents
-    const { error: e4 } = await adminClient.from("vehicle_wallet_documents").delete().eq("user_id", userId);
-    if (e4) return json({ error: `Failed to delete vehicle_wallet_documents: ${e4.message}` }, 500);
-
-    // 5. vehicles
-    const { error: e5 } = await adminClient.from("vehicles").delete().eq("user_id", userId);
-    if (e5) return json({ error: `Failed to delete vehicles: ${e5.message}` }, 500);
-
-    // 6. property_maintenance_tasks (joined via property_id)
-    if (propertyIds.length > 0) {
-      const { error: e6 } = await adminClient.from("property_maintenance_tasks").delete().in("property_id", propertyIds);
-      if (e6) return json({ error: `Failed to delete property_maintenance_tasks: ${e6.message}` }, 500);
-    }
-
-    // 7. properties
-    const { error: e7 } = await adminClient.from("properties").delete().eq("user_id", userId);
-    if (e7) return json({ error: `Failed to delete properties: ${e7.message}` }, 500);
-
-    // 8. health_appointments
-    const { error: e8 } = await adminClient.from("health_appointments").delete().eq("user_id", userId);
-    if (e8) return json({ error: `Failed to delete health_appointments: ${e8.message}` }, 500);
-
-    // 9. medications
-    const { error: e9 } = await adminClient.from("medications").delete().eq("user_id", userId);
-    if (e9) return json({ error: `Failed to delete medications: ${e9.message}` }, 500);
-
-    // 10. family_members
-    const { error: e10 } = await adminClient.from("family_members").delete().eq("user_id", userId);
-    if (e10) return json({ error: `Failed to delete family_members: ${e10.message}` }, 500);
-
-    // 11. health_profiles
-    const { error: e11 } = await adminClient.from("health_profiles").delete().eq("user_id", userId);
-    if (e11) return json({ error: `Failed to delete health_profiles: ${e11.message}` }, 500);
-
-    // 12. notifications
-    const { error: e12 } = await adminClient.from("notifications").delete().eq("user_id", userId);
-    if (e12) return json({ error: `Failed to delete notifications: ${e12.message}` }, 500);
-
-    // 13. promo_redemptions
-    const { error: e13 } = await adminClient.from("promo_redemptions").delete().eq("user_id", userId);
-    if (e13) return json({ error: `Failed to delete promo_redemptions: ${e13.message}` }, 500);
-
-    // 14. profiles
-    const { error: e14 } = await adminClient.from("profiles").delete().eq("user_id", userId);
-    if (e14) return json({ error: `Failed to delete profiles: ${e14.message}` }, 500);
-
-    // 15. Delete the auth user (requires service role)
+    // Step 2: hard-delete the auth user. Cascades 32+ user-owned tables atomically.
+    // Runs BEFORE Storage purge so a still-valid JWT cannot create new objects
+    // between purge and auth delete.
     const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(userId);
-    if (deleteAuthError) return json({ error: `Failed to delete auth user: ${deleteAuthError.message}` }, 500);
+    if (deleteAuthError) {
+      console.error("[delete-account] auth.admin.deleteUser failed:", deleteAuthError);
+      return json({ error: GENERIC_ERROR_MESSAGE }, 500);
+    }
 
-    return json({ success: true });
-  } catch (err: any) {
-    console.error("[delete-account] Unexpected error:", err?.message ?? err);
-    return json({ error: "Failed to delete account. Please try again." }, 500);
+    // Step 3: purge Storage objects under {userId}/ prefix. Best-effort —
+    // failure here doesn't undo auth delete; log to failed_storage_deletions
+    // for nightly sweep retry.
+    let storageDeleted: Record<string, number> | null = null;
+    const { data: purgeData, error: purgeErr } = await adminClient.rpc(
+      "purge_user_storage_objects",
+      { p_user_id: userId },
+    );
+    if (purgeErr) {
+      console.error("[delete-account] purge_user_storage_objects failed:", purgeErr);
+      const { error: logErr } = await adminClient
+        .from("failed_storage_deletions")
+        .insert({
+          user_id: userId,
+          failure_kind: "rpc_failure",
+          response_body: (purgeErr.message ?? "").slice(0, 1000),
+        });
+      if (logErr) console.error("[delete-account] failed_storage_deletions insert error:", logErr);
+    } else {
+      storageDeleted = (purgeData ?? null) as Record<string, number> | null;
+    }
+
+    // Step 4: best-effort RevenueCat REST DELETE for app_user_id (= userId)
+    // and, if distinct, for the stored revenuecat_customer_id.
+    const rcTargets: string[] = [userId];
+    if (rcCustomerId && rcCustomerId !== userId) rcTargets.push(rcCustomerId);
+
+    if (!rcApiKey) {
+      const rows = rcTargets.map((id) => ({
+        user_id: userId,
+        rc_app_user_id: id,
+        failure_kind: "missing_rest_api_key",
+        status_code: null,
+        response_body: null,
+      }));
+      const { error: logErr } = await adminClient
+        .from("failed_rc_deletions")
+        .insert(rows);
+      if (logErr) console.error("[delete-account] failed_rc_deletions insert error:", logErr);
+    } else {
+      for (const target of rcTargets) {
+        const outcome = await attemptRcDelete(rcApiKey, target);
+        if (outcome.kind === "failure") {
+          const { error: logErr } = await adminClient
+            .from("failed_rc_deletions")
+            .insert({
+              user_id: userId,
+              rc_app_user_id: target,
+              failure_kind: "rest_failure",
+              status_code: outcome.status,
+              response_body: outcome.body,
+            });
+          if (logErr) console.error("[delete-account] failed_rc_deletions insert error:", logErr);
+        }
+      }
+    }
+
+    return json({ success: true, storage_deleted: storageDeleted });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[delete-account] Unexpected error:", msg);
+    return json({ error: GENERIC_ERROR_MESSAGE }, 500);
   }
 });
