@@ -19,7 +19,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
-import { rcReady } from "@/lib/revenuecat";
+import { rcReady, extractTierHintFromCustomerInfo, syncSubscriptionFromRc } from "@/lib/revenuecat";
 
 type Billing = "monthly" | "annual";
 type TierKey = "personal" | "pro" | "business";
@@ -124,12 +124,13 @@ export default function Paywall({
     latestProfileTierRef.current = profile?.subscription_tier ?? null;
   }, [profile?.subscription_tier]);
 
-  const waitForWebhookProfileTier = async (expectedTier: string): Promise<void> => {
+  const waitForWebhookProfileTier = async (expectedTier: string): Promise<boolean> => {
     for (let i = 0; i < 8; i++) {
       await refreshProfile();
-      if (latestProfileTierRef.current === expectedTier) return;
+      if (latestProfileTierRef.current === expectedTier) return true;
       if (i < 7) await new Promise(r => setTimeout(r, 1000));
     }
+    return false;
   };
 
   useEffect(() => {
@@ -165,10 +166,28 @@ export default function Paywall({
     setIsPurchasing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
+    // Apple sandbox routinely takes >30s and can exceed 120s during
+    // outages. Do not tell the user the purchase failed while purchasePackage
+    // is still in flight.
+    //
+    // 30s soft hint: toast only. Spinner stays. CTA stays disabled.
+    // 150s long-wait nudge: advisory Alert only. Does NOT set isPurchasing
+    // false — that would re-enable the CTA and allow a duplicate purchase
+    // attempt while StoreKit is still working. The original purchase promise
+    // remains authoritative and runs the normal finally{} cleanup when it
+    // eventually resolves or rejects.
     purchaseTimeoutRef.current = setTimeout(() => {
-      setIsPurchasing(false);
-      Alert.alert("Hmm, that didn't work", "Give it another shot.");
+      setToastMessage("Still waiting on Apple…");
+      setToastVisible(true);
+      setTimeout(() => setToastVisible(false), 2400);
     }, 30000);
+
+    const purchaseEscapeTimeout = setTimeout(() => {
+      Alert.alert(
+        "Still waiting on Apple",
+        "This is taking longer than expected. You can leave this screen — if Apple completes the charge, you can come back and tap Restore Purchases."
+      );
+    }, 150000);
 
     try {
       const Purchases = (await import("react-native-purchases")).default;
@@ -179,6 +198,7 @@ export default function Paywall({
 
       if (!offering) {
         if (purchaseTimeoutRef.current) { clearTimeout(purchaseTimeoutRef.current); purchaseTimeoutRef.current = null; }
+        clearTimeout(purchaseEscapeTimeout);
         setIsPurchasing(false);
         Alert.alert("Couldn't load pricing", "Give it another shot.");
         return;
@@ -190,6 +210,7 @@ export default function Paywall({
 
       if (!pkg) {
         if (purchaseTimeoutRef.current) { clearTimeout(purchaseTimeoutRef.current); purchaseTimeoutRef.current = null; }
+        clearTimeout(purchaseEscapeTimeout);
         setIsPurchasing(false);
         Alert.alert("Plan unavailable", "This plan isn't available right now. Try a different one.");
         return;
@@ -197,6 +218,7 @@ export default function Paywall({
 
       const { customerInfo } = await Purchases.purchasePackage(pkg);
       if (purchaseTimeoutRef.current) clearTimeout(purchaseTimeoutRef.current);
+      clearTimeout(purchaseEscapeTimeout);
 
       const active = customerInfo?.entitlements?.active ?? {};
       const tier = active["business_access"] ? "business"
@@ -204,21 +226,43 @@ export default function Paywall({
         : active["personal_access"] ? "personal" : null;
 
       if (tier) {
-        await waitForWebhookProfileTier(tier);
+        const synced = await waitForWebhookProfileTier(tier);
 
-        setToastMessage("Welcome to LifeMaintained Premium!");
-        setToastVisible(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setTimeout(() => {
-          setToastVisible(false);
-          onDismiss?.();
-        }, 1600);
+        if (synced) {
+          setToastMessage("Welcome to LifeMaintained Premium!");
+          setToastVisible(true);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setTimeout(() => {
+            setToastVisible(false);
+            onDismiss?.();
+          }, 1600);
+        } else {
+          const syncResult = await syncSubscriptionFromRc();
+          await refreshProfile();
+
+          if (syncResult.ok && latestProfileTierRef.current === tier) {
+            setToastMessage("Welcome to LifeMaintained Premium!");
+            setToastVisible(true);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setTimeout(() => {
+              setToastVisible(false);
+              onDismiss?.();
+            }, 1600);
+          } else {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            Alert.alert(
+              "Almost there",
+              "Your purchase went through but we couldn't activate it just yet. Tap Restore Purchases to finish, or contact support@lifemaintained.com if it doesn't update."
+            );
+          }
+        }
       } else {
         console.warn("[Paywall] Purchase completed but no entitlement found:", JSON.stringify(active));
         Alert.alert("Something went wrong", "Your purchase was processed but we couldn't activate your plan. Please tap Restore Purchases, or contact support@lifemaintained.com.");
       }
     } catch (err: any) {
       if (purchaseTimeoutRef.current) clearTimeout(purchaseTimeoutRef.current);
+      clearTimeout(purchaseEscapeTimeout);
       if (!err?.userCancelled) {
         Alert.alert("Purchase didn't go through", err?.message ?? "Give it another shot.");
       }
@@ -229,25 +273,43 @@ export default function Paywall({
 
   async function handleRestore() {
     if (Platform.OS === "web") return;
+    if (!user) {
+      Alert.alert("Sign in first", "Please sign in to restore your purchases.");
+      return;
+    }
     setIsRestoring(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const Purchases = (await import("react-native-purchases")).default;
       const customerInfo = await Purchases.restorePurchases();
-      const active = customerInfo?.entitlements?.active ?? {};
-      const tier = active["business_access"] ? "business"
-        : active["pro_access"] ? "pro"
-        : active["personal_access"] ? "personal" : null;
+      const tierHint = extractTierHintFromCustomerInfo(customerInfo);
 
-      if (tier && user) {
-        await waitForWebhookProfileTier(tier);
-        setToastMessage("Purchases restored!");
-        setToastVisible(true);
-        setTimeout(() => { setToastVisible(false); onDismiss?.(); }, 1600);
-      } else {
+      if (!tierHint) {
         Alert.alert("No purchases found", "If you think this is wrong, reach out to us at support@lifemaintained.com.");
+        return;
       }
-    } catch {
+
+      const syncResult = await syncSubscriptionFromRc();
+      if (!syncResult.ok) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert("Restore couldn't finish", "We saw your purchase but couldn't update your account. Please try again or contact support@lifemaintained.com.");
+        return;
+      }
+
+      await refreshProfile();
+
+      if (syncResult.tier === "free") {
+        Alert.alert("No active subscription", "We couldn't find an active subscription on this Apple ID. Contact support@lifemaintained.com if you think this is wrong.");
+        return;
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setToastMessage("Purchases restored!");
+      setToastVisible(true);
+      setTimeout(() => { setToastVisible(false); onDismiss?.(); }, 1600);
+    } catch (e) {
+      console.error("[Paywall] Restore failed:", e);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Restore didn't work", "Give it another shot.");
     } finally {
       setIsRestoring(false);

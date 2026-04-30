@@ -55,7 +55,7 @@ focusManager.setEventListener((handleFocus) => {
 });
 
 function RootLayoutNav() {
-  const { session, isLoading, onboardingCompleted } = useAuth();
+  const { session, isLoading, onboardingCompleted, refreshProfile } = useAuth();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
@@ -102,6 +102,59 @@ function RootLayoutNav() {
       }
     })();
   }, [session?.user?.id]);
+
+  // RC customerInfoUpdate listener — keeps the client in sync with background
+  // renewals, expirations, and billing-issue resolutions even when the
+  // server-side webhook is delayed or hasn't fired yet. Throttled at 5s
+  // because RevenueCat can emit multiple customerInfo updates in quick
+  // succession; the Paywall flow handles its own post-purchase sync directly.
+  useEffect(() => {
+    if (!session?.user?.id || Platform.OS === "web") return;
+
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+    let lastSyncAt = 0;
+
+    (async () => {
+      try {
+        await rcReady;
+        if (cancelled) return;
+        const Purchases = (await import("react-native-purchases")).default;
+        const { syncSubscriptionFromRc } = await import("@/lib/revenuecat");
+
+        const handler = async () => {
+          const now = Date.now();
+          if (now - lastSyncAt < 5000) return;
+          lastSyncAt = now;
+
+          try {
+            const result = await syncSubscriptionFromRc();
+            if (result.ok) {
+              await refreshProfile();
+            }
+          } catch (e) {
+            console.error("[RevenueCat] customerInfoUpdate handler failed:", e);
+          }
+        };
+
+        Purchases.addCustomerInfoUpdateListener(handler);
+        cleanup = () => {
+          try {
+            Purchases.removeCustomerInfoUpdateListener(handler);
+          } catch (e) {
+            console.warn("[RevenueCat] listener cleanup failed:", e);
+          }
+        };
+      } catch (e) {
+        console.error("[RevenueCat] listener setup failed:", e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (cleanup) cleanup();
+    };
+  }, [session?.user?.id, refreshProfile]);
 
   // Deep link: lifemaintained://reset-password → password reset (no session gate)
   useEffect(() => {

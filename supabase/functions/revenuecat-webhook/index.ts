@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | undefined;
 
 const UPGRADE_EVENTS = new Set([
   "INITIAL_PURCHASE",
@@ -131,16 +130,13 @@ serve(async (req) => {
     return new Response("Bad request", { status: 400, headers: corsHeaders });
   }
 
-  const work = processWebhook(rawBody).catch((e) =>
-    console.error("[WEBHOOK] Top-level processWebhook error:", e)
-  );
-
-  // Prefer waitUntil for background processing. If unavailable in this runtime,
-  // await synchronously rather than risk dropping events on shutdown.
-  if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
-    EdgeRuntime.waitUntil(work);
-  } else {
-    await work;
+  // Process synchronously so transient DB errors return 5xx and RevenueCat
+  // retries. Background processing silently dropped failures.
+  try {
+    await processWebhook(rawBody);
+  } catch (e) {
+    console.error("[WEBHOOK] processWebhook failed, returning 500 for retry:", e);
+    return new Response("Processing failed", { status: 500, headers: corsHeaders });
   }
 
   return new Response("OK", { status: 200, headers: corsHeaders });
@@ -200,6 +196,10 @@ async function processWebhook(rawBody: string): Promise<void> {
       ? result.error
       : (result as any).reason ?? (result as any).note ?? null
   );
+
+  if (result.status === "failed") {
+    throw new Error(`handleEvent failed: ${result.error}`);
+  }
 }
 
 async function markEvent(
