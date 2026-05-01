@@ -143,8 +143,8 @@ export default function PropertyTaskHistoryScreen() {
                       <Pressable
                         style={({ pressed }) => [styles.logCardMain, { opacity: pressed ? 0.85 : 1 }]}
                         onPress={() => {
-                          Haptics.selectionAsync();
                           setExpandedId(isExpanded ? null : log.id);
+                          Haptics.selectionAsync();
                         }}
                         accessibilityRole="button"
                         accessibilityLabel={`${formattedDate ?? "Service"}, ${log.cost != null ? "$" + log.cost.toFixed(2) : ""}`}

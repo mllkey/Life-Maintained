@@ -809,8 +809,8 @@ export default function PropertyDetailScreen() {
                         key={group.name}
                         style={({ pressed }) => [styles.historyGroupCard, { opacity: pressed ? 0.8 : 1 }]}
                         onPress={() => {
-                          Haptics.selectionAsync();
                           router.push(`/property-task-history/${id}?task=${encodeURIComponent(group.name)}` as any);
+                          Haptics.selectionAsync();
                         }}
                       >
                         <View style={styles.historyGroupCardLeft}>

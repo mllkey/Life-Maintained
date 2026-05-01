@@ -177,8 +177,8 @@ export default function VehicleTaskHistoryScreen() {
                       <Pressable
                         style={({ pressed }) => [styles.logCardMain, { opacity: pressed ? 0.85 : 1 }]}
                         onPress={() => {
-                          Haptics.selectionAsync();
                           setExpandedId(isExpanded ? null : log.id);
+                          Haptics.selectionAsync();
                         }}
                         accessibilityRole="button"
                         accessibilityLabel={`${formattedDate ?? "Service"}${log.cost != null ? ", $" + log.cost.toFixed(2) : ""}`}
@@ -264,8 +264,8 @@ export default function VehicleTaskHistoryScreen() {
                             <Pressable
                               style={({ pressed }) => [styles.editBtn, { opacity: pressed ? 0.7 : 1 }]}
                               onPress={() => {
-                                Haptics.selectionAsync();
                                 router.push(`/log-service/${vehicleId}?editId=${log.id}` as any);
+                                Haptics.selectionAsync();
                               }}
                             >
                               <Ionicons name="pencil-outline" size={13} color={Colors.vehicle} />

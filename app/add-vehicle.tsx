@@ -1374,13 +1374,12 @@ export default function AddVehicleScreen() {
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: isSelected }}
                                 onPress={() => {
-                                  Haptics.selectionAsync().catch(() => {});
                                   setVehicleType(t.value);
                                   setMake("");
                                   setModel("");
                                   setAvgMilesPerMonth("");
-                                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
                                   setOnboardingTypeSheetVisible(false);
+                                  Haptics.selectionAsync().catch(() => {});
                                 }}
                                 style={({ pressed }) => [{ height: 56, flexDirection: "row", alignItems: "center", paddingHorizontal: 20, gap: 14, backgroundColor: pressed ? "#141A26" : "transparent" }]}
                               >
@@ -1465,10 +1464,10 @@ export default function AddVehicleScreen() {
                     style={[styles.typeCard, isSelected && styles.typeCardSelected, { width: "auto", minWidth: 80, paddingHorizontal: 12 }]}
                     onPress={() => {
                       Keyboard.dismiss();
-                      Haptics.selectionAsync();
                       setVehicleType(t.value);
                       setMake("");
                       setModel("");
+                      Haptics.selectionAsync();
                     }}
                   >
                     <MaterialCommunityIcons name={t.icon as any} size={22} color={isSelected ? Colors.accent : Colors.textSecondary} />
@@ -1507,11 +1506,11 @@ export default function AddVehicleScreen() {
                     { opacity: pressed ? 0.8 : 1 },
                   ]}
                   onPress={() => {
-                    Haptics.selectionAsync();
                     setTrailerSubtype("dump_scissor");
                     setVehicleType("dump_trailer");
                     setMake("");
                     setModel("");
+                    Haptics.selectionAsync();
                   }}
                 >
                   <Text style={[styles.presetChipText, trailerSubtype === "dump_scissor" && styles.presetChipTextActive]}>
@@ -1526,11 +1525,11 @@ export default function AddVehicleScreen() {
                     { opacity: pressed ? 0.8 : 1 },
                   ]}
                   onPress={() => {
-                    Haptics.selectionAsync();
                     setTrailerSubtype("dump_hydraulic");
                     setVehicleType("dump_trailer");
                     setMake("");
                     setModel("");
+                    Haptics.selectionAsync();
                   }}
                 >
                   <Text style={[styles.presetChipText, trailerSubtype === "dump_hydraulic" && styles.presetChipTextActive]}>
@@ -1545,11 +1544,11 @@ export default function AddVehicleScreen() {
                     { opacity: pressed ? 0.8 : 1 },
                   ]}
                   onPress={() => {
-                    Haptics.selectionAsync();
                     setTrailerSubtype("enclosed_cargo");
                     setVehicleType("trailer");
                     setMake("");
                     setModel("");
+                    Haptics.selectionAsync();
                   }}
                 >
                   <Text style={[styles.presetChipText, trailerSubtype === "enclosed_cargo" && styles.presetChipTextActive]}>
@@ -1564,11 +1563,11 @@ export default function AddVehicleScreen() {
                     { opacity: pressed ? 0.8 : 1 },
                   ]}
                   onPress={() => {
-                    Haptics.selectionAsync();
                     setTrailerSubtype("flatbed_utility");
                     setVehicleType("trailer");
                     setMake("");
                     setModel("");
+                    Haptics.selectionAsync();
                   }}
                 >
                   <Text style={[styles.presetChipText, trailerSubtype === "flatbed_utility" && styles.presetChipTextActive]}>
@@ -1583,11 +1582,11 @@ export default function AddVehicleScreen() {
                     { opacity: pressed ? 0.8 : 1 },
                   ]}
                   onPress={() => {
-                    Haptics.selectionAsync();
                     setTrailerSubtype("car_hauler");
                     setVehicleType("trailer");
                     setMake("");
                     setModel("");
+                    Haptics.selectionAsync();
                   }}
                 >
                   <Text style={[styles.presetChipText, trailerSubtype === "car_hauler" && styles.presetChipTextActive]}>
@@ -1602,11 +1601,11 @@ export default function AddVehicleScreen() {
                     { opacity: pressed ? 0.8 : 1 },
                   ]}
                   onPress={() => {
-                    Haptics.selectionAsync();
                     setTrailerSubtype("boat_trailer");
                     setVehicleType("trailer");
                     setMake("");
                     setModel("");
+                    Haptics.selectionAsync();
                   }}
                 >
                   <Text style={[styles.presetChipText, trailerSubtype === "boat_trailer" && styles.presetChipTextActive]}>
@@ -1627,11 +1626,11 @@ export default function AddVehicleScreen() {
                     { opacity: pressed ? 0.8 : 1 },
                   ]}
                   onPress={() => {
-                    Haptics.selectionAsync();
                     setDumpTruckSubtype("standard_dump");
                     setVehicleType("dump_truck");
                     setMake("");
                     setModel("");
+                    Haptics.selectionAsync();
                   }}
                 >
                   <Text style={[styles.presetChipText, dumpTruckSubtype === "standard_dump" && styles.presetChipTextActive]}>
@@ -1646,11 +1645,11 @@ export default function AddVehicleScreen() {
                     { opacity: pressed ? 0.8 : 1 },
                   ]}
                   onPress={() => {
-                    Haptics.selectionAsync();
                     setDumpTruckSubtype("roll_off");
                     setVehicleType("dump_truck");
                     setMake("");
                     setModel("");
+                    Haptics.selectionAsync();
                   }}
                 >
                   <Text style={[styles.presetChipText, dumpTruckSubtype === "roll_off" && styles.presetChipTextActive]}>
@@ -1665,11 +1664,11 @@ export default function AddVehicleScreen() {
                     { opacity: pressed ? 0.8 : 1 },
                   ]}
                   onPress={() => {
-                    Haptics.selectionAsync();
                     setDumpTruckSubtype("hook_lift");
                     setVehicleType("dump_truck");
                     setMake("");
                     setModel("");
+                    Haptics.selectionAsync();
                   }}
                 >
                   <Text style={[styles.presetChipText, dumpTruckSubtype === "hook_lift" && styles.presetChipTextActive]}>
@@ -1912,10 +1911,10 @@ export default function AddVehicleScreen() {
             <Pressable
               style={styles.toggleRow}
               onPress={() => {
-                Haptics.selectionAsync();
                 const next = !isSeasonal;
                 setIsSeasonal(next);
                 if (!next) { setSeasonStartMonth(null); setSeasonEndMonth(null); }
+                Haptics.selectionAsync();
               }}
             >
               <View>
@@ -2083,12 +2082,12 @@ export default function AddVehicleScreen() {
                         key={t.value}
                         style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 13, gap: 14, backgroundColor: pressed ? Colors.surface : "transparent" }]}
                         onPress={() => {
-                          Haptics.selectionAsync();
                           if (t.value === "trailer") {
                             setVehicleType((trailerSubtype === "dump_scissor" || trailerSubtype === "dump_hydraulic") ? "dump_trailer" : "trailer");
                           } else {
                             setVehicleType(t.value);
                           }
+                          Haptics.selectionAsync();
                           setMake("");
                           setModel("");
                           setMoreTypeSheetVisible(false);
