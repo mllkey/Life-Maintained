@@ -4,6 +4,7 @@ import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/json.ts";
 import { requireUser, hasEdgeSecret, AuthError } from "../_shared/auth.ts";
 import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
+import { requirePaidTier, PremiumGateError } from "../_shared/tierGate.ts";
 
 /**
  * Query maintenance_logs for real user costs on a matching service + vehicle type.
@@ -118,8 +119,9 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    // ── Rate limit only on user path. Internal preheats skip it. ────
+    // ── Premium gate + rate limit only on user path. Internal preheats skip. ────
     if (userIdForRateLimit) {
+      await requirePaidTier(supabase, userIdForRateLimit);
       await enforceAiRateLimit(supabase, userIdForRateLimit, "estimate-repair-cost");
     }
 
@@ -275,6 +277,9 @@ Base your estimates on current 2025-2026 market prices. Be accurate for this spe
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
       });
+    }
+    if (err instanceof PremiumGateError) {
+      return jsonResponse({ error: err.message }, err.status);
     }
     return jsonResponse({ error: (err as Error).message ?? "Unknown error" }, 500);
   }

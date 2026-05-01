@@ -255,7 +255,11 @@ function RootLayout() {
           if (__DEV__ && apiKey.startsWith("test_")) {
             console.warn("[RevenueCat] Using TEST key — replace with production key (appl_) before App Store submission");
           }
-          Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
+          if (__DEV__) {
+            Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
+          } else {
+            Purchases.setLogLevel(Purchases.LOG_LEVEL.WARN);
+          }
           Purchases.configure({ apiKey });
           signalRcReady();
         }

@@ -4,6 +4,7 @@ import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/json.ts";
 import { requireUser, AuthError } from "../_shared/auth.ts";
 import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
+import { requirePaidTier, PremiumGateError } from "../_shared/tierGate.ts";
 
 function addMonthsUTC(date: Date, months: number): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, date.getUTCDate()));
@@ -173,6 +174,8 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
+    // ── Premium gate ────────────────────────────────────────────────
+    await requirePaidTier(adminClient, userId);
     // ── Rate limit (per user, per fn) ───────────────────────────────
     await enforceAiRateLimit(adminClient, userId, "generate-health-schedule");
 
@@ -375,6 +378,9 @@ serve(async (req: Request) => {
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
       });
+    }
+    if (err instanceof PremiumGateError) {
+      return jsonResponse({ error: err.message }, err.status);
     }
     console.error("[ERROR]", err);
     return jsonResponse({ error: "Failed to generate health schedule", detail: err instanceof Error ? err.message : String(err) }, 500);

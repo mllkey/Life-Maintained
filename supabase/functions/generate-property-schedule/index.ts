@@ -4,6 +4,7 @@ import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { jsonResponse as json } from "../_shared/json.ts";
 import { requireUser, AuthError } from "../_shared/auth.ts";
 import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
+import { requirePaidTier, PremiumGateError } from "../_shared/tierGate.ts";
 
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
@@ -312,6 +313,8 @@ serve(async (req: Request) => {
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Premium gate
+    await requirePaidTier(adminClient, authUserId);
     // Rate limit (per user, per fn)
     await enforceAiRateLimit(adminClient, authUserId, "generate-property-schedule");
 
@@ -536,6 +539,9 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
       });
+    }
+    if (err instanceof PremiumGateError) {
+      return json({ error: err.message }, err.status);
     }
     console.error("[ERROR]", err);
     return json({ error: "Failed to generate schedule", detail: err instanceof Error ? err.message : String(err) }, 500);

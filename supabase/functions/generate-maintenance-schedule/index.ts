@@ -24,6 +24,7 @@ import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { jsonResponse as json } from "../_shared/json.ts";
 import { requireUser, AuthError } from "../_shared/auth.ts";
 import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
+import { requirePaidTier, PremiumGateError } from "../_shared/tierGate.ts";
 
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
@@ -261,6 +262,8 @@ serve(async (req: Request) => {
         return json({ error: "Forbidden: vehicle not found or does not belong to this user" }, 403);
       }
 
+      // Premium gate (skipped on service-role admin calls).
+      await requirePaidTier(adminClient, authUserId);
       // Rate limit on user calls only. Internal admin calls skip.
       await enforceAiRateLimit(adminClient, authUserId, "generate-maintenance-schedule");
     }
@@ -1307,6 +1310,9 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
       });
+    }
+    if (err instanceof PremiumGateError) {
+      return json({ error: err.message }, err.status);
     }
     console.error("Unhandled error:", err);
     const message = err instanceof Error ? err.message : String(err);

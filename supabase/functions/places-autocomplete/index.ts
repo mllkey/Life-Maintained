@@ -1,18 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders as sharedCorsHeaders, handlePreflight } from "../_shared/cors.ts";
+import { requireUser, AuthError } from "../_shared/auth.ts";
+import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 
 const GOOGLE_PLACES_API_KEY = Deno.env.get("GOOGLE_PLACES_API_KEY");
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const corsHeaders = sharedCorsHeaders;
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const pre = handlePreflight(req);
+  if (pre) return pre;
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -21,24 +19,30 @@ serve(async (req: Request) => {
     });
   }
 
-  // Verify caller is an authenticated user
-  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ suggestions: [], error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  const jwt = authHeader.replace("Bearer ", "").trim();
-  const authClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-    { global: { headers: { Authorization: `Bearer ${jwt}` } } },
-  );
-  const { error: authError } = await authClient.auth.getUser();
-  if (authError) {
-    return new Response(JSON.stringify({ suggestions: [], error: "Unauthorized" }), {
-      status: 401,
+  // Auth + per-user rate limit. Preserve { suggestions: [] } shape on failures.
+  try {
+    const { userId } = await requireUser(req);
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    await enforceAiRateLimit(adminClient, userId, "places-autocomplete", 60, 60);
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return new Response(JSON.stringify({ suggestions: [], error: err.message }), {
+        status: err.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (err instanceof RateLimitError) {
+      return new Response(JSON.stringify({ suggestions: [], error: "Rate limit exceeded" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
+      });
+    }
+    console.error("[places-autocomplete] auth/rate error:", err);
+    return new Response(JSON.stringify({ suggestions: [], error: "Internal server error" }), {
+      status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

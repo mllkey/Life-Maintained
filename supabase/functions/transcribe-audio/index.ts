@@ -1,23 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
+import { jsonResponse } from "../_shared/json.ts";
+import { requireUser, AuthError } from "../_shared/auth.ts";
+import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
+import { requirePaidTier, PremiumGateError } from "../_shared/tierGate.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+const json = jsonResponse;
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const pre = handlePreflight(req);
+  if (pre) return pre;
 
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
@@ -29,29 +22,29 @@ serve(async (req: Request) => {
     return json({ error: "OPENAI_API_KEY secret is not configured" }, 500);
   }
 
-  // --- Authenticate JWT ---
-  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-  console.log("[AUTH] Authorization header present:", !!authHeader);
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.error("[AUTH] Missing or invalid Authorization header");
-    return json({ error: "Missing or invalid Authorization header" }, 401);
-  }
-  const jwt = authHeader.replace("Bearer ", "").trim();
-
+  // --- Authenticate, premium-gate, rate-limit ---
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${jwt}` } },
-  });
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  console.log("[AUTH] getUser result:", user?.id, "error:", authError?.message);
-
-  if (authError || !user) {
-    console.error("[AUTH] Auth failed:", authError?.message);
-    return json({ error: "Unauthorized" }, 401);
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  try {
+    const { userId } = await requireUser(req);
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+    await requirePaidTier(adminClient, userId);
+    await enforceAiRateLimit(adminClient, userId, "transcribe-audio");
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return json({ error: err.message }, err.status);
+    }
+    if (err instanceof RateLimitError) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
+      });
+    }
+    if (err instanceof PremiumGateError) {
+      return json({ error: err.message }, err.status);
+    }
+    console.error("[transcribe-audio] auth/gate/rate error:", err);
+    return json({ error: "Internal server error" }, 500);
   }
 
   // --- Parse request body ---

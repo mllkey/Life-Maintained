@@ -1,21 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
+import { jsonResponse } from "../_shared/json.ts";
+import { requireUser, AuthError } from "../_shared/auth.ts";
 import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
+import { requirePaidTier, PremiumGateError } from "../_shared/tierGate.ts";
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+const json = jsonResponse;
 
 interface ExtractedItem {
   category: "vehicle" | "property" | "health";
@@ -31,9 +24,8 @@ interface ExtractedItem {
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const pre = handlePreflight(req);
+  if (pre) return pre;
 
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
@@ -44,43 +36,37 @@ serve(async (req: Request) => {
     return json({ error: "ANTHROPIC_API_KEY secret is not configured" }, 500);
   }
 
-  // --- Authenticate JWT ---
-  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.error("[AUTH] Missing or invalid Authorization header");
-    return json({ error: "Missing or invalid Authorization header" }, 401);
-  }
-  const jwt = authHeader.replace("Bearer ", "").trim();
-
+  // --- Authenticate, premium-gate, rate-limit ---
+  let userId: string;
+  let supabase: ReturnType<typeof createClient>;
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  // Use getUser() (no jwt arg) — the Authorization header in global.headers does the work.
-  // This matches the pattern used in generate-maintenance-schedule.
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${jwt}` } },
-  });
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    console.error("[AUTH] Auth failed — authError:", authError?.message, "user:", user?.id);
-    return json({ error: "Unauthorized" }, 401);
-  }
-  const userId = user.id;
-
-  // --- Rate limit ---
   try {
-    const adminClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+    const { userId: uid, jwt } = await requireUser(req);
+    userId = uid;
+    supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    });
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+    await requirePaidTier(adminClient, userId);
     await enforceAiRateLimit(adminClient, userId, "extract-maintenance-data");
-  } catch (rlErr) {
-    if (rlErr instanceof RateLimitError) {
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return json({ error: err.message }, err.status);
+    }
+    if (err instanceof RateLimitError) {
       return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
         status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rlErr.retryAfterSeconds) },
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
       });
     }
-    throw rlErr;
+    if (err instanceof PremiumGateError) {
+      return json({ error: err.message }, err.status);
+    }
+    console.error("[extract-maintenance-data] auth/gate/rate error:", err);
+    return json({ error: "Internal server error" }, 500);
   }
 
   // --- Parse request body ---

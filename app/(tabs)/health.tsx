@@ -722,8 +722,8 @@ export default function HealthScreen() {
                               <Pressable
                                 style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
                                 onPress={() => Alert.alert(
-                                  "Family Member Locked",
-                                  "This family member is locked on your current plan. Upgrade to access all your family members.",
+                                  "Pet Locked",
+                                  "This pet is locked on your current plan. Upgrade to access all your pets.",
                                   [
                                     { text: "Cancel", style: "cancel" },
                                     { text: "Upgrade Now", onPress: () => router.push("/subscription" as any) },
