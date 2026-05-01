@@ -235,8 +235,8 @@ export default function VehiclesScreen() {
                     );
                     return;
                   }
-                  Haptics.selectionAsync();
                   router.push(`/vehicle/${v.id}` as any);
+                  Haptics.selectionAsync();
                 }}
               >
                 {v.photo_url ? (

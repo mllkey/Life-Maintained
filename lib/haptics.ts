@@ -59,9 +59,17 @@ export { ExpoHaptics as Haptics };
  * (faint) tactile event. Pass 2 wires this into the first user-initiated
  * haptic of a session so the prime IS the user's expected feedback.
  *
+ * Single-fire: subsequent calls are no-ops. Wire at multiple potential
+ * entry points; whichever user gesture fires first wins.
+ *
  * Best-effort, swallow errors.
  */
+let _primed = false;
+
 export async function primeHaptics(): Promise<void> {
+  if (_primed) return;
+  _primed = true;
+
   try {
     await ExpoHaptics.selectionAsync();
   } catch {

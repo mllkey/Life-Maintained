@@ -106,15 +106,15 @@ export default function ValueRevealScreen() {
   }
 
   async function handleAddHome() {
-    Haptics.selectionAsync();
     await completeOnboarding();
     router.replace("/(tabs)");
     setTimeout(() => router.push("/add-property"), 400);
+    Haptics.selectionAsync();
   }
 
   function handleAddAnotherVehicle() {
-    Haptics.selectionAsync();
     router.replace({ pathname: "/add-vehicle", params: { onboarding: "true" } });
+    Haptics.selectionAsync();
   }
 
   const tasksToShow = (topTasks ?? []).slice(0, 3);

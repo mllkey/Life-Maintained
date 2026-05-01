@@ -90,8 +90,8 @@ export default function VehicleTaskHistoryScreen() {
   }
 
   async function openReceipt(storagePath: string, logId: string) {
-    Haptics.selectionAsync();
     setReceiptGeneratingId(logId);
+    Haptics.selectionAsync();
     try {
       const { data, error } = await supabase.storage
         .from("receipts")

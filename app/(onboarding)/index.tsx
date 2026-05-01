@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import * as Haptics from "expo-haptics";
+import { primeHaptics } from "@/lib/haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth, getOnboardingKey } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -80,8 +81,8 @@ export default function OnboardingStartScreen() {
   }
 
   async function handleFinishLater() {
-    Haptics.selectionAsync();
     await completeAndGo("/(tabs)");
+    Haptics.selectionAsync();
   }
 
   return (
@@ -114,7 +115,7 @@ export default function OnboardingStartScreen() {
                   styles.card,
                   isSelected && { borderColor: v.color, backgroundColor: `${v.color}10` },
                 ]}
-                onPress={() => { setSelected(v.id); Haptics.selectionAsync(); }}
+                onPress={() => { setSelected(v.id); primeHaptics(); }}
               >
                 <View style={styles.cardHeader}>
                   <View style={[styles.cardIcon, { backgroundColor: `${v.color}20` }]}>

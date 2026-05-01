@@ -1522,8 +1522,8 @@ export default function VehicleDetailScreen() {
                         key={group.name}
                         style={({ pressed }) => [styles.historyGroupCard, { opacity: pressed ? 0.8 : 1 }]}
                         onPress={() => {
-                          Haptics.selectionAsync();
                           router.push(`/vehicle-task-history/${id}?task=${encodeURIComponent(group.name)}` as any);
+                          Haptics.selectionAsync();
                         }}
                       >
                         <View style={styles.historyGroupCardLeft}>

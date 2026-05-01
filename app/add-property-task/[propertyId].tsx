@@ -53,11 +53,11 @@ export default function AddPropertyTaskScreen() {
   const scrollOffset = useRef(0);
 
   function applyTemplate(t: typeof TEMPLATE_TASKS[0]) {
-    Haptics.selectionAsync();
     setTask(t.task);
     setCategory(t.category);
     setInterval(t.interval);
     setEstimatedCost(t.cost);
+    Haptics.selectionAsync();
   }
 
   async function handleSave() {

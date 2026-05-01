@@ -158,13 +158,13 @@ export default function AddFamilyMemberScreen() {
                     key={r}
                     style={[styles.chip, relationship === r && styles.chipSelected, r === "Myself" && styles.chipMyself, r === "Myself" && relationship === r && styles.chipMyselfSelected]}
                     onPress={() => {
-                      Haptics.selectionAsync();
                       setRelationship(r);
                       if (r === "Myself" && !name.trim() && user?.email) {
                         const emailName = user.email.split("@")[0];
                         const formatted = emailName.charAt(0).toUpperCase() + emailName.slice(1);
                         setName(formatted);
                       }
+                      Haptics.selectionAsync();
                     }}
                   >
                     {r === "Myself" && (

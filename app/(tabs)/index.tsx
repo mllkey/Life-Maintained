@@ -28,6 +28,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { differenceInDays, parseISO, isBefore, addDays, format, subMonths, startOfMonth } from "date-fns";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
+import { primeHaptics } from "@/lib/haptics";
 import { useBudgetAlert } from "@/context/BudgetAlertContext";
 import TrialBanner from "@/components/TrialBanner";
 import { resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode, isHoursTracked, isTimeOnly } from "@/lib/usageHelpers";
@@ -161,10 +162,10 @@ export default function DashboardScreen() {
   }
 
   async function toggleScreeningOptIn(title: string) {
-    Haptics.selectionAsync();
     const next = { ...screeningOptIns, [title]: !screeningOptIns[title] };
     setScreeningOptIns(next);
     await AsyncStorage.setItem(SCREENING_NOTIF_KEY, JSON.stringify(next));
+    Haptics.selectionAsync();
   }
 
   const { data: counts, isLoading: countsLoading, refetch: refetchCounts } = useQuery({
@@ -698,9 +699,9 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
       <Pressable
         style={styles.qmCardHeader}
         onPress={() => {
-          Haptics.selectionAsync();
           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           setExpanded(e => !e);
+          primeHaptics();
         }}
         accessibilityRole="button"
         accessibilityLabel={expanded ? "Collapse usage updater" : "Expand usage updater"}
@@ -787,10 +788,10 @@ function DashboardSkeleton() {
 
 function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
   function handlePress(item: DashboardItem) {
-    Haptics.selectionAsync();
     if (item.category === "vehicles") router.push(`/vehicle/${item.entityId}` as any);
     else if (item.category === "properties") router.push(`/property/${item.entityId}` as any);
     else router.push("/(tabs)/health");
+    Haptics.selectionAsync();
   }
 
   if (items.length === 0) return null;

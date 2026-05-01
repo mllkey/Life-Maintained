@@ -187,8 +187,8 @@ export default function HomeTabScreen() {
                     );
                     return;
                   }
-                  Haptics.selectionAsync();
                   router.push(`/property/${p.id}` as any);
+                  Haptics.selectionAsync();
                 }}
               >
                 <Ionicons name={icon as any} size={18} color={Colors.home} />

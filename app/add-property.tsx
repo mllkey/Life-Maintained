@@ -211,12 +211,12 @@ export default function AddPropertyScreen() {
 
   async function onSelectSuggestion(suggestion: PlaceSuggestion) {
     Keyboard.dismiss();
-    Haptics.selectionAsync();
     setStreet(suggestion.mainText);
     setShowSuggestions(false);
     setSuggestions([]);
     setPropertyAutoFilled(false);
     setPropertyRateLimited(false);
+    Haptics.selectionAsync();
 
     const parsed = await fetchPlaceDetails(suggestion.placeId);
     if (!parsed) return;

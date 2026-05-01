@@ -190,19 +190,19 @@ export default function NotificationsSettingsScreen() {
   }
 
   function toggleMutedVehicle(id: string) {
-    Haptics.selectionAsync();
     const muted = prefs.mutedVehicles.includes(id)
       ? prefs.mutedVehicles.filter(v => v !== id)
       : [...prefs.mutedVehicles, id];
     updatePref("mutedVehicles", muted);
+    Haptics.selectionAsync();
   }
 
   function toggleMutedProperty(id: string) {
-    Haptics.selectionAsync();
     const muted = prefs.mutedProperties.includes(id)
       ? prefs.mutedProperties.filter(p => p !== id)
       : [...prefs.mutedProperties, id];
     updatePref("mutedProperties", muted);
+    Haptics.selectionAsync();
   }
 
   function handleBudgetBlur() {

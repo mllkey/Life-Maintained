@@ -58,12 +58,12 @@ export default function Tooltip({ id, message, icon, delay = 800 }: TooltipProps
   }, [id, delay]);
 
   async function dismiss() {
-    Haptics.selectionAsync();
     // Write first, then hide — prevents re-showing on flaky devices
     try {
       await AsyncStorage.setItem(`${SEEN_PREFIX}${id}`, "true");
     } catch {}
     if (mountedRef.current) setVisible(false);
+    Haptics.selectionAsync();
   }
 
   if (!visible) return null;

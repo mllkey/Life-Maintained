@@ -915,7 +915,6 @@ export default function AddVehicleScreen() {
   }
 
   function handleMonthTap(m: number) {
-    Haptics.selectionAsync();
     if (seasonStartMonth === null || (seasonStartMonth !== null && seasonEndMonth !== null)) {
       setSeasonStartMonth(m);
       setSeasonEndMonth(null);
@@ -926,7 +925,8 @@ export default function AddVehicleScreen() {
         setSeasonEndMonth(m);
       }
     }
-  }
+  
+    Haptics.selectionAsync();}
 
   function applyPreset(start: number, end: number) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -2087,10 +2087,10 @@ export default function AddVehicleScreen() {
                           } else {
                             setVehicleType(t.value);
                           }
-                          Haptics.selectionAsync();
                           setMake("");
                           setModel("");
                           setMoreTypeSheetVisible(false);
+                          Haptics.selectionAsync();
                         }}
                       >
                         <MaterialCommunityIcons name={t.icon as any} size={22} color={isSelected ? Colors.accent : Colors.textSecondary} />
