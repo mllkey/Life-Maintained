@@ -1339,11 +1339,6 @@ export default function AddVehicleScreen() {
                   animationType="fade"
                   onRequestClose={() => setOnboardingTypeSheetVisible(false)}
                 >
-                  <KeyboardAvoidingView
-                    style={{ flex: 1 }}
-                    behavior={Platform.OS === "ios" ? "padding" : "height"}
-                    keyboardVerticalOffset={0}
-                  >
                     <Pressable
                       style={StyleSheet.absoluteFillObject}
                       onPress={() => setOnboardingTypeSheetVisible(false)}
@@ -1400,7 +1395,6 @@ export default function AddVehicleScreen() {
                         </Reanimated.View>
                       </GestureDetector>
                     </View>
-                  </KeyboardAvoidingView>
                 </Modal>
               </>
             ) : (
@@ -2021,7 +2015,7 @@ export default function AddVehicleScreen() {
       >
         {isLoading
           ? <ActivityIndicator size="small" color="#0C111B" />
-          : <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: "#0C111B" }}>Continue</Text>}
+          : <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: "#0C111B" }}>Add Vehicle</Text>}
       </Pressable>
         </ScrollView>
       </View>
