@@ -360,7 +360,7 @@ export default function AddPropertyScreen() {
           >
             {isLoading
               ? <ActivityIndicator size="small" color={Colors.textInverse} />
-              : <Text style={styles.saveBtnText}>Save</Text>}
+              : <Text style={styles.saveBtnText}>Add Property</Text>}
           </Pressable>
         </View>
 

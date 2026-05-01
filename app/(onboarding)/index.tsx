@@ -146,7 +146,7 @@ export default function OnboardingStartScreen() {
           style={({ pressed }) => [styles.cta, { opacity: pressed ? 0.85 : 1 }]}
           onPress={handleContinue}
         >
-          <Text style={styles.ctaText}>Continue</Text>
+          <Text style={styles.ctaText}>Get started</Text>
         </Pressable>
 
         <Pressable onPress={handleFinishLater} style={styles.skip}>

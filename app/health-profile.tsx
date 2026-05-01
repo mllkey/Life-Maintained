@@ -134,7 +134,7 @@ export default function HealthProfileScreen() {
           </Pressable>
           <Text style={styles.title}>Health Profile</Text>
           <Pressable style={({ pressed }) => [styles.saveBtn, { opacity: pressed ? 0.8 : 1 }]} onPress={handleSave} disabled={isLoading}>
-            {isLoading ? <ActivityIndicator size="small" color={Colors.textInverse} /> : <Text style={styles.saveBtnText}>Save</Text>}
+            {isLoading ? <ActivityIndicator size="small" color={Colors.textInverse} /> : <Text style={styles.saveBtnText}>Save Profile</Text>}
           </Pressable>
         </View>
 

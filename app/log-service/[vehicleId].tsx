@@ -411,7 +411,7 @@ export default function LogServiceScreen() {
             onPress={handleSave}
             disabled={isLoading}
           >
-            {isLoading ? <ActivityIndicator size="small" color={Colors.textInverse} /> : <Text style={styles.saveBtnText}>Save</Text>}
+            {isLoading ? <ActivityIndicator size="small" color={Colors.textInverse} /> : <Text style={styles.saveBtnText}>Log Service</Text>}
           </Pressable>
         </View>
 
