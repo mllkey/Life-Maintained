@@ -925,8 +925,8 @@ export default function AddVehicleScreen() {
         setSeasonEndMonth(m);
       }
     }
-  
-    Haptics.selectionAsync();}
+    Haptics.selectionAsync();
+  }
 
   function applyPreset(start: number, end: number) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
