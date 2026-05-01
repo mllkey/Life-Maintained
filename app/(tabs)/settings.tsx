@@ -591,7 +591,7 @@ export default function SettingsScreen() {
                           isSelected && styles.vehicleChipSelected,
                           { opacity: pressed ? 0.8 : 1 },
                         ]}
-                        onPress={() => { Haptics.selectionAsync(); setSelectedVehicleId(pv.id); }}
+                        onPress={() => { setSelectedVehicleId(pv.id); Haptics.selectionAsync(); }}
                       >
                         <Ionicons
                           name="car-outline"
@@ -664,7 +664,7 @@ export default function SettingsScreen() {
           {/* Action Button shortcut tip card */}
           <Pressable
             style={({ pressed }) => [styles.actionBtnCard, { opacity: pressed ? 0.95 : 1 }]}
-            onPress={() => { Haptics.selectionAsync(); setActionButtonExpanded(v => !v); }}
+            onPress={() => { setActionButtonExpanded(v => !v); Haptics.selectionAsync(); }}
           >
             <View style={styles.actionBtnRow}>
               <View style={styles.actionBtnIconWrap}>

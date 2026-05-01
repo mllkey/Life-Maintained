@@ -104,12 +104,12 @@ export default function AddMedicationScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Who takes this?</Text>
               <View style={styles.memberGrid}>
-                <Pressable style={[styles.chip, familyMemberId === null && styles.chipSelected]} onPress={() => { Haptics.selectionAsync(); setFamilyMemberId(null); }}>
+                <Pressable style={[styles.chip, familyMemberId === null && styles.chipSelected]} onPress={() => { setFamilyMemberId(null); Haptics.selectionAsync(); }}>
                   <Ionicons name="person-outline" size={14} color={familyMemberId === null ? Colors.health : Colors.textSecondary} />
                   <Text style={[styles.chipText, familyMemberId === null && styles.chipTextSelected]}>Me</Text>
                 </Pressable>
                 {familyMembers.map(fm => (
-                  <Pressable key={fm.id} style={[styles.chip, familyMemberId === fm.id && styles.chipSelected]} onPress={() => { Haptics.selectionAsync(); setFamilyMemberId(fm.id); }}>
+                  <Pressable key={fm.id} style={[styles.chip, familyMemberId === fm.id && styles.chipSelected]} onPress={() => { setFamilyMemberId(fm.id); Haptics.selectionAsync(); }}>
                     <Ionicons name={fm.member_type === "pet" ? "paw-outline" : "person-outline"} size={14} color={familyMemberId === fm.id ? Colors.health : Colors.textSecondary} />
                     <Text style={[styles.chipText, familyMemberId === fm.id && styles.chipTextSelected]}>{fm.name}</Text>
                   </Pressable>
@@ -119,7 +119,7 @@ export default function AddMedicationScreen() {
           )}
 
           <View style={styles.section}>
-            <Pressable style={styles.toggleRow} onPress={() => { Haptics.selectionAsync(); setRemindersEnabled(!remindersEnabled); }}>
+            <Pressable style={styles.toggleRow} onPress={() => { setRemindersEnabled(!remindersEnabled); Haptics.selectionAsync(); }}>
               <View>
                 <Text style={styles.toggleLabel}>Daily Reminders</Text>
                 <Text style={styles.toggleSub}>Get notified when it's time to take this</Text>

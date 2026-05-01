@@ -1243,7 +1243,7 @@ export default function VehicleDetailScreen() {
                 <Pressable
                   key={tab}
                   style={[styles.tab, activeTab === tab && styles.tabActive]}
-                  onPress={() => { Haptics.selectionAsync(); setActiveTab(tab); }}
+                  onPress={() => { setActiveTab(tab); Haptics.selectionAsync(); }}
                 >
                   <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                     {tab === "schedule"
@@ -1334,7 +1334,7 @@ export default function VehicleDetailScreen() {
                       title={`Action Needed (${actionNeededTasks.length})`}
                       titleColor={Colors.overdue}
                       expanded={actionNeededExpanded}
-                      onToggle={() => { Haptics.selectionAsync(); setActionNeededExpanded(v => !v); }}
+                      onToggle={() => { setActionNeededExpanded(v => !v); Haptics.selectionAsync(); }}
                       tasks={actionNeededTasks}
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}
@@ -1347,7 +1347,7 @@ export default function VehicleDetailScreen() {
                   <ScheduleSection
                     title={`Upcoming (${upcomingTasks.length})`}
                     expanded={upcomingExpanded}
-                    onToggle={() => { Haptics.selectionAsync(); setUpcomingExpanded(v => !v); }}
+                    onToggle={() => { setUpcomingExpanded(v => !v); Haptics.selectionAsync(); }}
                     tasks={upcomingTasks}
                     vehicle={vehicle}
                     emptyMessage="No upcoming tasks"
@@ -1362,7 +1362,7 @@ export default function VehicleDetailScreen() {
                       title={`Completed (${completedTasks.length})`}
                       titleColor={Colors.good}
                       expanded={completedExpanded}
-                      onToggle={() => { Haptics.selectionAsync(); setCompletedExpanded(v => !v); }}
+                      onToggle={() => { setCompletedExpanded(v => !v); Haptics.selectionAsync(); }}
                       tasks={completedTasks}
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}
@@ -1415,7 +1415,7 @@ export default function VehicleDetailScreen() {
                       title={`Action Needed (${actionNeededTasks.length})`}
                       titleColor={Colors.overdue}
                       expanded={actionNeededExpanded}
-                      onToggle={() => { Haptics.selectionAsync(); setActionNeededExpanded(v => !v); }}
+                      onToggle={() => { setActionNeededExpanded(v => !v); Haptics.selectionAsync(); }}
                       tasks={actionNeededTasks}
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}
@@ -1428,7 +1428,7 @@ export default function VehicleDetailScreen() {
                   <ScheduleSection
                     title={`Upcoming (${upcomingTasks.length})`}
                     expanded={upcomingExpanded}
-                    onToggle={() => { Haptics.selectionAsync(); setUpcomingExpanded(v => !v); }}
+                    onToggle={() => { setUpcomingExpanded(v => !v); Haptics.selectionAsync(); }}
                     tasks={upcomingTasks}
                     vehicle={vehicle}
                     emptyMessage="No upcoming tasks"
@@ -1443,7 +1443,7 @@ export default function VehicleDetailScreen() {
                       title={`Completed (${completedTasks.length})`}
                       titleColor={Colors.good}
                       expanded={completedExpanded}
-                      onToggle={() => { Haptics.selectionAsync(); setCompletedExpanded(v => !v); }}
+                      onToggle={() => { setCompletedExpanded(v => !v); Haptics.selectionAsync(); }}
                       tasks={completedTasks}
                       vehicle={vehicle}
                       onMarkComplete={handleOpenMarkComplete}

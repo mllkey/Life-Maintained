@@ -114,7 +114,7 @@ export default function OnboardingStartScreen() {
                   styles.card,
                   isSelected && { borderColor: v.color, backgroundColor: `${v.color}10` },
                 ]}
-                onPress={() => { Haptics.selectionAsync(); setSelected(v.id); }}
+                onPress={() => { setSelected(v.id); Haptics.selectionAsync(); }}
               >
                 <View style={styles.cardHeader}>
                   <View style={[styles.cardIcon, { backgroundColor: `${v.color}20` }]}>

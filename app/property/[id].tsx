@@ -626,7 +626,7 @@ export default function PropertyDetailScreen() {
                 <Pressable
                   key={tab}
                   style={[styles.tab]}
-                  onPress={() => { Haptics.selectionAsync(); setActiveTab(tab); }}
+                  onPress={() => { setActiveTab(tab); Haptics.selectionAsync(); }}
                 >
                   <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                     {tab === "tasks"
@@ -705,7 +705,7 @@ export default function PropertyDetailScreen() {
                       title={`Action Needed (${actionNeededTasks.length})`}
                       titleColor={Colors.overdue}
                       expanded={actionNeededExpanded}
-                      onToggle={() => { Haptics.selectionAsync(); setActionNeededExpanded(v => !v); }}
+                      onToggle={() => { setActionNeededExpanded(v => !v); Haptics.selectionAsync(); }}
                       tasks={actionNeededTasks}
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
@@ -716,7 +716,7 @@ export default function PropertyDetailScreen() {
                       title={`Up to Date (${goodTasks.length})`}
                       titleColor={Colors.good}
                       expanded={upToDateExpanded}
-                      onToggle={() => { Haptics.selectionAsync(); setUpToDateExpanded(v => !v); }}
+                      onToggle={() => { setUpToDateExpanded(v => !v); Haptics.selectionAsync(); }}
                       tasks={goodTasks}
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
@@ -727,7 +727,7 @@ export default function PropertyDetailScreen() {
                       title={`Upcoming (${upcomingTasks.length})`}
                       titleColor={Colors.textSecondary}
                       expanded={upcomingExpanded}
-                      onToggle={() => { Haptics.selectionAsync(); setUpcomingExpanded(v => !v); }}
+                      onToggle={() => { setUpcomingExpanded(v => !v); Haptics.selectionAsync(); }}
                       tasks={upcomingTasks}
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}

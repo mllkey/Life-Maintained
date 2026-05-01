@@ -136,7 +136,7 @@ export default function AddFamilyMemberScreen() {
             <Text style={styles.sectionTitle}>Type</Text>
             <View style={styles.typeRow}>
               {MEMBER_TYPES.map(t => (
-                <Pressable key={t} style={[styles.typeBtn, memberType === t && styles.typeBtnSelected]} onPress={() => { Haptics.selectionAsync(); setMemberType(t); }}>
+                <Pressable key={t} style={[styles.typeBtn, memberType === t && styles.typeBtnSelected]} onPress={() => { setMemberType(t); Haptics.selectionAsync(); }}>
                   <Ionicons name={t === "pet" ? "paw-outline" : "person-outline"} size={18} color={memberType === t ? Colors.health : Colors.textSecondary} />
                   <Text style={[styles.typeBtnText, memberType === t && styles.typeBtnTextSelected]}>{t === "pet" ? "Pet" : "Person"}</Text>
                 </Pressable>
@@ -180,7 +180,7 @@ export default function AddFamilyMemberScreen() {
               <Text style={styles.sectionTitle}>Pet Type</Text>
               <View style={styles.grid}>
                 {PET_TYPES.map(p => (
-                  <Pressable key={p} style={[styles.chip, petType === p && styles.chipSelected]} onPress={() => { Haptics.selectionAsync(); setPetType(p); }}>
+                  <Pressable key={p} style={[styles.chip, petType === p && styles.chipSelected]} onPress={() => { setPetType(p); Haptics.selectionAsync(); }}>
                     <Text style={[styles.chipText, petType === p && styles.chipTextSelected]}>{p}</Text>
                   </Pressable>
                 ))}

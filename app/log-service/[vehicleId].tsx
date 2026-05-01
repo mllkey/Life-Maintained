@@ -492,7 +492,7 @@ export default function LogServiceScreen() {
                         placeholder="Service name"
                       />
                     ) : (
-                      <Pressable onPress={() => { Haptics.selectionAsync(); setEditingField({ index, field: "name" }); }}>
+                      <Pressable onPress={() => { setEditingField({ index, field: "name" }); Haptics.selectionAsync(); }}>
                         <Text style={styles.itemName}>{item.name || "Tap to name"}</Text>
                         {item.details && (
                           <Text style={styles.itemDetails}>{item.details}</Text>
@@ -516,7 +516,7 @@ export default function LogServiceScreen() {
                         placeholderTextColor={Colors.textTertiary}
                       />
                     ) : (
-                      <Pressable onPress={() => { Haptics.selectionAsync(); setEditingField({ index, field: "cost" }); }}>
+                      <Pressable onPress={() => { setEditingField({ index, field: "cost" }); Haptics.selectionAsync(); }}>
                         <Text style={[styles.itemCost, item.cost == null && styles.itemCostEmpty]}>
                           {item.cost != null ? `$${item.cost.toFixed(2)}` : "$ -"}
                         </Text>
@@ -556,7 +556,7 @@ export default function LogServiceScreen() {
                   <Pressable
                     key={t}
                     style={[styles.quickPick, task === t && styles.quickPickSelected]}
-                    onPress={() => { Haptics.selectionAsync(); setTask(t); }}
+                    onPress={() => { setTask(t); Haptics.selectionAsync(); }}
                   >
                     <Text style={[styles.quickPickText, task === t && styles.quickPickTextSelected]}>{t}</Text>
                   </Pressable>

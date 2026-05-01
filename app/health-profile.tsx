@@ -163,7 +163,7 @@ export default function HealthProfileScreen() {
             <Text style={styles.sectionTitle}>Sex at Birth</Text>
             <View style={styles.grid}>
               {SEX_OPTIONS.map(opt => (
-                <Pressable key={opt} style={[styles.chip, sex === opt && styles.chipSelected]} onPress={() => { Haptics.selectionAsync(); setSex(opt === sex ? null : opt); }}>
+                <Pressable key={opt} style={[styles.chip, sex === opt && styles.chipSelected]} onPress={() => { setSex(opt === sex ? null : opt); Haptics.selectionAsync(); }}>
                   <Text style={[styles.chipText, sex === opt && styles.chipTextSelected]}>{SEX_LABELS[opt]}</Text>
                 </Pressable>
               ))}

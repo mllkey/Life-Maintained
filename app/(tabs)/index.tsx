@@ -829,7 +829,7 @@ function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
         {hasMore && (
           <Pressable
             style={({ pressed }) => [styles.seeAllRow, { opacity: pressed ? 0.7 : 1 }]}
-            onPress={() => { Haptics.selectionAsync(); router.push(seeAllRoute); }}
+            onPress={() => { router.push(seeAllRoute); Haptics.selectionAsync(); }}
           >
             <Text style={styles.seeAllText}>{"See all "}{items.length}{" items →"}</Text>
           </Pressable>

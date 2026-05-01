@@ -1484,7 +1484,7 @@ export default function AddVehicleScreen() {
                 return (
                   <Pressable
                     style={[styles.typeCard, isMoreSelected && styles.typeCardSelected, { width: "auto", minWidth: 80, paddingHorizontal: 12 }]}
-                    onPress={() => { Haptics.selectionAsync(); setMoreTypeSheetVisible(true); }}
+                    onPress={() => { setMoreTypeSheetVisible(true); Haptics.selectionAsync(); }}
                   >
                     <MaterialCommunityIcons name="dots-horizontal" size={22} color={isMoreSelected ? Colors.accent : Colors.textSecondary} />
                     <Text style={[styles.typeCardLabel, isMoreSelected && styles.typeCardLabelSelected, { fontSize: 11 }]}>
@@ -1834,7 +1834,7 @@ export default function AddVehicleScreen() {
               {AWD_TYPES.has(vehicleType) && (
                 <Pressable
                   style={styles.toggleRow}
-                  onPress={() => { Haptics.selectionAsync(); setIsAwd(!isAwd); }}
+                  onPress={() => { setIsAwd(!isAwd); Haptics.selectionAsync(); }}
                 >
                   <View>
                     <Text style={styles.toggleLabel}>AWD / 4WD</Text>

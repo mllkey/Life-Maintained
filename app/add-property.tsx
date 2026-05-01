@@ -388,7 +388,7 @@ export default function AddPropertyScreen() {
                   <Pressable
                     key={t.value}
                     style={[styles.typeCard, isSelected && styles.typeCardSelected]}
-                    onPress={() => { Haptics.selectionAsync(); setPropertyType(t.value); }}
+                    onPress={() => { setPropertyType(t.value); Haptics.selectionAsync(); }}
                   >
                     <MaterialCommunityIcons
                       name={t.icon as any}

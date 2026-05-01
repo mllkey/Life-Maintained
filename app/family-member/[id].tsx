@@ -357,7 +357,7 @@ export default function FamilyMemberDetailScreen() {
               <Pressable
                 key={tab}
                 style={[styles.tab, activeTab === tab && styles.tabActive]}
-                onPress={() => { Haptics.selectionAsync(); setActiveTab(tab); }}
+                onPress={() => { setActiveTab(tab); Haptics.selectionAsync(); }}
               >
                 <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                   {tab === "appointments" ? "Appointments" : "Medications"}
@@ -407,7 +407,7 @@ export default function FamilyMemberDetailScreen() {
                       <View key={appt.id}>
                         <Pressable
                           style={({ pressed }) => [styles.taskRow, { opacity: pressed ? 0.85 : 1 }]}
-                          onPress={() => { Haptics.selectionAsync(); setExpandedId(isExpanded ? null : appt.id); }}
+                          onPress={() => { setExpandedId(isExpanded ? null : appt.id); Haptics.selectionAsync(); }}
                           accessibilityRole="button"
                         >
                           <View style={[styles.taskBar, { backgroundColor: statusColor }]} />

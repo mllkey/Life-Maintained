@@ -215,7 +215,7 @@ export default function AddAppointmentScreen() {
           <Section title="Appointment Type">
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
               {APPOINTMENT_TYPES.map(t => (
-                <Pressable key={t} style={[styles.chip, appointmentType === t && styles.chipSelected]} onPress={() => { Haptics.selectionAsync(); setAppointmentType(t); }}>
+                <Pressable key={t} style={[styles.chip, appointmentType === t && styles.chipSelected]} onPress={() => { setAppointmentType(t); Haptics.selectionAsync(); }}>
                   <Text style={[styles.chipText, appointmentType === t && styles.chipTextSelected]}>{t}</Text>
                 </Pressable>
               ))}
@@ -265,12 +265,12 @@ export default function AddAppointmentScreen() {
           {familyMembers && familyMembers.length > 0 && (
             <Section title="Who is this for?">
               <View style={styles.memberGrid}>
-                <Pressable style={[styles.memberChip, familyMemberId === null && styles.memberChipSelected]} onPress={() => { Haptics.selectionAsync(); setFamilyMemberId(null); }}>
+                <Pressable style={[styles.memberChip, familyMemberId === null && styles.memberChipSelected]} onPress={() => { setFamilyMemberId(null); Haptics.selectionAsync(); }}>
                   <Ionicons name="person-outline" size={14} color={familyMemberId === null ? Colors.health : Colors.textSecondary} />
                   <Text style={[styles.memberChipText, familyMemberId === null && styles.memberChipTextSelected]}>Me</Text>
                 </Pressable>
                 {familyMembers.map(fm => (
-                  <Pressable key={fm.id} style={[styles.memberChip, familyMemberId === fm.id && styles.memberChipSelected]} onPress={() => { Haptics.selectionAsync(); setFamilyMemberId(fm.id); }}>
+                  <Pressable key={fm.id} style={[styles.memberChip, familyMemberId === fm.id && styles.memberChipSelected]} onPress={() => { setFamilyMemberId(fm.id); Haptics.selectionAsync(); }}>
                     <Ionicons name={fm.member_type === "pet" ? "paw-outline" : "person-outline"} size={14} color={familyMemberId === fm.id ? Colors.health : Colors.textSecondary} />
                     <Text style={[styles.memberChipText, familyMemberId === fm.id && styles.memberChipTextSelected]}>{fm.name}</Text>
                   </Pressable>

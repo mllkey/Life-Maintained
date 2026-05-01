@@ -675,7 +675,7 @@ export default function HealthScreen() {
                                 member={person}
                                 overdue={status.overdue}
                                 upcoming={status.upcoming}
-                                onPress={() => { Haptics.selectionAsync(); router.push(`/family-member/${person.id}` as any); }}
+                                onPress={() => { router.push(`/family-member/${person.id}` as any); Haptics.selectionAsync(); }}
                               />
                             </View>
                             {isLocked && (
@@ -715,7 +715,7 @@ export default function HealthScreen() {
                                 member={pet}
                                 overdue={status.overdue}
                                 upcoming={status.upcoming}
-                                onPress={() => { Haptics.selectionAsync(); router.push(`/family-member/${pet.id}` as any); }}
+                                onPress={() => { router.push(`/family-member/${pet.id}` as any); Haptics.selectionAsync(); }}
                               />
                             </View>
                             {isLocked && (
@@ -857,7 +857,7 @@ export default function HealthScreen() {
                         {matches.map(suggestion => (
                           <Pressable
                             key={suggestion}
-                            onPress={() => { Haptics.selectionAsync(); setCompleteProvider(suggestion); }}
+                            onPress={() => { setCompleteProvider(suggestion); Haptics.selectionAsync(); }}
                             style={({ pressed }) => ({
                               paddingVertical: 8,
                               paddingHorizontal: 12,

@@ -139,7 +139,7 @@ export default function AddPropertyTaskScreen() {
             <Text style={styles.sectionTitle}>Category</Text>
             <View style={styles.grid}>
               {CATEGORIES.map(c => (
-                <Pressable key={c} style={[styles.chip, category === c && styles.chipSelected]} onPress={() => { Haptics.selectionAsync(); setCategory(c); }}>
+                <Pressable key={c} style={[styles.chip, category === c && styles.chipSelected]} onPress={() => { setCategory(c); Haptics.selectionAsync(); }}>
                   <Text style={[styles.chipText, category === c && styles.chipTextSelected]}>{c}</Text>
                 </Pressable>
               ))}
@@ -150,7 +150,7 @@ export default function AddPropertyTaskScreen() {
             <Text style={styles.sectionTitle}>Interval</Text>
             <View style={styles.grid}>
               {INTERVALS.map(iv => (
-                <Pressable key={iv} style={[styles.chip, interval === iv && styles.chipSelected]} onPress={() => { Haptics.selectionAsync(); setInterval(iv); }}>
+                <Pressable key={iv} style={[styles.chip, interval === iv && styles.chipSelected]} onPress={() => { setInterval(iv); Haptics.selectionAsync(); }}>
                   <Text style={[styles.chipText, interval === iv && styles.chipTextSelected]}>{iv}</Text>
                 </Pressable>
               ))}
@@ -164,7 +164,7 @@ export default function AddPropertyTaskScreen() {
                 const colors = { high: Colors.overdue, medium: Colors.dueSoon, low: Colors.good };
                 const selected = priority === p;
                 return (
-                  <Pressable key={p} style={[styles.priorityBtn, selected && { borderColor: colors[p as keyof typeof colors], backgroundColor: colors[p as keyof typeof colors] + "22" }]} onPress={() => { Haptics.selectionAsync(); setPriority(p); }}>
+                  <Pressable key={p} style={[styles.priorityBtn, selected && { borderColor: colors[p as keyof typeof colors], backgroundColor: colors[p as keyof typeof colors] + "22" }]} onPress={() => { setPriority(p); Haptics.selectionAsync(); }}>
                     <Text style={[styles.priorityText, selected && { color: colors[p as keyof typeof colors] }]}>{p.charAt(0).toUpperCase() + p.slice(1)}</Text>
                   </Pressable>
                 );

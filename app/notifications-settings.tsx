@@ -270,7 +270,7 @@ export default function NotificationsSettingsScreen() {
               <Pressable
                 key={days}
                 style={[styles.advanceOption, prefs.advanceDays === days && styles.advanceOptionActive]}
-                onPress={() => { Haptics.selectionAsync(); updatePref("advanceDays", days); }}
+                onPress={() => { updatePref("advanceDays", days); Haptics.selectionAsync(); }}
               >
                 <Text style={[styles.advanceOptionText, prefs.advanceDays === days && styles.advanceOptionTextActive]}>
                   {days} days

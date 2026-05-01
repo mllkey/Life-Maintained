@@ -422,7 +422,7 @@ export default function Paywall({
               <Pressable
                 key={b}
                 style={[styles.billingOption, billing === b && styles.billingActive]}
-                onPress={() => { Haptics.selectionAsync(); setBilling(b); }}
+                onPress={() => { setBilling(b); Haptics.selectionAsync(); }}
               >
                 <View style={styles.billingOptionContent}>
                   <Text style={[styles.billingLabel, billing === b && styles.billingLabelActive]}>
@@ -451,7 +451,7 @@ export default function Paywall({
                     styles.tierCard,
                     selected && { borderColor: cfg.color, backgroundColor: cfg.color + "0C" },
                   ]}
-                  onPress={() => { Haptics.selectionAsync(); setSelectedTier(tier); }}
+                  onPress={() => { setSelectedTier(tier); Haptics.selectionAsync(); }}
                   testID={`tier-${tier}`}
                 >
                   <View style={styles.tierTop}>
