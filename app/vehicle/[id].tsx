@@ -471,7 +471,7 @@ export default function VehicleDetailScreen() {
   async function generateSchedule() {
     if (!vehicle || !user) return;
     setGeneratingSchedule(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const mode = resolveTrackingMode(vehicle);
       const { error } = await supabase.functions.invoke("generate-maintenance-schedule", {
@@ -512,7 +512,7 @@ export default function VehicleDetailScreen() {
   async function refreshSchedule() {
     if (!vehicle || !user) return;
     setRefreshingSchedule(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const mode = resolveTrackingMode(vehicle);
       const { error } = await supabase.functions.invoke("generate-maintenance-schedule", {
@@ -1398,7 +1398,7 @@ export default function VehicleDetailScreen() {
                   </View>
                   {!generatingSchedule && (
                     <Pressable
-                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); generateSchedule(); }}
+                      onPress={() => { generateSchedule(); }}
                       style={({ pressed }) => [{ marginTop: 16, marginHorizontal: 16, paddingVertical: 14, paddingHorizontal: 20, backgroundColor: '#E8943A', borderRadius: 12, alignItems: 'center', opacity: pressed ? 0.85 : 1 }]}
                       accessibilityRole="button"
                       accessibilityLabel="Generate maintenance schedule"
