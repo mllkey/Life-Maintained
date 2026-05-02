@@ -25,6 +25,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
 import { Colors } from "@/constants/colors";
 import NotifPermissionBanner from "@/components/NotifPermissionBanner";
+import OfflineBanner from "@/components/OfflineBanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { BudgetAlertProvider } from "@/context/BudgetAlertContext";
 import * as Notifications from "expo-notifications";
@@ -226,6 +227,7 @@ function RootLayoutNav() {
           <Stack.Screen name="reset-password" options={{ headerShown: false, presentation: "fullScreenModal" }} />
         </Stack>
         {showBanner && <NotifPermissionBanner userId={session?.user?.id} />}
+        <OfflineBanner />
       </View>
     </BudgetAlertProvider>
   );

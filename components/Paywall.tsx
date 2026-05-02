@@ -19,6 +19,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
+import { useNetworkStatus } from "@/lib/useNetworkStatus";
 import { rcReady, extractTierHintFromCustomerInfo, syncSubscriptionFromRc } from "@/lib/revenuecat";
 
 type Billing = "monthly" | "annual";
@@ -104,6 +105,7 @@ export default function Paywall({
 }: PaywallProps) {
   const insets = useSafeAreaInsets();
   const { user, profile, refreshProfile } = useAuth();
+  const { isOffline } = useNetworkStatus();
 
   const [billing, setBilling] = useState<Billing>("annual");
   const [selectedTier, setSelectedTier] = useState<TierKey>("personal");
@@ -116,6 +118,7 @@ export default function Paywall({
   const [loadedOfferings, setLoadedOfferings] = useState<any | null>(null);
   const [offeringsError, setOfferingsError] = useState(false);
   const [loadingOfferings, setLoadingOfferings] = useState(Platform.OS !== "web");
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("Welcome to LifeMaintained Premium!");
   const purchaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -159,6 +162,11 @@ export default function Paywall({
   }
 
   async function handlePurchase() {
+    if (isOffline) {
+      setOfflineError("You're offline. Connect to the internet and try again.");
+      return;
+    }
+    setOfflineError(null);
     if (!user || Platform.OS === "web") {
       Alert.alert("Subscribe on Mobile", "Please use the iOS or Android app to subscribe.");
       return;
@@ -272,6 +280,11 @@ export default function Paywall({
   }
 
   async function handleRestore() {
+    if (isOffline) {
+      setOfflineError("You're offline. Connect to the internet and try again.");
+      return;
+    }
+    setOfflineError(null);
     if (Platform.OS === "web") return;
     if (!user) {
       Alert.alert("Sign in first", "Please sign in to restore your purchases.");
@@ -594,6 +607,26 @@ export default function Paywall({
             </View>
           )}
         </ScrollView>
+      )}
+      {offlineError && (
+        <View style={{ backgroundColor: Colors.card, borderColor: Colors.border, borderWidth: 1, borderRadius: 12, padding: 14, marginHorizontal: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: Colors.text, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>{offlineError}</Text>
+          </View>
+          <Pressable
+            disabled={isOffline}
+            onPress={() => { setOfflineError(null); handlePurchase(); }}
+            style={({ pressed }) => ({
+              backgroundColor: isOffline ? Colors.border : "#E8943A",
+              opacity: pressed ? 0.85 : 1,
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              borderRadius: 8,
+            })}
+          >
+            <Text style={{ color: "#FFFFFF", fontFamily: "Inter_600SemiBold", fontSize: 13 }}>Retry</Text>
+          </Pressable>
+        </View>
       )}
       <SaveToast visible={toastVisible} message={toastMessage} />
     </View>
