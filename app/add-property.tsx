@@ -259,6 +259,7 @@ export default function AddPropertyScreen() {
   }
 
   async function handleSave() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isLoading) return;
     if (!user) {
       setError("Session unavailable. Please close and reopen this screen.");

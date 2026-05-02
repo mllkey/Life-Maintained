@@ -935,6 +935,7 @@ export default function AddVehicleScreen() {
   }
 
   async function handleSave() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isLoading) return;
     setSubmitted(true);
     if (!user) {

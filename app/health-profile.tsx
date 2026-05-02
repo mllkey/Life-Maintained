@@ -60,6 +60,7 @@ export default function HealthProfileScreen() {
   }
 
   async function handleSave() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isLoading) return;
 
     if (!user) {

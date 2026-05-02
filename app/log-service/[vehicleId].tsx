@@ -258,6 +258,7 @@ export default function LogServiceScreen() {
   // ─────────────────────────────────────────────────────────────────────────
 
   async function handleSave() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isLoading) return;
     if (!user || !vehicleId) return;
     setIsLoading(true);
