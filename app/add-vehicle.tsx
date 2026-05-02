@@ -1035,7 +1035,6 @@ export default function AddVehicleScreen() {
           .select("id")
           .single();
         if (err || !inserted) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           Alert.alert("Save Failed", err?.message ?? "Failed to save vehicle. Please try again.");
           return;
         }
@@ -1100,7 +1099,6 @@ export default function AddVehicleScreen() {
         setShowSaveToast(true);
         setTimeout(() => router.back(), 900);
       } catch (saveErr) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert("Save Failed", "Failed to save vehicle. Please try again.");
       } finally {
         setIsLoading(false);
@@ -1118,7 +1116,6 @@ export default function AddVehicleScreen() {
         .single();
       if (err || !inserted) {
         setIsLoading(false);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert("Save Failed", err?.message ?? "Failed to save vehicle. Please try again.");
         return;
       }
@@ -1161,7 +1158,6 @@ export default function AddVehicleScreen() {
       setShowCopyModal(true);
     } catch (saveErr) {
       setIsLoading(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Save Failed", "Failed to save vehicle. Please try again.");
     }
   }

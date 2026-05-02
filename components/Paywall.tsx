@@ -291,7 +291,6 @@ export default function Paywall({
 
       const syncResult = await syncSubscriptionFromRc();
       if (!syncResult.ok) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert("Restore couldn't finish", "We saw your purchase but couldn't update your account. Please try again or contact support@lifemaintained.com.");
         return;
       }
@@ -309,7 +308,6 @@ export default function Paywall({
       setTimeout(() => { setToastVisible(false); onDismiss?.(); }, 1600);
     } catch (e) {
       console.error("[Paywall] Restore failed:", e);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Restore didn't work", "Give it another shot.");
     } finally {
       setIsRestoring(false);
