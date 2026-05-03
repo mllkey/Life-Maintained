@@ -661,7 +661,8 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
         setSaved(s => ({ ...s, [k]: false }));
       }, 1500);
     } catch {
-      Alert.alert("Save Failed", "Could not update your mileage. Please try again.");
+      setErrors(e => ({ ...e, [k]: "Save failed — try again" }));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSaving(s => ({ ...s, [k]: false }));
     }
