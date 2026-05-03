@@ -15,7 +15,6 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
-import { useNetworkStatus } from "@/lib/useNetworkStatus";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ScanPack {
@@ -38,19 +37,12 @@ interface ScanPackModalProps {
 }
 
 export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackModalProps) {
-  const { isOffline } = useNetworkStatus("ScanPackModal");
-  const [offlineError, setOfflineError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const { user, refreshProfile } = useAuth();
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
 
   async function handlePurchase(pack: ScanPack) {
-    if (isOffline) {
-      setOfflineError("You're offline. Connect to the internet and try again.");
-      return;
-    }
-    setOfflineError(null);
     if (!user || Platform.OS === "web") {
       Alert.alert("Purchase on Mobile", "Use the iOS or Android app to purchase scan packs.");
       return;
@@ -169,11 +161,6 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
           <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
 
-        {offlineError && (
-          <View style={{ backgroundColor: "#E8943A", borderRadius: 12, padding: 14, marginHorizontal: 16, marginBottom: 8 }}>
-            <Text style={{ color: "#0C111B", fontFamily: "Inter_700Bold", fontSize: 14 }}>{offlineError}</Text>
-          </View>
-        )}
         <SaveToast visible={toastVisible} message="Scans added!" />
       </View>
     </Modal>

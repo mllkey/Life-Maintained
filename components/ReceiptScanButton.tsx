@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { useNetworkStatus } from "@/lib/useNetworkStatus";
 import { TouchableOpacity, Text, Alert, ActivityIndicator, StyleSheet, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -22,7 +21,6 @@ interface Props {
 }
 
 export default function ReceiptScanButton({ assetType, assetId, onScanComplete, onScanLimitReached, onPaidUserAtCap }: Props) {
-  const { isOffline } = useNetworkStatus("ReceiptScanButton");
   const [scanning, setScanning] = useState(false);
 
   const handleScan = async (useCamera: boolean) => {
@@ -96,7 +94,6 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
   };
 
   const showOptions = () => {
-    if (isOffline) { return; }
     Alert.alert("Scan Receipt", "How would you like to add a receipt?", [
       { text: "Take Photo", onPress: () => handleScan(true) },
       { text: "Choose from Library", onPress: () => handleScan(false) },

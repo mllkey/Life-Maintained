@@ -19,7 +19,6 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
-import { useNetworkStatus } from "@/lib/useNetworkStatus";
 import { rcReady, extractTierHintFromCustomerInfo, syncSubscriptionFromRc } from "@/lib/revenuecat";
 
 type Billing = "monthly" | "annual";
@@ -105,8 +104,6 @@ export default function Paywall({
 }: PaywallProps) {
   const insets = useSafeAreaInsets();
   const { user, profile, refreshProfile } = useAuth();
-  const { isOffline } = useNetworkStatus("Paywall");
-
   const [billing, setBilling] = useState<Billing>("annual");
   const [selectedTier, setSelectedTier] = useState<TierKey>("personal");
   const [isPurchasing, setIsPurchasing] = useState(false);
@@ -118,8 +115,6 @@ export default function Paywall({
   const [loadedOfferings, setLoadedOfferings] = useState<any | null>(null);
   const [offeringsError, setOfferingsError] = useState(false);
   const [loadingOfferings, setLoadingOfferings] = useState(Platform.OS !== "web");
-  const [offlineError, setOfflineError] = useState<string | null>(null);
-  const offlineRetryRef = useRef<(() => Promise<void>) | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("Welcome to LifeMaintained Premium!");
   const purchaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -163,13 +158,6 @@ export default function Paywall({
   }
 
   async function handlePurchase() {
-    if (isOffline) {
-      offlineRetryRef.current = handlePurchase;
-      setOfflineError("You're offline. Connect to the internet and try again.");
-      return;
-    }
-    offlineRetryRef.current = null;
-    setOfflineError(null);
     if (!user || Platform.OS === "web") {
       Alert.alert("Subscribe on Mobile", "Please use the iOS or Android app to subscribe.");
       return;
@@ -283,13 +271,6 @@ export default function Paywall({
   }
 
   async function handleRestore() {
-    if (isOffline) {
-      offlineRetryRef.current = handleRestore;
-      setOfflineError("You're offline. Connect to the internet and try again.");
-      return;
-    }
-    offlineRetryRef.current = null;
-    setOfflineError(null);
     if (Platform.OS === "web") return;
     if (!user) {
       Alert.alert("Sign in first", "Please sign in to restore your purchases.");
@@ -612,31 +593,6 @@ export default function Paywall({
             </View>
           )}
         </ScrollView>
-      )}
-      {offlineError && (
-        <View style={{ backgroundColor: "#E8943A", borderRadius: 12, padding: 14, marginHorizontal: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: "#0C111B", fontFamily: "Inter_700Bold", fontSize: 14 }}>{offlineError}</Text>
-          </View>
-          <Pressable
-            disabled={isOffline}
-            onPress={() => {
-              const retry = offlineRetryRef.current ?? handlePurchase;
-              offlineRetryRef.current = null;
-              setOfflineError(null);
-              retry();
-            }}
-            style={({ pressed }) => ({
-              backgroundColor: isOffline ? "rgba(12,17,27,0.25)" : "#0C111B",
-              opacity: pressed ? 0.85 : 1,
-              paddingHorizontal: 14,
-              paddingVertical: 8,
-              borderRadius: 8,
-            })}
-          >
-            <Text style={{ color: "#E8943A", fontFamily: "Inter_700Bold", fontSize: 13 }}>Retry</Text>
-          </Pressable>
-        </View>
       )}
       <SaveToast visible={toastVisible} message={toastMessage} />
     </View>
