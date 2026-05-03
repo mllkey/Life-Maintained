@@ -91,7 +91,7 @@
       "eas": {
         "projectId": "2b817e52-5d6d-43c4-9855-966f7ded10ad"
       },
-      "sentryDsn": "${SENTRY_DSN}"
+      "sentryDsn": "https://c153ff26c55fa27f933cc28e3f47f407@o4511203460841472.ingest.us.sentry.io/4511203468509184"
     }
   }
 }

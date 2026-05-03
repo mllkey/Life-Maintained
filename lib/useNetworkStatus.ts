@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AppState, AppStateStatus } from "react-native";
 import NetInfo, { NetInfoState } from "@react-native-community/netinfo";
+import * as Sentry from "@sentry/react-native";
 
 export interface NetworkStatus {
   isConnected: boolean;
@@ -45,25 +46,24 @@ export function useNetworkStatus(): NetworkStatus {
   useEffect(() => {
     let cancelled = false;
     const hookId = Math.random().toString(36).slice(2, 8);
-    console.log("[NetworkStatus] hook MOUNT id=" + hookId);
+    Sentry.captureMessage("[NetworkStatus] hook MOUNT id=" + hookId);
 
     const stopOfflinePoll = () => {
       if (pollHandleRef.current) {
         clearInterval(pollHandleRef.current);
         pollHandleRef.current = null;
-        console.log("[NetworkStatus] poll STOP id=" + hookId);
+        Sentry.captureMessage("[NetworkStatus] poll STOP id=" + hookId);
       }
     };
 
     const apply = (next: NetInfoState, source: string) => {
       if (cancelled) {
-        console.log("[NetworkStatus] apply IGNORED (cancelled) id=" + hookId + " source=" + source);
+        Sentry.captureMessage("[NetworkStatus] apply IGNORED (cancelled) id=" + hookId + " source=" + source);
         return;
       }
 
       const evaluated = evaluate(next);
-      console.log(
-        "[NetworkStatus] apply id=" + hookId +
+      Sentry.captureMessage("[NetworkStatus] apply id=" + hookId +
         " source=" + source +
         " type=" + String(next.type) +
         " isConnected=" + String(next.isConnected) +
@@ -74,12 +74,12 @@ export function useNetworkStatus(): NetworkStatus {
 
       if (evaluated.isOffline) {
         if (!pollHandleRef.current) {
-          console.log("[NetworkStatus] poll START id=" + hookId);
+          Sentry.captureMessage("[NetworkStatus] poll START id=" + hookId);
           pollHandleRef.current = setInterval(() => {
-            console.log("[NetworkStatus] poll TICK id=" + hookId);
+            Sentry.captureMessage("[NetworkStatus] poll TICK id=" + hookId);
             NetInfo.refresh()
               .then((s) => apply(s, "poll-refresh"))
-              .catch((e) => console.log("[NetworkStatus] poll REFRESH ERROR id=" + hookId + " err=" + String(e)));
+              .catch((e) => Sentry.captureMessage("[NetworkStatus] poll REFRESH ERROR id=" + hookId + " err=" + String(e)));
           }, 3000);
         }
       } else {
@@ -91,21 +91,21 @@ export function useNetworkStatus(): NetworkStatus {
 
     NetInfo.refresh()
       .then((s) => apply(s, "initial-refresh"))
-      .catch((e) => console.log("[NetworkStatus] initial REFRESH ERROR id=" + hookId + " err=" + String(e)));
+      .catch((e) => Sentry.captureMessage("[NetworkStatus] initial REFRESH ERROR id=" + hookId + " err=" + String(e)));
 
     const onAppStateChange = (nextStatus: AppStateStatus) => {
-      console.log("[NetworkStatus] AppState change id=" + hookId + " status=" + String(nextStatus));
+      Sentry.captureMessage("[NetworkStatus] AppState change id=" + hookId + " status=" + String(nextStatus));
       if (nextStatus === "active") {
         NetInfo.refresh()
           .then((s) => apply(s, "appstate-refresh"))
-          .catch((e) => console.log("[NetworkStatus] appstate REFRESH ERROR id=" + hookId + " err=" + String(e)));
+          .catch((e) => Sentry.captureMessage("[NetworkStatus] appstate REFRESH ERROR id=" + hookId + " err=" + String(e)));
       }
     };
 
     const appStateSub = AppState.addEventListener("change", onAppStateChange);
 
     return () => {
-      console.log("[NetworkStatus] hook UNMOUNT id=" + hookId);
+      Sentry.captureMessage("[NetworkStatus] hook UNMOUNT id=" + hookId);
       cancelled = true;
       unsubscribe();
       appStateSub.remove();

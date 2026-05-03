@@ -898,3 +898,105 @@ H5 OK
 **Finished:** Sun May  3 02:30:21 CDT 2026
 ================================================================
 
+
+================================================================
+## DIAGNOSTIC-2 — route NetworkStatus logs to Sentry
+**Run ID:** G6-1-DIAG2-20260503-132447
+**Started:** Sun May  3 13:24:47 CDT 2026
+**HEAD:** 3e015a7 diag(G6.1): instrument useNetworkStatus + OfflineBanner to capture stuck-offline cause
+================================================================
+
+## H0 — preconditions
+H0 OK — A1=10 A2_TOTAL=2 Sentry-not-imported
+
+## H1 — instrument lib/useNetworkStatus.ts with Sentry.captureMessage
+HALT_REASON: H1 fail — python regex matched 11 console.log("[NetworkStatus]...") calls but expected 10
+ROOT_CAUSE: self-check used line-oriented grep ("console.log.*\[NetworkStatus\]") which misses the multi-line call at lib/useNetworkStatus.ts:65-72 (console.log( ... ) split across 8 lines). The python regex with re.DOTALL correctly counts all 11.
+STATE: source files clean at HEAD 3e015a7. Only app.json and this log are modified. No partial swap on disk.
+NEXT: re-issue diagnostic with expected counts A1=11 / V3=11, OR amend python pattern + grep anchor to align. No edits performed unilaterally.
+
+================================================================
+## DIAGNOSTIC-2 RETRY — corrected counts hook=11 banner=2
+**Run ID:** G6-1-DIAG2-RETRY-20260503-132801
+**Started:** Sun May  3 13:28:01 CDT 2026
+**HEAD:** 3e015a7 diag(G6.1): instrument useNetworkStatus + OfflineBanner to capture stuck-offline cause
+================================================================
+
+## H0 — preconditions
+H0 OK — hook=11 banner=2 (total=13) Sentry-not-imported
+
+## H1 — instrument lib/useNetworkStatus.ts (expect 11 replacements)
+
+## H2 — instrument components/OfflineBanner.tsx (expect 2 replacements)
+
+## H3 — verification gates
+V1 hook console.log [NetworkStatus] remaining : 0 (expect 0)
+V2 banner console.log [NetworkStatus] remaining: 0 (expect 0)
+V3 hook Sentry.captureMessage calls           : 11 (expect 11)
+V4 banner Sentry.captureMessage calls         : 2 (expect 2)
+V5 hook Sentry import                         : 1 (expect 1)
+V6 banner Sentry import                       : 1 (expect 1)
+H3 OK
+
+## H4 — source-scope
+Changed files:
+app.json
+components/OfflineBanner.tsx
+lib/useNetworkStatus.ts
+pass-c-g6-1-execution.md
+H4 OK
+
+## H5 — tsc smoke
+tsc app/lib/components errors: 9 (baseline 2, gate -le 2)
+app/edit-vehicle.tsx(131,64): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'RejectExcessProperties<{ average_miles_per_month?: number | null | undefined; color?: string | null | undefined; created_at?: string | undefined; engine_cylinders?: number | null | undefined; engine_size?: string | ... 1 more ... | undefined; ... 23 more ...; year?: number | undefined; }, Record<...>>'.
+components/OfflineBanner.tsx(24,88): error TS2554: Expected 0-1 arguments, but got 2.
+components/OfflineBanner.tsx(30,90): error TS2554: Expected 0-1 arguments, but got 2.
+lib/maintenanceMatcher.ts(250,62): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'RejectExcessProperties<{ category?: string | null | undefined; created_at?: string | undefined; description?: string | null | undefined; estimated_cost?: number | null | undefined; id?: string | undefined; ... 11 more ...; user_id?: string | undefined; }, Record<...>>'.
+lib/useNetworkStatus.ts(68,38): error TS2554: Expected 0-1 arguments, but got 2.
+lib/useNetworkStatus.ts(82,123): error TS2554: Expected 0-1 arguments, but got 2.
+lib/useNetworkStatus.ts(94,118): error TS2554: Expected 0-1 arguments, but got 2.
+lib/useNetworkStatus.ts(97,110): error TS2554: Expected 0-1 arguments, but got 2.
+lib/useNetworkStatus.ts(101,123): error TS2554: Expected 0-1 arguments, but got 2.
+HALT_REASON: H5 fail
+
+================================================================
+## RETRY-2 — surgical string delete: , "info"
+**Run ID:** G6-1-RETRY2-20260503-133310
+**Started:** Sun May  3 13:33:10 CDT 2026
+**HEAD:** 3e015a7 diag(G6.1): instrument useNetworkStatus + OfflineBanner to capture stuck-offline cause
+================================================================
+
+## H0 — preconditions
+Hook ', "info")' occurrences   : 11 (expect 11)
+Banner ', "info")' occurrences : 2 (expect 2)
+Hook total Sentry.captureMessage  : 11 (expect 11)
+Banner total Sentry.captureMessage: 2 (expect 2)
+H0 OK
+
+## H1 — delete ', "info"' from lib/useNetworkStatus.ts (expect 11 deletions)
+
+## H2 — delete ', "info"' from components/OfflineBanner.tsx (expect 2 deletions)
+
+## H3 — verification
+V1 hook ', "info")' remaining   : 0 (expect 0)
+V2 banner ', "info")' remaining : 0 (expect 0)
+V3 hook captureMessage count     : 11 (expect 11)
+V4 banner captureMessage count   : 2 (expect 2)
+H3 OK
+
+## H4 — source-scope
+Changed files:
+app.json
+components/OfflineBanner.tsx
+lib/useNetworkStatus.ts
+pass-c-g6-1-execution.md
+H4 OK
+
+## H5 — tsc smoke
+tsc app/lib/components errors: 2 (baseline 2, gate -le 2)
+H5 OK
+
+================================================================
+## RETRY-2 COMPLETE — Run ID: G6-1-RETRY2-20260503-133310
+**Finished:** Sun May  3 13:33:20 CDT 2026
+================================================================

@@ -3,6 +3,7 @@ import { Animated, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import * as Sentry from "@sentry/react-native";
 
 import { useNetworkStatus } from "@/lib/useNetworkStatus";
 
@@ -20,14 +21,13 @@ export function OfflineBanner() {
   const insets = useSafeAreaInsets();
   const { isOffline } = useNetworkStatus();
 
-  console.log("[NetworkStatus] BANNER render isOffline=" + String(isOffline));
+  Sentry.captureMessage("[NetworkStatus] BANNER render isOffline=" + String(isOffline));
 
   const progress = useRef(new Animated.Value(0)).current;
   const lastOfflineRef = useRef<boolean | null>(null);
 
   useEffect(() => {
-    console.log(
-      "[NetworkStatus] BANNER effect isOffline=" + String(isOffline) +
+    Sentry.captureMessage("[NetworkStatus] BANNER effect isOffline=" + String(isOffline) +
       " last=" + String(lastOfflineRef.current)
     );
 
