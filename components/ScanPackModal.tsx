@@ -170,8 +170,8 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
         </Pressable>
 
         {offlineError && (
-          <View style={{ backgroundColor: "#1A1F2E", borderColor: "#2A2F3E", borderWidth: 1, borderRadius: 12, padding: 12, marginHorizontal: 16, marginBottom: 8 }}>
-            <Text style={{ color: "#FFFFFF", fontFamily: "Inter_600SemiBold", fontSize: 14 }}>{offlineError}</Text>
+          <View style={{ backgroundColor: "#E8943A", borderRadius: 12, padding: 14, marginHorizontal: 16, marginBottom: 8 }}>
+            <Text style={{ color: "#0C111B", fontFamily: "Inter_700Bold", fontSize: 14 }}>{offlineError}</Text>
           </View>
         )}
         <SaveToast visible={toastVisible} message="Scans added!" />

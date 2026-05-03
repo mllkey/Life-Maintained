@@ -4,21 +4,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
-import { Colors } from "@/constants/colors";
 import { useNetworkStatus } from "@/lib/useNetworkStatus";
 
 /**
  * App-shell offline indicator.
  *
- * Pattern: absolute-positioned full-width strip overlaying the status bar.
- * Matches Robinhood, Calm, and Apple Wallet's persistent-state strip pattern.
- * The strip does not reflow screen content when toggled — overlay-only — so
- * the rest of the app stays visually stable as the network state changes.
- *
- * Selection haptic fires on actual state transitions only (skip-mount via
- * lastOfflineRef sentinel).
+ * Full-width status strip with brand-orange treatment, dark high-contrast text,
+ * and warning notification haptic on real offline/online state transitions.
  */
-const STRIP_HEIGHT = 28;
+const STRIP_HEIGHT = 32;
+const ORANGE = "#E8943A";
+const ORANGE_TEXT = "#0C111B";
 
 export function OfflineBanner() {
   const insets = useSafeAreaInsets();
@@ -29,7 +25,7 @@ export function OfflineBanner() {
 
   useEffect(() => {
     if (lastOfflineRef.current !== null && lastOfflineRef.current !== isOffline) {
-      Haptics.selectionAsync().catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
     }
 
     lastOfflineRef.current = isOffline;
@@ -57,7 +53,12 @@ export function OfflineBanner() {
       style={[styles.container, { height: containerHeight, opacity }]}
     >
       <View style={[styles.strip, { marginTop: insets.top }]}>
-        <Ionicons name="cloud-offline-outline" size={14} color={Colors.text} />
+        <Ionicons
+          name="cloud-offline"
+          size={16}
+          color={ORANGE_TEXT}
+          style={styles.icon}
+        />
         <Text style={styles.text}>You{"'"}re offline</Text>
       </View>
     </Animated.View>
@@ -73,9 +74,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     overflow: "hidden",
-    backgroundColor: Colors.card,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
+    backgroundColor: ORANGE,
     zIndex: 9999,
     elevation: 9999,
   },
@@ -84,12 +83,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+  },
+  icon: {
+    marginRight: 8,
   },
   text: {
-    color: Colors.text,
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 12,
-    letterSpacing: 0.2,
+    color: ORANGE_TEXT,
+    fontFamily: "Inter_700Bold",
+    fontSize: 13,
+    letterSpacing: 0.3,
   },
 });

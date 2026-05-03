@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import NetInfo from "@react-native-community/netinfo";
+import { useEffect, useRef, useState } from "react";
+import { AppState, AppStateStatus } from "react-native";
+import NetInfo, { NetInfoState } from "@react-native-community/netinfo";
 
 export interface NetworkStatus {
   isConnected: boolean;
@@ -10,10 +11,33 @@ export interface NetworkStatus {
 /**
  * App-wide network status hook.
  *
- * Cold start is intentionally optimistic while NetInfo resolves. We only mark
- * offline when NetInfo gives positive evidence that the device is disconnected
- * or the internet is unreachable.
+ * Robustness rules:
+ * - isConnected must be literal true to count as connected.
+ * - isInternetReachable must be literal true to count as reachable after first sample.
+ * - Cold-start with both fields null is treated as online to avoid first-render offline flash.
+ * - After first sample, null/false reachability is offline.
+ * - AppState foreground re-fetch catches reconnect after app reopen.
+ * - 3-second poll while offline catches missed listener events on iOS.
  */
+function evaluate(nextState: NetInfoState, hasFirstSample: boolean): NetworkStatus {
+  if (!hasFirstSample && nextState.isConnected == null && nextState.isInternetReachable == null) {
+    return {
+      isConnected: true,
+      isInternetReachable: true,
+      isOffline: false,
+    };
+  }
+
+  const isConnected = nextState.isConnected === true;
+  const isInternetReachable = nextState.isInternetReachable === true;
+
+  return {
+    isConnected,
+    isInternetReachable,
+    isOffline: !isConnected || !isInternetReachable,
+  };
+}
+
 export function useNetworkStatus(): NetworkStatus {
   const [state, setState] = useState<NetworkStatus>({
     isConnected: true,
@@ -21,34 +45,55 @@ export function useNetworkStatus(): NetworkStatus {
     isOffline: false,
   });
 
+  const firstSampleRef = useRef(false);
+  const pollHandleRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((nextState) => {
-      const connected = nextState.isConnected !== false;
-      const reachable = nextState.isInternetReachable !== false;
+    let cancelled = false;
 
-      setState({
-        isConnected: connected,
-        isInternetReachable: reachable,
-        isOffline: !connected || !reachable,
-      });
-    });
+    const stopOfflinePoll = () => {
+      if (pollHandleRef.current) {
+        clearInterval(pollHandleRef.current);
+        pollHandleRef.current = null;
+      }
+    };
 
-    NetInfo.fetch()
-      .then((nextState) => {
-        const connected = nextState.isConnected !== false;
-        const reachable = nextState.isInternetReachable !== false;
+    const apply = (next: NetInfoState) => {
+      if (cancelled) return;
 
-        setState({
-          isConnected: connected,
-          isInternetReachable: reachable,
-          isOffline: !connected || !reachable,
-        });
-      })
-      .catch(() => {
-        // Keep the optimistic initial state if NetInfo cannot resolve.
-      });
+      const evaluated = evaluate(next, firstSampleRef.current);
+      firstSampleRef.current = true;
+      setState(evaluated);
 
-    return unsubscribe;
+      if (evaluated.isOffline) {
+        if (!pollHandleRef.current) {
+          pollHandleRef.current = setInterval(() => {
+            NetInfo.fetch().then(apply).catch(() => {});
+          }, 3000);
+        }
+      } else {
+        stopOfflinePoll();
+      }
+    };
+
+    const unsubscribe = NetInfo.addEventListener(apply);
+
+    NetInfo.fetch().then(apply).catch(() => {});
+
+    const onAppStateChange = (nextStatus: AppStateStatus) => {
+      if (nextStatus === "active") {
+        NetInfo.fetch().then(apply).catch(() => {});
+      }
+    };
+
+    const appStateSub = AppState.addEventListener("change", onAppStateChange);
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+      appStateSub.remove();
+      stopOfflinePoll();
+    };
   }, []);
 
   return state;

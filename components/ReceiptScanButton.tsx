@@ -26,7 +26,6 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
   const [scanning, setScanning] = useState(false);
 
   const handleScan = async (useCamera: boolean) => {
-    if (isOffline) { return; }
     const source: ReceiptScanSource = useCamera ? "camera" : "photo_library";
 
     try {
@@ -97,6 +96,7 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
   };
 
   const showOptions = () => {
+    if (isOffline) { return; }
     Alert.alert("Scan Receipt", "How would you like to add a receipt?", [
       { text: "Take Photo", onPress: () => handleScan(true) },
       { text: "Choose from Library", onPress: () => handleScan(false) },

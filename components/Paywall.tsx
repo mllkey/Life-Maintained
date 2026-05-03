@@ -119,6 +119,7 @@ export default function Paywall({
   const [offeringsError, setOfferingsError] = useState(false);
   const [loadingOfferings, setLoadingOfferings] = useState(Platform.OS !== "web");
   const [offlineError, setOfflineError] = useState<string | null>(null);
+  const offlineRetryRef = useRef<(() => Promise<void>) | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("Welcome to LifeMaintained Premium!");
   const purchaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -163,9 +164,11 @@ export default function Paywall({
 
   async function handlePurchase() {
     if (isOffline) {
+      offlineRetryRef.current = handlePurchase;
       setOfflineError("You're offline. Connect to the internet and try again.");
       return;
     }
+    offlineRetryRef.current = null;
     setOfflineError(null);
     if (!user || Platform.OS === "web") {
       Alert.alert("Subscribe on Mobile", "Please use the iOS or Android app to subscribe.");
@@ -281,9 +284,11 @@ export default function Paywall({
 
   async function handleRestore() {
     if (isOffline) {
+      offlineRetryRef.current = handleRestore;
       setOfflineError("You're offline. Connect to the internet and try again.");
       return;
     }
+    offlineRetryRef.current = null;
     setOfflineError(null);
     if (Platform.OS === "web") return;
     if (!user) {
@@ -609,22 +614,27 @@ export default function Paywall({
         </ScrollView>
       )}
       {offlineError && (
-        <View style={{ backgroundColor: Colors.card, borderColor: Colors.border, borderWidth: 1, borderRadius: 12, padding: 14, marginHorizontal: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <View style={{ backgroundColor: "#E8943A", borderRadius: 12, padding: 14, marginHorizontal: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 12 }}>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: Colors.text, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>{offlineError}</Text>
+            <Text style={{ color: "#0C111B", fontFamily: "Inter_700Bold", fontSize: 14 }}>{offlineError}</Text>
           </View>
           <Pressable
             disabled={isOffline}
-            onPress={() => { setOfflineError(null); handlePurchase(); }}
+            onPress={() => {
+              const retry = offlineRetryRef.current ?? handlePurchase;
+              offlineRetryRef.current = null;
+              setOfflineError(null);
+              retry();
+            }}
             style={({ pressed }) => ({
-              backgroundColor: isOffline ? Colors.border : "#E8943A",
+              backgroundColor: isOffline ? "rgba(12,17,27,0.25)" : "#0C111B",
               opacity: pressed ? 0.85 : 1,
               paddingHorizontal: 14,
               paddingVertical: 8,
               borderRadius: 8,
             })}
           >
-            <Text style={{ color: "#FFFFFF", fontFamily: "Inter_600SemiBold", fontSize: 13 }}>Retry</Text>
+            <Text style={{ color: "#E8943A", fontFamily: "Inter_700Bold", fontSize: 13 }}>Retry</Text>
           </Pressable>
         </View>
       )}
