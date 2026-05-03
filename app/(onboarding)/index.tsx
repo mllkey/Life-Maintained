@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, Alert } from "react-native";
+import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -43,16 +43,19 @@ const VERTICALS = [
 export default function OnboardingStartScreen() {
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState("vehicle");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const { setOnboardingCompleted, user } = useAuth();
 
   async function completeAndGo(destination: string, thenPush?: string) {
+    setSaveError(null);
     if (user) {
       const { error } = await supabase.from("profiles").upsert(
         { user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() },
         { onConflict: "user_id" }
       );
       if (error) {
-        Alert.alert("Something went wrong", "Could not save your progress. Please try again.");
+        setSaveError("Couldn’t save your progress. Please try again.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
     }
@@ -142,6 +145,10 @@ export default function OnboardingStartScreen() {
           })}
         </View>
 
+        {saveError ? (
+          <Text style={styles.inlineError}>{saveError}</Text>
+        ) : null}
+
         {/* CTA */}
         <Pressable
           style={({ pressed }) => [styles.cta, { opacity: pressed ? 0.85 : 1 }]}
@@ -188,4 +195,5 @@ const styles = StyleSheet.create({
   ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: "#0C111B" },
   skip: { alignItems: "center", paddingVertical: 4 },
   skipText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  inlineError: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue, lineHeight: 19 },
 });

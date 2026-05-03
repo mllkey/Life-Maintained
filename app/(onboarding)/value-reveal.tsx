@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, Alert } from "react-native";
+import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,6 +28,7 @@ export default function ValueRevealScreen() {
   const { setOnboardingCompleted, user } = useAuth();
   const pollCount = useRef(0);
   const [pollTimedOut, setPollTimedOut] = useState(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
   const skeletonAnim = usePulse();
 
   const { data: topTasks } = useQuery({
@@ -82,31 +83,36 @@ export default function ValueRevealScreen() {
     enabled: (topTasks?.length ?? 0) > 0,
   });
 
-  async function completeOnboarding() {
+  async function completeOnboarding(): Promise<boolean> {
+    setCompletionError(null);
     if (user) {
       const { error } = await supabase.from("profiles").upsert(
         { user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() },
         { onConflict: "user_id" }
       );
       if (error) {
-        Alert.alert("Something went wrong", "Could not save your progress. Please try again.");
-        return;
+        setCompletionError("Couldn’t save your progress. Please try again.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return false;
       }
     }
     if (user) {
       await AsyncStorage.setItem(getOnboardingKey(user.id), "true");
     }
     setOnboardingCompleted(true);
+    return true;
   }
 
   async function handleOpenDashboard() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await completeOnboarding();
+    const completed = await completeOnboarding();
+    if (!completed) return;
     router.replace("/(tabs)");
   }
 
   async function handleAddHome() {
-    await completeOnboarding();
+    const completed = await completeOnboarding();
+    if (!completed) return;
     router.replace("/(tabs)");
     setTimeout(() => router.push("/add-property"), 400);
     Haptics.selectionAsync();
@@ -217,6 +223,10 @@ export default function ValueRevealScreen() {
         )}
 
         {/* CTAs — always available even if tasks never loaded */}
+        {completionError ? (
+          <Text style={styles.inlineError}>{completionError}</Text>
+        ) : null}
+
         <Pressable onPress={handleAddHome} style={styles.secondary}>
           <Ionicons name="home-outline" size={16} color={Colors.home} />
           <Text style={styles.secondaryText}>Add home next</Text>
@@ -264,4 +274,5 @@ const styles = StyleSheet.create({
   ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: "#0C111B" },
   secondary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
   secondaryText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.home },
+  inlineError: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue, lineHeight: 19, textAlign: "center" },
 });

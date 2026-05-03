@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from "react";
-import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -67,6 +67,7 @@ export default function BuildingPlanScreen() {
   const [subtitleText, setSubtitleText] = React.useState("Reading the factory service manual");  // beat-driven swaps below override at 1.4/1.7/3.6/8.0s
   const [ready, setReady] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
+  const [continueError, setContinueError] = React.useState<string | null>(null);
 
   const hasAttempted = useRef(false);
   const hasFinalized = useRef(false);
@@ -262,6 +263,7 @@ export default function BuildingPlanScreen() {
 
   async function handleRetry() {
     setFailed(false);
+    setContinueError(null);
     setReady(false);
     setTypedName("");
     setSubtitleText("Reading the factory service manual");
@@ -322,13 +324,15 @@ export default function BuildingPlanScreen() {
   }
 
   async function handleContinueAnyway() {
+    setContinueError(null);
     if (user) {
       const { error } = await supabase.from("profiles").upsert(
         { user_id: user.id, onboarding_completed: true, updated_at: new Date().toISOString() },
         { onConflict: "user_id" }
       );
       if (error) {
-        Alert.alert("Something went wrong", "Could not save your progress. Please try again.");
+        setContinueError("Couldn’t save your progress. Please try again.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
       await AsyncStorage.setItem(getOnboardingKey(user.id), "true");
@@ -443,6 +447,9 @@ export default function BuildingPlanScreen() {
 
       {failed && (
         <View style={styles.errorButtons}>
+          {continueError ? (
+            <Text style={styles.inlineError}>{continueError}</Text>
+          ) : null}
           <Pressable style={styles.cta} onPress={handleRetry}>
             <Text style={styles.ctaText}>Try again</Text>
           </Pressable>
@@ -561,4 +568,5 @@ const styles = StyleSheet.create({
   ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: "#0C111B" },
   skip: { alignItems: "center", paddingVertical: 4 },
   skipText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  inlineError: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue, lineHeight: 19, textAlign: "center" },
 });
