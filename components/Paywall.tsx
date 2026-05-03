@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Alert,
   TextInput,
   Platform,
   Animated,
@@ -87,6 +86,14 @@ const TIER_CONFIG: Record<TierKey, {
   },
 };
 
+type PaywallInlineError = {
+  title: string;
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  feedback?: "error" | "warning";
+};
+
 interface PaywallProps {
   canDismiss: boolean;
   showSkip?: boolean;
@@ -117,11 +124,21 @@ export default function Paywall({
   const [loadingOfferings, setLoadingOfferings] = useState(Platform.OS !== "web");
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("Welcome to LifeMaintained Premium!");
+  const [toastSubtitle, setToastSubtitle] = useState<string | null>(null);
+  const [toastIsError, setToastIsError] = useState(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [inlineError, setInlineError] = useState<PaywallInlineError | null>(null);
   const purchaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestProfileTierRef = useRef<string | null>(profile?.subscription_tier ?? null);
   useEffect(() => {
     latestProfileTierRef.current = profile?.subscription_tier ?? null;
   }, [profile?.subscription_tier]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   const waitForWebhookProfileTier = async (expectedTier: string): Promise<boolean> => {
     for (let i = 0; i < 8; i++) {
@@ -137,9 +154,35 @@ export default function Paywall({
     loadOfferings();
   }, []);
 
+  function showToast(message: string, subtitle?: string, isError = false, duration = 2400) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToastMessage(message);
+    setToastSubtitle(subtitle ?? null);
+    setToastIsError(isError);
+    setToastVisible(true);
+    toastTimerRef.current = setTimeout(() => {
+      setToastVisible(false);
+      toastTimerRef.current = null;
+    }, duration);
+  }
+
+  function showInlineError(next: PaywallInlineError) {
+    setInlineError(next);
+    const feedbackType =
+      next.feedback === "warning"
+        ? Haptics.NotificationFeedbackType.Warning
+        : Haptics.NotificationFeedbackType.Error;
+    Haptics.notificationAsync(feedbackType).catch(() => {});
+  }
+
+  function clearPaywallError() {
+    setInlineError(null);
+  }
+
   async function loadOfferings(retried = false) {
     setLoadingOfferings(true);
     setOfferingsError(false);
+    clearPaywallError();
     try {
       await rcReady;
       const Purchases = (await import("react-native-purchases")).default;
@@ -159,7 +202,12 @@ export default function Paywall({
 
   async function handlePurchase() {
     if (!user || Platform.OS === "web") {
-      Alert.alert("Subscribe on Mobile", "Please use the iOS or Android app to subscribe.");
+      showInlineError({
+        title: "Sign in required",
+        message: "Please sign in to start a subscription.",
+        actionLabel: "Try again",
+        onAction: handlePurchase,
+      });
       return;
     }
     setIsPurchasing(true);
@@ -182,10 +230,11 @@ export default function Paywall({
     }, 30000);
 
     const purchaseEscapeTimeout = setTimeout(() => {
-      Alert.alert(
-        "Still waiting on Apple",
-        "This is taking longer than expected. You can leave this screen — if Apple completes the charge, you can come back and tap Restore Purchases."
-      );
+      showInlineError({
+        title: "Still waiting on Apple",
+        message: "This is taking longer than expected. You can leave this screen — if Apple completes the charge, come back and tap Restore Purchases.",
+        feedback: "warning",
+      });
     }, 150000);
 
     try {
@@ -199,7 +248,12 @@ export default function Paywall({
         if (purchaseTimeoutRef.current) { clearTimeout(purchaseTimeoutRef.current); purchaseTimeoutRef.current = null; }
         clearTimeout(purchaseEscapeTimeout);
         setIsPurchasing(false);
-        Alert.alert("Couldn't load pricing", "Give it another shot.");
+        showInlineError({
+          title: "Couldn't load pricing",
+          message: "Check your connection and try again.",
+          actionLabel: "Try again",
+          onAction: () => loadOfferings(false),
+        });
         return;
       }
 
@@ -211,7 +265,11 @@ export default function Paywall({
         if (purchaseTimeoutRef.current) { clearTimeout(purchaseTimeoutRef.current); purchaseTimeoutRef.current = null; }
         clearTimeout(purchaseEscapeTimeout);
         setIsPurchasing(false);
-        Alert.alert("Plan unavailable", "This plan isn't available right now. Try a different one.");
+        showInlineError({
+          title: "Plan unavailable",
+          message: "This plan isn't available right now. Try another plan or check back shortly.",
+          feedback: "warning",
+        });
         return;
       }
 
@@ -248,22 +306,35 @@ export default function Paywall({
               onDismiss?.();
             }, 1600);
           } else {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            Alert.alert(
-              "Almost there",
-              "Your purchase went through but we couldn't activate it just yet. Tap Restore Purchases to finish, or contact support@lifemaintained.com if it doesn't update."
-            );
+            showInlineError({
+              title: "Almost there",
+              message: "Your purchase went through, but we couldn't activate it just yet. Tap Restore Purchases, or contact support@lifemaintained.com if it doesn't update.",
+              actionLabel: "Restore Purchases",
+              onAction: handleRestore,
+              feedback: "warning",
+            });
           }
         }
       } else {
         console.warn("[Paywall] Purchase completed but no entitlement found:", JSON.stringify(active));
-        Alert.alert("Something went wrong", "Your purchase was processed but we couldn't activate your plan. Please tap Restore Purchases, or contact support@lifemaintained.com.");
+        showInlineError({
+          title: "Activation needs a retry",
+          message: "Your purchase was processed, but we couldn't activate your plan. Tap Restore Purchases, or contact support@lifemaintained.com.",
+          actionLabel: "Restore Purchases",
+          onAction: handleRestore,
+          feedback: "warning",
+        });
       }
     } catch (err: any) {
       if (purchaseTimeoutRef.current) clearTimeout(purchaseTimeoutRef.current);
       clearTimeout(purchaseEscapeTimeout);
       if (!err?.userCancelled) {
-        Alert.alert("Purchase didn't go through", err?.message ?? "Give it another shot.");
+        showInlineError({
+          title: "Purchase didn't go through",
+          message: err?.message ?? "Give it another shot.",
+          actionLabel: "Try again",
+          onAction: handlePurchase,
+        });
       }
     } finally {
       setIsPurchasing(false);
@@ -273,7 +344,12 @@ export default function Paywall({
   async function handleRestore() {
     if (Platform.OS === "web") return;
     if (!user) {
-      Alert.alert("Sign in first", "Please sign in to restore your purchases.");
+      showInlineError({
+        title: "Sign in required",
+        message: "Please sign in to restore your purchases.",
+        actionLabel: "Try again",
+        onAction: handleRestore,
+      });
       return;
     }
     setIsRestoring(true);
@@ -284,20 +360,31 @@ export default function Paywall({
       const tierHint = extractTierHintFromCustomerInfo(customerInfo);
 
       if (!tierHint) {
-        Alert.alert("No purchases found", "If you think this is wrong, reach out to us at support@lifemaintained.com.");
+        showInlineError({
+          title: "No purchases found",
+          message: "We couldn't find purchases on this Apple ID. Contact support@lifemaintained.com if you think this is wrong.",
+        });
         return;
       }
 
       const syncResult = await syncSubscriptionFromRc();
       if (!syncResult.ok) {
-        Alert.alert("Restore couldn't finish", "We saw your purchase but couldn't update your account. Please try again or contact support@lifemaintained.com.");
+        showInlineError({
+          title: "Restore couldn't finish",
+          message: "We saw your purchase, but couldn't update your account. Please try again or contact support@lifemaintained.com.",
+          actionLabel: "Try again",
+          onAction: handleRestore,
+        });
         return;
       }
 
       await refreshProfile();
 
       if (syncResult.tier === "free") {
-        Alert.alert("No active subscription", "We couldn't find an active subscription on this Apple ID. Contact support@lifemaintained.com if you think this is wrong.");
+        showInlineError({
+          title: "No active subscription",
+          message: "We couldn't find an active subscription on this Apple ID. Contact support@lifemaintained.com if you think this is wrong.",
+        });
         return;
       }
 
@@ -307,7 +394,12 @@ export default function Paywall({
       setTimeout(() => { setToastVisible(false); onDismiss?.(); }, 1600);
     } catch (e) {
       console.error("[Paywall] Restore failed:", e);
-      Alert.alert("Restore didn't work", "Give it another shot.");
+      showInlineError({
+        title: "Restore didn't work",
+        message: "Give it another shot.",
+        actionLabel: "Try again",
+        onAction: handleRestore,
+      });
     } finally {
       setIsRestoring(false);
     }
@@ -407,6 +499,24 @@ export default function Paywall({
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={Colors.accent} size="large" />
         </View>
+      ) : offeringsError ? (
+        <View style={styles.offeringsErrorContainer}>
+          <View style={styles.offeringsErrorIcon}>
+            <Ionicons name="cloud-offline-outline" size={30} color={Colors.accent} />
+          </View>
+          <Text style={styles.offeringsErrorTitle}>Couldn't load plans</Text>
+          <Text style={styles.offeringsErrorText}>
+            Check your connection and try again. Your account is safe.
+          </Text>
+          <Pressable
+            style={({ pressed }) => [styles.offeringsRetryBtn, { opacity: pressed ? 0.82 : 1 }]}
+            onPress={() => loadOfferings(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Try loading plans again"
+          >
+            <Text style={styles.offeringsRetryText}>Try again</Text>
+          </Pressable>
+        </View>
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -494,6 +604,37 @@ export default function Paywall({
           <Text style={styles.trialCalloutText}>
             14-day free trial · Full access · No credit card required
           </Text>
+
+          {inlineError && (
+            <View style={[
+              styles.inlineErrorCard,
+              inlineError.feedback === "warning" && styles.inlineWarningCard,
+            ]}>
+              <View style={styles.inlineErrorIcon}>
+                <Ionicons
+                  name={inlineError.feedback === "warning" ? "time-outline" : "alert-circle"}
+                  size={18}
+                  color={inlineError.feedback === "warning" ? Colors.accent : Colors.overdue}
+                />
+              </View>
+              <View style={styles.inlineErrorTextBlock}>
+                <Text style={styles.inlineErrorTitle}>{inlineError.title}</Text>
+                <Text style={styles.inlineErrorMessage}>{inlineError.message}</Text>
+              </View>
+              {inlineError.actionLabel && inlineError.onAction && (
+                <Pressable
+                  style={({ pressed }) => [styles.inlineErrorAction, { opacity: pressed ? 0.75 : 1 }]}
+                  onPress={() => {
+                    const action = inlineError.onAction;
+                    clearPaywallError();
+                    action?.();
+                  }}
+                >
+                  <Text style={styles.inlineErrorActionText}>{inlineError.actionLabel}</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
 
           <Pressable
             style={({ pressed }) => [
@@ -594,7 +735,12 @@ export default function Paywall({
           )}
         </ScrollView>
       )}
-      <SaveToast visible={toastVisible} message={toastMessage} />
+      <SaveToast
+        visible={toastVisible}
+        message={toastMessage}
+        subtitle={toastSubtitle ?? undefined}
+        isError={toastIsError}
+      />
     </View>
     </KeyboardAvoidingView>
   );
@@ -749,4 +895,81 @@ const styles = StyleSheet.create({
   webFallbackInner: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 },
   webFallbackTitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text },
   webFallbackSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 22 },
+
+  inlineErrorCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.overdue,
+    padding: 14,
+  },
+  inlineWarningCard: { borderColor: Colors.accent },
+  inlineErrorIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.card,
+  },
+  inlineErrorTextBlock: { flex: 1, gap: 3 },
+  inlineErrorTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: Colors.text },
+  inlineErrorMessage: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    lineHeight: 18,
+  },
+  inlineErrorAction: {
+    alignSelf: "center",
+    borderRadius: 999,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  inlineErrorActionText: { fontSize: 13, fontFamily: "Inter_700Bold", color: Colors.accent },
+
+  offeringsErrorContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    gap: 14,
+  },
+  offeringsErrorIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  offeringsErrorTitle: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    color: Colors.text,
+    textAlign: "center",
+  },
+  offeringsErrorText: {
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  offeringsRetryBtn: {
+    marginTop: 8,
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+  },
+  offeringsRetryText: { fontSize: 15, fontFamily: "Inter_700Bold", color: Colors.textInverse },
 });
