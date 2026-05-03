@@ -11,30 +11,25 @@ export interface NetworkStatus {
 /**
  * App-wide network status hook.
  *
- * Robustness rules:
- * - isConnected must be literal true to count as connected.
- * - isInternetReachable must be literal true to count as reachable after first sample.
- * - Cold-start with both fields null is treated as online to avoid first-render offline flash.
- * - After first sample, null/false reachability is offline.
- * - AppState foreground re-fetch catches reconnect after app reopen.
- * - 3-second poll while offline catches missed listener events on iOS.
+ * Rules:
+ * - Offline only on positive false evidence:
+ *   isConnected === false OR isInternetReachable === false.
+ * - Null on either field is unknown and must not keep the app offline.
+ * - Recovery uses NetInfo.refresh() instead of NetInfo.fetch().
+ * - AppState foreground re-probes via refresh() to catch reconnect after app reopen.
+ * - 3-second poll while offline re-probes via refresh() to catch missed listener events.
  */
-function evaluate(nextState: NetInfoState, hasFirstSample: boolean): NetworkStatus {
-  if (!hasFirstSample && nextState.isConnected == null && nextState.isInternetReachable == null) {
-    return {
-      isConnected: true,
-      isInternetReachable: true,
-      isOffline: false,
-    };
-  }
-
-  const isConnected = nextState.isConnected === true;
-  const isInternetReachable = nextState.isInternetReachable === true;
+function evaluate(nextState: NetInfoState): NetworkStatus {
+  // Symmetric rule: offline only on positive false evidence. Null is unknown -> assume online.
+  // This prevents stuck-offline on iOS reconnect where NetInfo emits
+  // { isConnected: true, isInternetReachable: null } while the reachability probe runs.
+  const offline =
+    nextState.isConnected === false || nextState.isInternetReachable === false;
 
   return {
-    isConnected,
-    isInternetReachable,
-    isOffline: !isConnected || !isInternetReachable,
+    isConnected: nextState.isConnected !== false,
+    isInternetReachable: nextState.isInternetReachable !== false,
+    isOffline: offline,
   };
 }
 
@@ -45,7 +40,6 @@ export function useNetworkStatus(): NetworkStatus {
     isOffline: false,
   });
 
-  const firstSampleRef = useRef(false);
   const pollHandleRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -61,14 +55,13 @@ export function useNetworkStatus(): NetworkStatus {
     const apply = (next: NetInfoState) => {
       if (cancelled) return;
 
-      const evaluated = evaluate(next, firstSampleRef.current);
-      firstSampleRef.current = true;
+      const evaluated = evaluate(next);
       setState(evaluated);
 
       if (evaluated.isOffline) {
         if (!pollHandleRef.current) {
           pollHandleRef.current = setInterval(() => {
-            NetInfo.fetch().then(apply).catch(() => {});
+            NetInfo.refresh().then(apply).catch(() => {});
           }, 3000);
         }
       } else {
@@ -78,11 +71,11 @@ export function useNetworkStatus(): NetworkStatus {
 
     const unsubscribe = NetInfo.addEventListener(apply);
 
-    NetInfo.fetch().then(apply).catch(() => {});
+    NetInfo.refresh().then(apply).catch(() => {});
 
     const onAppStateChange = (nextStatus: AppStateStatus) => {
       if (nextStatus === "active") {
-        NetInfo.fetch().then(apply).catch(() => {});
+        NetInfo.refresh().then(apply).catch(() => {});
       }
     };
 
