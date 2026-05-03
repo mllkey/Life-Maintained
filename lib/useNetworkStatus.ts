@@ -77,9 +77,41 @@ export function useNetworkStatus(): NetworkStatus {
           Sentry.captureMessage("[NetworkStatus] poll START id=" + hookId);
           pollHandleRef.current = setInterval(() => {
             Sentry.captureMessage("[NetworkStatus] poll TICK id=" + hookId);
+            // Path 1: NetInfo refresh (may be stuck on iOS — see Sentry diag).
             NetInfo.refresh()
               .then((s) => apply(s, "poll-refresh"))
               .catch((e) => Sentry.captureMessage("[NetworkStatus] poll REFRESH ERROR id=" + hookId + " err=" + String(e)));
+            // Path 2: independent 204 reachability probe. Bypasses NetInfo entirely.
+            // If this resolves with status 204, we are actually online regardless
+            // of what NetInfo reports. Synthesize an online state and apply.
+            const probeController = new AbortController();
+            const probeTimeout = setTimeout(() => probeController.abort(), 3000);
+            fetch("https://clients3.google.com/generate_204", {
+              method: "HEAD",
+              cache: "no-store",
+              signal: probeController.signal,
+            })
+              .then((res) => {
+                clearTimeout(probeTimeout);
+                if (res.status === 204) {
+                  Sentry.captureMessage("[NetworkStatus] probe-204 OK id=" + hookId);
+                  apply(
+                    {
+                      type: "unknown" as NetInfoState["type"],
+                      isConnected: true,
+                      isInternetReachable: true,
+                      details: null,
+                    } as NetInfoState,
+                    "probe-204"
+                  );
+                } else {
+                  Sentry.captureMessage("[NetworkStatus] probe-204 BAD STATUS id=" + hookId + " status=" + String(res.status));
+                }
+              })
+              .catch((e) => {
+                clearTimeout(probeTimeout);
+                Sentry.captureMessage("[NetworkStatus] probe-204 FAIL id=" + hookId + " err=" + String(e));
+              });
           }, 3000);
         }
       } else {

@@ -1000,3 +1000,50 @@ H5 OK
 ## RETRY-2 COMPLETE — Run ID: G6-1-RETRY2-20260503-133310
 **Finished:** Sun May  3 13:33:20 CDT 2026
 ================================================================
+
+================================================================
+## HOTFIX-4 — independent 204 reachability probe
+**Run ID:** G6-1-HOTFIX4-20260503-144421
+**Started:** Sun May  3 14:44:21 CDT 2026
+**HEAD:** 0d0f22a diag(G6.1): route NetworkStatus diagnostics to Sentry + wire DSN
+================================================================
+
+## H0 — preconditions
+HALT_REASON: H0 fail — HEAD=0d0f22a expected 3e015a7
+
+================================================================
+## HOTFIX-4 RERUN — independent 204 reachability probe
+**Run ID:** G6-1-HOTFIX4-RERUN-20260503-144719
+**Started:** Sun May  3 14:47:19 CDT 2026
+**HEAD:** 0d0f22a diag(G6.1): route NetworkStatus diagnostics to Sentry + wire DSN
+================================================================
+
+## H0 — preconditions
+H0 OK — A1=11 A2=1 A3=1 A4=1
+
+## H1 — add 204 probe to offline poll tick
+
+## H2 — verification
+V1 probe-204 references           : 4 (expect 4)
+V2 fetch generate_204 call site   : 1 (expect 1)
+V3 AbortController usage          : 1 (expect 1)
+V4 captureMessage total           : 14 (expect 14)
+V5 method HEAD                    : 1 (expect 1)
+V6 cache no-store                 : 1 (expect 1)
+V7 status 204 check               : 1 (expect 1)
+H2 OK
+
+## H3 — source-scope
+Changed files:
+lib/useNetworkStatus.ts
+pass-c-g6-1-execution.md
+H3 OK
+
+## H4 — tsc smoke
+tsc app/lib/components errors: 2 (baseline 2, gate -le 2)
+H4 OK
+
+================================================================
+## HOTFIX-4 RERUN COMPLETE — Run ID: G6-1-HOTFIX4-RERUN-20260503-144719
+**Finished:** Sun May  3 14:47:28 CDT 2026
+================================================================
