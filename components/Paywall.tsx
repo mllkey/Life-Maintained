@@ -105,7 +105,7 @@ export default function Paywall({
 }: PaywallProps) {
   const insets = useSafeAreaInsets();
   const { user, profile, refreshProfile } = useAuth();
-  const { isOffline } = useNetworkStatus();
+  const { isOffline } = useNetworkStatus("Paywall");
 
   const [billing, setBilling] = useState<Billing>("annual");
   const [selectedTier, setSelectedTier] = useState<TierKey>("personal");

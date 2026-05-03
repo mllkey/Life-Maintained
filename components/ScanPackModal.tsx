@@ -38,7 +38,7 @@ interface ScanPackModalProps {
 }
 
 export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackModalProps) {
-  const { isOffline } = useNetworkStatus();
+  const { isOffline } = useNetworkStatus("ScanPackModal");
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const { user, refreshProfile } = useAuth();

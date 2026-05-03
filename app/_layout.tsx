@@ -27,6 +27,7 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import { Colors } from "@/constants/colors";
 import NotifPermissionBanner from "@/components/NotifPermissionBanner";
 import OfflineBanner from "@/components/OfflineBanner";
+import { NetworkStatusProvider } from "@/lib/NetworkStatusProvider";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { BudgetAlertProvider } from "@/context/BudgetAlertContext";
 import * as Notifications from "expo-notifications";
@@ -297,9 +298,11 @@ function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <KeyboardProvider>
-            <AuthProvider>
-              <RootLayoutNav />
-            </AuthProvider>
+            <NetworkStatusProvider>
+              <AuthProvider>
+                <RootLayoutNav />
+              </AuthProvider>
+            </NetworkStatusProvider>
           </KeyboardProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>

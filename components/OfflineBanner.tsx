@@ -19,7 +19,7 @@ const ORANGE_TEXT = "#0C111B";
 
 export function OfflineBanner() {
   const insets = useSafeAreaInsets();
-  const { isOffline } = useNetworkStatus();
+  const { isOffline } = useNetworkStatus("OfflineBanner");
 
   Sentry.captureMessage("[NetworkStatus] BANNER render isOffline=" + String(isOffline));
 
@@ -37,11 +37,18 @@ export function OfflineBanner() {
 
     lastOfflineRef.current = isOffline;
 
+    const target = isOffline ? 1 : 0;
     Animated.timing(progress, {
-      toValue: isOffline ? 1 : 0,
+      toValue: target,
       duration: isOffline ? 220 : 180,
       useNativeDriver: false,
-    }).start();
+    }).start(({ finished }) => {
+      Sentry.captureMessage(
+        "[NetworkStatus] BANNER animation done isOffline=" + String(isOffline) +
+          " target=" + String(target) +
+          " finished=" + String(finished)
+      );
+    });
   }, [isOffline, progress]);
 
   const containerHeight = progress.interpolate({

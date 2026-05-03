@@ -22,7 +22,7 @@ interface Props {
 }
 
 export default function ReceiptScanButton({ assetType, assetId, onScanComplete, onScanLimitReached, onPaidUserAtCap }: Props) {
-  const { isOffline } = useNetworkStatus();
+  const { isOffline } = useNetworkStatus("ReceiptScanButton");
   const [scanning, setScanning] = useState(false);
 
   const handleScan = async (useCamera: boolean) => {
