@@ -20,10 +20,17 @@ export function OfflineBanner() {
   const insets = useSafeAreaInsets();
   const { isOffline } = useNetworkStatus();
 
+  console.log("[NetworkStatus] BANNER render isOffline=" + String(isOffline));
+
   const progress = useRef(new Animated.Value(0)).current;
   const lastOfflineRef = useRef<boolean | null>(null);
 
   useEffect(() => {
+    console.log(
+      "[NetworkStatus] BANNER effect isOffline=" + String(isOffline) +
+      " last=" + String(lastOfflineRef.current)
+    );
+
     if (lastOfflineRef.current !== null && lastOfflineRef.current !== isOffline) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
     }

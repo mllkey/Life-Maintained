@@ -855,3 +855,46 @@ H6 OK — tsc <= baseline
 **Finished:** Sun May  3 01:56:31 CDT 2026
 ================================================================
 
+
+================================================================
+## DIAGNOSTIC-1 — instrument useNetworkStatus + OfflineBanner
+**Run ID:** G6-1-DIAG1-20260503-023012
+**Started:** Sun May  3 02:30:12 CDT 2026
+**HEAD:** 496f1dc fix(G6.1): symmetric evaluator + NetInfo.refresh() to fix stuck offline banner on iOS reconnect
+================================================================
+
+## H0 — preconditions
+H0 OK — anchors A1=1 A2=3 A3=1 A4=1 A5=1
+
+## H1 — edit 1: instrument useNetworkStatus.ts
+
+## H2 — edit 2: instrument OfflineBanner
+
+## H3 — verification
+V1 hook MOUNT log         : 1 (expect 1)
+V2 poll TICK log          : 1 (expect 1)
+V3 hook UNMOUNT log       : 1 (expect 1)
+V4 listener apply call    : 1 (expect 1)
+V5 initial-refresh apply  : 1 (expect 1)
+V6 poll-refresh apply     : 1 (expect 1)
+V7 appstate-refresh apply : 1 (expect 1)
+V8 banner render log      : 1 (expect 1)
+V9 banner effect log      : 1 (expect 1)
+H3 OK
+
+## H4 — source-scope
+Changed files:
+components/OfflineBanner.tsx
+lib/useNetworkStatus.ts
+pass-c-g6-1-execution.md
+H4 OK
+
+## H5 — tsc smoke
+tsc errors: 2 (baseline 2, gate -le 2)
+H5 OK
+
+================================================================
+## DIAGNOSTIC-1 COMPLETE — Run ID: G6-1-DIAG1-20260503-023012
+**Finished:** Sun May  3 02:30:21 CDT 2026
+================================================================
+
