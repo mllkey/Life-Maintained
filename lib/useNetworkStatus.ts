@@ -16,14 +16,12 @@ export interface NetworkStatus {
  * - Offline only on positive false evidence:
  *   isConnected === false OR isInternetReachable === false.
  * - Null on either field is unknown and must not keep the app offline.
- * - Recovery uses NetInfo.refresh() instead of NetInfo.fetch().
- * - AppState foreground re-probes via refresh() to catch reconnect after app reopen.
- * - 3-second poll while offline re-probes via refresh() to catch missed listener events.
+ * - On iOS, app/_layout.tsx configures NetInfo to use JS reachability instead
+ *   of native reachability so airplane-mode reconnect does not get trapped by
+ *   stale native reachability state.
+ * - Offline recovery polling only runs while AppState is active.
  */
 function evaluate(nextState: NetInfoState): NetworkStatus {
-  // Symmetric rule: offline only on positive false evidence. Null is unknown -> assume online.
-  // This prevents stuck-offline on iOS reconnect where NetInfo emits
-  // { isConnected: true, isInternetReachable: null } while the reachability probe runs.
   const offline =
     nextState.isConnected === false || nextState.isInternetReachable === false;
 
@@ -42,6 +40,8 @@ export function useNetworkStatus(): NetworkStatus {
   });
 
   const pollHandleRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const refreshInFlightRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,88 +49,123 @@ export function useNetworkStatus(): NetworkStatus {
     Sentry.captureMessage("[NetworkStatus] hook MOUNT id=" + hookId);
 
     const stopOfflinePoll = () => {
-      if (pollHandleRef.current) {
-        clearInterval(pollHandleRef.current);
-        pollHandleRef.current = null;
-        Sentry.captureMessage("[NetworkStatus] poll STOP id=" + hookId);
-      }
+      if (!pollHandleRef.current) return;
+      clearInterval(pollHandleRef.current);
+      pollHandleRef.current = null;
+      Sentry.captureMessage("[NetworkStatus] poll STOP id=" + hookId);
     };
 
-    const apply = (next: NetInfoState, source: string) => {
+    const refreshNow = (source: string) => {
+      if (cancelled) return;
+
+      if (appStateRef.current !== "active") {
+        Sentry.captureMessage(
+          "[NetworkStatus] refresh SKIP inactive id=" +
+            hookId +
+            " source=" +
+            source +
+            " appState=" +
+            String(appStateRef.current)
+        );
+        return;
+      }
+
+      if (refreshInFlightRef.current) {
+        Sentry.captureMessage(
+          "[NetworkStatus] refresh SKIP in-flight id=" + hookId + " source=" + source
+        );
+        return;
+      }
+
+      refreshInFlightRef.current = true;
+      Sentry.captureMessage("[NetworkStatus] refresh START id=" + hookId + " source=" + source);
+
+      NetInfo.refresh()
+        .then((s) => apply(s, source))
+        .catch((e) =>
+          Sentry.captureMessage(
+            "[NetworkStatus] refresh ERROR id=" +
+              hookId +
+              " source=" +
+              source +
+              " err=" +
+              String(e)
+          )
+        )
+        .finally(() => {
+          refreshInFlightRef.current = false;
+        });
+    };
+
+    const startOfflinePoll = () => {
+      if (pollHandleRef.current) return;
+
+      Sentry.captureMessage("[NetworkStatus] poll START id=" + hookId);
+      pollHandleRef.current = setInterval(() => {
+        Sentry.captureMessage(
+          "[NetworkStatus] poll TICK id=" +
+            hookId +
+            " appState=" +
+            String(appStateRef.current)
+        );
+        refreshNow("poll-refresh");
+      }, 3000);
+    };
+
+    function apply(next: NetInfoState, source: string) {
       if (cancelled) {
-        Sentry.captureMessage("[NetworkStatus] apply IGNORED (cancelled) id=" + hookId + " source=" + source);
+        Sentry.captureMessage(
+          "[NetworkStatus] apply IGNORED cancelled id=" + hookId + " source=" + source
+        );
         return;
       }
 
       const evaluated = evaluate(next);
-      Sentry.captureMessage("[NetworkStatus] apply id=" + hookId +
-        " source=" + source +
-        " type=" + String(next.type) +
-        " isConnected=" + String(next.isConnected) +
-        " isInternetReachable=" + String(next.isInternetReachable) +
-        " -> isOffline=" + String(evaluated.isOffline)
+      Sentry.captureMessage(
+        "[NetworkStatus] apply id=" +
+          hookId +
+          " source=" +
+          source +
+          " appState=" +
+          String(appStateRef.current) +
+          " type=" +
+          String(next.type) +
+          " isConnected=" +
+          String(next.isConnected) +
+          " isInternetReachable=" +
+          String(next.isInternetReachable) +
+          " -> isOffline=" +
+          String(evaluated.isOffline)
       );
+
       setState(evaluated);
 
       if (evaluated.isOffline) {
-        if (!pollHandleRef.current) {
-          Sentry.captureMessage("[NetworkStatus] poll START id=" + hookId);
-          pollHandleRef.current = setInterval(() => {
-            Sentry.captureMessage("[NetworkStatus] poll TICK id=" + hookId);
-            // Path 1: NetInfo refresh (may be stuck on iOS — see Sentry diag).
-            NetInfo.refresh()
-              .then((s) => apply(s, "poll-refresh"))
-              .catch((e) => Sentry.captureMessage("[NetworkStatus] poll REFRESH ERROR id=" + hookId + " err=" + String(e)));
-            // Path 2: independent 204 reachability probe. Bypasses NetInfo entirely.
-            // If this resolves with status 204, we are actually online regardless
-            // of what NetInfo reports. Synthesize an online state and apply.
-            const probeController = new AbortController();
-            const probeTimeout = setTimeout(() => probeController.abort(), 3000);
-            fetch("https://clients3.google.com/generate_204", {
-              method: "HEAD",
-              cache: "no-store",
-              signal: probeController.signal,
-            })
-              .then((res) => {
-                clearTimeout(probeTimeout);
-                if (res.status === 204) {
-                  Sentry.captureMessage("[NetworkStatus] probe-204 OK id=" + hookId);
-                  apply(
-                    {
-                      type: "unknown" as NetInfoState["type"],
-                      isConnected: true,
-                      isInternetReachable: true,
-                      details: null,
-                    } as NetInfoState,
-                    "probe-204"
-                  );
-                } else {
-                  Sentry.captureMessage("[NetworkStatus] probe-204 BAD STATUS id=" + hookId + " status=" + String(res.status));
-                }
-              })
-              .catch((e) => {
-                clearTimeout(probeTimeout);
-                Sentry.captureMessage("[NetworkStatus] probe-204 FAIL id=" + hookId + " err=" + String(e));
-              });
-          }, 3000);
-        }
+        startOfflinePoll();
       } else {
         stopOfflinePoll();
       }
-    };
+    }
 
     const unsubscribe = NetInfo.addEventListener((s) => apply(s, "listener"));
 
-    NetInfo.refresh()
-      .then((s) => apply(s, "initial-refresh"))
-      .catch((e) => Sentry.captureMessage("[NetworkStatus] initial REFRESH ERROR id=" + hookId + " err=" + String(e)));
+    refreshNow("initial-refresh");
 
     const onAppStateChange = (nextStatus: AppStateStatus) => {
-      Sentry.captureMessage("[NetworkStatus] AppState change id=" + hookId + " status=" + String(nextStatus));
-      if (nextStatus === "active") {
-        NetInfo.refresh()
-          .then((s) => apply(s, "appstate-refresh"))
-          .catch((e) => Sentry.captureMessage("[NetworkStatus] appstate REFRESH ERROR id=" + hookId + " err=" + String(e)));
+      const previousStatus = appStateRef.current;
+      appStateRef.current = nextStatus;
+
+      Sentry.captureMessage(
+        "[NetworkStatus] AppState change id=" +
+          hookId +
+          " prev=" +
+          String(previousStatus) +
+          " next=" +
+          String(nextStatus)
+      );
+
+      if (nextStatus === "active" && previousStatus !== "active") {
+        refreshNow("appstate-active-refresh");
       }
     };
 

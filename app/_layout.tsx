@@ -17,6 +17,7 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
 import { AppState, AppStateStatus, Platform, View } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -36,6 +37,21 @@ import Constants from 'expo-constants';
 import { nativeApplicationVersion, nativeBuildVersion } from 'expo-application';
 
 SplashScreen.preventAutoHideAsync();
+
+if (Platform.OS === "ios") {
+  NetInfo.configure({
+    reachabilityUrl: "https://clients3.google.com/generate_204",
+    reachabilityMethod: "HEAD",
+    reachabilityTest: async (response) => response.status === 204,
+    reachabilityShortTimeout: 3000,
+    reachabilityLongTimeout: 15000,
+    reachabilityRequestTimeout: 3000,
+    useNativeReachability: false,
+  });
+
+  Sentry.captureMessage("[NetworkStatus] NetInfo configured for iOS JS reachability");
+}
+
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
