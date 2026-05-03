@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import { queryClient } from "@/lib/query-client";
 
 export type ErrorFallbackProps = {
   error: Error;
@@ -35,10 +36,15 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   const [isModalVisible, setIsModalVisible] = useState(false);
 
   const handleRestart = async () => {
+    queryClient.clear();
+
     try {
       await reloadAppAsync();
     } catch (restartError) {
-      console.error("Failed to restart app:", restartError);
+      if (__DEV__) {
+        console.error("Failed to restart app:", restartError);
+      }
+    } finally {
       resetError();
     }
   };
@@ -86,9 +92,11 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           Please reload the app to continue.
         </Text>
 
-        <Text style={[styles.errorHint, { color: theme.textSecondary }]} numberOfLines={3}>
-          {error.message}
-        </Text>
+        {__DEV__ ? (
+          <Text style={[styles.errorHint, { color: theme.textSecondary }]} numberOfLines={3}>
+            {error.message}
+          </Text>
+        ) : null}
 
         <Pressable
           onPress={handleRestart}
