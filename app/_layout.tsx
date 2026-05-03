@@ -17,7 +17,6 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
 import { AppState, AppStateStatus, Platform, View } from "react-native";
-import NetInfo from "@react-native-community/netinfo";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -26,8 +25,6 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
 import { Colors } from "@/constants/colors";
 import NotifPermissionBanner from "@/components/NotifPermissionBanner";
-import OfflineBanner from "@/components/OfflineBanner";
-import { NetworkStatusProvider } from "@/lib/NetworkStatusProvider";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { BudgetAlertProvider } from "@/context/BudgetAlertContext";
 import * as Notifications from "expo-notifications";
@@ -38,20 +35,6 @@ import Constants from 'expo-constants';
 import { nativeApplicationVersion, nativeBuildVersion } from 'expo-application';
 
 SplashScreen.preventAutoHideAsync();
-
-if (Platform.OS === "ios") {
-  NetInfo.configure({
-    reachabilityUrl: "https://clients3.google.com/generate_204",
-    reachabilityMethod: "HEAD",
-    reachabilityTest: async (response) => response.status === 204,
-    reachabilityShortTimeout: 3000,
-    reachabilityLongTimeout: 15000,
-    reachabilityRequestTimeout: 3000,
-    useNativeReachability: false,
-  });
-
-  Sentry.captureMessage("[NetworkStatus] NetInfo configured for iOS JS reachability");
-}
 
 
 Notifications.setNotificationHandler({
@@ -244,7 +227,6 @@ function RootLayoutNav() {
           <Stack.Screen name="reset-password" options={{ headerShown: false, presentation: "fullScreenModal" }} />
         </Stack>
         {showBanner && <NotifPermissionBanner userId={session?.user?.id} />}
-        <OfflineBanner />
       </View>
     </BudgetAlertProvider>
   );
@@ -298,11 +280,9 @@ function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <KeyboardProvider>
-            <NetworkStatusProvider>
-              <AuthProvider>
-                <RootLayoutNav />
-              </AuthProvider>
-            </NetworkStatusProvider>
+            <AuthProvider>
+              <RootLayoutNav />
+            </AuthProvider>
           </KeyboardProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>
