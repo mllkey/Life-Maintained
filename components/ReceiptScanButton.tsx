@@ -2,7 +2,9 @@ import React, { useState } from "react";
 import { TouchableOpacity, Text, Alert, ActivityIndicator, StyleSheet, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
+import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
+import { SaveToast } from "@/components/SaveToast";
 import {
   scanReceipt,
   ReceiptScanResult,
@@ -22,6 +24,18 @@ interface Props {
 
 export default function ReceiptScanButton({ assetType, assetId, onScanComplete, onScanLimitReached, onPaidUserAtCap }: Props) {
   const [scanning, setScanning] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastSubtitle, setToastSubtitle] = useState<string | null>(null);
+  const [toastIsError, setToastIsError] = useState(true);
+
+  function showToast(message: string, subtitle?: string, isError = true) {
+    setToastMessage(message);
+    setToastSubtitle(subtitle ?? null);
+    setToastIsError(isError);
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 2600);
+  }
 
   const handleScan = async (useCamera: boolean) => {
     const source: ReceiptScanSource = useCamera ? "camera" : "photo_library";
@@ -30,7 +44,8 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
       if (useCamera) {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== "granted") {
-          Alert.alert("Permission needed", "Camera access is required to scan receipts.");
+          showToast("Camera access is off", "Allow camera access in Settings to scan receipts.");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
           return;
         }
       }
@@ -62,32 +77,25 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
         const isScanLimit = result.scans_used != null && result.scans_limit != null && result.scans_used >= result.scans_limit;
 
         if (isScanLimit) {
-          // Prefer pack modal for paid users; fall back to upgrade flow.
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
           const handler = onPaidUserAtCap ?? onScanLimitReached;
           if (handler) {
-            const ctaLabel = onPaidUserAtCap ? "Get More Scans" : "Upgrade";
-            Alert.alert(
-              "Scan Limit Reached",
-              `You've used all ${result.scans_limit} scans this month.`,
-              [
-                { text: ctaLabel, onPress: handler },
-                { text: "Enter Manually", style: "cancel" },
-              ]
-            );
+            handler();
             return;
           }
+          showToast("Scan limit reached", "You can enter the receipt manually for now.");
+          return;
         }
 
-        Alert.alert(
-          "Scan Issue",
-          result.error || "We couldn't read all fields automatically. You can fill in the remaining fields manually."
-        );
+        showToast("Scan needs review", result.error || "We filled what we could. Review the fields below.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       }
 
       onScanComplete(withUri);
     } catch (err) {
       console.error("Receipt scan error:", err);
-      Alert.alert("Scan Failed", "Something went wrong scanning the receipt. Please enter the details manually.");
+      showToast("Scan failed", "Enter the details manually for now.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
     } finally {
       setScanning(false);
     }
@@ -111,9 +119,12 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
   }
 
   return (
-    <TouchableOpacity style={styles.button} onPress={showOptions}>
-      <Text style={styles.buttonText}>📷 Scan Receipt</Text>
-    </TouchableOpacity>
+    <View>
+      <TouchableOpacity style={styles.button} onPress={showOptions}>
+        <Text style={styles.buttonText}>📷 Scan Receipt</Text>
+      </TouchableOpacity>
+      <SaveToast visible={toastVisible} message={toastMessage} subtitle={toastSubtitle ?? undefined} isError={toastIsError} />
+    </View>
   );
 }
 

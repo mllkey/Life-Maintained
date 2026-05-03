@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
 } from "react-native";
@@ -41,10 +40,13 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
   const { user, refreshProfile } = useAuth();
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
   async function handlePurchase(pack: ScanPack) {
+    setPurchaseError(null);
     if (!user || Platform.OS === "web") {
-      Alert.alert("Purchase on Mobile", "Use the iOS or Android app to purchase scan packs.");
+      setPurchaseError("Scan packs can be purchased in the mobile app.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       return;
     }
     setPurchasingId(pack.id);
@@ -82,6 +84,7 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
 
       await refreshProfile();
 
+      setPurchaseError(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setToastVisible(true);
       setTimeout(() => {
@@ -90,7 +93,9 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
       }, 1200);
     } catch (err: any) {
       if (!err?.userCancelled) {
-        Alert.alert("Purchase Failed", err?.message ?? "Something went wrong. Please try again.");
+        if (__DEV__) console.error("Scan pack purchase failed:", err);
+        setPurchaseError("Purchase couldn’t finish. Please try again.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       }
     } finally {
       setPurchasingId(null);
@@ -119,6 +124,13 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
             <Text style={styles.subtitle}>You've used all your receipt scans for this month</Text>
           </View>
         </View>
+
+        {purchaseError ? (
+          <View style={styles.errorCard}>
+            <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
+            <Text style={styles.errorText}>{purchaseError}</Text>
+          </View>
+        ) : null}
 
         {PACKS.map(pack => {
           const isPurchasing = purchasingId === pack.id;
@@ -237,4 +249,22 @@ const styles = StyleSheet.create({
   packPrice: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.text },
   cancelBtn: { alignItems: "center", paddingVertical: 8 },
   cancelText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  errorCard: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.overdue,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.overdue,
+    lineHeight: 18,
+  },
 });
