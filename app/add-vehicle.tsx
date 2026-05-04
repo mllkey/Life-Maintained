@@ -978,12 +978,12 @@ export default function AddVehicleScreen() {
           year: yearNum,
           make: make.trim(),
           model: model.trim(),
-          trim: null,
+          trim: trim.trim() || null,
           nickname: null,
           vehicle_type: vehicleType,
           vehicle_category: selectedVehicleCategory,
           fuel_type: fuelType,
-          is_awd: false,
+          is_awd: isAwd,
           tracking_mode: (MILEAGE_TRACKED_TYPES.has(vehicleType) ? 'mileage' : HOURS_TRACKED_TYPES.has(vehicleType) ? 'hours' : 'time'),
           mileage: HOURS_TRACKED_TYPES.has(vehicleType) ? null : (mileage ? parseInt(mileage.replace(/,/g, ""), 10) : null),
           hours: null,
@@ -994,9 +994,9 @@ export default function AddVehicleScreen() {
           season_end_month: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          vin: null,
-          engine_size: null,
-          engine_cylinders: null,
+          vin: vin.trim().toUpperCase() || null,
+          engine_size: engineSize,
+          engine_cylinders: engineCylinders,
         }
       : {
           user_id: user.id,
@@ -1193,6 +1193,60 @@ export default function AddVehicleScreen() {
         >
           {isOnboarding ? (
               <>
+                <FieldGroup label="Add by VIN">
+                  <View style={styles.vinRow}>
+                    <TextInput
+                      style={styles.vinInput}
+                      value={vin}
+                      onChangeText={v => {
+                        setVin(v.toUpperCase());
+                        setVinError(null);
+                        setVinSuccess(null);
+                      }}
+                      placeholder="17-character VIN"
+                      placeholderTextColor={Colors.textTertiary}
+                      autoCapitalize="characters"
+                      maxLength={17}
+                      returnKeyType="go"
+                      onSubmitEditing={handleVinLookup}
+                    />
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.vinBtn,
+                        vin.trim().length === 17 && styles.vinBtnActive,
+                        { opacity: pressed ? 0.8 : 1 },
+                      ]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        handleVinLookup();
+                      }}
+                      disabled={isVinLoading}
+                    >
+                      {isVinLoading
+                        ? <ActivityIndicator size="small" color={Colors.textInverse} />
+                        : <Text style={[styles.vinBtnText, vin.trim().length === 17 && styles.vinBtnTextActive]}>
+                            Look Up
+                          </Text>}
+                    </Pressable>
+                  </View>
+
+                  {vinError && (
+                    <View style={styles.alertBox}>
+                      <Ionicons name="alert-circle-outline" size={14} color={Colors.overdue} />
+                      <Text style={styles.alertText}>{vinError}</Text>
+                    </View>
+                  )}
+                  {vinSuccess && (
+                    <View style={styles.successBox}>
+                      <Ionicons name="checkmark-circle" size={14} color={Colors.good} />
+                      <Text style={styles.successText}>{vinSuccess}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.vinHint}>
+                    Or enter year, make, and model manually below.
+                  </Text>
+                </FieldGroup>
+
                 <FieldGroup label="Basic Info">
                   <View style={styles.row}>
                     <View style={{ flex: 1 }}>

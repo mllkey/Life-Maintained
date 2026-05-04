@@ -80,7 +80,7 @@ export default function SignUpScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={[styles.container, { backgroundColor: Colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
