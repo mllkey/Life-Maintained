@@ -19,6 +19,7 @@ import Svg, { Circle } from "react-native-svg";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import type { Href } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -94,6 +95,50 @@ function formatDueDate(dueDate: string | null): string {
   if (days === 1) return "Tomorrow";
   if (days < 30) return `${days}d`;
   return format(due, "MMM d");
+}
+
+type MonthAheadItem = DashboardItem & { daysUntil: number };
+
+function getMonthAheadItems(items: DashboardItem[] | undefined): MonthAheadItem[] {
+  const today = new Date();
+  return (items ?? [])
+    .filter(item => item.dueDate)
+    .map(item => ({ ...item, daysUntil: differenceInDays(parseISO(item.dueDate!), today) }))
+    .filter(item => item.daysUntil <= 30)
+    .sort((a, b) => a.daysUntil - b.daysUntil || a.title.localeCompare(b.title));
+}
+
+function verticalCount(items: DashboardItem[]): number {
+  return new Set(items.map(item => item.category)).size;
+}
+
+function possessiveName(label: string): string {
+  const clean = label.trim() || "item";
+  return clean.endsWith("s") ? `${clean}'` : `${clean}'s`;
+}
+
+function monthAheadPhrase(item: MonthAheadItem): string {
+  const subject = item.category === "health" ? item.subtitle : possessiveName(item.subtitle);
+  const timing = item.daysUntil < 0
+    ? `${Math.abs(item.daysUntil)}d overdue`
+    : item.daysUntil === 0
+      ? "today"
+      : item.daysUntil === 1
+        ? "tomorrow"
+        : `in ${item.daysUntil} days`;
+  return `${subject} ${item.title} is ${timing}`;
+}
+
+function joinNatural(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+}
+
+function categoryLabel(category: DashboardItem["category"]): string {
+  if (category === "vehicles") return "Vehicle";
+  if (category === "properties") return "Home";
+  return "Health";
 }
 
 function getAgeScreenings(dob: string | null, sex: string | null): { title: string; description: string }[] {
@@ -318,6 +363,7 @@ export default function DashboardScreen() {
   const isLoading = countsLoading || dashLoading;
   const isNewUser = !isLoading && counts != null && counts.vehicles === 0 && counts.properties === 0 && counts.health === 0;
   const screenings = healthProfile ? getAgeScreenings(healthProfile.date_of_birth, healthProfile.sex_at_birth) : [];
+  const monthAheadItems = getMonthAheadItems(dashboardItems);
   const upcomingItems = dashboardItems?.slice(0, 6) ?? [];
 
   const overdueCnt = dashboardItems?.filter(i => i.status === "overdue").length ?? 0;
@@ -398,6 +444,8 @@ export default function DashboardScreen() {
                 <Ionicons name="close" size={14} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
               </Pressable>
             )}
+            <YourMonthAheadCard items={monthAheadItems} />
+
             {totalTasks > 0 && (
               <HealthScoreCard
                 score={healthScore}
@@ -787,6 +835,94 @@ function DashboardSkeleton() {
   );
 }
 
+function YourMonthAheadCard({ items }: { items: MonthAheadItem[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const heroItems = items.slice(0, 3);
+  const detailItems = items.slice(0, 6);
+  const categories = verticalCount(items);
+
+  if (categories < 2 || heroItems.length < 2) return null;
+
+  const narrative = `This month: ${joinNatural(heroItems.map(monthAheadPhrase))}.`;
+
+  function handlePress(item?: MonthAheadItem) {
+    if (!item) {
+      setExpanded(value => !value);
+      Haptics.selectionAsync();
+      return;
+    }
+    if (item.category === "vehicles") {
+      const href: Href = `/vehicle/${item.entityId}` as Href;
+      router.push(href);
+    } else if (item.category === "properties") {
+      const href: Href = `/property/${item.entityId}` as Href;
+      router.push(href);
+    } else {
+      const href: Href = `/(tabs)/health` as Href;
+      router.push(href);
+    }
+    Haptics.selectionAsync();
+  }
+
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.monthAheadCard, { opacity: pressed ? 0.92 : 1 }]}
+      onPress={() => handlePress()}
+      accessibilityRole="button"
+      accessibilityLabel="Show this month ahead"
+    >
+      <View style={styles.monthAheadTopRow}>
+        <View style={styles.monthAheadIconStack}>
+          <View style={[styles.monthAheadIcon, { backgroundColor: Colors.blueMuted, marginRight: -8 }]}>
+            <Ionicons name="car" size={15} color={Colors.blue} />
+          </View>
+          <View style={[styles.monthAheadIcon, { backgroundColor: Colors.goodMuted, marginRight: -8 }]}>
+            <Ionicons name="home" size={15} color={Colors.good} />
+          </View>
+          <View style={[styles.monthAheadIcon, { backgroundColor: Colors.healthMuted }]}>
+            <Ionicons name="heart" size={15} color={Colors.health} />
+          </View>
+        </View>
+        <Text style={styles.monthAheadEyebrow}>YOUR MONTH AHEAD</Text>
+        <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={18} color={Colors.textTertiary} />
+      </View>
+
+      <Text style={styles.monthAheadTitle}>Everything coming up, in one place</Text>
+      <Text style={styles.monthAheadNarrative}>{narrative}</Text>
+
+      <View style={styles.monthAheadMetaRow}>
+        <Text style={styles.monthAheadMeta}>{items.length} item{items.length !== 1 ? "s" : ""}</Text>
+        <View style={styles.monthAheadDot} />
+        <Text style={styles.monthAheadMeta}>{categories} areas</Text>
+      </View>
+
+      {expanded ? (
+        <View style={styles.monthAheadDetails}>
+          {detailItems.map(item => {
+            const cat = CAT[item.category];
+            return (
+              <Pressable
+                key={`${item.category}-${item.id}`}
+                style={({ pressed }) => [styles.monthAheadDetailRow, { opacity: pressed ? 0.72 : 1 }]}
+                onPress={() => handlePress(item)}
+              >
+                <View style={[styles.monthAheadDetailIcon, { backgroundColor: cat.muted }]}>
+                  <Ionicons name={cat.icon} size={14} color={cat.color} />
+                </View>
+                <View style={styles.monthAheadDetailText}>
+                  <Text style={styles.monthAheadDetailTitle} numberOfLines={1}>{item.title}</Text>
+                  <Text style={styles.monthAheadDetailSub} numberOfLines={1}>{item.subtitle} · {categoryLabel(item.category)}</Text>
+                </View>
+                <Text style={[styles.monthAheadDue, { color: item.status === "overdue" ? Colors.overdue : Colors.dueSoon }]}>{formatDueDate(item.dueDate)}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
 function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
   function handlePress(item: DashboardItem) {
     if (item.category === "vehicles") router.push(`/vehicle/${item.entityId}` as any);
@@ -934,41 +1070,134 @@ function SpendingChartCard({ spending }: { spending: Record<string, number> | un
 
 
 function WelcomeView() {
-  const cats: (keyof typeof CAT)[] = ["vehicles", "properties", "health"];
+  const cards = [
+    {
+      key: "vehicles" as const,
+      icon: "car" as const,
+      route: "/add-vehicle" as Href,
+      color: Colors.blue,
+      muted: Colors.blueMuted,
+      title: "Start with your vehicle",
+      body: "Never forget an oil change again. Takes 30 seconds to set up.",
+      chips: ["Oil", "Tires", "Battery"],
+    },
+    {
+      key: "properties" as const,
+      icon: "home" as const,
+      route: "/add-property" as Href,
+      color: Colors.good,
+      muted: Colors.goodMuted,
+      title: "Add your home",
+      body: "Your house runs on a schedule. We'll tell you what it is.",
+      chips: ["HVAC", "Filters", "Seasonal"],
+    },
+    {
+      key: "health" as const,
+      icon: "heart" as const,
+      route: "/add-family-member" as Href,
+      color: Colors.health,
+      muted: Colors.healthMuted,
+      title: "Track family health",
+      body: "Annual physicals, pet vet visits, and refills in one place.",
+      chips: ["People", "Pets", "Refills"],
+    },
+  ];
+
   return (
     <View style={styles.welcomeWrap}>
-      <View style={styles.welcomeBanner}>
-        <View style={styles.welcomeIconWrap}>
-          <Ionicons name="sparkles" size={28} color={Colors.accent} />
+      <View style={styles.welcomeHero}>
+        <View style={styles.welcomeOrbit}>
+          {cards.map((card, index) => {
+            const orbitOffset = [styles.welcomeOrbitIcon0, styles.welcomeOrbitIcon1, styles.welcomeOrbitIcon2][index];
+            return (
+              <View key={card.key} style={[styles.welcomeOrbitIcon, orbitOffset, { backgroundColor: card.muted }]}>
+                <Ionicons name={card.icon} size={18} color={card.color} />
+              </View>
+            );
+          })}
+          <View style={styles.welcomeCenterMark}>
+            <Ionicons name="sparkles" size={24} color={Colors.accent} />
+          </View>
         </View>
-        <View style={styles.welcomeText}>
-          <Text style={styles.welcomeTitle}>Welcome to LifeMaintained!</Text>
-          <Text style={styles.welcomeBody}>Stay on top of your vehicles, home, and health maintenance.</Text>
-        </View>
+        <Text style={styles.welcomeTitle}>Your maintenance command center</Text>
+        <Text style={styles.welcomeBody}>Start with one thing. LifeMaintained connects the schedule across your vehicle, home, and health.</Text>
       </View>
-      <View style={styles.emptyCardsRow}>
-        {cats.map(key => {
-          const cat = CAT[key];
-          return (
-            <View key={key} style={[styles.emptyCard, { borderColor: cat.color + "55" }]}>
-              <Ionicons name={cat.icon} size={28} color={cat.color} />
-              <Text style={styles.emptyCardLabel}>{cat.label}</Text>
-              <Text style={styles.emptyCardDesc}>{cat.desc}</Text>
-              <Pressable
-                style={({ pressed }) => [styles.emptyCardBtn, { backgroundColor: cat.color, opacity: pressed ? 0.85 : 1 }]}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(cat.addRoute); }}
-              >
-                <Ionicons name="add" size={18} color={Colors.textInverse} />
-              </Pressable>
+
+      <View style={styles.emptyCardsStack}>
+        {cards.map(card => (
+          <Pressable
+            key={card.key}
+            style={({ pressed }) => [styles.emptyVisionCard, { borderColor: card.color + "44", opacity: pressed ? 0.86 : 1 }]}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(card.route); }}
+            accessibilityRole="button"
+            accessibilityLabel={card.title}
+          >
+            <View style={[styles.emptyVisionIcon, { backgroundColor: card.muted }]}>
+              <Ionicons name={card.icon} size={22} color={card.color} />
             </View>
-          );
-        })}
+            <View style={styles.emptyVisionText}>
+              <Text style={styles.emptyVisionTitle}>{card.title}</Text>
+              <Text style={styles.emptyVisionBody}>{card.body}</Text>
+              <View style={styles.emptyVisionChips}>
+                {card.chips.map(chip => (
+                  <Text key={chip} style={[styles.emptyVisionChip, { color: card.color, backgroundColor: card.muted }]}>{chip}</Text>
+                ))}
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+          </Pressable>
+        ))}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  monthAheadCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  monthAheadTopRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  monthAheadIconStack: { flexDirection: "row", alignItems: "center" },
+  monthAheadIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.borderSubtle },
+  monthAheadEyebrow: { flex: 1, fontSize: 11, fontFamily: "Inter_700Bold", color: Colors.textTertiary, letterSpacing: 1.4 },
+  monthAheadTitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.25, lineHeight: 25, marginBottom: 8 },
+  monthAheadNarrative: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
+  monthAheadMetaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14 },
+  monthAheadMeta: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary },
+  monthAheadDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.textTertiary, opacity: 0.7 },
+  monthAheadDetails: { marginTop: 14, borderTopWidth: 1, borderTopColor: Colors.borderSubtle, paddingTop: 8, gap: 2 },
+  monthAheadDetailRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9 },
+  monthAheadDetailIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  monthAheadDetailText: { flex: 1, gap: 1 },
+  monthAheadDetailTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  monthAheadDetailSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  monthAheadDue: { fontSize: 12, fontFamily: "Inter_600SemiBold", flexShrink: 0 },
+
+  welcomeHero: { alignItems: "center", backgroundColor: Colors.card, borderRadius: 24, paddingHorizontal: 20, paddingVertical: 24, borderWidth: 1, borderColor: Colors.border, gap: 12 },
+  welcomeOrbit: { width: 112, height: 112, borderRadius: 56, alignItems: "center", justifyContent: "center", marginBottom: 2 },
+  welcomeCenterMark: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(232,147,58,0.14)", borderWidth: 1, borderColor: "rgba(232,147,58,0.32)" },
+  welcomeOrbitIcon: { position: "absolute", width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.borderSubtle },
+  welcomeOrbitIcon0: { top: 0, left: 37 },
+  welcomeOrbitIcon1: { right: 2, bottom: 18 },
+  welcomeOrbitIcon2: { left: 2, bottom: 18 },
+  emptyCardsStack: { gap: 12 },
+  emptyVisionCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.card, borderRadius: 18, padding: 15, borderWidth: 1 },
+  emptyVisionIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  emptyVisionText: { flex: 1, gap: 5 },
+  emptyVisionTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.1 },
+  emptyVisionBody: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 18 },
+  emptyVisionChips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 3 },
+  emptyVisionChip: { overflow: "hidden", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, fontSize: 11, fontFamily: "Inter_600SemiBold" },
+
   headerGradient: { paddingBottom: 20 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", paddingHorizontal: 20, paddingTop: 16 },
   headerTitle: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
@@ -1044,28 +1273,9 @@ const styles = StyleSheet.create({
   screeningDesc: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
 
   welcomeWrap: { gap: 16 },
-  welcomeBanner: { flexDirection: "row", gap: 14, backgroundColor: Colors.accentLight, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.accent + "30", alignItems: "flex-start" },
-  welcomeIconWrap: { width: 48, height: 48, borderRadius: 14, backgroundColor: Colors.accentMuted, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  welcomeText: { flex: 1, gap: 4 },
   welcomeTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
   welcomeBody: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 20 },
-  emptyCardsRow: { flexDirection: "row", gap: 10 },
-  emptyCard: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderRadius: 14,
-    padding: 14,
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.card,
-    minHeight: 160,
-    justifyContent: "center",
-  },
   emptyCardIcon: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  emptyCardLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
-  emptyCardDesc: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", lineHeight: 15 },
-  emptyCardBtn: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center", marginTop: 2 },
 
   qmCard: {
     backgroundColor: Colors.card,
