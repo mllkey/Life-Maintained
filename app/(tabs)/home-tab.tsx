@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   Pressable,
   RefreshControl,
   Platform,
-  Alert,
+  Modal,
 } from "react-native";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays } from "date-fns";
 import { propertyLimit } from "@/lib/subscription";
+import Paywall from "@/components/Paywall";
 
 type Property = {
   id: string;
@@ -72,6 +73,7 @@ export default function HomeTabScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
+  const [showPaywall, setShowPaywall] = useState(false);
 
   const { data: properties, isLoading, refetch } = useQuery({
     queryKey: ["properties", user?.id],
@@ -177,14 +179,7 @@ export default function HomeTabScreen() {
                 ]}
                 onPress={() => {
                   if (isLocked) {
-                    Alert.alert(
-                      "Property Locked",
-                      "This property is locked on your current plan. Upgrade to access all your properties.",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        { text: "Upgrade Now", onPress: () => router.push("/subscription" as any) },
-                      ]
-                    );
+                    setShowPaywall(true);
                     return;
                   }
                   router.push(`/property/${p.id}` as any);
@@ -209,6 +204,15 @@ export default function HomeTabScreen() {
           })
         )}
       </ScrollView>
+
+      <Modal visible={showPaywall} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowPaywall(false)}>
+        <Paywall
+          canDismiss
+          showSkip={false}
+          subtitle="Adding more properties requires Pro."
+          onDismiss={() => setShowPaywall(false)}
+        />
+      </Modal>
     </View>
   );
 }

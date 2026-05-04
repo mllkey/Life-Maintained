@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   Pressable,
   RefreshControl,
   Platform,
-  Alert,
+  Modal,
   Image,
 } from "react-native";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
@@ -23,6 +23,7 @@ import { parseISO, isBefore, addDays, differenceInDays, formatDistanceToNowStric
 import { vehicleLimit } from "@/lib/subscription";
 import { resolveTrackingMode, isHoursTracked, isMileageTracked, currentUsageValue } from "@/lib/usageHelpers";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
+import Paywall from "@/components/Paywall";
 
 type Vehicle = {
   id: string;
@@ -71,6 +72,7 @@ export default function VehiclesScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
+  const [showPaywall, setShowPaywall] = useState(false);
 
   const { data: vehicles, isLoading, refetch } = useQuery({
     queryKey: ["vehicles", user?.id],
@@ -225,14 +227,7 @@ export default function VehiclesScreen() {
                 style={({ pressed }) => [styles.vehicleCard, { opacity: pressed ? 0.88 : isLocked ? 0.55 : 1 }]}
                 onPress={() => {
                   if (isLocked) {
-                    Alert.alert(
-                      "Vehicle Locked",
-                      "This vehicle is locked on your current plan. Upgrade to access all your vehicles.",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        { text: "Upgrade Now", onPress: () => router.push("/subscription" as any) },
-                      ]
-                    );
+                    setShowPaywall(true);
                     return;
                   }
                   router.push(`/vehicle/${v.id}` as any);
@@ -277,6 +272,15 @@ export default function VehiclesScreen() {
           })
         )}
       </ScrollView>
+
+      <Modal visible={showPaywall} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowPaywall(false)}>
+        <Paywall
+          canDismiss
+          showSkip={false}
+          subtitle="Adding more vehicles requires Pro."
+          onDismiss={() => setShowPaywall(false)}
+        />
+      </Modal>
     </View>
   );
 }

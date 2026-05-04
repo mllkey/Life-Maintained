@@ -27,6 +27,7 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { personLimit, petLimit } from "@/lib/subscription";
 import { SaveToast } from "@/components/SaveToast";
+import Paywall from "@/components/Paywall";
 import DatePicker from "@/components/DatePicker";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
@@ -81,6 +82,8 @@ export default function HealthScreen() {
   const [toastMsg, setToastMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
   const [toastIsError, setToastIsError] = useState(false);
+  const [paywallSubtitle, setPaywallSubtitle] = useState("Upgrade to unlock more family tracking.");
+  const [showPaywall, setShowPaywall] = useState(false);
 
   function showToast(msg: string, isError = false) {
     setToastMsg(msg);
@@ -407,18 +410,16 @@ export default function HealthScreen() {
 
   const hasNoMembers = !familyMembers?.length;
 
+  function openPlanUpsell(subtitle: string) {
+    setPaywallSubtitle(subtitle);
+    setShowPaywall(true);
+  }
+
   function openAddPerson() {
     const currentPeople = familyMembers?.filter(fm => fm.member_type !== "pet").length ?? 0;
     const maxPeople = personLimit(profile);
     if (currentPeople >= maxPeople) {
-      Alert.alert(
-        "Person Limit Reached",
-        `Your plan allows ${maxPeople === 0 ? "no people" : `${maxPeople} ${maxPeople === 1 ? "person" : "people"}`}. Upgrade to add more.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Upgrade", onPress: () => router.push("/subscription" as any) },
-        ],
-      );
+      openPlanUpsell("Adding more people requires Pro.");
       return;
     }
     router.push("/add-family-member");
@@ -428,14 +429,7 @@ export default function HealthScreen() {
     const currentPets = familyMembers?.filter(fm => fm.member_type === "pet").length ?? 0;
     const maxPets = petLimit(profile);
     if (currentPets >= maxPets) {
-      Alert.alert(
-        "Pet Limit Reached",
-        `Your plan allows ${maxPets === 0 ? "no pets" : `${maxPets} ${maxPets === 1 ? "pet" : "pets"}`}. Upgrade to add more.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Upgrade", onPress: () => router.push("/subscription" as any) },
-        ],
-      );
+      openPlanUpsell("Adding more pets requires Pro.");
       return;
     }
     router.push("/add-family-member?type=pet" as any);
@@ -681,14 +675,7 @@ export default function HealthScreen() {
                             {isLocked && (
                               <Pressable
                                 style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                                onPress={() => Alert.alert(
-                                  "Family Member Locked",
-                                  "This family member is locked on your current plan. Upgrade to access all your family members.",
-                                  [
-                                    { text: "Cancel", style: "cancel" },
-                                    { text: "Upgrade Now", onPress: () => router.push("/subscription" as any) },
-                                  ]
-                                )}
+                                onPress={() => openPlanUpsell("Accessing more family members requires Pro.")}
                               />
                             )}
                           </View>
@@ -721,14 +708,7 @@ export default function HealthScreen() {
                             {isLocked && (
                               <Pressable
                                 style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                                onPress={() => Alert.alert(
-                                  "Pet Locked",
-                                  "This pet is locked on your current plan. Upgrade to access all your pets.",
-                                  [
-                                    { text: "Cancel", style: "cancel" },
-                                    { text: "Upgrade Now", onPress: () => router.push("/subscription" as any) },
-                                  ]
-                                )}
+                                onPress={() => openPlanUpsell("Accessing more pets requires Pro.")}
                               />
                             )}
                           </View>
@@ -787,6 +767,15 @@ export default function HealthScreen() {
           </>
         )}
       </ScrollView>
+
+      <Modal visible={showPaywall} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowPaywall(false)}>
+        <Paywall
+          canDismiss
+          showSkip={false}
+          subtitle={paywallSubtitle}
+          onDismiss={() => setShowPaywall(false)}
+        />
+      </Modal>
 
       <SaveToast visible={toastVisible} message={toastMsg} isError={toastIsError} />
 
