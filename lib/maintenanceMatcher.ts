@@ -1,5 +1,8 @@
 import { supabase } from "./supabase";
 import { completeVehicleTask } from "./rpc";
+import type { Database } from "./supabase-types";
+
+type PropertyTaskUpdate = Database["public"]["Tables"]["property_maintenance_tasks"]["Update"];
 
 export type MatchResult = {
   taskId: string;
@@ -199,7 +202,14 @@ export async function matchAndUpdateVehicleTask(
     });
 
     if (rpcErr) {
-      console.warn("[matcher] complete_vehicle_task RPC error:", rpcErr.message);
+      const e: unknown = rpcErr;
+      const rpcMessage =
+        e instanceof Error
+          ? e.message
+          : typeof e === "object" && e !== null && "message" in e
+            ? String((e as { message?: unknown }).message ?? "Unknown RPC error")
+            : "Unknown RPC error";
+      console.warn("[matcher] complete_vehicle_task RPC error:", rpcMessage);
       return null;
     }
 
@@ -238,7 +248,7 @@ export async function matchAndUpdatePropertyTask(
       ? null
       : calculateNextDue(matched.interval, null, serviceDate, null, null);
 
-    const updatePayload: Record<string, any> = {
+    const updatePayload: PropertyTaskUpdate = {
       last_completed_at: new Date(serviceDate + "T12:00:00").toISOString(),
       updated_at: new Date().toISOString(),
     };

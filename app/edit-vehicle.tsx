@@ -23,6 +23,9 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES, inferTrackingMode } from "@/lib/vehicleTypes";
 import { SaveToast } from "@/components/SaveToast";
+import type { Database } from "@/lib/supabase-types";
+
+type VehicleUpdate = Database["public"]["Tables"]["vehicles"]["Update"];
 
 const VEHICLE_TYPE_OPTIONS = [
   { value: "car", label: "Car / Truck / SUV" },
@@ -89,7 +92,7 @@ export default function EditVehicleScreen() {
     if (!vehicle || !user) return;
     setSaving(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const updates: Record<string, any> = {
+    const updates: VehicleUpdate = {
       nickname: nickname.trim() || null,
       color: color.trim() || null,
       trim: trim.trim() || null,
@@ -112,7 +115,7 @@ export default function EditVehicleScreen() {
         return;
       }
       updates.mileage = newMileage;
-      (updates as Record<string, unknown>).last_mileage_update = new Date().toISOString();
+      updates.last_mileage_update = new Date().toISOString();
     }
 
     if (tracksHours && hours.trim()) {
@@ -128,7 +131,7 @@ export default function EditVehicleScreen() {
       }
     }
 
-    (updates as Record<string, unknown>).tracking_mode = inferTrackingMode(vehicleType as string);
+    updates.tracking_mode = inferTrackingMode(vehicleType as string);
 
     try {
       const { error } = await supabase.from("vehicles").update(updates).eq("id", vehicleId!);
