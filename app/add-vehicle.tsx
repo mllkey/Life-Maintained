@@ -665,6 +665,15 @@ export default function AddVehicleScreen() {
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelLoadFailed, setModelLoadFailed] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
+  const [showSaveErrorToast, setShowSaveErrorToast] = useState(false);
+  const [saveErrorSubtitle, setSaveErrorSubtitle] = useState<string | undefined>(undefined);
+
+  function showSaveError(msg?: string) {
+    setSaveErrorSubtitle(msg ?? "Failed to save vehicle. Please try again.");
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    setShowSaveErrorToast(true);
+    setTimeout(() => setShowSaveErrorToast(false), 2800);
+  }
 
   const [hasManufacturerSchedule, setHasManufacturerSchedule] = useState(false);
   const [isCheckingSchedule, setIsCheckingSchedule] = useState(false);
@@ -1036,7 +1045,7 @@ export default function AddVehicleScreen() {
           .select("id")
           .single();
         if (err || !inserted) {
-          Alert.alert("Save Failed", err?.message ?? "Failed to save vehicle. Please try again.");
+          showSaveError(err?.message);
           return;
         }
 
@@ -1100,7 +1109,7 @@ export default function AddVehicleScreen() {
         setShowSaveToast(true);
         setTimeout(() => router.back(), 900);
       } catch (saveErr) {
-        Alert.alert("Save Failed", "Failed to save vehicle. Please try again.");
+        showSaveError();
       } finally {
         setIsLoading(false);
       }
@@ -1117,7 +1126,7 @@ export default function AddVehicleScreen() {
         .single();
       if (err || !inserted) {
         setIsLoading(false);
-        Alert.alert("Save Failed", err?.message ?? "Failed to save vehicle. Please try again.");
+        showSaveError(err?.message);
         return;
       }
       // Fire-and-forget: generate schedule + prefetch estimates in background
@@ -1159,7 +1168,7 @@ export default function AddVehicleScreen() {
       setShowCopyModal(true);
     } catch (saveErr) {
       setIsLoading(false);
-      Alert.alert("Save Failed", "Failed to save vehicle. Please try again.");
+      showSaveError();
     }
   }
 
@@ -2180,6 +2189,7 @@ export default function AddVehicleScreen() {
         }}
       />
       <SaveToast visible={showSaveToast} message="Vehicle saved!" />
+      <SaveToast visible={showSaveErrorToast} message="Save Failed" subtitle={saveErrorSubtitle} isError />
     </KeyboardAvoidingView>
   );
 }

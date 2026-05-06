@@ -22,6 +22,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES, inferTrackingMode } from "@/lib/vehicleTypes";
+import { SaveToast } from "@/components/SaveToast";
 
 const VEHICLE_TYPE_OPTIONS = [
   { value: "car", label: "Car / Truck / SUV" },
@@ -54,6 +55,8 @@ export default function EditVehicleScreen() {
   const [trim, setTrim] = useState("");
   const [vehicleType, setVehicleType] = useState("car");
   const [mileageWarning, setMileageWarning] = useState<string | null>(null);
+  const [showSaveErrorToast, setShowSaveErrorToast] = useState(false);
+  const [saveErrorSubtitle, setSaveErrorSubtitle] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!vehicleId) return;
@@ -135,7 +138,10 @@ export default function EditVehicleScreen() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setTimeout(() => router.back(), 150);
     } catch (err: any) {
-      Alert.alert("Couldn't save", err?.message ?? "Give it another shot.");
+      setSaveErrorSubtitle(err?.message ?? "Give it another shot.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setShowSaveErrorToast(true);
+      setTimeout(() => setShowSaveErrorToast(false), 2800);
     } finally {
       setSaving(false);
     }
@@ -297,6 +303,7 @@ export default function EditVehicleScreen() {
           </Pressable>
         </View>
       </InputAccessoryView>
+      <SaveToast visible={showSaveErrorToast} message="Couldn't save" subtitle={saveErrorSubtitle} isError />
     </View>
   );
 }

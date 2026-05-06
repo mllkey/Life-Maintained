@@ -849,7 +849,8 @@ export default function VehicleDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: any) {
-      Alert.alert("Photo didn't save", "Something went wrong on our end. Give it another shot.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast("Photo didn't save", true, "Something went wrong on our end. Give it another shot.");
     } finally {
       setUploadingPhoto(false);
     }
@@ -864,7 +865,8 @@ export default function VehicleDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
-      Alert.alert("Photo didn't remove", "Give it another shot.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast("Photo didn't remove", true, "Give it another shot.");
     }
   }
 
@@ -925,7 +927,7 @@ export default function VehicleDetailScreen() {
 
   async function exportHistory(fmt: "pdf" | "csv") {
     if (!logs || logs.length === 0) {
-      Alert.alert("No Records", "There are no service records to export.");
+      showToast("No Records", false, "There are no service records to export.");
       return;
     }
     setIsExporting(true);
@@ -937,7 +939,7 @@ export default function VehicleDetailScreen() {
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf" });
         } else {
-          Alert.alert("PDF Saved", `Saved to: ${uri}`);
+          showToast("PDF Saved", false, `Saved to: ${uri}`);
         }
       } else {
         const csv = buildCsv(logs);
@@ -948,11 +950,12 @@ export default function VehicleDetailScreen() {
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(fileUri, { mimeType: "text/csv", UTI: "public.comma-separated-values-text" });
         } else {
-          Alert.alert("CSV Saved", `Saved to: ${fileUri}`);
+          showToast("CSV Saved", false, `Saved to: ${fileUri}`);
         }
       }
     } catch (e: any) {
-      Alert.alert("Export didn't work", e.message ?? "Try again in a moment.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast("Export didn't work", true, e.message ?? "Try again in a moment.");
     } finally {
       setIsExporting(false);
     }
@@ -2425,6 +2428,19 @@ function walletVehicleLabel(row: WalletDocWithVehicle): string {
 function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string }) {
   const [uploading, setUploading] = useState<DocType | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+  const [walletToastVisible, setWalletToastVisible] = useState(false);
+  const [walletToastTitle, setWalletToastTitle] = useState("");
+  const [walletToastSubtitle, setWalletToastSubtitle] = useState<string | undefined>(undefined);
+  const [walletToastIsError, setWalletToastIsError] = useState(false);
+
+  function showWalletToast(title: string, subtitle: string | undefined, isError: boolean) {
+    setWalletToastTitle(title);
+    setWalletToastSubtitle(subtitle);
+    setWalletToastIsError(isError);
+    if (isError) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    setWalletToastVisible(true);
+    setTimeout(() => setWalletToastVisible(false), 2800);
+  }
 
   const { data: allWalletDocs } = useQuery<(WalletDoc & { vehicle_id: string })[]>({
     queryKey: ["all_wallet_docs", userId, vehicleId],
@@ -2510,7 +2526,7 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       console.error("[WalletTab] Copy error:", err);
-      Alert.alert("Copy didn't work", "Give it another shot.");
+      showWalletToast("Copy didn't work", "Give it another shot.", true);
     }
   }
 
@@ -2577,9 +2593,10 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       console.error("[WalletTab] Upload error:", err);
-      Alert.alert(
+      showWalletToast(
         "Couldn't save document",
         "Check your connection and try again. You can also pick a smaller photo.",
+        true,
       );
     } finally {
       setUploading(null);
@@ -2616,7 +2633,7 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
               await supabase.from("vehicle_wallet_documents").delete().eq("id", doc.id);
               await refetch();
             } catch {
-              Alert.alert("Photo didn't delete", "Try again in a moment.");
+              showWalletToast("Photo didn't delete", "Try again in a moment.", true);
             }
           },
         },
@@ -2695,7 +2712,7 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
                 resizeMode="contain"
                 onError={() => {
                   setViewingPhoto(null);
-                  Alert.alert("Can't load photo", "The image couldn't be loaded. Try re-uploading it.");
+                  showWalletToast("Can't load photo", "The image couldn't be loaded. Try re-uploading it.", true);
                 }}
               />
               <Text style={walletStyles.photoViewerHint}>Tap anywhere to close</Text>
@@ -2706,6 +2723,7 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
       <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, lineHeight: 16 }}>
         Photos stored here are for personal reference only. Check your local laws regarding acceptable identification documents.
       </Text>
+      <SaveToast visible={walletToastVisible} message={walletToastTitle} subtitle={walletToastSubtitle} isError={walletToastIsError} />
     </View>
   );
 }

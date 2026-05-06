@@ -378,15 +378,14 @@ export default function LogServiceScreen() {
       }
 
       if (updatedTasks.length === 0 && storedReceiptPath === null && receiptLocalUri) {
-        // Pure receipt failure with no other success — keep blocking Alert
-        Alert.alert("Receipt Upload Failed", "Receipt couldn't be saved. Please try again.", [{ text: "OK", onPress: () => router.back() }]);
+        // Pure receipt failure with no other success — surface inline error and stay on screen
+        setError("Receipt couldn't be saved. Please try again.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       } else {
         // Success — toast synced with haptic, then navigate back
-        fireSuccessToast(`${firstServiceName} logged`, dueSub);
-        if (storedReceiptPath === null && receiptLocalUri) {
-          // Non-blocking receipt warning alongside a successful save
-          Alert.alert("Receipt Upload Failed", "Service was saved, but the receipt photo couldn't be uploaded.", [{ text: "OK" }]);
-        }
+        const receiptFailed = storedReceiptPath === null && !!receiptLocalUri;
+        const subtitle = receiptFailed ? "Service saved, but receipt couldn't be uploaded." : dueSub;
+        fireSuccessToast(`${firstServiceName} logged`, subtitle);
         setTimeout(() => router.back(), 1200);
       }
     } catch (err: any) {
