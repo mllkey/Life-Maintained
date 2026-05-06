@@ -25,8 +25,8 @@ interface ScanPack {
 }
 
 const PACKS: ScanPack[] = [
-  { id: "scan_pack_10", title: "10 Additional Receipt Scans", scans: 10, price: "$2.99" },
-  { id: "scan_pack_25", title: "25 Additional Receipt Scans", scans: 25, price: "$4.99", popular: true },
+  { id: "scan_pack_10", title: "10 scans", scans: 10, price: "$2.99" },
+  { id: "scan_pack_25", title: "25 scans", scans: 25, price: "$4.99", popular: true },
 ];
 
 interface ScanPackModalProps {
@@ -120,8 +120,8 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
             <Ionicons name="scan-outline" size={22} color={Colors.accent} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Need More Scans?</Text>
-            <Text style={styles.subtitle}>You've used all your receipt scans for this month</Text>
+            <Text style={styles.title}>You're out of scans this month</Text>
+            <Text style={styles.subtitle}>Pick up where you left off — credits never expire</Text>
           </View>
         </View>
 
@@ -148,7 +148,7 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
             >
               {pack.popular && (
                 <View style={styles.bestValueBadge}>
-                  <Text style={styles.bestValueText}>Best Value</Text>
+                  <Text style={styles.bestValueText}>Best value · save 40%</Text>
                 </View>
               )}
               <View style={styles.packLeft}>
