@@ -13,10 +13,13 @@
  * future migration that changes a function's parameter list is caught at
  * compile time without manual sync.
  *
- * Implementation note: `.overrideTypes<T, { merge: false }>()` is used (not
- * `.returns<T>()` which is @deprecated as of postgrest-js 2.103.0). The
- * `merge: false` option is required — without it, supabase-js merges the
- * provided type with the inferred `Json` base, producing a useless union.
+ * Implementation note: these SQL functions return a scalar `jsonb` value (a
+ * single object built via `jsonb_build_object(...)`), not `SETOF` rows. The
+ * postgrest-js RPC builder, however, statically infers an array result and
+ * its compile-time path for collapsing to a single object does not match a
+ * scalar `jsonb` shape. To keep call-site types clean, each wrapper awaits
+ * the RPC and narrows `data` to the declared result type at the boundary,
+ * preserving the familiar `{ data, error }` contract.
  */
 
 import { supabase } from "./supabase";
@@ -33,11 +36,12 @@ export type CompleteVehicleTaskResult = {
   next_due_hours: number | null;
 };
 
-export function completeVehicleTask(args: CompleteVehicleTaskArgs) {
-  return supabase
-    .rpc("complete_vehicle_task", args)
-    .returns<Array<CompleteVehicleTaskResult>>()
-    .single();
+export async function completeVehicleTask(args: CompleteVehicleTaskArgs): Promise<{
+  data: CompleteVehicleTaskResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("complete_vehicle_task", args);
+  return { data: (data as CompleteVehicleTaskResult | null), error };
 }
 
 export type CompletePropertyTaskArgs = Functions["complete_property_task"]["Args"];
@@ -52,11 +56,12 @@ export type CompletePropertyTaskResult = {
   log_created: boolean;
 };
 
-export function completePropertyTask(args: CompletePropertyTaskArgs) {
-  return supabase
-    .rpc("complete_property_task", args)
-    .returns<Array<CompletePropertyTaskResult>>()
-    .single();
+export async function completePropertyTask(args: CompletePropertyTaskArgs): Promise<{
+  data: CompletePropertyTaskResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("complete_property_task", args);
+  return { data: (data as CompletePropertyTaskResult | null), error };
 }
 
 export type GetScanQuotaArgs = Functions["get_scan_quota"]["Args"];
@@ -67,9 +72,10 @@ export type GetScanQuotaResult = {
   scans_remaining: number;
 };
 
-export function getScanQuota(args: GetScanQuotaArgs) {
-  return supabase
-    .rpc("get_scan_quota", args)
-    .returns<Array<GetScanQuotaResult>>()
-    .single();
+export async function getScanQuota(args: GetScanQuotaArgs): Promise<{
+  data: GetScanQuotaResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("get_scan_quota", args);
+  return { data: (data as GetScanQuotaResult | null), error };
 }
