@@ -24,7 +24,6 @@ import Animated, {
 } from "react-native-reanimated";
 
 const MIN_SCENE_MS = 6000;
-const POST_READY_HOLD_MS = 700;
 const MAX_WAIT_MS = 25000;
 const PARTICLE_COUNT = 12;
 
@@ -114,6 +113,18 @@ export default function BuildingPlanScreen() {
     particle8, particle9, particle10, particle11,
   ];
 
+  function handleViewPlan() {
+    setContinueError(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.replace({
+      pathname: "/(onboarding)/value-reveal",
+      params: {
+        vehicleId,
+        vehicleName: displayName,
+      },
+    });
+  }
+
   const generateSchedule = useCallback(async () => {
     if (!vehicleId) {
       setFailed(true);
@@ -170,17 +181,7 @@ export default function BuildingPlanScreen() {
     docGlow.value = withTiming(1, { duration: 400 });
     readyOpacity.value = withTiming(1, { duration: 300 });
     runOnJS(Haptics.notificationAsync)(Haptics.NotificationFeedbackType.Success);
-
-    setTimeout(() => {
-      router.replace({
-        pathname: "/(onboarding)/value-reveal",
-        params: {
-          vehicleId,
-          vehicleName: displayName,
-        },
-      });
-    }, POST_READY_HOLD_MS);
-  }, [failed, vehicleId, displayName, docScale, docGlow, readyOpacity]);
+  }, [failed, docScale, docGlow, readyOpacity]);
 
   // Typewriter
   useEffect(() => {
@@ -442,6 +443,14 @@ export default function BuildingPlanScreen() {
             <Ionicons name="checkmark-circle" size={16} color={Colors.good} />
             <Text style={styles.readyText}>Ready</Text>
           </Animated.View>
+        </View>
+      )}
+
+      {!failed && ready && (
+        <View style={{ paddingHorizontal: 20 }}>
+          <Pressable style={styles.cta} onPress={handleViewPlan}>
+            <Text style={styles.ctaText}>See my plan</Text>
+          </Pressable>
         </View>
       )}
 
