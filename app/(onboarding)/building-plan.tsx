@@ -214,7 +214,7 @@ export default function BuildingPlanScreen() {
     subtitleTimers.push(setTimeout(() => setSubtitleText("Building your personalized plan"), 3600));
     subtitleTimers.push(setTimeout(() => {
       if (!scheduleDone.current && !hasFinalized.current) {
-        setSubtitleText("Still working on this — almost there.");
+        setSubtitleText("Cross-checking the schedule — a few more seconds.");
       }
     }, 8000));
 
@@ -313,7 +313,7 @@ export default function BuildingPlanScreen() {
     retrySubtitleTimers.push(setTimeout(() => setSubtitleText("Building your personalized plan"), 3600));
     retrySubtitleTimers.push(setTimeout(() => {
       if (!scheduleDone.current && !hasFinalized.current) {
-        setSubtitleText("Still working on this — almost there.");
+        setSubtitleText("Cross-checking the schedule — a few more seconds.");
       }
     }, 8000));
 
@@ -392,12 +392,12 @@ export default function BuildingPlanScreen() {
         <View style={styles.titleWrap}>
           <Animated.View style={[styles.titleGlow, titleGlowStyle]} />
           <Text style={styles.title} numberOfLines={2}>
-            {failed ? "We couldn’t finish that" : (typedName || " ")}
+            {failed ? "Couldn't build your schedule" : (typedName || " ")}
           </Text>
         </View>
         <Text style={styles.subtitle}>
           {failed
-            ? "Your vehicle was saved. Try again now, or continue to the app."
+            ? "Your vehicle is saved. Retry now, or build it later from the vehicle screen."
             : subtitleText}
         </Text>
       </View>

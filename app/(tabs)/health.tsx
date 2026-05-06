@@ -205,7 +205,7 @@ export default function HealthScreen() {
 
   async function handleScheduleNotification(med: any) {
     if (!med.reminder_time) {
-      Alert.alert("No Reminder Time", "This medication doesn't have a reminder time set. Edit it to add one.");
+      Alert.alert("No reminder time", "Edit this medication to add one.");
       return;
     }
     setSchedulingMed(med.id);
@@ -244,7 +244,7 @@ export default function HealthScreen() {
         Alert.alert("Reminder Off", `Daily reminder for ${med.name} has been turned off.`);
       }
     } catch (e: any) {
-      Alert.alert("Error", e.message ?? "Could not update reminder. Please try again.");
+      Alert.alert("Error", e.message ?? "Try again in a moment.");
     } finally {
       setSchedulingMed(null);
     }

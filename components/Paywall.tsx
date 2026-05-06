@@ -123,7 +123,7 @@ export default function Paywall({
   const [offeringsError, setOfferingsError] = useState(false);
   const [loadingOfferings, setLoadingOfferings] = useState(Platform.OS !== "web");
   const [toastVisible, setToastVisible] = useState(false);
-  const [toastMessage, setToastMessage] = useState("Welcome to LifeMaintained Premium!");
+  const [toastMessage, setToastMessage] = useState("You're in. Trial starts now.");
   const [toastSubtitle, setToastSubtitle] = useState<string | null>(null);
   const [toastIsError, setToastIsError] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -286,7 +286,7 @@ export default function Paywall({
         const synced = await waitForWebhookProfileTier(tier);
 
         if (synced) {
-          setToastMessage("Welcome to LifeMaintained Premium!");
+          setToastMessage("You're in. Trial starts now.");
           setToastVisible(true);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setTimeout(() => {
@@ -298,7 +298,7 @@ export default function Paywall({
           await refreshProfile();
 
           if (syncResult.ok && latestProfileTierRef.current === tier) {
-            setToastMessage("Welcome to LifeMaintained Premium!");
+            setToastMessage("You're in. Trial starts now.");
             setToastVisible(true);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setTimeout(() => {
@@ -307,8 +307,8 @@ export default function Paywall({
             }, 1600);
           } else {
             showInlineError({
-              title: "Almost there",
-              message: "Your purchase went through, but we couldn't activate it just yet. Tap Restore Purchases, or contact support@lifemaintained.com if it doesn't update.",
+              title: "Just a moment",
+              message: "The purchase went through. Tap Restore Purchases. If it still won't unlock, email support@lifemaintained.com.",
               actionLabel: "Restore Purchases",
               onAction: handleRestore,
               feedback: "warning",
@@ -331,7 +331,7 @@ export default function Paywall({
       if (!err?.userCancelled) {
         showInlineError({
           title: "Purchase didn't go through",
-          message: err?.message ?? "Give it another shot.",
+          message: err?.message ?? "No charge was made. Try again or pick a different plan.",
           actionLabel: "Try again",
           onAction: handlePurchase,
         });
@@ -395,8 +395,8 @@ export default function Paywall({
     } catch (e) {
       console.error("[Paywall] Restore failed:", e);
       showInlineError({
-        title: "Restore didn't work",
-        message: "Give it another shot.",
+        title: "Couldn't restore purchases",
+        message: "No charge was made. Try again or pick a different plan.",
         actionLabel: "Try again",
         onAction: handleRestore,
       });
@@ -506,7 +506,7 @@ export default function Paywall({
           </View>
           <Text style={styles.offeringsErrorTitle}>Couldn't load plans</Text>
           <Text style={styles.offeringsErrorText}>
-            Check your connection and try again. Your account is safe.
+            Check your connection and try again.
           </Text>
           <Pressable
             style={({ pressed }) => [styles.offeringsRetryBtn, { opacity: pressed ? 0.82 : 1 }]}
@@ -595,14 +595,14 @@ export default function Paywall({
 
           <View style={styles.scanLimitsBox}>
             <Text style={styles.scanLimitsTitle}>AI scan limits</Text>
-            <Text style={styles.scanLimitsText}>Free: Upgrade to scan receipts</Text>
+            <Text style={styles.scanLimitsText}>Free: 0 AI scans/month</Text>
             <Text style={styles.scanLimitsText}>Personal: 15 AI scans/month</Text>
             <Text style={styles.scanLimitsText}>Pro: 30 AI scans/month</Text>
             <Text style={styles.scanLimitsText}>Business: 100 AI scans/month</Text>
           </View>
 
           <Text style={styles.trialCalloutText}>
-            14-day free trial · Full access · No credit card required
+            14 days free · Full access · Manage in Settings
           </Text>
 
           {inlineError && (

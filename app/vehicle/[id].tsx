@@ -491,7 +491,7 @@ export default function VehicleDetailScreen() {
       if (error) {
         const httpStatus = ((error as unknown as Record<string, unknown>)?.context as Record<string, unknown>)?.status as number | undefined;
         if (httpStatus !== 409) {
-          showToast("Failed to generate schedule. Please try again.", true);
+          showToast("Couldn't build the schedule. Try again in a moment.", true);
           return;
         }
       }
@@ -503,7 +503,7 @@ export default function VehicleDetailScreen() {
       await refetchSchedule();
       showToast("Schedule generated!");
     } catch {
-      showToast("Failed to generate schedule. Please try again.", true);
+      showToast("Couldn't build the schedule. Try again in a moment.", true);
     } finally {
       setGeneratingSchedule(false);
     }
@@ -850,7 +850,7 @@ export default function VehicleDetailScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast("Photo didn't save", true, "Something went wrong on our end. Give it another shot.");
+      showToast("Photo didn't upload", true, "Check your connection and try again.");
     } finally {
       setUploadingPhoto(false);
     }

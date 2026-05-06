@@ -45,7 +45,7 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
   async function handlePurchase(pack: ScanPack) {
     setPurchaseError(null);
     if (!user || Platform.OS === "web") {
-      setPurchaseError("Scan packs can be purchased in the mobile app.");
+      setPurchaseError("Open LifeMaintained on iPhone to buy a scan pack.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       return;
     }
@@ -94,7 +94,7 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
     } catch (err: any) {
       if (!err?.userCancelled) {
         if (__DEV__) console.error("Scan pack purchase failed:", err);
-        setPurchaseError("Purchase couldn’t finish. Please try again.");
+        setPurchaseError("Couldn't complete the purchase. No charge was made — try again.");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       }
     } finally {
@@ -148,7 +148,7 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
             >
               {pack.popular && (
                 <View style={styles.bestValueBadge}>
-                  <Text style={styles.bestValueText}>Best value · save 40%</Text>
+                  <Text style={styles.bestValueText}>Save 40%</Text>
                 </View>
               )}
               <View style={styles.packLeft}>
@@ -173,7 +173,7 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
           <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
 
-        <SaveToast visible={toastVisible} message="Scans added!" />
+        <SaveToast visible={toastVisible} message="Scans added to your account" />
       </View>
     </Modal>
   );

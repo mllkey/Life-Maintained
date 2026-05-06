@@ -148,7 +148,7 @@ export default function OnboardingStartScreen() {
         { onConflict: "user_id" }
       );
       if (error) {
-        setSaveError("Couldn’t save your progress. Please try again.");
+        setSaveError("Couldn't save your progress. Try again.");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }

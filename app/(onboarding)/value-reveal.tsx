@@ -142,7 +142,7 @@ export default function ValueRevealScreen() {
         <View style={styles.header}>
           <Ionicons name="checkmark-circle" size={48} color={Colors.good} />
           <Text style={styles.title}>
-            {hasTasks ? "Your plan is ready" : pollTimedOut ? "Your vehicle is saved" : "Almost there..."}
+            {hasTasks ? "Your plan is ready" : pollTimedOut ? "Your vehicle is saved" : "Building your schedule"}
           </Text>
           <Text style={styles.subtitle}>
             {hasTasks
