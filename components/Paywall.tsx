@@ -396,7 +396,7 @@ export default function Paywall({
       console.error("[Paywall] Restore failed:", e);
       showInlineError({
         title: "Couldn't restore purchases",
-        message: "No charge was made. Try again or pick a different plan.",
+        message: "Make sure you're signed into the same Apple ID you used to subscribe, then try again.",
         actionLabel: "Try again",
         onAction: handleRestore,
       });

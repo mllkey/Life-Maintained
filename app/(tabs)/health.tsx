@@ -241,10 +241,10 @@ export default function HealthScreen() {
       if (newEnabled) {
         Alert.alert("Reminder Set", `You'll be reminded to take ${med.name} daily at ${med.reminder_time}.`);
       } else {
-        Alert.alert("Reminder Off", `Daily reminder for ${med.name} has been turned off.`);
+        Alert.alert("Reminder off", `Daily reminder for ${med.name} has been turned off.`);
       }
     } catch (e: any) {
-      Alert.alert("Error", e.message ?? "Try again in a moment.");
+      Alert.alert("Reminder didn't update", e.message ?? "Try again in a moment.");
     } finally {
       setSchedulingMed(null);
     }
