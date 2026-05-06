@@ -699,7 +699,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
         const { error: updateErr } = await supabase.from("vehicles").update({ mileage: newM, last_mileage_update: now, updated_at: now }).eq("id", v.id);
         if (updateErr) throw updateErr;
         const { error: histErr } = await supabase.from("vehicle_mileage_history").insert({ vehicle_id: v.id, user_id: userId, mileage: newM, recorded_at: now });
-        if (histErr && !histErr.message.includes("does not exist")) throw histErr;
+        if (histErr) throw histErr;
       }
       setSaved(s => ({ ...s, [k]: true }));
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });

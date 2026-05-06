@@ -488,10 +488,14 @@ export function LogSheet({
     recordingRef.current = null;
     try {
       await rec.stopAndUnloadAsync();
-    } catch (_) {}
+    } catch (err) {
+      console.warn("[LogSheet] recorder stopAndUnload failed:", err);
+    }
     try {
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-    } catch (_) {}
+    } catch (err) {
+      console.warn("[LogSheet] audio mode reset failed:", err);
+    }
   }
 
   async function handleStartRecording() {

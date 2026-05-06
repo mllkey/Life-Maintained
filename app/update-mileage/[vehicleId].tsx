@@ -72,7 +72,7 @@ export default function UpdateMileageScreen() {
           recorded_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
         });
-        if (histErr) console.warn("[update-mileage] history insert failed:", histErr.message);
+        if (histErr) throw histErr;
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
