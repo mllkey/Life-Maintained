@@ -213,7 +213,7 @@ export default function DashboardScreen() {
     Haptics.selectionAsync();
   }
 
-  const { data: counts, isLoading: countsLoading, refetch: refetchCounts } = useQuery({
+  const { data: counts, isLoading: countsLoading, isError: isCountsError, isFetching: isCountsFetching, refetch: refetchCounts } = useQuery({
     queryKey: ["dashboard_counts", user?.id],
     queryFn: async () => {
       if (!user) return { vehicles: 0, properties: 0, health: 0 };
@@ -231,7 +231,7 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
-  const { data: dashboardItems, isLoading: dashLoading, refetch: refetchDash } = useQuery({
+  const { data: dashboardItems, isLoading: dashLoading, isError: isDashError, isFetching: isDashFetching, refetch: refetchDash } = useQuery({
     queryKey: ["dashboard", user?.id],
     queryFn: async () => {
       if (!user) return [];
@@ -279,7 +279,7 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
-  const { data: spending, refetch: refetchSpending } = useQuery({
+  const { data: spending, isError: isSpendingError, isFetching: isSpendingFetching, refetch: refetchSpending } = useQuery({
     queryKey: ["dashboard_spending", user?.id],
     queryFn: async () => {
       if (!user) return {};
@@ -304,7 +304,7 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
-  const { data: mileageVehicles, refetch: refetchMileage } = useQuery({
+  const { data: mileageVehicles, isError: isMileageError, isFetching: isMileageFetching, refetch: refetchMileage } = useQuery({
     queryKey: ["mileage_vehicles", user?.id],
     queryFn: async () => {
       if (!user) return [];
@@ -318,7 +318,7 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
-  const { data: healthProfile } = useQuery({
+  const { data: healthProfile, isError: isHealthProfileError, isFetching: isHealthProfileFetching, refetch: refetchHealthProfile } = useQuery({
     queryKey: ["health_profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
@@ -328,7 +328,7 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
-  const { data: familyMembers } = useQuery({
+  const { data: familyMembers, isError: isFamilyMembersError, isFetching: isFamilyMembersFetching, refetch: refetchFamilyMembers } = useQuery({
     queryKey: ["family_members_count", user?.id],
     queryFn: async () => {
       if (!user) return [];
@@ -338,7 +338,7 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
-  const { data: totalTasksData, refetch: refetchTotalTasks } = useQuery({
+  const { data: totalTasksData, isError: isTotalTasksError, isFetching: isTotalTasksFetching, refetch: refetchTotalTasks } = useQuery({
     queryKey: ["total_tasks_count", user?.id],
     queryFn: async () => {
       if (!user) return 0;
@@ -357,11 +357,33 @@ export default function DashboardScreen() {
     refetchDash();
     refetchSpending();
     refetchMileage();
+    refetchHealthProfile();
+    refetchFamilyMembers();
     refetchTotalTasks();
   }
 
   const isLoading = countsLoading || dashLoading;
-  const isNewUser = !isLoading && counts != null && counts.vehicles === 0 && counts.properties === 0 && counts.health === 0;
+
+  const hasDashboardError =
+    !isLoading &&
+    (isCountsError ||
+      isDashError ||
+      isSpendingError ||
+      isMileageError ||
+      isHealthProfileError ||
+      isFamilyMembersError ||
+      isTotalTasksError);
+
+  const isRetrying =
+    isCountsFetching ||
+    isDashFetching ||
+    isSpendingFetching ||
+    isMileageFetching ||
+    isHealthProfileFetching ||
+    isFamilyMembersFetching ||
+    isTotalTasksFetching;
+
+  const isNewUser = !isLoading && !hasDashboardError && counts != null && counts.vehicles === 0 && counts.properties === 0 && counts.health === 0;
   const screenings = healthProfile ? getAgeScreenings(healthProfile.date_of_birth, healthProfile.sex_at_birth) : [];
   const monthAheadItems = getMonthAheadItems(dashboardItems);
   const upcomingItems = dashboardItems?.slice(0, 6) ?? [];
@@ -422,6 +444,29 @@ export default function DashboardScreen() {
       <View style={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0) }]}>
         {isLoading ? (
           <DashboardSkeleton />
+        ) : hasDashboardError ? (
+          <View style={styles.dashboardErrorCard}>
+            <View style={styles.dashboardErrorIcon}>
+              <Ionicons name="cloud-offline-outline" size={28} color={Colors.overdue} />
+            </View>
+            <Text style={styles.dashboardErrorTitle}>Dashboard couldn't load</Text>
+            <Text style={styles.dashboardErrorBody}>Check your connection and try again.</Text>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                refetch();
+              }}
+              disabled={isRetrying}
+              style={({ pressed }) => [
+                styles.dashboardErrorBtn,
+                { opacity: isRetrying ? 0.5 : pressed ? 0.85 : 1 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Try again"
+            >
+              <Text style={styles.dashboardErrorBtnText}>Try again</Text>
+            </Pressable>
+          </View>
         ) : isNewUser ? (
           <WelcomeView />
         ) : (
@@ -1181,6 +1226,60 @@ const styles = StyleSheet.create({
   monthAheadDetailTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.text },
   monthAheadDetailSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
   monthAheadDue: { fontSize: 12, fontFamily: "Inter_600SemiBold", flexShrink: 0 },
+
+  dashboardErrorCard: {
+    alignItems: "center",
+    backgroundColor: Colors.card,
+    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  dashboardErrorIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.overdueMuted,
+    marginBottom: 4,
+  },
+  dashboardErrorTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: Colors.text,
+    textAlign: "center",
+    letterSpacing: -0.2,
+  },
+  dashboardErrorBody: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  dashboardErrorBtn: {
+    marginTop: 10,
+    backgroundColor: Colors.accent,
+    borderRadius: 999,
+    paddingHorizontal: 22,
+    paddingVertical: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dashboardErrorBtnText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#0C111B",
+    letterSpacing: -0.1,
+  },
 
   welcomeHero: { alignItems: "center", backgroundColor: Colors.card, borderRadius: 24, paddingHorizontal: 20, paddingVertical: 24, borderWidth: 1, borderColor: Colors.border, gap: 12 },
   welcomeOrbit: { width: 112, height: 112, borderRadius: 56, alignItems: "center", justifyContent: "center", marginBottom: 2 },
