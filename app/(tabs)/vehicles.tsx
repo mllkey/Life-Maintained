@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback} from "react";
 import {
   View,
   Text,
@@ -120,6 +120,16 @@ export default function VehiclesScreen() {
     enabled: !!(user && vehicles?.length),
   });
 
+
+  const guardedAddVehiclePress = useCallback(() => {
+    const count = vehicles?.length ?? 0;
+    if (count >= vehicleLimit(profile)) {
+      setShowPaywall(true);
+      return;
+    }
+    router.push('/add-vehicle');
+  }, [vehicles, profile, router, setShowPaywall]);
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
@@ -137,7 +147,7 @@ export default function VehiclesScreen() {
           }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/add-vehicle");
+            guardedAddVehiclePress();
           }}
           accessibilityLabel="Add a new vehicle"
           accessibilityRole="button"

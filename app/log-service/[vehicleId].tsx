@@ -23,7 +23,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import ReceiptScanButton from "@/components/ReceiptScanButton";
 import Paywall from "@/components/Paywall";
 import ScanPackModal from "@/components/ScanPackModal";
-import { isFreeTier } from "@/lib/subscription";
+import { isFreeTier, scansRemaining} from "@/lib/subscription";
 import { ReceiptScanResult } from "@/lib/receiptScanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import DatePicker from "@/components/DatePicker";
@@ -468,6 +468,7 @@ export default function LogServiceScreen() {
                 onScanComplete={handleScanComplete}
                 onScanLimitReached={() => setShowPaywall(true)}
                 onPaidUserAtCap={() => setShowScanPackModal(true)}
+                scansRemaining={scansRemaining(profile)}
               />
             )}
           </View>

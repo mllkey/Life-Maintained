@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback} from "react";
 import {
   View,
   Text,
@@ -112,6 +112,16 @@ export default function HomeTabScreen() {
     enabled: !!(user && properties?.length),
   });
 
+
+  const guardedAddPropertyPress = useCallback(() => {
+    const count = properties?.length ?? 0;
+    if (count >= propertyLimit(profile)) {
+      setShowPaywall(true);
+      return;
+    }
+    router.push('/add-property');
+  }, [properties, profile, router, setShowPaywall]);
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
@@ -129,7 +139,7 @@ export default function HomeTabScreen() {
           }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/add-property");
+            guardedAddPropertyPress();
           }}
           accessibilityLabel="Add a new property"
           accessibilityRole="button"

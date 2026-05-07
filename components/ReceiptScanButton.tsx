@@ -20,9 +20,10 @@ interface Props {
   onScanLimitReached?: () => void;
   /** Paid user hits cap — caller typically opens ScanPackModal. */
   onPaidUserAtCap?: () => void;
+  scansRemaining: number;
 }
 
-export default function ReceiptScanButton({ assetType, assetId, onScanComplete, onScanLimitReached, onPaidUserAtCap }: Props) {
+export default function ReceiptScanButton({ assetType, assetId, onScanComplete, onScanLimitReached, onPaidUserAtCap, scansRemaining }: Props) {
   const [scanning, setScanning] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -38,6 +39,18 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
   }
 
   const handleScan = async (useCamera: boolean) => {
+
+    if (scansRemaining <= 0) {
+      try {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      } catch {}
+      if (onPaidUserAtCap) {
+        onPaidUserAtCap();
+      } else if (onScanLimitReached) {
+        onScanLimitReached();
+      }
+      return;
+    }
     const source: ReceiptScanSource = useCamera ? "camera" : "photo_library";
 
     try {
