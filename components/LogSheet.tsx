@@ -14,9 +14,19 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+import { FunctionsHttpError } from "@supabase/supabase-js";
+import { router } from "expo-router";
+import { useAuth } from "@/context/AuthContext";
+import type { Profile } from "@/lib/subscription";
+import { hasPersonalOrAbove, hasProOrAbove } from "@/lib/subscription";
+import {
+  voiceCapPerDay,
+  localVoiceRemainingToday,
+  incrementLocalVoiceCount,
+  reconcileLocalVoiceFromServer,
+} from "@/lib/voiceQuota";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,6 +47,12 @@ import Reanimated, {
   cancelAnimation,
   Easing as ReaEasing,
 } from "react-native-reanimated";
+
+type TranscribeAudioResponse = {
+  text?: string;
+  error?: string;
+  voice_remaining_today?: number | null;
+};
 
 type RecordPhase =
   | "idle"
@@ -446,11 +462,13 @@ export function LogSheet({
   userId: string;
 }) {
   const insets = useSafeAreaInsets();
+  const { profile } = useAuth();
   const [phase, setPhase] = useState<RecordPhase>("idle");
   const [text, setText] = useState("");
   const [items, setItems] = useState<ExtractedItem[]>([]);
   const [doneCount, setDoneCount] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
+  const [voiceCapHit, setVoiceCapHit] = useState(false);
   const [logToastVisible, setLogToastVisible] = useState(false);
   const [logToastTitle, setLogToastTitle] = useState("");
   const [logToastSubtitle, setLogToastSubtitle] = useState<string | undefined>(undefined);
@@ -475,6 +493,7 @@ export function LogSheet({
       setItems([]);
       setDoneCount(0);
       setErrorMsg("");
+      setVoiceCapHit(false);
       amplitudeRef.current = 0;
     } else {
       safeStopRecording();
@@ -500,6 +519,14 @@ export function LogSheet({
 
   async function handleStartRecording() {
     try {
+      // Tier-aware cap gate fires BEFORE permissions / recording start.
+      const remaining = await localVoiceRemainingToday(profile);
+      if (remaining <= 0) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setVoiceCapHit(true);
+        return;
+      }
+
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
         setPhase("type");
@@ -556,20 +583,32 @@ export function LogSheet({
       return;
     }
     try {
-      const canTranscribe = await checkVoiceTranscriptionLimit();
-      if (!canTranscribe) {
-        setErrorMsg("Daily voice transcription limit reached. Try again tomorrow.");
+      const fileContent = await FileSystem.readAsStringAsync(uri, {
+        encoding: "base64" as any,
+      });
+      const { data, error } = await supabase.functions.invoke<TranscribeAudioResponse>("transcribe-audio", {
+        body: { audio: fileContent, mimeType: "audio/m4a" },
+      });
+
+      // Daily voice cap is a structured HTTP 200 payload with error="voice_cap_reached".
+      // Recognised by body, not status. Reconcile local count to 0 and show cap UI.
+      if (data?.error === "voice_cap_reached") {
+        await reconcileLocalVoiceFromServer(profile, 0);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setVoiceCapHit(true);
+        return;
+      }
+
+      // 429 from this endpoint means the per-minute abuse rate-limit fired,
+      // NOT a daily cap. Surface as transient error; do NOT touch local count.
+      if (error instanceof FunctionsHttpError && error.context.status === 429) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setErrorMsg("Voice is busy right now. Please try again in a moment, or type your log below.");
         setText("");
         setPhase("type");
         return;
       }
 
-      const fileContent = await FileSystem.readAsStringAsync(uri, {
-        encoding: "base64" as any,
-      });
-      const { data, error } = await supabase.functions.invoke("transcribe-audio", {
-        body: { audio: fileContent, mimeType: "audio/m4a" },
-      });
       if (error || data?.error) {
         console.error("[transcribe] error:", error ?? data?.error);
         setErrorMsg("Transcription failed. You can type your log below.");
@@ -578,7 +617,12 @@ export function LogSheet({
         return;
       }
       const transcribed: string = data?.text ?? "";
-      await incrementVoiceTranscriptionCount();
+      const remainingFromServer = data?.voice_remaining_today;
+      if (typeof remainingFromServer === "number") {
+        await reconcileLocalVoiceFromServer(profile, remainingFromServer);
+      } else {
+        await incrementLocalVoiceCount();
+      }
       setText(transcribed);
       setPhase("type");
     } catch (err) {
@@ -689,7 +733,28 @@ export function LogSheet({
 
             {/* Bottom group: button → status text → type-instead */}
             <View style={styles.recordingBottom}>
-              {phase === "transcribing" ? (
+              {voiceCapHit ? (
+                <View style={styles.voiceCapBlock}>
+                  <Text style={styles.voiceCapTitle}>{voiceCapTitleFor(profile)}</Text>
+                  <Text style={styles.voiceCapBody}>{voiceCapBodyFor(profile)}</Text>
+                  <Pressable
+                    style={styles.voiceCapBtn}
+                    onPress={() => {
+                      const cta = voiceCapCtaActionFor(profile);
+                      handleClose();
+                      if (cta === "paywall") {
+                        setTimeout(() => router.push("/subscription"), 50);
+                      }
+                    }}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.voiceCapBtnText}>{voiceCapCtaLabelFor(profile)}</Text>
+                  </Pressable>
+                  <Pressable onPress={() => { setVoiceCapHit(false); setPhase("type"); }} hitSlop={12} style={{ marginTop: 14 }}>
+                    <Text style={styles.typeInsteadText}>or type instead</Text>
+                  </Pressable>
+                </View>
+              ) : phase === "transcribing" ? (
                 <View style={styles.transcribingRow}>
                   <ActivityIndicator size="small" color={Colors.accent} />
                   <Text style={styles.transcribingText}>Processing audio...</Text>
@@ -1137,29 +1202,64 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     flexShrink: 0,
   },
+  voiceCapBlock: {
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  voiceCapTitle: {
+    fontSize: 17,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.text,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  voiceCapBody: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 18,
+  },
+  voiceCapBtn: {
+    height: 44,
+    paddingHorizontal: 22,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.accent,
+  },
+  voiceCapBtnText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#fff",
+  },
 });
 
-const VOICE_TRANSCRIPTION_COUNT_KEY = "@daily_voice_transcription_count";
-const VOICE_TRANSCRIPTION_DATE_KEY = "@daily_voice_transcription_date";
-const MAX_DAILY_VOICE_TRANSCRIPTIONS = 30;
-
-async function checkVoiceTranscriptionLimit(): Promise<boolean> {
-  const today = new Date().toISOString().split("T")[0];
-  const savedDate = await AsyncStorage.getItem(VOICE_TRANSCRIPTION_DATE_KEY);
-  let count = 0;
-  if (savedDate === today) {
-    count = parseInt(await AsyncStorage.getItem(VOICE_TRANSCRIPTION_COUNT_KEY) ?? "0", 10);
-  }
-  return count < MAX_DAILY_VOICE_TRANSCRIPTIONS;
+function voiceCapTitleFor(profile: Profile | null | undefined): string {
+  if (hasProOrAbove(profile)) return "Voice paused for now";
+  if (hasPersonalOrAbove(profile)) return "Daily voice limit reached";
+  return "You used your 5 free voice logs today";
 }
 
-async function incrementVoiceTranscriptionCount(): Promise<void> {
-  const today = new Date().toISOString().split("T")[0];
-  const savedDate = await AsyncStorage.getItem(VOICE_TRANSCRIPTION_DATE_KEY);
-  let count = 0;
-  if (savedDate === today) {
-    count = parseInt(await AsyncStorage.getItem(VOICE_TRANSCRIPTION_COUNT_KEY) ?? "0", 10);
+function voiceCapBodyFor(profile: Profile | null | undefined): string {
+  if (hasProOrAbove(profile)) {
+    return "Voice will be back shortly. You can type your log below in the meantime.";
   }
-  await AsyncStorage.setItem(VOICE_TRANSCRIPTION_DATE_KEY, today);
-  await AsyncStorage.setItem(VOICE_TRANSCRIPTION_COUNT_KEY, String(count + 1));
+  if (hasPersonalOrAbove(profile)) {
+    return "Personal includes 30 voice logs per day. Upgrade to Pro for unlimited voice logging.";
+  }
+  const cap = voiceCapPerDay(profile);
+  const capLabel = cap === Infinity ? "unlimited" : String(cap);
+  return `Free includes ${capLabel} voice logs per day. Upgrade to Personal for 30/day, or Pro for unlimited.`;
+}
+
+function voiceCapCtaLabelFor(profile: Profile | null | undefined): string {
+  if (hasProOrAbove(profile)) return "Got it";
+  return "See plans";
+}
+
+function voiceCapCtaActionFor(profile: Profile | null | undefined): "paywall" | "dismiss" {
+  if (hasProOrAbove(profile)) return "dismiss";
+  return "paywall";
 }

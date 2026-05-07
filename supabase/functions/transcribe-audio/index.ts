@@ -4,7 +4,6 @@ import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/json.ts";
 import { requireUser, AuthError } from "../_shared/auth.ts";
 import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
-import { requirePaidTier, PremiumGateError } from "../_shared/tierGate.ts";
 
 const json = jsonResponse;
 
@@ -22,14 +21,85 @@ serve(async (req: Request) => {
     return json({ error: "OPENAI_API_KEY secret is not configured" }, 500);
   }
 
-  // --- Authenticate, premium-gate, rate-limit ---
+  // --- Authenticate, abuse rate-limit, daily voice cap ---
+  // Order matters: abuse rate-limit fires BEFORE daily cap, so attempts
+  // rejected by the abuse limiter do not consume the user's daily quota.
+  // Daily voice cap: Free 5/day, Personal 30/day. Pro/Business get NO daily
+  // cap; abuse protection is the only limit they hit.
+  // Daily cap response is HTTP 200 with a structured error code so the
+  // client can distinguish it from the abuse-limit 429.
+  // The fn_name "transcribe-audio:daily" is namespaced separately from the
+  // per-minute "transcribe-audio" so the two windows do not collide.
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  let resolvedUserId = "";
+  let voiceDailyCap: number | null = null;
+  let voiceRemainingToday: number | null = null;
   try {
     const { userId } = await requireUser(req);
+    resolvedUserId = userId;
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
-    await requirePaidTier(adminClient, userId);
+
+    // Resolve current effective tier for this user.
+    const { data: profileRow, error: profileErr } = await adminClient
+      .from("profiles")
+      .select("subscription_tier, trial_expires_at, subscription_expires_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (profileErr || !profileRow) {
+      console.error("[transcribe-audio] profile lookup failed:", profileErr?.message ?? "no row");
+      return json({ error: "Could not verify your subscription. Please try again." }, 500);
+    }
+    const now = Date.now();
+    const tier = (profileRow.subscription_tier ?? "").toString();
+    const trialMs = profileRow.trial_expires_at ? new Date(profileRow.trial_expires_at as string).getTime() : 0;
+    const subMs = profileRow.subscription_expires_at ? new Date(profileRow.subscription_expires_at as string).getTime() : 0;
+    const trialActive = tier === "trial" && trialMs > now;
+    const subActive = ["personal", "pro", "business"].includes(tier) && subMs > now;
+
+    // Trial is treated as Pro/Business equivalence — no daily cap.
+    if (trialActive || (subActive && (tier === "pro" || tier === "business"))) {
+      voiceDailyCap = null;
+    } else if (subActive && tier === "personal") {
+      voiceDailyCap = 30;
+    } else {
+      voiceDailyCap = 5;
+    }
+
+    // 1. Per-minute abuse rate-limit (all tiers). Fires FIRST so rejected
+    //    attempts do not consume daily voice quota. On cap, throws
+    //    RateLimitError -> handled by existing 429 branch below.
     await enforceAiRateLimit(adminClient, userId, "transcribe-audio");
+
+    // 2. Daily voice cap (Free/Personal only).
+    if (voiceDailyCap !== null) {
+      const { data: dailyOk, error: dailyErr } = await adminClient.rpc("check_rate_limit", {
+        p_user_id: userId,
+        p_fn_name: "transcribe-audio:daily",
+        p_max_calls: voiceDailyCap,
+        p_window_seconds: 86400,
+      });
+      if (dailyErr) {
+        console.error("[transcribe-audio] daily check_rate_limit RPC error:", dailyErr.message);
+        return json({ error: "Could not verify your voice quota. Please try again." }, 500);
+      }
+      if (dailyOk === false) {
+        // Daily cap hit — short-circuit with HTTP 200 structured payload.
+        return json({ error: "voice_cap_reached", voice_remaining_today: 0 }, 200);
+      }
+
+      // Compute remaining-today after this attempt was logged.
+      const sinceIso = new Date(now - 86400 * 1000).toISOString();
+      const { count: dailyCount } = await adminClient
+        .from("rate_limit_events")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("fn_name", "transcribe-audio:daily")
+        .gte("occurred_at", sinceIso);
+      voiceRemainingToday = Math.max(0, voiceDailyCap - (dailyCount ?? 0));
+    } else {
+      voiceRemainingToday = null;
+    }
   } catch (err) {
     if (err instanceof AuthError) {
       return json({ error: err.message }, err.status);
@@ -39,9 +109,6 @@ serve(async (req: Request) => {
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
       });
-    }
-    if (err instanceof PremiumGateError) {
-      return json({ error: err.message }, err.status);
     }
     console.error("[transcribe-audio] auth/gate/rate error:", err);
     return json({ error: "Internal server error" }, 500);
@@ -120,7 +187,7 @@ serve(async (req: Request) => {
     const whisperData = await whisperRes.json();
     console.log("[transcribe-audio] Transcription success, text length:", whisperData.text?.length);
 
-    return json({ text: whisperData.text ?? "" });
+    return json({ text: whisperData.text ?? "", voice_remaining_today: voiceRemainingToday });
   } catch (err) {
     console.error("[transcribe-audio] Unexpected error:", err);
     return json({ error: "Internal server error" }, 500);
