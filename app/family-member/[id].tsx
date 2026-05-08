@@ -19,6 +19,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
+import { SaveToast } from "@/components/SaveToast";
 import { parseISO, isBefore, addDays, format, differenceInYears } from "date-fns";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
@@ -112,6 +113,18 @@ export default function FamilyMemberDetailScreen() {
     });
   }, [appointments]);
 
+  const [saveErrorToastVisible, setSaveErrorToastVisible] = useState(false);
+  const [saveErrorToastTitle, setSaveErrorToastTitle] = useState("");
+  const [saveErrorToastSubtitle, setSaveErrorToastSubtitle] = useState<string | undefined>(undefined);
+
+  function fireSaveErrorToast(title: string, subtitle?: string) {
+    setSaveErrorToastTitle(title);
+    setSaveErrorToastSubtitle(subtitle);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+    setSaveErrorToastVisible(true);
+    setTimeout(() => setSaveErrorToastVisible(false), 3000);
+  }
+
   function handleMemberPhoto() {
     if (!user || !id) return;
     if (member?.photo_url) {
@@ -199,7 +212,7 @@ export default function FamilyMemberDetailScreen() {
               if (router.canGoBack()) router.back(); else router.replace("/(tabs)" as any);
             } catch (err: any) {
               isDeletingMemberRef.current = false;
-              Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+              fireSaveErrorToast("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
             }
           },
         },
@@ -223,7 +236,7 @@ export default function FamilyMemberDetailScreen() {
               queryClient.invalidateQueries({ queryKey: ["member_appointments", id] });
               queryClient.invalidateQueries({ queryKey: ["health_appointments"] });
             } catch (err: any) {
-              Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+              fireSaveErrorToast("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
             }
           },
         },
@@ -505,6 +518,7 @@ export default function FamilyMemberDetailScreen() {
           )}
         </ScrollView>
       )}
+      <SaveToast visible={saveErrorToastVisible} message={saveErrorToastTitle} subtitle={saveErrorToastSubtitle} isError />
     </View>
   );
 }

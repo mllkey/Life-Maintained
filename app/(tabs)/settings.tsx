@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
+import { SaveToast } from "@/components/SaveToast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -231,6 +232,18 @@ export default function SettingsScreen() {
 
   const hasChanges = isLoaded && JSON.stringify(settings) !== JSON.stringify(savedRef.current);
 
+  const [saveErrorToastVisible, setSaveErrorToastVisible] = useState(false);
+  const [saveErrorToastTitle, setSaveErrorToastTitle] = useState("");
+  const [saveErrorToastSubtitle, setSaveErrorToastSubtitle] = useState<string | undefined>(undefined);
+
+  function fireSaveErrorToast(title: string, subtitle?: string) {
+    setSaveErrorToastTitle(title);
+    setSaveErrorToastSubtitle(subtitle);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+    setSaveErrorToastVisible(true);
+    setTimeout(() => setSaveErrorToastVisible(false), 3000);
+  }
+
   function updateSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
     setSettings(prev => ({ ...prev, [key]: value }));
   }
@@ -342,7 +355,7 @@ export default function SettingsScreen() {
       savedRef.current = { ...settings };
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
-      Alert.alert("Could not save settings", "Please check your connection and try again.");
+      fireSaveErrorToast("Could not save settings", "Please check your connection and try again.");
     } finally {
       setIsSaving(false);
     }
@@ -406,7 +419,7 @@ export default function SettingsScreen() {
                   } catch (err) {
                     isDeletingAccountRef.current = false;
                     const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
-                    Alert.alert("Delete Failed", message);
+                    fireSaveErrorToast("Delete Failed", message);
                   }
                 },
               },
@@ -794,6 +807,7 @@ export default function SettingsScreen() {
           </View>
         </View>
       )}
+      <SaveToast visible={saveErrorToastVisible} message={saveErrorToastTitle} subtitle={saveErrorToastSubtitle} isError />
     </View>
   );
 }

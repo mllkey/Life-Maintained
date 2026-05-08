@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
+import { SaveToast } from "@/components/SaveToast";
 import { parseISO, format } from "date-fns";
 import { isHoursTracked } from "@/lib/usageHelpers";
 
@@ -65,6 +66,18 @@ export default function VehicleTaskHistoryScreen() {
     enabled: !!(vehicleId && task),
   });
 
+  const [saveErrorToastVisible, setSaveErrorToastVisible] = useState(false);
+  const [saveErrorToastTitle, setSaveErrorToastTitle] = useState("");
+  const [saveErrorToastSubtitle, setSaveErrorToastSubtitle] = useState<string | undefined>(undefined);
+
+  function fireSaveErrorToast(title: string, subtitle?: string) {
+    setSaveErrorToastTitle(title);
+    setSaveErrorToastSubtitle(subtitle);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+    setSaveErrorToastVisible(true);
+    setTimeout(() => setSaveErrorToastVisible(false), 3000);
+  }
+
   function handleDelete(logId: string) {
     Alert.alert(
       "Delete Record",
@@ -81,7 +94,7 @@ export default function VehicleTaskHistoryScreen() {
               queryClient.invalidateQueries({ queryKey: ["vehicle_task_logs", vehicleId, task] });
               queryClient.invalidateQueries({ queryKey: ["maintenance_logs", vehicleId] });
             } catch (err: any) {
-              Alert.alert("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+              fireSaveErrorToast("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
             }
           },
         },
@@ -99,7 +112,7 @@ export default function VehicleTaskHistoryScreen() {
       if (error || !data?.signedUrl) throw error ?? new Error("No signed URL");
       setReceiptUrl(data.signedUrl);
     } catch {
-      Alert.alert("Error", "Could not load receipt image. Please try again.");
+      fireSaveErrorToast("Could not load receipt", "Please try again.");
     } finally {
       setReceiptGeneratingId(null);
     }
@@ -328,6 +341,7 @@ export default function VehicleTaskHistoryScreen() {
           </Pressable>
         </View>
       </Modal>
+      <SaveToast visible={saveErrorToastVisible} message={saveErrorToastTitle} subtitle={saveErrorToastSubtitle} isError />
     </View>
   );
 }
