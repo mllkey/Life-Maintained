@@ -772,6 +772,7 @@ export default function HealthScreen() {
         <Paywall
           canDismiss
           showSkip={false}
+          context={{ vertical: "family", reason: "limit_reached" }}
           subtitle={paywallSubtitle}
           onDismiss={() => setShowPaywall(false)}
         />

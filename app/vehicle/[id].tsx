@@ -1697,7 +1697,7 @@ export default function VehicleDetailScreen() {
         <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
           <Paywall
             canDismiss
-            subtitle="Upgrade to export your service history"
+            context={{ vertical: "vehicle", reason: "feature_locked" }}
             onDismiss={() => setShowPaywall(false)}
           />
         </Modal>

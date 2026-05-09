@@ -2171,7 +2171,7 @@ export default function AddVehicleScreen() {
         <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
           <Paywall
             canDismiss
-            subtitle="Upgrade to add more vehicles"
+            context={{ vertical: "vehicle", reason: "limit_reached" }}
             onDismiss={() => setShowPaywall(false)}
           />
         </Modal>

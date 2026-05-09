@@ -203,7 +203,7 @@ export default function AddFamilyMemberScreen() {
         <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
           <Paywall
             canDismiss
-            subtitle="Upgrade to add unlimited family members"
+            context={{ vertical: "family", reason: "limit_reached" }}
             onDismiss={() => setShowPaywall(false)}
           />
         </Modal>

@@ -73,6 +73,7 @@ export default function VehiclesScreen() {
   const { user, profile } = useAuth();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
   const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallReason, setPaywallReason] = useState<"limit_reached" | "locked_existing">("limit_reached");
 
   const { data: vehicles, isLoading, refetch } = useQuery({
     queryKey: ["vehicles", user?.id],
@@ -124,6 +125,7 @@ export default function VehiclesScreen() {
   const guardedAddVehiclePress = useCallback(() => {
     const count = vehicles?.length ?? 0;
     if (count >= vehicleLimit(profile)) {
+      setPaywallReason("limit_reached");
       setShowPaywall(true);
       return;
     }
@@ -237,6 +239,7 @@ export default function VehiclesScreen() {
                 style={({ pressed }) => [styles.vehicleCard, { opacity: pressed ? 0.88 : isLocked ? 0.55 : 1 }]}
                 onPress={() => {
                   if (isLocked) {
+                    setPaywallReason("locked_existing");
                     setShowPaywall(true);
                     return;
                   }
@@ -287,7 +290,7 @@ export default function VehiclesScreen() {
         <Paywall
           canDismiss
           showSkip={false}
-          subtitle="Adding more vehicles requires Pro."
+          context={{ vertical: "vehicle", reason: paywallReason }}
           onDismiss={() => setShowPaywall(false)}
         />
       </Modal>

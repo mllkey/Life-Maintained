@@ -694,7 +694,7 @@ export default function LogServiceScreen() {
         <Modal visible animationType="slide" onRequestClose={() => { setShowPaywall(false); const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}>
           <Paywall
             canDismiss
-            subtitle="Upgrade to scan receipts with AI"
+            context={{ vertical: "scans", reason: "limit_reached" }}
             onDismiss={() => { setShowPaywall(false); const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}
           />
         </Modal>

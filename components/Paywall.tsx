@@ -106,12 +106,62 @@ type PaywallInlineError = {
   feedback?: "error" | "warning";
 };
 
+export type PaywallVertical = "vehicle" | "property" | "family" | "scans" | "general";
+export type PaywallReason = "limit_reached" | "feature_locked" | "locked_existing" | "general";
+export interface PaywallContext {
+  vertical: PaywallVertical;
+  reason: PaywallReason;
+}
+
 interface PaywallProps {
   canDismiss: boolean;
   showSkip?: boolean;
   onDismiss?: () => void;
   onSkip?: () => void;
   subtitle?: string;
+  context?: PaywallContext;
+}
+
+// Per-vertical accent color for the primary CTA and contextual subtitle tint.
+function verticalAccent(vertical: PaywallVertical): string {
+  if (vertical === "vehicle") return Colors.vehicle;
+  if (vertical === "property") return Colors.home;
+  if (vertical === "family") return Colors.health;
+  return Colors.accent;
+}
+
+// Per-context default subtitle. Distinguishes locked-existing from limit-reached
+// so the user knows whether they are unlocking what they already have or being
+// asked to grow beyond their current plan.
+function contextualSubtitle(ctx: PaywallContext | undefined): string {
+  if (!ctx) return "Choose the plan that fits your life";
+  if (ctx.reason === "locked_existing") {
+    if (ctx.vertical === "vehicle") return "Unlock your other vehicles";
+    if (ctx.vertical === "property") return "Unlock your other properties";
+    if (ctx.vertical === "family") return "Unlock your other family members";
+    return "Unlock everything you have";
+  }
+  if (ctx.reason === "limit_reached") {
+    if (ctx.vertical === "vehicle") return "Upgrade to add more vehicles";
+    if (ctx.vertical === "property") return "Upgrade to add more properties";
+    if (ctx.vertical === "family") return "Upgrade to add more family members";
+    if (ctx.vertical === "scans") return "Upgrade for more receipt scans";
+    return "Upgrade to keep going";
+  }
+  if (ctx.reason === "feature_locked") {
+    if (ctx.vertical === "vehicle") return "Upgrade to export your service history";
+    if (ctx.vertical === "scans") return "Upgrade to scan receipts with AI";
+    return "Upgrade to unlock this";
+  }
+  return "Choose the plan that fits your life";
+}
+
+// Tier preselect: free user hitting any context starts at Personal; Personal user
+// hitting any context starts at Pro. Defaults to Personal otherwise.
+function preselectedTierFor(profile: { subscription_tier: string | null } | null | undefined): TierKey {
+  const t = profile?.subscription_tier ?? null;
+  if (t === "personal") return "pro";
+  return "personal";
 }
 
 export default function Paywall({
@@ -119,12 +169,13 @@ export default function Paywall({
   showSkip = false,
   onDismiss,
   onSkip,
-  subtitle = "Choose the plan that fits your life",
+  subtitle,
+  context,
 }: PaywallProps) {
   const insets = useSafeAreaInsets();
   const { user, profile, refreshProfile } = useAuth();
   const [billing, setBilling] = useState<Billing>("annual");
-  const [selectedTier, setSelectedTier] = useState<TierKey>("personal");
+  const [selectedTier, setSelectedTier] = useState<TierKey>(context ? preselectedTierFor(profile) : "personal");
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [showPromo, setShowPromo] = useState(false);
@@ -502,7 +553,7 @@ export default function Paywall({
         )}
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>LifeMaintained Premium</Text>
-          <Text style={styles.headerSubtitle}>{subtitle}</Text>
+          <Text style={styles.headerSubtitle}>{subtitle ?? contextualSubtitle(context)}</Text>
         </View>
         <View style={styles.closeBtn} />
       </View>
@@ -658,6 +709,7 @@ export default function Paywall({
           <Pressable
             style={({ pressed }) => [
               styles.ctaBtn,
+              context ? { backgroundColor: verticalAccent(context.vertical) } : null,
               { opacity: pressed || isPurchasing ? 0.85 : 1 },
             ]}
             onPress={handlePurchase}

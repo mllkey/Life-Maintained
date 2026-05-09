@@ -7,6 +7,7 @@ export default function SubscriptionScreen() {
     <Paywall
       canDismiss
       showSkip={false}
+      context={{ vertical: "general", reason: "general" }}
       onDismiss={() => router.back()}
     />
   );

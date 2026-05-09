@@ -575,7 +575,7 @@ export default function AddPropertyScreen() {
         <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
           <Paywall
             canDismiss
-            subtitle="Upgrade to add more properties"
+            context={{ vertical: "property", reason: "limit_reached" }}
             onDismiss={() => setShowPaywall(false)}
           />
         </Modal>

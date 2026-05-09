@@ -74,6 +74,7 @@ export default function HomeTabScreen() {
   const { user, profile } = useAuth();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
   const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallReason, setPaywallReason] = useState<"limit_reached" | "locked_existing">("limit_reached");
 
   const { data: properties, isLoading, refetch } = useQuery({
     queryKey: ["properties", user?.id],
@@ -116,6 +117,7 @@ export default function HomeTabScreen() {
   const guardedAddPropertyPress = useCallback(() => {
     const count = properties?.length ?? 0;
     if (count >= propertyLimit(profile)) {
+      setPaywallReason("limit_reached");
       setShowPaywall(true);
       return;
     }
@@ -189,6 +191,7 @@ export default function HomeTabScreen() {
                 ]}
                 onPress={() => {
                   if (isLocked) {
+                    setPaywallReason("locked_existing");
                     setShowPaywall(true);
                     return;
                   }
@@ -219,7 +222,7 @@ export default function HomeTabScreen() {
         <Paywall
           canDismiss
           showSkip={false}
-          subtitle="Adding more properties requires Pro."
+          context={{ vertical: "property", reason: paywallReason }}
           onDismiss={() => setShowPaywall(false)}
         />
       </Modal>
