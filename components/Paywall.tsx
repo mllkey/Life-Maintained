@@ -23,6 +23,18 @@ import { rcReady, extractTierHintFromCustomerInfo, syncSubscriptionFromRc } from
 type Billing = "monthly" | "annual";
 type TierKey = "personal" | "pro" | "business";
 
+// Compute true annual-vs-monthly savings percentage from price strings.
+// Returns an integer percentage rounded down. Source of truth is
+// TIER_CONFIG below; do not duplicate the math anywhere else.
+function savingsPctFor(monthlyStr: string, annualStr: string): number {
+  const m = parseFloat(monthlyStr.replace(/[^0-9.]/g, ""));
+  const a = parseFloat(annualStr.replace(/[^0-9.]/g, ""));
+  if (!Number.isFinite(m) || !Number.isFinite(a) || m <= 0) return 0;
+  const yearlyAtMonthly = m * 12;
+  if (yearlyAtMonthly <= 0) return 0;
+  return Math.floor(((yearlyAtMonthly - a) / yearlyAtMonthly) * 100);
+}
+
 const TIER_CONFIG: Record<TierKey, {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
@@ -535,11 +547,6 @@ export default function Paywall({
                   <Text style={[styles.billingLabel, billing === b && styles.billingLabelActive]}>
                     {b === "monthly" ? "Monthly" : "Annual"}
                   </Text>
-                  {b === "annual" && (
-                    <Text style={[styles.saveText, billing === "annual" && styles.saveTextActive]}>
-                      {"  "}Save 40%
-                    </Text>
-                  )}
                 </View>
               </Pressable>
             ))}
@@ -570,7 +577,7 @@ export default function Paywall({
                         {billing === "annual" ? cfg.annualPrice : cfg.monthlyPrice}
                       </Text>
                       {billing === "annual" && (
-                        <Text style={styles.tierPriceSub}>{cfg.annualMonthly} · billed annually</Text>
+                        <Text style={styles.tierPriceSub}>{cfg.annualMonthly} · billed annually · save {savingsPctFor(cfg.monthlyPrice, cfg.annualPrice)}%</Text>
                       )}
                     </View>
                     <View style={[

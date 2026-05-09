@@ -148,7 +148,7 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
             >
               {pack.popular && (
                 <View style={styles.bestValueBadge}>
-                  <Text style={styles.bestValueText}>Save 40%</Text>
+                  <Text style={styles.bestValueText}>Best Value</Text>
                 </View>
               )}
               <View style={styles.packLeft}>

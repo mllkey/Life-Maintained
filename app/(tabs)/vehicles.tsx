@@ -172,7 +172,7 @@ export default function VehiclesScreen() {
         {isLoading ? (
           <VehicleListSkeleton />
         ) : vehicles?.length === 0 ? (
-          <EmptyVehicles />
+          <EmptyVehicles onAddPress={guardedAddVehiclePress} />
         ) : (
           vehicles?.map((v, idx) => {
             const isLocked = idx >= vehicleLimit(profile);
@@ -318,13 +318,13 @@ function VehicleListSkeleton() {
   );
 }
 
-function EmptyVehicles() {
+function EmptyVehicles({ onAddPress }: { onAddPress: () => void }) {
   return (
     <View style={styles.emptyWrap}>
       <Text style={styles.emptyTitle}>No vehicles yet</Text>
       <Pressable
         style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-vehicle"); }}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onAddPress(); }}
       >
         <Text style={styles.emptyLink}>Add your first vehicle</Text>
       </Pressable>
