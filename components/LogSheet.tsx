@@ -37,6 +37,9 @@ import { updateVehicleUsage } from "@/lib/vehicleUsageHelper";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import DatePicker from "@/components/DatePicker";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const VOICE_ORB_FIRST_OPEN_KEY = "@logsheet_voice_orb_first_open_seen";
 import Reanimated, {
   useSharedValue,
   withRepeat,
@@ -82,9 +85,10 @@ type OrbProps = {
   amplitudeRef: React.MutableRefObject<number>;
   isRecording: boolean;
   phase: RecordPhase;
+  firstOpen?: boolean;
 };
 
-function VoiceOrb({ amplitudeRef, isRecording, phase }: OrbProps) {
+function VoiceOrb({ amplitudeRef, isRecording, phase, firstOpen = false }: OrbProps) {
   // Breathing layers
   const outerScale   = useSharedValue(1.0);
   const outerOpacity = useSharedValue(0.06);
@@ -97,14 +101,17 @@ function VoiceOrb({ amplitudeRef, isRecording, phase }: OrbProps) {
   const r3s = useSharedValue(0.3); const r3o = useSharedValue(0.35);
   const r4s = useSharedValue(0.3); const r4o = useSharedValue(0.35);
 
-  // Start ambient breathing + sonar pulses on mount
+  // Start ambient breathing + sonar pulses on mount.
+  // First-open prominence boosts amplitude of the ambient animation so the orb
+  // visibly invites a tap before any interaction has happened.
   useEffect(() => {
+    const scaleBoost = firstOpen ? 0.10 : 0;
     outerScale.value = withRepeat(
-      withTiming(1.05, { duration: 3500, easing: ReaEasing.inOut(ReaEasing.ease) }),
+      withTiming(1.05 + scaleBoost, { duration: 3500, easing: ReaEasing.inOut(ReaEasing.ease) }),
       -1, true,
     );
     midScale.value = withRepeat(
-      withTiming(1.12, { duration: 2500, easing: ReaEasing.inOut(ReaEasing.ease) }),
+      withTiming(1.12 + scaleBoost, { duration: 2500, easing: ReaEasing.inOut(ReaEasing.ease) }),
       -1, true,
     );
 
@@ -469,6 +476,7 @@ export function LogSheet({
   const [doneCount, setDoneCount] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
   const [voiceCapHit, setVoiceCapHit] = useState(false);
+  const [firstOpenProminence, setFirstOpenProminence] = useState(false);
   const [logToastVisible, setLogToastVisible] = useState(false);
   const [logToastTitle, setLogToastTitle] = useState("");
   const [logToastSubtitle, setLogToastSubtitle] = useState<string | undefined>(undefined);
@@ -495,11 +503,23 @@ export function LogSheet({
       setErrorMsg("");
       setVoiceCapHit(false);
       amplitudeRef.current = 0;
+
+      AsyncStorage.getItem(VOICE_ORB_FIRST_OPEN_KEY)
+        .then(seen => {
+          if (seen === null) setFirstOpenProminence(true);
+        })
+        .catch(() => {});
     } else {
       safeStopRecording();
       amplitudeRef.current = 0;
     }
   }, [visible]);
+
+  function dismissFirstOpenProminence() {
+    if (!firstOpenProminence) return;
+    setFirstOpenProminence(false);
+    AsyncStorage.setItem(VOICE_ORB_FIRST_OPEN_KEY, "true").catch(() => {});
+  }
 
   async function safeStopRecording() {
     const rec = recordingRef.current;
@@ -518,6 +538,7 @@ export function LogSheet({
   }
 
   async function handleStartRecording() {
+    dismissFirstOpenProminence();
     try {
       // Tier-aware cap gate fires BEFORE permissions / recording start.
       const remaining = await localVoiceRemainingToday(profile);
@@ -680,6 +701,7 @@ export function LogSheet({
       setItems(extracted);
       setDoneCount(0);
       setPhase("results");
+      dismissFirstOpenProminence();
     } catch (err: any) {
       const msg = err?.message ?? String(err);
       console.error("[extract-maintenance-data] caught:", msg);
@@ -724,11 +746,29 @@ export function LogSheet({
 
             {/* Orb — centered in upper portion */}
             <View style={styles.recordingCenter}>
-              <VoiceOrb
-                amplitudeRef={amplitudeRef}
-                isRecording={phase === "recording"}
-                phase={phase}
-              />
+              <Pressable
+                onPress={dismissFirstOpenProminence}
+                disabled={!firstOpenProminence}
+                hitSlop={12}
+              >
+                <VoiceOrb
+                  amplitudeRef={amplitudeRef}
+                  isRecording={phase === "recording"}
+                  phase={phase}
+                  firstOpen={firstOpenProminence}
+                />
+              </Pressable>
+              {firstOpenProminence ? (
+                <Pressable
+                  onPress={dismissFirstOpenProminence}
+                  hitSlop={8}
+                  style={styles.firstOpenCaption}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss voice introduction"
+                >
+                  <Text style={styles.firstOpenCaptionText}>Tap to record by voice</Text>
+                </Pressable>
+              ) : null}
             </View>
 
             {/* Bottom group: button → status text → type-instead */}
@@ -1233,6 +1273,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     color: "#fff",
+  },
+  firstOpenCaption: {
+    marginTop: 18,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    alignSelf: "center",
+  },
+  firstOpenCaptionText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+    letterSpacing: 0.2,
   },
 });
 
