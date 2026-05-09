@@ -28,7 +28,11 @@ import {
   hasPersonalOrAbove,
   hasProOrAbove,
   hasBusiness,
+  getLiveScanQuota,
+  scanLimit,
 } from "@/lib/subscription";
+import ScanPackModal from "@/components/ScanPackModal";
+import { PaidActionCTA } from "@/components/PaidActionCTA";
 
 const SETTINGS_KEY = "app_settings_v2";
 
@@ -133,6 +137,18 @@ export default function SettingsScreen() {
     },
     enabled: !!user,
   });
+
+    const [showScanPackModal, setShowScanPackModal] = useState(false);
+  const isPaidNonTrialUser =
+    hasPersonalOrAbove(profile) && profile?.subscription_tier !== "trial";
+  const { data: scanQuota } = useQuery({
+    queryKey: ["scan-quota", user?.id, profile?.subscription_tier],
+    queryFn: getLiveScanQuota,
+    enabled: !!user?.id && isPaidNonTrialUser,
+    staleTime: 30_000,
+  });
+  const scanQuotaLimit = scanQuota?.scans_limit ?? scanLimit(profile);
+  const scanQuotaRemaining = scanQuota?.scans_remaining ?? 0;
 
   const { data: budgetPref } = useQuery({
     queryKey: ["budget_threshold", user?.id],
@@ -511,6 +527,26 @@ export default function SettingsScreen() {
             </View>
           )}
 
+          {isPremium && !userIsInTrial && !!profile?.revenuecat_customer_id && (
+            <View style={styles.manageSubCard}>
+              <View style={styles.manageSubText}>
+                <Text style={styles.manageSubTitle}>Subscription</Text>
+                <Text style={styles.manageSubSub}>Cancel or change plan in iOS Settings</Text>
+              </View>
+              <PaidActionCTA
+                label="Manage"
+                icon="open-outline"
+                variant="secondary"
+                fullWidth={false}
+                onPress={() => {
+                  const { Linking } = require("react-native");
+                  Linking.openURL("itms-apps://apps.apple.com/account/subscriptions");
+                }}
+                testID="settings-manage-subscription"
+              />
+            </View>
+          )}
+
           {/* ACCOUNT */}
           <Text style={styles.sectionLabel}>Account</Text>
           <View style={styles.groupCard}>
@@ -527,6 +563,35 @@ export default function SettingsScreen() {
               <Text style={styles.signOutText}>Sign Out</Text>
             </Pressable>
           </View>
+
+          {isPaidNonTrialUser && (
+            <>
+              <Text style={styles.sectionLabel}>Scans</Text>
+              <View style={styles.groupCard}>
+                <View style={styles.scansRow}>
+                  <View style={styles.scansIconWrap}>
+                    <Ionicons name="receipt-outline" size={18} color={Colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.scansLabel}>Receipt scans</Text>
+                    <Text style={styles.scansSub}>
+                      {scanQuotaRemaining} of {scanQuotaLimit} remaining this month
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.groupDivider} />
+                <View style={styles.scansCtaWrap}>
+                  <PaidActionCTA
+                    label="Buy more scans"
+                    icon="add-circle-outline"
+                    variant="secondary"
+                    onPress={() => setShowScanPackModal(true)}
+                    testID="settings-buy-scans"
+                  />
+                </View>
+              </View>
+            </>
+          )}
 
           {/* NOTIFICATIONS */}
           <Text style={styles.sectionLabel}>Notifications</Text>
@@ -736,23 +801,16 @@ export default function SettingsScreen() {
             >
               <Text style={styles.legalBtnText}>Privacy Policy</Text>
             </Pressable>
-            {isPremium && !userIsInTrial && !!profile?.revenuecat_customer_id && (
-              <>
-                <Text style={styles.legalDot}>·</Text>
-                <Pressable
-                  style={({ pressed }) => [styles.legalBtn, { opacity: pressed ? 0.7 : 1 }]}
-                  onPress={() => {
-                    const { Linking } = require("react-native");
-                    Linking.openURL("itms-apps://apps.apple.com/account/subscriptions");
-                  }}
-                >
-                  <Text style={styles.legalBtnText}>Manage Subscription</Text>
-                </Pressable>
-              </>
-            )}
+
           </View>
 
           <Text style={styles.version}>LifeMaintained v1.0.0</Text>
+
+          <ScanPackModal
+            visible={showScanPackModal}
+            onClose={() => setShowScanPackModal(false)}
+            onSuccess={() => setShowScanPackModal(false)}
+          />
 
           <View style={{ height: 32 }} />
           <Pressable
@@ -1087,6 +1145,34 @@ const styles = StyleSheet.create({
   legalRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   legalBtn: { paddingVertical: 8, paddingHorizontal: 4, minHeight: 44, justifyContent: "center" },
   legalBtnText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  scansRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 },
+  scansIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.accentLight,
+    borderWidth: 1,
+    borderColor: Colors.accentMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scansLabel: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
+  scansSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  scansCtaWrap: { paddingTop: 8 },
+  manageSubCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  manageSubText: { flex: 1 },
+  manageSubTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  manageSubSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
   legalDot: { fontSize: 13, color: Colors.textTertiary },
   version: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
 

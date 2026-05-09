@@ -556,19 +556,31 @@ export default function Paywall({
             const cfg = TIER_CONFIG[tier];
             const selected = selectedTier === tier;
             return (
-              <View key={tier} style={styles.tierWrapper}>
-                {cfg.popular && (
-                  <Text style={[styles.popularLabel, { color: cfg.color }]}>Most Popular</Text>
-                )}
+              <View key={tier} style={[styles.tierWrapper, cfg.popular && styles.tierWrapperPopular]}>
                 <Pressable
                   style={[
                     styles.tierCard,
+                    cfg.popular && styles.tierCardPopular,
                     selected && { borderColor: cfg.color, backgroundColor: cfg.color + "0C" },
                   ]}
                   onPress={() => { setSelectedTier(tier); Haptics.selectionAsync(); }}
                   testID={`tier-${tier}`}
                 >
+                  {cfg.popular ? (
+                    <View
+                      pointerEvents="none"
+                      style={[styles.popularPillBadge, { backgroundColor: cfg.color }]}
+                    >
+                      <Text style={styles.popularPillBadgeText}>Most Popular</Text>
+                    </View>
+                  ) : null}
                   <View style={styles.tierTop}>
+                    <View style={[
+                      styles.tierIconWrap,
+                      { backgroundColor: cfg.color + "1A", borderColor: cfg.color + "33" },
+                    ]}>
+                      <Ionicons name={cfg.icon} size={22} color={cfg.color} />
+                    </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.tierName, { color: selected ? cfg.color : Colors.text }]}>
                         {cfg.label}
@@ -794,10 +806,35 @@ const styles = StyleSheet.create({
 
   // Tier cards
   tierWrapper: { gap: 4 },
+  tierWrapperPopular: { marginTop: 10 },
+  popularPillBadge: {
+    position: "absolute",
+    top: -10,
+    right: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    zIndex: 2,
+  },
+  popularPillBadgeText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    color: Colors.textInverse,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
   popularLabel: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     paddingLeft: 2,
+  },
+  tierIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
   },
   tierCard: {
     backgroundColor: Colors.card,
@@ -806,6 +843,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     gap: 12,
+    overflow: "visible",
+  },
+  tierCardPopular: {
+    padding: 20,
+    borderWidth: 1.5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6,
   },
   tierTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   tierName: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 4 },
