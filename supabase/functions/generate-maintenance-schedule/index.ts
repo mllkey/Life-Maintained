@@ -684,6 +684,10 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
         const aiElapsedMs = Date.now() - aiStartedAt;
         console.log(`[generate-maintenance-schedule] AI call completed in ${aiElapsedMs}ms, status=${aiResponse.status}`);
 
+        if (!aiResponse.ok) {
+          const errText = await aiResponse.text();
+          console.error("[generate-maintenance-schedule] Claude API error:", aiResponse.status, errText.slice(0, 200));
+        }
         if (aiResponse.ok) {
           const aiData = await aiResponse.json();
           const aiText = aiData.content?.[0]?.text ?? "";

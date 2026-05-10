@@ -285,7 +285,8 @@ serve(async (req: Request) => {
               }
             }
           } else {
-            console.error("[AI] Claude API error:", aiResponse.status);
+            const errText = await aiResponse.text();
+            console.error("[AI] Claude API error:", aiResponse.status, errText.slice(0, 200));
           }
         } catch (aiErr) {
           if (aiErr instanceof Error && aiErr.name === "AbortError") {

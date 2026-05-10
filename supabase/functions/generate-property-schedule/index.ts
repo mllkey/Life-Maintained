@@ -457,7 +457,8 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
             }
           }
         } else {
-          console.error("[AI] Claude API error:", aiResponse.status);
+          const errText = await aiResponse.text();
+          console.error("[AI] Claude API error:", aiResponse.status, errText.slice(0, 200));
         }
       } catch (aiErr) {
         if (aiErr instanceof Error && aiErr.name === "AbortError") {
