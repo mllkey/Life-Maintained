@@ -464,6 +464,16 @@ export default function SettingsScreen() {
       ? (expiryDate! > new Date() ? `Renews ${tierExpiry}` : `Expires ${tierExpiry}`)
       : "Active subscription";
 
+  // When the user is in trial and a paid tier is on file (e.g. Apple-trial
+  // period attached to Personal/Pro/Business), show the tier label so the
+  // banner does not just say "Free Trial". Falls back to "Trial" when no
+  // paid tier can be inferred from the profile.
+  const trialBannerTitle =
+    profile?.subscription_tier === "personal" ? "Personal Plan" :
+    profile?.subscription_tier === "pro" ? "Pro Plan" :
+    profile?.subscription_tier === "business" ? "Business Plan" :
+    "Trial";
+
   if (!isLoaded) {
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: "center", alignItems: "center" }}>
@@ -491,8 +501,8 @@ export default function SettingsScreen() {
           {userIsInTrial && (
             <View style={styles.banner}>
               <View style={styles.bannerText}>
-                <Text style={styles.bannerTitle}>Free Trial</Text>
-                <Text style={styles.bannerSub}>{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining</Text>
+                <Text style={styles.bannerTitle}>{trialBannerTitle}</Text>
+                <Text style={styles.bannerSub}>Free trial: {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining</Text>
               </View>
               <Pressable
                 style={({ pressed }) => [styles.bannerBtn, { opacity: pressed ? 0.8 : 1 }]}
@@ -528,23 +538,26 @@ export default function SettingsScreen() {
           )}
 
           {isPremium && !userIsInTrial && !!profile?.revenuecat_customer_id && (
-            <View style={styles.manageSubCard}>
+            <Pressable
+              style={({ pressed }) => [styles.manageSubCard, { opacity: pressed ? 0.85 : 1 }]}
+              onPress={() => {
+                const { Linking } = require("react-native");
+                Linking.openURL("itms-apps://apps.apple.com/account/subscriptions");
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Manage subscription"
+              accessibilityHint="Opens iOS subscription settings"
+              testID="settings-manage-subscription-card"
+            >
               <View style={styles.manageSubText}>
                 <Text style={styles.manageSubTitle}>Subscription</Text>
                 <Text style={styles.manageSubSub}>Cancel or change plan in iOS Settings</Text>
               </View>
-              <PaidActionCTA
-                label="Manage"
-                icon="open-outline"
-                variant="secondary"
-                fullWidth={false}
-                onPress={() => {
-                  const { Linking } = require("react-native");
-                  Linking.openURL("itms-apps://apps.apple.com/account/subscriptions");
-                }}
-                testID="settings-manage-subscription"
-              />
-            </View>
+              <View style={styles.manageSubPill} pointerEvents="none">
+                <Ionicons name="open-outline" size={16} color={Colors.accent} />
+                <Text style={styles.manageSubPillText}>Manage</Text>
+              </View>
+            </Pressable>
           )}
 
           {/* ACCOUNT */}
@@ -1173,6 +1186,23 @@ const styles = StyleSheet.create({
   manageSubText: { flex: 1 },
   manageSubTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
   manageSubSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  manageSubPill: {
+    height: 40,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  manageSubPillText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.accent,
+  },
   legalDot: { fontSize: 13, color: Colors.textTertiary },
   version: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
 
