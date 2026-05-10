@@ -19,7 +19,6 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
 import { rcReady, extractTierHintFromCustomerInfo, syncSubscriptionFromRc } from "@/lib/revenuecat";
-import * as Sentry from "@sentry/react-native";
 
 type Billing = "monthly" | "annual";
 type TierKey = "personal" | "pro" | "business";
@@ -185,7 +184,6 @@ export default function Paywall({
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [loadedOfferings, setLoadedOfferings] = useState<any | null>(null);
   const [offeringsError, setOfferingsError] = useState(false);
-  const [offeringsErrorDetail, setOfferingsErrorDetail] = useState<string | null>(null);
   const [loadingOfferings, setLoadingOfferings] = useState(Platform.OS !== "web");
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("You're in. Trial starts now.");
@@ -244,58 +242,9 @@ export default function Paywall({
     setInlineError(null);
   }
 
-  // Diagnostic helper. Temporary — revert with the rest of this diagnostic
-  // patch once getOfferings is healthy. Returns a redacted, length-capped
-  // safe string suitable for the user-facing subtitle and Sentry extras.
-  function getSafeRevenueCatErrorDetail(error: unknown): string {
-    let raw = "";
-    try {
-      const parts: string[] = [];
-      if (error instanceof Error) {
-        if (error.message) parts.push(error.message);
-      }
-      if (error && typeof error === "object") {
-        const o = error as {
-          code?: unknown;
-          domain?: unknown;
-          underlyingErrorMessage?: unknown;
-          readableErrorCode?: unknown;
-          message?: unknown;
-          userInfo?: unknown;
-        };
-        if (o.readableErrorCode !== undefined) parts.push(`readableErrorCode=${String(o.readableErrorCode)}`);
-        if (o.code !== undefined) parts.push(`code=${String(o.code)}`);
-        if (o.domain !== undefined) parts.push(`domain=${String(o.domain)}`);
-        if (o.underlyingErrorMessage !== undefined) parts.push(`underlyingErrorMessage=${String(o.underlyingErrorMessage)}`);
-        if (!(error instanceof Error) && o.message !== undefined) parts.push(`message=${String(o.message)}`);
-        if (o.userInfo !== undefined) {
-          try { parts.push(`userInfo=${JSON.stringify(o.userInfo)}`); } catch { /* ignore */ }
-        }
-      }
-      if (parts.length > 0) {
-        raw = parts.join(" | ");
-      } else {
-        try { raw = JSON.stringify(error); } catch { raw = ""; }
-        if (!raw || raw === "{}") raw = String(error);
-      }
-    } catch {
-      raw = "";
-    }
-    raw = raw.replace(/appl_[A-Za-z0-9]+/g, "[redacted-rc-key]");
-    raw = raw.replace(/sk_[A-Za-z0-9]+/g, "[redacted-secret]");
-    raw = raw.replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, "Bearer [redacted]");
-    raw = raw.replace(/eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+/g, "[redacted-jwt]");
-    raw = raw.replace(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g, "[redacted-email]");
-    raw = raw.replace(/\s+/g, " ").trim();
-    if (raw.length > 240) raw = raw.slice(0, 240);
-    if (!raw) return "Unknown error";
-    return raw;
-  }
-
   async function loadOfferings(retried = false) {
     setLoadingOfferings(true);
     setOfferingsError(false);
-    setOfferingsErrorDetail(null);
     clearPaywallError();
     try {
       await rcReady;
@@ -303,16 +252,7 @@ export default function Paywall({
       const offerings = await Purchases.getOfferings();
       setLoadedOfferings(offerings);
     } catch (e) {
-      const safeDetail = getSafeRevenueCatErrorDetail(e);
       console.error("[Paywall] getOfferings failed:", e);
-      try {
-        Sentry.captureMessage("[RevenueCat] Paywall getOfferings failed", {
-          level: "error",
-          tags: { area: "paywall", operation: "getOfferings" },
-          extra: { safeDetail },
-        });
-      } catch { /* ignore */ }
-      setOfferingsErrorDetail(safeDetail);
       if (!retried) {
         setTimeout(() => loadOfferings(true), 3000);
       } else {
@@ -629,7 +569,7 @@ export default function Paywall({
           </View>
           <Text style={styles.offeringsErrorTitle}>Couldn't load plans</Text>
           <Text style={styles.offeringsErrorText}>
-            RevenueCat could not load plans: {offeringsErrorDetail || "Unknown error"}
+            Check your connection and try again.
           </Text>
           <Pressable
             style={({ pressed }) => [styles.offeringsRetryBtn, { opacity: pressed ? 0.82 : 1 }]}
