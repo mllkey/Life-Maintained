@@ -54,3 +54,4 @@ supabase/.temp/
 tools/promptforge/.env
 tools/promptforge/.venv/
 tools/promptforge/__pycache__/
+LifeMaintained-Pass-*-Audit*.docx
