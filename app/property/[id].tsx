@@ -23,6 +23,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { completePropertyTask } from "@/lib/rpc";
+import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { formatShopAndDiy } from "@/lib/costFormat";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -322,6 +323,11 @@ export default function PropertyDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
 
       showToast(`${task.task} marked complete!`);
+
+      // Reschedule notifications — fire-and-forget, never blocks UI
+      if (user?.id) {
+        try { scheduleMaintenanceNotifications(user.id).catch(() => {}); } catch {}
+      }
     } catch {
       queryClient.invalidateQueries({ queryKey: ["property_tasks", id] });
       showToast("Failed to save. Please try again.", true);
