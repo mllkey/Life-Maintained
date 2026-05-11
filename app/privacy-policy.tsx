@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { PRIVACY_POLICY_EFFECTIVE_DATE } from "@/lib/legalDates";
 
 const SECTIONS = [
   {
@@ -68,7 +69,7 @@ export default function PrivacyPolicyScreen() {
         <View style={{ flex: 1, alignItems: "center" }}>
           <Text style={styles.headerTitle}>Privacy Policy</Text>
           <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginBottom: 16 }}>
-            Effective Date: March 22, 2026
+            {`Effective Date: ${PRIVACY_POLICY_EFFECTIVE_DATE}`}
           </Text>
         </View>
         <View style={{ width: 36 }} />

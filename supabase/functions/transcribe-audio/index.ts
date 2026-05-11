@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/json.ts";
@@ -7,7 +6,7 @@ import { enforceAiRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 
 const json = jsonResponse;
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   const pre = handlePreflight(req);
   if (pre) return pre;
 

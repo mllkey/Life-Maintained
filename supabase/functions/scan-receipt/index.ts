@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/json.ts";
@@ -36,7 +35,7 @@ function isUuid(s: unknown): s is string {
   return typeof s === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   const pre = handlePreflight(req);
   if (pre) return pre;
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
@@ -200,7 +199,7 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
 }`;
 
     const requestBody = {
-      model: "claude-haiku-4-5-20251001",
+      model: Deno.env.get("CLAUDE_HAIKU_MODEL") ?? "claude-haiku-4-5",
       max_tokens: 512,
       messages: [
         {

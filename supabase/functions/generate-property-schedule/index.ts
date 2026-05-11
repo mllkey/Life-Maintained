@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { jsonResponse as json } from "../_shared/json.ts";
@@ -286,7 +285,7 @@ function getTemplateTasks(propType: string, yearBuilt: number | null, climateZon
 }
 
 // ── Main handler ─────────────────────────────────────────────────────
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   const pre = handlePreflight(req);
   if (pre) return pre;
   if (req.method !== "POST") {
@@ -361,7 +360,7 @@ serve(async (req: Request) => {
 
     // AI generation
     if (!validatedTasks && anthropicKey) {
-      const claudeModel = Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-4-20250514";
+      const claudeModel = Deno.env.get("CLAUDE_SONNET_MODEL") ?? "claude-sonnet-4-5";
       const currentMonth = today.toLocaleString("en-US", { month: "long" });
       const currentYear = today.getFullYear();
 
