@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Platform,
   Image,
   ActivityIndicator,
+  Animated,
+  findNodeHandle,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -33,8 +35,40 @@ function getApptStatus(nextDue: string | null, lastCompleted: string | null) {
   return "good";
 }
 
+function DeepLinkPulse({ color }: { color: string }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const seq = Animated.sequence([
+      Animated.timing(opacity, { toValue: 0.6, duration: 350, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0, duration: 450, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.6, duration: 350, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0, duration: 450, useNativeDriver: true }),
+    ]);
+    seq.start();
+    return () => seq.stop();
+  }, [opacity]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        borderRadius: 14,
+        borderWidth: 2,
+        borderColor: color,
+        backgroundColor: color + "22",
+        opacity,
+        zIndex: 1,
+      }}
+    />
+  );
+}
+
 export default function FamilyMemberDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, appointmentId, medicationId } = useLocalSearchParams<{ id: string; appointmentId?: string; medicationId?: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -42,6 +76,47 @@ export default function FamilyMemberDetailScreen() {
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
   const [activeTab, setActiveTab] = useState<"appointments" | "medications">("appointments");
+  const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
+  const familyScrollRef = useRef<ScrollView>(null);
+  const itemRefs = useRef<Record<string, React.ElementRef<typeof View> | null>>({});
+  const lastHandledRef = useRef<string | null>(null);
+
+  // Deep-link — see vehicle/[id].tsx for pattern docs.
+  useEffect(() => {
+    const target = appointmentId ?? medicationId;
+    if (!target) return;
+    if (lastHandledRef.current === target) return;
+    lastHandledRef.current = target;
+
+    setActiveTab(appointmentId ? "appointments" : "medications");
+    setExpandedId(target);
+    setHighlightedItemId(target);
+
+    const performScroll = () => {
+      const row = itemRefs.current[target];
+      const scroll = familyScrollRef.current;
+      if (!row || !scroll) return;
+      const scrollNode = findNodeHandle(scroll);
+      if (scrollNode == null) return;
+      row.measureLayout(
+        scrollNode,
+        (_x, y) => {
+          scroll.scrollTo({ y: Math.max(0, y - 80), animated: true });
+        },
+        () => {},
+      );
+    };
+
+    const t1 = setTimeout(performScroll, 250);
+    const t2 = setTimeout(performScroll, 750);
+    const clear = setTimeout(() => setHighlightedItemId(null), 2400);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(clear);
+    };
+  }, [appointmentId, medicationId]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const isDeletingMemberRef = useRef(false);
@@ -314,6 +389,7 @@ export default function FamilyMemberDetailScreen() {
         </View>
       ) : (
         <ScrollView
+          ref={familyScrollRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scroll,
@@ -417,7 +493,13 @@ export default function FamilyMemberDetailScreen() {
                       : null;
 
                     return (
-                      <View key={appt.id}>
+                      <View
+                        key={appt.id}
+                        ref={(node) => { itemRefs.current[appt.id] = node; }}
+                        collapsable={false}
+                        pointerEvents="box-none"
+                        style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
+                      >
                         <Pressable
                           style={({ pressed }) => [styles.taskRow, { opacity: pressed ? 0.85 : 1 }]}
                           onPress={() => { setExpandedId(isExpanded ? null : appt.id); Haptics.selectionAsync(); }}
@@ -473,6 +555,7 @@ export default function FamilyMemberDetailScreen() {
                           </View>
                         )}
 
+                        {appt.id === highlightedItemId && <DeepLinkPulse color={Colors.health} />}
                         {!isLast && <View style={styles.rowDivider} />}
                       </View>
                     );
@@ -498,7 +581,13 @@ export default function FamilyMemberDetailScreen() {
               ) : (
                 <View style={styles.listCard}>
                   {medications.map((med, idx) => (
-                    <View key={med.id}>
+                    <View
+                      key={med.id}
+                      ref={(node) => { itemRefs.current[med.id] = node; }}
+                      collapsable={false}
+                      pointerEvents="box-none"
+                      style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
+                    >
                       <View style={styles.taskRow}>
                         <View style={[styles.taskBar, { backgroundColor: Colors.health }]} />
                         <View style={styles.taskInfo}>
@@ -509,6 +598,7 @@ export default function FamilyMemberDetailScreen() {
                         </View>
                         <View style={[styles.reminderDot, { backgroundColor: med.reminders_enabled ? Colors.good : Colors.border }]} />
                       </View>
+                      {med.id === highlightedItemId && <DeepLinkPulse color={Colors.health} />}
                       {idx < medications.length - 1 && <View style={styles.rowDivider} />}
                     </View>
                   ))}

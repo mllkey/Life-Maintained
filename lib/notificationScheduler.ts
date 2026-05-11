@@ -133,10 +133,17 @@ export async function upsertPushToken(userId: string): Promise<UpsertPushTokenRe
   return { ok: true, token, reason: null };
 }
 
+export type NotifAssetKind = "vehicle" | "property" | "family_member";
+export type NotifTaskKind = "vehicle_task" | "property_task" | "health_appointment" | "medication";
+
 type Candidate = {
   body: string;
   triggerDate: Date;
   priority: number;
+  assetId: string;
+  assetKind: NotifAssetKind;
+  taskId: string;
+  taskKind: NotifTaskKind;
 };
 
 export async function scheduleMaintenanceNotifications(userId: string): Promise<void> {
@@ -212,7 +219,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       propertyIds.length > 0
         ? supabase
             .from("property_maintenance_tasks")
-            .select("property_id, task, next_due_date")
+            .select("id, property_id, task, next_due_date")
             .in("property_id", propertyIds)
             .not("next_due_date", "is", null)
         : Promise.resolve({ data: [] as any[] }),
@@ -238,7 +245,16 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
 
     const candidates: Candidate[] = [];
 
-    function enqueue(taskName: string, assetName: string, dueDateStr: string, isMuted: boolean) {
+    function enqueue(
+      taskName: string,
+      assetName: string,
+      dueDateStr: string,
+      isMuted: boolean,
+      assetId: string,
+      assetKind: NotifAssetKind,
+      taskId: string,
+      taskKind: NotifTaskKind,
+    ) {
       if (isMuted) return;
 
       const dueDate = parseDueDateAnchor(dueDateStr);
@@ -291,6 +307,10 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
           body: `🔧 ${taskName} on ${assetName} ${label}`,
           triggerDate,
           priority,
+          assetId,
+          assetKind,
+          taskId,
+          taskKind,
         });
       }
     }
@@ -306,7 +326,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
 
       // Date-based notifications (existing behavior)
       if (task.next_due_date) {
-        enqueue(task.name, assetName, task.next_due_date, false);
+        enqueue(task.name, assetName, task.next_due_date, false, task.vehicle_id, "vehicle", task.id, "vehicle_task");
       }
 
       // Usage-based notifications (new)
@@ -374,6 +394,10 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
           body: `\u{1F527} ${task.name} on ${assetName} is ${Math.abs(Math.round(usageRemaining)).toLocaleString()} ${usageUnit} overdue`,
           triggerDate,
           priority: 0,
+          assetId: task.vehicle_id,
+          assetKind: "vehicle",
+          taskId: task.id,
+          taskKind: "vehicle_task",
         });
       } else if (usageDueSoon && !hasDateNotif) {
         // Only add due-soon usage notification if there's no date-based notification for this task
@@ -381,6 +405,10 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
           body: `\u{1F527} ${task.name} on ${assetName} is due in ${Math.round(usageRemaining).toLocaleString()} ${usageUnit}`,
           triggerDate,
           priority: 1,
+          assetId: task.vehicle_id,
+          assetKind: "vehicle",
+          taskId: task.id,
+          taskKind: "vehicle_task",
         });
       }
     }
@@ -391,7 +419,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       if (!property) continue;
       const assetName = property.nickname ?? property.address ?? "Property";
       const isMuted = (prefs.mutedProperties ?? []).includes(task.property_id);
-      enqueue(task.task, assetName, task.next_due_date, isMuted);
+      enqueue(task.task, assetName, task.next_due_date, isMuted, task.property_id, "property", task.id, "property_task");
     }
 
     // ── Health appointments (single query, reused for scheduling + badge) ──
@@ -399,7 +427,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     try {
       const { data: healthAppts } = await supabase
         .from("health_appointments")
-        .select("appointment_type, next_due_date, family_member_id, family_members(name)")
+        .select("id, appointment_type, next_due_date, family_member_id, family_members(name)")
         .eq("user_id", userId)
         .not("next_due_date", "is", null);
 
@@ -409,7 +437,18 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         if (!appt.next_due_date) continue;
         const memberName = (appt as any).family_members?.name;
         const assetName = memberName ? `${memberName}'s` : "Your";
-        enqueue(appt.appointment_type, assetName, appt.next_due_date, false);
+        if (appt.family_member_id) {
+          enqueue(
+            appt.appointment_type,
+            assetName,
+            appt.next_due_date,
+            false,
+            appt.family_member_id,
+            "family_member",
+            appt.id,
+            "health_appointment",
+          );
+        }
       }
     } catch (e) {
       console.warn("[NOTIF] Health appointments query failed:", e);
@@ -512,11 +551,24 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       const subjectPrefix = memberName ? `${memberName}: ` : "";
 
       try {
+        if (!med.family_member_id) {
+          if (__DEV__) {
+            console.warn("[NotifScheduler] medication missing family_member_id; skipping:", { medId: med.id });
+          }
+          continue;
+        }
+        const medData: { assetId: string; assetKind: NotifAssetKind; taskId: string; taskKind: NotifTaskKind } = {
+          assetId: med.family_member_id,
+          assetKind: "family_member",
+          taskId: med.id,
+          taskKind: "medication",
+        };
         await Notifications.scheduleNotificationAsync({
           content: {
             title: "Medication Reminder",
             body: `${subjectPrefix}Time to take ${med.name}`,
             sound: true,
+            data: medData,
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -562,7 +614,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       });
     }
 
-    for (const { body, triggerDate } of toSchedule) {
+    for (const { body, triggerDate, assetId, assetKind, taskId, taskKind } of toSchedule) {
       const tt = triggerDate.getTime();
       if (!Number.isFinite(tt)) {
         if (__DEV__) {
@@ -582,6 +634,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
             title: "LifeMaintained",
             body,
             sound: true,
+            data: { assetId, assetKind, taskId, taskKind },
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,

@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Linking,
   Animated,
+  findNodeHandle,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -122,7 +123,7 @@ const STATUS_BORDER: Record<string, string> = {
 };
 
 export default function VehicleDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, taskId } = useLocalSearchParams<{ id: string; taskId?: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { profile, user } = useAuth();
@@ -146,6 +147,50 @@ export default function VehicleDetailScreen() {
   const [scheduleInsight, setScheduleInsight] = useState<string | null>(null);
   const [insightTaskName, setInsightTaskName] = useState<string | null>(null);
   const [highlightedTask, setHighlightedTask] = useState<string | null>(null);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
+  const scheduleScrollRef = useRef<ScrollView>(null);
+  const taskRowRefs = useRef<Record<string, React.ElementRef<typeof View> | null>>({});
+  const lastHandledTaskIdRef = useRef<string | null>(null);
+
+  // Deep-link: switch to schedule tab, expand sections, scroll target row to
+  // absolute Y (80px top offset), pulse for 2.4s. lastHandledRef prevents
+  // re-trigger on refocus.
+  useEffect(() => {
+    if (!taskId) return;
+    if (lastHandledTaskIdRef.current === taskId) return;
+    lastHandledTaskIdRef.current = taskId;
+
+    setActiveTab("schedule");
+    setActionNeededExpanded(true);
+    setUpcomingExpanded(true);
+    setCompletedExpanded(true);
+    setHighlightedTaskId(taskId);
+
+    const performScroll = () => {
+      const row = taskRowRefs.current[taskId];
+      const scroll = scheduleScrollRef.current;
+      if (!row || !scroll) return;
+      const scrollNode = findNodeHandle(scroll);
+      if (scrollNode == null) return;
+      row.measureLayout(
+        scrollNode,
+        (_x, y) => {
+          scroll.scrollTo({ y: Math.max(0, y - 80), animated: true });
+        },
+        () => {},
+      );
+    };
+
+    const t1 = setTimeout(performScroll, 250);
+    const t2 = setTimeout(performScroll, 750);
+    const clear = setTimeout(() => setHighlightedTaskId(null), 2400);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(clear);
+    };
+  }, [taskId]);
   const prevScheduleCountRef = useRef(0);
   const lastStatusHashRef = useRef("");
   const pollStartRef = useRef<number | null>(null);
@@ -1159,6 +1204,7 @@ export default function VehicleDetailScreen() {
         <ActivityIndicator color={Colors.accent} style={{ marginTop: 60 }} />
       ) : vehicle ? (
         <ScrollView
+          ref={scheduleScrollRef}
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[1]}
           refreshControl={
@@ -1345,6 +1391,8 @@ export default function VehicleDetailScreen() {
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
+                      highlightedTaskId={highlightedTaskId}
+                      taskRowRefs={taskRowRefs}
                     />
                   )}
                   <ScheduleSection
@@ -1359,6 +1407,8 @@ export default function VehicleDetailScreen() {
                     costEstimates={costEstimates}
                     onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                     highlightedTask={highlightedTask}
+                      highlightedTaskId={highlightedTaskId}
+                      taskRowRefs={taskRowRefs}
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
@@ -1373,6 +1423,8 @@ export default function VehicleDetailScreen() {
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
+                      highlightedTaskId={highlightedTaskId}
+                      taskRowRefs={taskRowRefs}
                     />
                   )}
                   {Object.keys(costEstimates ?? {}).length > 0 && (
@@ -1426,6 +1478,8 @@ export default function VehicleDetailScreen() {
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
+                      highlightedTaskId={highlightedTaskId}
+                      taskRowRefs={taskRowRefs}
                     />
                   )}
                   <ScheduleSection
@@ -1440,6 +1494,8 @@ export default function VehicleDetailScreen() {
                     costEstimates={costEstimates}
                     onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                     highlightedTask={highlightedTask}
+                      highlightedTaskId={highlightedTaskId}
+                      taskRowRefs={taskRowRefs}
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
@@ -1454,6 +1510,8 @@ export default function VehicleDetailScreen() {
                       costEstimates={costEstimates}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
+                      highlightedTaskId={highlightedTaskId}
+                      taskRowRefs={taskRowRefs}
                     />
                   )}
                   {Object.keys(costEstimates ?? {}).length > 0 && (
@@ -1735,6 +1793,8 @@ function ScheduleSection({
   costEstimates,
   onShowDifficultyInfo,
   highlightedTask,
+  highlightedTaskId,
+  taskRowRefs,
 }: {
   title: string;
   titleColor?: string;
@@ -1748,6 +1808,8 @@ function ScheduleSection({
   costEstimates?: Record<string, any>;
   onShowDifficultyInfo?: () => void;
   highlightedTask?: string | null;
+  highlightedTaskId?: string | null;
+  taskRowRefs?: React.MutableRefObject<Record<string, React.ElementRef<typeof View> | null>>;
 }) {
   return (
     <View style={styles.scheduleSection}>
@@ -1766,23 +1828,70 @@ function ScheduleSection({
           {tasks.length === 0 && emptyMessage ? (
             <Text style={styles.scheduleSectionEmpty}>{emptyMessage}</Text>
           ) : (
-            tasks.map((task, idx) => (
-              <ScheduleTaskCard
-                key={task.id}
-                task={task}
-                vehicle={vehicle}
-                onMarkComplete={onMarkComplete}
-                onEditTask={onEditTask}
-                isLast={idx === tasks.length - 1}
-                costEstimate={costEstimates?.[task.name.toLowerCase().trim()]}
-                onShowDifficultyInfo={onShowDifficultyInfo}
-                isHighlighted={task.name === highlightedTask}
-              />
-            ))
+            tasks.map((task, idx) => {
+              const isDeepLink = task.id === highlightedTaskId;
+              return (
+                <View
+                  key={task.id}
+                  ref={(node) => {
+                    if (taskRowRefs) {
+                      taskRowRefs.current[task.id] = node;
+                    }
+                  }}
+                  collapsable={false}
+                  pointerEvents="box-none"
+                  style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
+                >
+                  <ScheduleTaskCard
+                    task={task}
+                    vehicle={vehicle}
+                    onMarkComplete={onMarkComplete}
+                    onEditTask={onEditTask}
+                    isLast={idx === tasks.length - 1}
+                    costEstimate={costEstimates?.[task.name.toLowerCase().trim()]}
+                    onShowDifficultyInfo={onShowDifficultyInfo}
+                    isHighlighted={task.name === highlightedTask}
+                  />
+                  {isDeepLink && <DeepLinkPulse color={Colors.vehicle} />}
+                </View>
+              );
+            })
           )}
         </View>
       )}
     </View>
+  );
+}
+
+function DeepLinkPulse({ color }: { color: string }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const seq = Animated.sequence([
+      Animated.timing(opacity, { toValue: 0.6, duration: 350, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0, duration: 450, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.6, duration: 350, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0, duration: 450, useNativeDriver: true }),
+    ]);
+    seq.start();
+    return () => seq.stop();
+  }, [opacity]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        borderRadius: 14,
+        borderWidth: 2,
+        borderColor: color,
+        backgroundColor: color + "22",
+        opacity,
+        zIndex: 1,
+      }}
+    />
   );
 }
 

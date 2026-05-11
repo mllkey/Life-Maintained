@@ -196,6 +196,57 @@ function RootLayoutNav() {
     return () => sub.remove();
   }, [session, isLoading]);
 
+  // Deep-link from a tapped notification routes to the specific item on its
+  // detail screen. Component-scoped ref so dedup survives effect re-runs from
+  // session/isLoading hydration.
+  const handledNotifIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!session || isLoading) return;
+    const { router } = require("expo-router");
+
+    const routeFromResponse = (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
+      const reqId = response.notification.request.identifier;
+      if (handledNotifIds.current.has(reqId)) return;
+
+      const raw = response.notification.request.content.data;
+      if (!raw || typeof raw !== "object") return;
+      const d = raw as {
+        assetId?: unknown;
+        assetKind?: unknown;
+        taskId?: unknown;
+        taskKind?: unknown;
+      };
+      const assetId = typeof d.assetId === "string" ? d.assetId : null;
+      const assetKind = typeof d.assetKind === "string" ? d.assetKind : null;
+      const taskId = typeof d.taskId === "string" ? d.taskId : null;
+      const taskKind = typeof d.taskKind === "string" ? d.taskKind : null;
+      if (!assetId || !taskId || !assetKind || !taskKind) return;
+
+      try {
+        if (assetKind === "vehicle" && taskKind === "vehicle_task") {
+          router.push({ pathname: "/vehicle/[id]", params: { id: assetId, taskId } });
+        } else if (assetKind === "property" && taskKind === "property_task") {
+          router.push({ pathname: "/property/[id]", params: { id: assetId, taskId } });
+        } else if (assetKind === "family_member" && taskKind === "health_appointment") {
+          router.push({ pathname: "/family-member/[id]", params: { id: assetId, appointmentId: taskId } });
+        } else if (assetKind === "family_member" && taskKind === "medication") {
+          router.push({ pathname: "/family-member/[id]", params: { id: assetId, medicationId: taskId } });
+        } else {
+          return;
+        }
+        handledNotifIds.current.add(reqId);
+      } catch (e) {
+        console.warn("[NotifDeepLink] route failed:", e);
+      }
+    };
+
+    routeFromResponse(Notifications.getLastNotificationResponse());
+
+    const sub = Notifications.addNotificationResponseReceivedListener(routeFromResponse);
+    return () => sub.remove();
+  }, [session, isLoading]);
+
   const showBanner = !!session && onboardingCompleted === true;
 
   return (
