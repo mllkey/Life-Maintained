@@ -2,7 +2,7 @@
 // Verifies a Supabase user JWT via auth.getUser() (real signature check).
 // Throws AuthError on failure; caller should map to a 401 response.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.98.0";
 
 export class AuthError extends Error {
   status: number;

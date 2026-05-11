@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.98.0";
 import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/json.ts";
 import { requireUser, AuthError } from "../_shared/auth.ts";
@@ -145,7 +145,8 @@ Deno.serve(async (req: Request) => {
     const audioBlob = new Blob([bytes], { type: mimeType });
     const formData = new FormData();
     formData.append("file", audioBlob, `recording.${ext}`);
-    formData.append("model", "whisper-1");
+    const transcribeModel = Deno.env.get("OPENAI_TRANSCRIBE_MODEL") ?? "gpt-4o-mini-transcribe";
+    formData.append("model", transcribeModel);
     formData.append("language", "en");
 
     const TIMEOUT_MS = 30_000;

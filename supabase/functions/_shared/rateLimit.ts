@@ -1,7 +1,7 @@
 // Per-user sliding-window rate limit for AI edge functions.
 // Calls the check_rate_limit RPC (service_role only). Throws on cap.
 
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.98.0";
 
 export class RateLimitError extends Error {
   status = 429;

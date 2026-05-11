@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.98.0";
 import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/json.ts";
 import { requireUser, hasEdgeSecret, AuthError } from "../_shared/auth.ts";
@@ -187,7 +187,7 @@ Respond ONLY with valid JSON, no other text. Use this exact format:
 "estimated_hours": <number, estimated labor hours>,
 "parts_list": "<comma-separated list of parts needed with approximate individual costs>"
 }
-Base your estimates on current 2025-2026 market prices. Be accurate for this specific ${entityLabel}.`;
+Base your estimates on current ${new Date().getFullYear()} market prices. Be accurate for this specific ${entityLabel}.`;
     const TIMEOUT_MS = 45_000;
     const aiController = new AbortController();
     const aiTimeoutId = setTimeout(() => aiController.abort(), TIMEOUT_MS);

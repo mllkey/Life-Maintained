@@ -10,7 +10,7 @@
 // Must be called with the admin (service-role) supabase client so RLS does
 // not block the profiles read.
 
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.98.0";
 
 export class PremiumGateError extends Error {
   status = 403;
