@@ -742,6 +742,7 @@ export type Database = {
           email: string | null
           id: string
           is_beta_user: boolean | null
+          last_active_at: string | null
           monthly_scan_count: number
           onboarding_completed: boolean | null
           onboarding_data: Json | null
@@ -771,6 +772,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_beta_user?: boolean | null
+          last_active_at?: string | null
           monthly_scan_count?: number
           onboarding_completed?: boolean | null
           onboarding_data?: Json | null
@@ -800,6 +802,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_beta_user?: boolean | null
+          last_active_at?: string | null
           monthly_scan_count?: number
           onboarding_completed?: boolean | null
           onboarding_data?: Json | null

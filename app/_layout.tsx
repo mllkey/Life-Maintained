@@ -24,6 +24,7 @@ import { queryClient } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { PostHogProvider } from "posthog-react-native";
 import { analyticsClient, capture } from "@/lib/analytics";
+import { supabase } from "@/lib/supabase";
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
 import { Colors } from "@/constants/colors";
 import NotifPermissionBanner from "@/components/NotifPermissionBanner";
@@ -57,6 +58,10 @@ focusManager.setEventListener((handleFocus) => {
   return () => subscription.remove();
 });
 
+// G10.2 — module-scope debounce ref for profiles.last_active_at upsert.
+// Survives component remounts; resets only on cold start.
+let lastActiveUpsertAt = 0;
+
 function RootLayoutNav() {
   const { session, isLoading, onboardingCompleted, refreshProfile } = useAuth();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -84,6 +89,21 @@ function RootLayoutNav() {
         Notifications.setBadgeCountAsync(0).catch(() => {});
         scheduleMaintenanceNotifications(userId);
         capture("app_foregrounded", {});
+        // G10.2 — debounced last_active_at upsert (60s). Closes PASS-E-002.
+        // Non-blocking; rolls back ref on error so next foreground retries.
+        const nowMs = Date.now();
+        if (nowMs - lastActiveUpsertAt >= 60000) {
+          lastActiveUpsertAt = nowMs;
+          supabase
+            .from("profiles")
+            .update({ last_active_at: new Date(nowMs).toISOString() })
+            .eq("user_id", userId)
+            .then(({ error }) => {
+              if (error) {
+                lastActiveUpsertAt = 0;
+              }
+            });
+        }
       }
     });
 
