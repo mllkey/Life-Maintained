@@ -119,6 +119,7 @@ export default function PropertyDetailScreen() {
   const [toastMsg, setToastMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
   const [toastIsError, setToastIsError] = useState(false);
+  const [toastSubtitle, setToastSubtitle] = useState<string | undefined>(undefined);
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -129,8 +130,9 @@ export default function PropertyDetailScreen() {
   const [scheduleTimedOut, setScheduleTimedOut] = useState(false);
   const pollingStartRef = useRef<number | null>(null);
 
-  function showToast(msg: string, isError = false) {
+  function showToast(msg: string, isError = false, subtitle?: string) {
     setToastMsg(msg);
+    setToastSubtitle(subtitle);
     setToastIsError(isError);
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2800);
@@ -372,7 +374,11 @@ export default function PropertyDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["property_task_counts"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
 
-      showToast(`${task.task} marked complete!`);
+      showToast(
+        `${task.task} marked complete`,
+        false,
+        `Next due ${format(parseISO(nextDate), "MMM d, yyyy")}`,
+      );
 
       // Reschedule notifications — fire-and-forget, never blocks UI
       if (user?.id) {
@@ -915,7 +921,7 @@ export default function PropertyDetailScreen() {
         </ScrollView>
       )}
 
-      <SaveToast visible={toastVisible} message={toastMsg} isError={toastIsError} />
+      <SaveToast visible={toastVisible} message={toastMsg} subtitle={toastSubtitle} isError={toastIsError} />
 
       <Modal
         visible={markCompleteTask != null}
