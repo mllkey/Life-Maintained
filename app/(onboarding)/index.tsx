@@ -8,6 +8,7 @@ import * as Haptics from "expo-haptics";
 import { primeHaptics } from "@/lib/haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth, getOnboardingKey } from "@/context/AuthContext";
+import { capture } from "@/lib/analytics";
 import { supabase } from "@/lib/supabase";
 import Animated, {
   Easing,
@@ -122,6 +123,10 @@ export default function OnboardingStartScreen() {
   const vehicleOrbStyle = useOrbStyle(0, "vehicle", selected, entryProgress, selectedProgress);
   const homeOrbStyle = useOrbStyle(1, "home", selected, entryProgress, selectedProgress);
   const healthOrbStyle = useOrbStyle(2, "health", selected, entryProgress, selectedProgress);
+
+  useEffect(() => {
+    capture("onboarding_step_viewed", { step: "start" });
+  }, []);
 
   useEffect(() => {
     entryProgress.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });

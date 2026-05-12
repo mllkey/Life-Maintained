@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import { capture as captureAnalytics } from "@/lib/analytics";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
 import { rcReady, extractTierHintFromCustomerInfo, syncSubscriptionFromRc } from "@/lib/revenuecat";
@@ -196,6 +197,13 @@ export default function Paywall({
   useEffect(() => {
     latestProfileTierRef.current = profile?.subscription_tier ?? null;
   }, [profile?.subscription_tier]);
+
+  useEffect(() => {
+    captureAnalytics("paywall_viewed", {
+      context_vertical: context?.vertical,
+      context_reason: context?.reason,
+    });
+  }, []);
 
   useEffect(() => {
     return () => {

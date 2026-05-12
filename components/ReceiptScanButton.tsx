@@ -5,6 +5,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
 import { SaveToast } from "@/components/SaveToast";
+import { capture } from "@/lib/analytics";
 import {
   scanReceipt,
   ReceiptScanResult,
@@ -104,6 +105,11 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       }
 
+      capture("scan_completed", {
+        asset_type: assetType,
+        asset_id: assetId,
+        source: source ? "camera" : "library",
+      });
       onScanComplete(withUri);
     } catch (err) {
       console.error("Receipt scan error:", err);

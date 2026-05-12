@@ -21,6 +21,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import { capture } from "@/lib/analytics";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import Paywall from "@/components/Paywall";
@@ -1106,6 +1107,14 @@ export default function AddVehicleScreen() {
         queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
         queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (inserted?.id) {
+          capture("vehicle_added", {
+            vehicle_id: inserted.id,
+            make: make.trim(),
+            model: model.trim(),
+            year: yearNum,
+          });
+        }
         setShowSaveToast(true);
         setTimeout(() => router.back(), 900);
       } catch (saveErr) {
@@ -2184,6 +2193,15 @@ export default function AddVehicleScreen() {
         candidates={walletCandidates ?? []}
         onClose={() => {
           setShowCopyModal(false);
+          const savedYear = parseInt(year, 10);
+          if (savedVehicleId && Number.isFinite(savedYear)) {
+            capture("vehicle_added", {
+              vehicle_id: savedVehicleId,
+              make: make.trim(),
+              model: model.trim(),
+              year: savedYear,
+            });
+          }
           setShowSaveToast(true);
           setTimeout(() => router.back(), 900);
         }}

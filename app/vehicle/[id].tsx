@@ -33,6 +33,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { parseISO, isBefore, addMonths, format, formatDistanceToNowStrict, differenceInDays } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
+import { capture } from "@/lib/analytics";
 import Paywall from "@/components/Paywall";
 import { hasPersonalOrAbove } from "@/lib/subscription";
 import { SaveToast } from "@/components/SaveToast";
@@ -798,6 +799,14 @@ export default function VehicleDetailScreen() {
       const { data: rpcResult, error: rpcErr } = await Promise.race([rpcPromise, timeout]);
       clearTimeout(timeoutId!);
       if (rpcErr) throw rpcErr;
+
+      if (typeof id === "string" && id.length > 0) {
+        capture("task_completed", {
+          task_id: task.id,
+          vehicle_id: id,
+          task_name: rpcResult?.task_name ?? task.name,
+        });
+      }
 
       handleCloseMarkComplete();
 

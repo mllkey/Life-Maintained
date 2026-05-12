@@ -22,6 +22,8 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { PostHogProvider } from "posthog-react-native";
+import { analyticsClient, capture } from "@/lib/analytics";
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
 import { Colors } from "@/constants/colors";
 import NotifPermissionBanner from "@/components/NotifPermissionBanner";
@@ -70,6 +72,7 @@ function RootLayoutNav() {
     const userId = session.user.id;
 
     Notifications.setBadgeCountAsync(0).catch(() => {});
+    capture("app_opened", {});
     const initialScheduleTimer = setTimeout(() => {
       scheduleMaintenanceNotifications(userId);
     }, 800);
@@ -80,6 +83,7 @@ function RootLayoutNav() {
       if (nextState === "active" && prev !== "active") {
         Notifications.setBadgeCountAsync(0).catch(() => {});
         scheduleMaintenanceNotifications(userId);
+        capture("app_foregrounded", {});
       }
     });
 
@@ -236,6 +240,7 @@ function RootLayoutNav() {
           return;
         }
         handledNotifIds.current.add(reqId);
+        capture("notification_opened", { asset_kind: assetKind, task_kind: taskKind });
       } catch (e) {
         console.warn("[NotifDeepLink] route failed:", e);
       }
@@ -331,9 +336,17 @@ function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <KeyboardProvider>
-            <AuthProvider>
-              <RootLayoutNav />
-            </AuthProvider>
+            {analyticsClient ? (
+              <PostHogProvider client={analyticsClient}>
+                <AuthProvider>
+                  <RootLayoutNav />
+                </AuthProvider>
+              </PostHogProvider>
+            ) : (
+              <AuthProvider>
+                <RootLayoutNav />
+              </AuthProvider>
+            )}
           </KeyboardProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>

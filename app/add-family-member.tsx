@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import { capture } from "@/lib/analytics";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -112,6 +113,13 @@ export default function AddFamilyMemberScreen() {
         }
       })();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (newMember?.id) {
+        const analyticsMemberType: "person" | "pet" = memberType === "pet" ? "pet" : "person";
+        capture("family_member_added", {
+          family_member_id: newMember.id,
+          member_type: analyticsMemberType,
+        });
+      }
       setShowToast(true);
       setTimeout(() => router.back(), 900);
     }

@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth, getOnboardingKey } from "@/context/AuthContext";
+import { capture } from "@/lib/analytics";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -63,6 +64,10 @@ export default function BuildingPlanScreen() {
   const displayName = (vehicleName || `${yearStr} ${make} ${model}`).trim();
 
   const [typedName, setTypedName] = React.useState("");
+
+  React.useEffect(() => {
+    capture("onboarding_step_viewed", { step: "building_plan" });
+  }, []);
   const [subtitleText, setSubtitleText] = React.useState("Reading the factory service manual");  // beat-driven swaps below override at 1.4/1.7/3.6/8.0s
   const [ready, setReady] = React.useState(false);
   const [failed, setFailed] = React.useState(false);

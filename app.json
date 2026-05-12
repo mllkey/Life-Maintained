@@ -78,7 +78,8 @@
           "project": "lifemaintained",
           "url": "https://sentry.io/"
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,

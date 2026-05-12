@@ -14,6 +14,7 @@ import { supabase } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
 import type { Profile } from "@/lib/subscription";
 import { checkAndResetScanCount } from "@/lib/subscription";
+import { identify as identifyUser, resetAnalytics } from "@/lib/analytics";
 
 interface AuthContextValue {
   session: Session | null;
@@ -189,6 +190,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (fullProfile) {
           setProfile(fullProfile);
 
+          identifyUser(nextSession.user.id, {
+            subscription_tier: fullProfile.subscription_tier ?? null,
+            onboarding_completed: !!fullProfile.onboarding_completed,
+          });
+
           if (fullProfile.onboarding_completed) {
             setOnboardingCompleted(true);
             setOnboardingCacheTrue(nextSession.user.id).catch(() => {});
@@ -330,6 +336,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfileLoaded(false);
     setSession(null);
 
+    resetAnalytics();
     await supabase.auth.signOut();
     setIsLoading(false);
   }

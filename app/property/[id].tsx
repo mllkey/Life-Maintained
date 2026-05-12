@@ -27,6 +27,7 @@ import { completePropertyTask } from "@/lib/rpc";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { formatShopAndDiy } from "@/lib/costFormat";
 import { useAuth } from "@/context/AuthContext";
+import { capture } from "@/lib/analytics";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
@@ -357,6 +358,14 @@ export default function PropertyDetailScreen() {
       });
 
       if (rpcError) throw rpcError;
+
+      if (typeof id === "string" && id.length > 0) {
+        capture("property_task_completed", {
+          task_id: task.id,
+          property_id: id,
+          task_name: task.task,
+        });
+      }
 
       queryClient.invalidateQueries({ queryKey: ["property_tasks", id] });
       queryClient.invalidateQueries({ queryKey: ["property_logs", id] });

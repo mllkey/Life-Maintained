@@ -24,6 +24,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import { capture } from "@/lib/analytics";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -339,6 +340,12 @@ export default function AddPropertyScreen() {
     queryClient.invalidateQueries({ queryKey: ["properties", user.id] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (newProperty?.id) {
+      capture("property_added", {
+        property_id: newProperty.id,
+        property_type: propertyType,
+      });
+    }
     setShowToast(true);
     setTimeout(() => router.back(), 900);
   }

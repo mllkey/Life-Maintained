@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,6 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import { formatCostDisplay } from "@/lib/costFormat";
 import { useAuth, getOnboardingKey } from "@/context/AuthContext";
+import { capture } from "@/lib/analytics";
 import { useQuery } from "@tanstack/react-query";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 
@@ -30,6 +31,10 @@ export default function ValueRevealScreen() {
   const [pollTimedOut, setPollTimedOut] = useState(false);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const skeletonAnim = usePulse();
+
+  useEffect(() => {
+    capture("onboarding_step_viewed", { step: "value_reveal" });
+  }, []);
 
   const { data: topTasks } = useQuery({
     queryKey: ["onboarding_top_tasks", vehicleId],
