@@ -563,7 +563,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
           taskId: med.id,
           taskKind: "medication",
         };
-        await Notifications.scheduleNotificationAsync({
+        const medNotifId = await Notifications.scheduleNotificationAsync({
           content: {
             title: "Medication Reminder",
             body: `${subjectPrefix}Time to take ${med.name}`,
@@ -576,6 +576,17 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
             minute: medMinute,
           },
         });
+        // G10.3 — non-blocking schedule-event insert (PASS-E-005a).
+        supabase
+          .from("notification_events")
+          .insert({
+            user_id: userId,
+            notif_id: medNotifId,
+            asset_kind: medData.assetKind,
+            task_kind: medData.taskKind,
+            scheduled_for: null,
+          })
+          .then(() => {}, () => {});
         medicationsScheduled++;
       } catch (err) {
         console.warn("[NotifScheduler] medication scheduleNotificationAsync threw:", { medId: med.id, err });
@@ -629,7 +640,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         continue;
       }
       try {
-        await Notifications.scheduleNotificationAsync({
+        const dateNotifId = await Notifications.scheduleNotificationAsync({
           content: {
             title: "LifeMaintained",
             body,
@@ -641,6 +652,17 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
             date: triggerDate,
           },
         });
+        // G10.3 — non-blocking schedule-event insert (PASS-E-005a).
+        supabase
+          .from("notification_events")
+          .insert({
+            user_id: userId,
+            notif_id: dateNotifId,
+            asset_kind: assetKind,
+            task_kind: taskKind,
+            scheduled_for: triggerDate.toISOString(),
+          })
+          .then(() => {}, () => {});
       } catch (err) {
         console.warn("[NotifScheduler] scheduleNotificationAsync threw:", err);
       }

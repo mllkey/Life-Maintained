@@ -734,6 +734,42 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_events: {
+        Row: {
+          asset_kind: string | null
+          created_at: string
+          id: string
+          notif_id: string
+          response_received_at: string | null
+          scheduled_for: string | null
+          sent_at: string | null
+          task_kind: string | null
+          user_id: string
+        }
+        Insert: {
+          asset_kind?: string | null
+          created_at?: string
+          id?: string
+          notif_id: string
+          response_received_at?: string | null
+          scheduled_for?: string | null
+          sent_at?: string | null
+          task_kind?: string | null
+          user_id: string
+        }
+        Update: {
+          asset_kind?: string | null
+          created_at?: string
+          id?: string
+          notif_id?: string
+          response_received_at?: string | null
+          scheduled_for?: string | null
+          sent_at?: string | null
+          task_kind?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           beta_premium_until: string | null

@@ -260,6 +260,13 @@ function RootLayoutNav() {
           return;
         }
         handledNotifIds.current.add(reqId);
+        // G10.3 — mark notification response timestamp (PASS-E-005a). Non-blocking.
+        // RLS enforces user scope; no user_id filter needed.
+        supabase
+          .from("notification_events")
+          .update({ response_received_at: new Date().toISOString() })
+          .eq("notif_id", reqId)
+          .then(() => {}, () => {});
         capture("notification_opened", { asset_kind: assetKind, task_kind: taskKind });
       } catch (e) {
         console.warn("[NotifDeepLink] route failed:", e);
