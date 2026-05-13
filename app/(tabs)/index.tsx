@@ -44,6 +44,10 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 
 const SCREENING_NOTIF_KEY = "screening_notif_optins";
 
+const VEHICLE_DISMISS_KEY = "@yma_crosssell_dismissed_vehicle_only";
+const PROPERTY_DISMISS_KEY = "@yma_crosssell_dismissed_property_only";
+const HEALTH_DISMISS_KEY = "@yma_crosssell_dismissed_health_only";
+
 const CAT = {
   vehicles: { color: Colors.blue, muted: Colors.blueMuted, icon: "car" as const, label: "Vehicles", desc: "Cars, trucks, motorcycles & more", addRoute: "/add-vehicle" as any, tab: "/(tabs)/vehicles" as any },
   properties: { color: Colors.good, muted: Colors.goodMuted, icon: "home" as const, label: "Properties", desc: "Home, HVAC, roof & appliances", addRoute: "/add-property" as any, tab: "/(tabs)/home-tab" as any },
@@ -352,6 +356,28 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
+  const { data: primaryAssetName } = useQuery({
+    queryKey: ["primary_asset_name", user?.id, counts?.vehicles, counts?.properties, counts?.health],
+    queryFn: async () => {
+      if (!user || !counts) return null;
+      const onlyVehicle = counts.vehicles > 0 && counts.properties === 0 && counts.health === 0;
+      const onlyProperty = counts.properties > 0 && counts.vehicles === 0 && counts.health === 0;
+      if (onlyVehicle) {
+        const { data } = await supabase.from("vehicles").select("nickname, year, make, model").eq("user_id", user.id).limit(1).maybeSingle();
+        if (!data) return null;
+        const vehicleName = [data.year, data.make, data.model].filter(Boolean).join(" ");
+        return data.nickname ?? (vehicleName.length > 0 ? vehicleName : null);
+      }
+      if (onlyProperty) {
+        const { data } = await supabase.from("properties").select("nickname, address").eq("user_id", user.id).limit(1).maybeSingle();
+        if (!data) return null;
+        return data.nickname ?? data.address ?? null;
+      }
+      return null;
+    },
+    enabled: !!user && !!counts,
+  });
+
   function refetch() {
     refetchCounts();
     refetchDash();
@@ -489,7 +515,11 @@ export default function DashboardScreen() {
                 <Ionicons name="close" size={14} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
               </Pressable>
             )}
-            <YourMonthAheadCard items={monthAheadItems} />
+            <YourMonthAheadCard
+              items={monthAheadItems}
+              counts={counts ?? { vehicles: 0, properties: 0, health: 0 }}
+              primaryAssetName={primaryAssetName ?? null}
+            />
 
             {totalTasks > 0 && (
               <HealthScoreCard
@@ -880,15 +910,56 @@ function DashboardSkeleton() {
   );
 }
 
-function YourMonthAheadCard({ items }: { items: MonthAheadItem[] }) {
+function YourMonthAheadCard({
+  items,
+  counts,
+  primaryAssetName,
+}: {
+  items: MonthAheadItem[];
+  counts: { vehicles: number; properties: number; health: number };
+  primaryAssetName: string | null;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
+
+  const onlyVehicle = counts.vehicles > 0 && counts.properties === 0 && counts.health === 0;
+  const onlyProperty = counts.properties > 0 && counts.vehicles === 0 && counts.health === 0;
+  const onlyHealth = counts.health > 0 && counts.vehicles === 0 && counts.properties === 0;
+  const singleVerticalActive = onlyVehicle || onlyProperty || onlyHealth;
+
+  const dismissKey = onlyVehicle
+    ? VEHICLE_DISMISS_KEY
+    : onlyProperty
+      ? PROPERTY_DISMISS_KEY
+      : onlyHealth
+        ? HEALTH_DISMISS_KEY
+        : null;
+
+  useEffect(() => {
+    if (!singleVerticalActive || !dismissKey) {
+      setDismissed(null);
+      return;
+    }
+    let cancelled = false;
+    AsyncStorage.getItem(dismissKey)
+      .then(val => {
+        if (!cancelled) setDismissed(val === "true");
+      })
+      .catch(() => {
+        if (!cancelled) setDismissed(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [singleVerticalActive, dismissKey]);
+
   const heroItems = items.slice(0, 3);
   const detailItems = items.slice(0, 6);
   const categories = verticalCount(items);
 
-  if (categories < 2 || heroItems.length < 2) return null;
+  const isMultiVertical = categories >= 2 && heroItems.length >= 2;
 
-  const narrative = `This month: ${joinNatural(heroItems.map(monthAheadPhrase))}.`;
+  if (!isMultiVertical && !singleVerticalActive) return null;
 
   function handlePress(item?: MonthAheadItem) {
     if (!item) {
@@ -909,62 +980,192 @@ function YourMonthAheadCard({ items }: { items: MonthAheadItem[] }) {
     Haptics.selectionAsync();
   }
 
+  if (isMultiVertical) {
+    const narrative = `This month: ${joinNatural(heroItems.map(monthAheadPhrase))}.`;
+    return (
+      <Pressable
+        style={({ pressed }) => [styles.monthAheadCard, { opacity: pressed ? 0.92 : 1 }]}
+        onPress={() => handlePress()}
+        accessibilityRole="button"
+        accessibilityLabel="Show this month ahead"
+      >
+        <View style={styles.monthAheadTopRow}>
+          <View style={styles.monthAheadIconStack}>
+            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.blueMuted, marginRight: -8 }]}>
+              <Ionicons name="car" size={15} color={Colors.blue} />
+            </View>
+            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.goodMuted, marginRight: -8 }]}>
+              <Ionicons name="home" size={15} color={Colors.good} />
+            </View>
+            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.healthMuted }]}>
+              <Ionicons name="heart" size={15} color={Colors.health} />
+            </View>
+          </View>
+          <Text style={styles.monthAheadEyebrow}>YOUR MONTH AHEAD</Text>
+          <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={18} color={Colors.textTertiary} />
+        </View>
+
+        <Text style={styles.monthAheadTitle}>Everything coming up, in one place</Text>
+        <Text style={styles.monthAheadNarrative}>{narrative}</Text>
+
+        <View style={styles.monthAheadMetaRow}>
+          <Text style={styles.monthAheadMeta}>{items.length} item{items.length !== 1 ? "s" : ""}</Text>
+          <View style={styles.monthAheadDot} />
+          <Text style={styles.monthAheadMeta}>{categories} areas</Text>
+        </View>
+
+        {expanded ? (
+          <View style={styles.monthAheadDetails}>
+            {detailItems.map(item => {
+              const cat = CAT[item.category];
+              return (
+                <Pressable
+                  key={`${item.category}-${item.id}`}
+                  style={({ pressed }) => [styles.monthAheadDetailRow, { opacity: pressed ? 0.72 : 1 }]}
+                  onPress={() => handlePress(item)}
+                >
+                  <View style={[styles.monthAheadDetailIcon, { backgroundColor: cat.muted }]}>
+                    <Ionicons name={cat.icon} size={14} color={cat.color} />
+                  </View>
+                  <View style={styles.monthAheadDetailText}>
+                    <Text style={styles.monthAheadDetailTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.monthAheadDetailSub} numberOfLines={1}>{item.subtitle} · {categoryLabel(item.category)}</Text>
+                  </View>
+                  <Text style={[styles.monthAheadDue, { color: item.status === "overdue" ? Colors.overdue : Colors.dueSoon }]}>{formatDueDate(item.dueDate)}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+      </Pressable>
+    );
+  }
+
+  const activeCategory: "vehicles" | "properties" | "health" = onlyVehicle ? "vehicles" : onlyProperty ? "properties" : "health";
+  const verticalItems = items.filter(i => i.category === activeCategory);
+  const verticalHero = verticalItems.slice(0, 3);
+  const verticalDetails = verticalItems.slice(0, 6);
+
+  const resolvedVehicleName = primaryAssetName ?? verticalHero[0]?.subtitle ?? "vehicle";
+  const vehicleDisplayName = resolvedVehicleName === "vehicle" ? "your vehicle" : `your ${resolvedVehicleName}`;
+  const propertyDisplayName = primaryAssetName ?? "your home";
+
+  const emptyText = onlyVehicle
+    ? `Nothing due this month for ${vehicleDisplayName}.`
+    : onlyProperty
+      ? `Nothing due this month for ${propertyDisplayName}.`
+      : "Nothing due this month in health.";
+
+  const crossSellCopy = onlyVehicle
+    ? `Tracking ${vehicleDisplayName} is a strong start. Add your home next so LifeMaintained can plan more of your month.`
+    : onlyProperty
+      ? "Your home is covered. Add your vehicle next so your month feels easier to see."
+      : "Health reminders are in one place. Add your vehicle next to bring more of your maintenance into view.";
+
+  const crossSellRoute = onlyVehicle ? CAT.properties.addRoute : CAT.vehicles.addRoute;
+  const crossSellIconName: "home" | "car" = onlyVehicle ? "home" : "car";
+  const crossSellIconColor = onlyVehicle ? Colors.good : Colors.blue;
+  const crossSellIconBg = onlyVehicle ? Colors.goodMuted : Colors.blueMuted;
+
+  const activeIconName: "car" | "home" | "heart" = activeCategory === "vehicles" ? "car" : activeCategory === "properties" ? "home" : "heart";
+  const activeIconColor = activeCategory === "vehicles" ? Colors.blue : activeCategory === "properties" ? Colors.good : Colors.health;
+  const activeIconBg = activeCategory === "vehicles" ? Colors.blueMuted : activeCategory === "properties" ? Colors.goodMuted : Colors.healthMuted;
+
+  const narrative = verticalHero.length > 0
+    ? `This month: ${joinNatural(verticalHero.map(monthAheadPhrase))}.`
+    : emptyText;
+
+  function handleCrossSellPress() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDismissed(true);
+    if (dismissKey) AsyncStorage.setItem(dismissKey, "true").catch(() => {});
+    router.push(crossSellRoute);
+  }
+
+  function handleDismissPress() {
+    Haptics.selectionAsync();
+    setDismissed(true);
+    if (dismissKey) AsyncStorage.setItem(dismissKey, "true").catch(() => {});
+  }
+
   return (
-    <Pressable
-      style={({ pressed }) => [styles.monthAheadCard, { opacity: pressed ? 0.92 : 1 }]}
-      onPress={() => handlePress()}
-      accessibilityRole="button"
-      accessibilityLabel="Show this month ahead"
-    >
-      <View style={styles.monthAheadTopRow}>
-        <View style={styles.monthAheadIconStack}>
-          <View style={[styles.monthAheadIcon, { backgroundColor: Colors.blueMuted, marginRight: -8 }]}>
-            <Ionicons name="car" size={15} color={Colors.blue} />
+    <View style={styles.monthAheadCard}>
+      <Pressable
+        onPress={() => handlePress()}
+        accessibilityRole="button"
+        accessibilityLabel="Show this month ahead"
+      >
+        <View style={styles.monthAheadTopRow}>
+          <View style={styles.monthAheadIconStack}>
+            <View style={[styles.singleVerticalIcon, { backgroundColor: activeIconBg }]}>
+              <Ionicons name={activeIconName} size={15} color={activeIconColor} />
+            </View>
           </View>
-          <View style={[styles.monthAheadIcon, { backgroundColor: Colors.goodMuted, marginRight: -8 }]}>
-            <Ionicons name="home" size={15} color={Colors.good} />
-          </View>
-          <View style={[styles.monthAheadIcon, { backgroundColor: Colors.healthMuted }]}>
-            <Ionicons name="heart" size={15} color={Colors.health} />
-          </View>
+          <Text style={styles.monthAheadEyebrow}>YOUR MONTH AHEAD</Text>
+          <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={18} color={Colors.textTertiary} />
         </View>
-        <Text style={styles.monthAheadEyebrow}>YOUR MONTH AHEAD</Text>
-        <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={18} color={Colors.textTertiary} />
-      </View>
 
-      <Text style={styles.monthAheadTitle}>Everything coming up, in one place</Text>
-      <Text style={styles.monthAheadNarrative}>{narrative}</Text>
+        <Text style={styles.monthAheadTitle}>Everything coming up</Text>
+        <Text style={styles.monthAheadNarrative}>{narrative}</Text>
 
-      <View style={styles.monthAheadMetaRow}>
-        <Text style={styles.monthAheadMeta}>{items.length} item{items.length !== 1 ? "s" : ""}</Text>
-        <View style={styles.monthAheadDot} />
-        <Text style={styles.monthAheadMeta}>{categories} areas</Text>
-      </View>
+        {verticalItems.length > 0 && (
+          <View style={styles.monthAheadMetaRow}>
+            <Text style={styles.monthAheadMeta}>{verticalItems.length} item{verticalItems.length !== 1 ? "s" : ""}</Text>
+          </View>
+        )}
 
-      {expanded ? (
-        <View style={styles.monthAheadDetails}>
-          {detailItems.map(item => {
-            const cat = CAT[item.category];
-            return (
-              <Pressable
-                key={`${item.category}-${item.id}`}
-                style={({ pressed }) => [styles.monthAheadDetailRow, { opacity: pressed ? 0.72 : 1 }]}
-                onPress={() => handlePress(item)}
-              >
-                <View style={[styles.monthAheadDetailIcon, { backgroundColor: cat.muted }]}>
-                  <Ionicons name={cat.icon} size={14} color={cat.color} />
-                </View>
-                <View style={styles.monthAheadDetailText}>
-                  <Text style={styles.monthAheadDetailTitle} numberOfLines={1}>{item.title}</Text>
-                  <Text style={styles.monthAheadDetailSub} numberOfLines={1}>{item.subtitle} · {categoryLabel(item.category)}</Text>
-                </View>
-                <Text style={[styles.monthAheadDue, { color: item.status === "overdue" ? Colors.overdue : Colors.dueSoon }]}>{formatDueDate(item.dueDate)}</Text>
-              </Pressable>
-            );
-          })}
+        {expanded && verticalDetails.length > 0 ? (
+          <View style={styles.monthAheadDetails}>
+            {verticalDetails.map(item => {
+              const cat = CAT[item.category];
+              return (
+                <Pressable
+                  key={`${item.category}-${item.id}`}
+                  style={({ pressed }) => [styles.monthAheadDetailRow, { opacity: pressed ? 0.72 : 1 }]}
+                  onPress={() => handlePress(item)}
+                >
+                  <View style={[styles.monthAheadDetailIcon, { backgroundColor: cat.muted }]}>
+                    <Ionicons name={cat.icon} size={14} color={cat.color} />
+                  </View>
+                  <View style={styles.monthAheadDetailText}>
+                    <Text style={styles.monthAheadDetailTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.monthAheadDetailSub} numberOfLines={1}>{item.subtitle} · {categoryLabel(item.category)}</Text>
+                  </View>
+                  <Text style={[styles.monthAheadDue, { color: item.status === "overdue" ? Colors.overdue : Colors.dueSoon }]}>{formatDueDate(item.dueDate)}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+      </Pressable>
+
+      {dismissed === false && (
+        <View>
+          <View style={styles.crossSellDivider} />
+          <Pressable
+            style={({ pressed }) => [styles.crossSellRow, { opacity: pressed ? 0.72 : 1 }]}
+            onPress={handleCrossSellPress}
+            accessibilityRole="button"
+            accessibilityLabel="Add next vertical"
+          >
+            <View style={[styles.crossSellIcon, { backgroundColor: crossSellIconBg }]}>
+              <Ionicons name={crossSellIconName} size={15} color={crossSellIconColor} />
+            </View>
+            <Text style={styles.crossSellText}>{crossSellCopy}</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+          </Pressable>
+          <Pressable
+            style={styles.crossSellDismiss}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+            onPress={handleDismissPress}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss cross-sell"
+          >
+            <Ionicons name="close" size={16} color={Colors.textTertiary} />
+          </Pressable>
         </View>
-      ) : null}
-    </Pressable>
+      )}
+    </View>
   );
 }
 
@@ -1226,6 +1427,12 @@ const styles = StyleSheet.create({
   monthAheadDetailTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.text },
   monthAheadDetailSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
   monthAheadDue: { fontSize: 12, fontFamily: "Inter_600SemiBold", flexShrink: 0 },
+  singleVerticalIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.borderSubtle },
+  crossSellDivider: { height: 1, backgroundColor: Colors.borderSubtle, marginTop: 14, marginBottom: 12 },
+  crossSellRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4, paddingRight: 36 },
+  crossSellIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  crossSellText: { flex: 1, flexShrink: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary, lineHeight: 20 },
+  crossSellDismiss: { position: "absolute", top: 12, right: 12, padding: 4, zIndex: 2 },
 
   dashboardErrorCard: {
     alignItems: "center",
