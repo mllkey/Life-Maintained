@@ -80,6 +80,78 @@ export type Database = {
         }
         Relationships: []
       }
+      failed_rc_deletions: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          failure_kind: string
+          id: string
+          last_attempt_at: string
+          rc_app_user_id: string
+          resolved_at: string | null
+          response_body: string | null
+          status_code: number | null
+          user_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          failure_kind: string
+          id?: string
+          last_attempt_at?: string
+          rc_app_user_id: string
+          resolved_at?: string | null
+          response_body?: string | null
+          status_code?: number | null
+          user_id: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          failure_kind?: string
+          id?: string
+          last_attempt_at?: string
+          rc_app_user_id?: string
+          resolved_at?: string | null
+          response_body?: string | null
+          status_code?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      failed_storage_deletions: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          failure_kind: string
+          id: string
+          last_attempt_at: string
+          resolved_at: string | null
+          response_body: string | null
+          user_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          failure_kind: string
+          id?: string
+          last_attempt_at?: string
+          resolved_at?: string | null
+          response_body?: string | null
+          user_id: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          failure_kind?: string
+          id?: string
+          last_attempt_at?: string
+          resolved_at?: string | null
+          response_body?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       family_members: {
         Row: {
           created_at: string
@@ -127,6 +199,66 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      health_appointment_logs: {
+        Row: {
+          appointment_id: string
+          appointment_type: string
+          cost: number | null
+          created_at: string
+          did_it_myself: boolean | null
+          family_member_id: string
+          id: string
+          notes: string | null
+          provider_name: string | null
+          service_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          appointment_id: string
+          appointment_type: string
+          cost?: number | null
+          created_at?: string
+          did_it_myself?: boolean | null
+          family_member_id: string
+          id?: string
+          notes?: string | null
+          provider_name?: string | null
+          service_date: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          appointment_id?: string
+          appointment_type?: string
+          cost?: number | null
+          created_at?: string
+          did_it_myself?: boolean | null
+          family_member_id?: string
+          id?: string
+          notes?: string | null
+          provider_name?: string | null
+          service_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_appointment_logs_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "health_appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "health_appointment_logs_family_member_id_fkey"
+            columns: ["family_member_id"]
+            isOneToOne: false
+            referencedRelation: "family_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       health_appointments: {
         Row: {
@@ -635,6 +767,42 @@ export type Database = {
           },
         ]
       }
+      notification_events: {
+        Row: {
+          asset_kind: string | null
+          created_at: string
+          id: string
+          notif_id: string
+          response_received_at: string | null
+          scheduled_for: string | null
+          sent_at: string | null
+          task_kind: string | null
+          user_id: string
+        }
+        Insert: {
+          asset_kind?: string | null
+          created_at?: string
+          id?: string
+          notif_id: string
+          response_received_at?: string | null
+          scheduled_for?: string | null
+          sent_at?: string | null
+          task_kind?: string | null
+          user_id: string
+        }
+        Update: {
+          asset_kind?: string | null
+          created_at?: string
+          id?: string
+          notif_id?: string
+          response_received_at?: string | null
+          scheduled_for?: string | null
+          sent_at?: string | null
+          task_kind?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           action_taken: string | null
@@ -730,42 +898,6 @@ export type Database = {
           record_id?: string
           session_id?: string | null
           table_name?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      notification_events: {
-        Row: {
-          asset_kind: string | null
-          created_at: string
-          id: string
-          notif_id: string
-          response_received_at: string | null
-          scheduled_for: string | null
-          sent_at: string | null
-          task_kind: string | null
-          user_id: string
-        }
-        Insert: {
-          asset_kind?: string | null
-          created_at?: string
-          id?: string
-          notif_id: string
-          response_received_at?: string | null
-          scheduled_for?: string | null
-          sent_at?: string | null
-          task_kind?: string | null
-          user_id: string
-        }
-        Update: {
-          asset_kind?: string | null
-          created_at?: string
-          id?: string
-          notif_id?: string
-          response_received_at?: string | null
-          scheduled_for?: string | null
-          sent_at?: string | null
-          task_kind?: string | null
           user_id?: string
         }
         Relationships: []
@@ -2008,6 +2140,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      complete_health_appointment: {
+        Args: {
+          p_appointment_id: string
+          p_completed_date?: string
+          p_cost?: number
+          p_did_it_myself?: boolean
+          p_notes?: string
+          p_provider_name?: string
+        }
+        Returns: Json
+      }
       complete_property_task: {
         Args: {
           p_completed_date?: string
@@ -2074,6 +2217,11 @@ export type Database = {
         Args: { p_request_id: string; p_user_id: string }
         Returns: Json
       }
+      prepare_user_account_deletion: {
+        Args: { p_user_id: string }
+        Returns: Json
+      }
+      purge_user_storage_objects: { Args: { p_user_id: string }; Returns: Json }
       reserve_receipt_scan: {
         Args: {
           p_asset_id: string

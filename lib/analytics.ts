@@ -31,6 +31,7 @@ export type AnalyticsEvents = {
   family_member_added: { family_member_id: string; member_type: "person" | "pet" };
   task_completed: { task_id: string; vehicle_id: string; task_name: string };
   property_task_completed: { task_id: string; property_id: string; task_name: string };
+  health_appointment_completed: { appointment_id: string; family_member_id: string; appointment_type: string };
   scan_completed: { asset_type: string; asset_id: string; source: "camera" | "library" };
   paywall_viewed: { context_vertical?: string; context_reason?: string };
   notification_opened: { asset_kind: string; task_kind: string };

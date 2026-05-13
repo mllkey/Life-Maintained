@@ -11,6 +11,9 @@ import {
   ActivityIndicator,
   Animated,
   findNodeHandle,
+  TextInput,
+  Modal,
+  KeyboardAvoidingView,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -22,9 +25,13 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
-import { parseISO, isBefore, addDays, format, differenceInYears } from "date-fns";
+import { parseISO, isBefore, addDays, addMonths, addWeeks, format, differenceInYears } from "date-fns";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
+import DatePicker from "@/components/DatePicker";
+import { completeHealthAppointment } from "@/lib/rpc";
+import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
+import { capture } from "@/lib/analytics";
 
 function getApptStatus(nextDue: string | null, lastCompleted: string | null) {
   if (!lastCompleted) return "due_soon";
@@ -198,6 +205,108 @@ export default function FamilyMemberDetailScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
     setSaveErrorToastVisible(true);
     setTimeout(() => setSaveErrorToastVisible(false), 3000);
+  }
+
+  const [markCompleteAppt, setMarkCompleteAppt] = useState<any | null>(null);
+  const [completeDate, setCompleteDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [completeCost, setCompleteCost] = useState("");
+  const [completeProvider, setCompleteProvider] = useState("");
+  const [completeNotes, setCompleteNotes] = useState("");
+  const [completeDiy, setCompleteDiy] = useState(false);
+  const [isSavingComplete, setIsSavingComplete] = useState(false);
+
+  const [successToastVisible, setSuccessToastVisible] = useState(false);
+  const [successToastTitle, setSuccessToastTitle] = useState("");
+  const [successToastSubtitle, setSuccessToastSubtitle] = useState<string | undefined>(undefined);
+
+  function fireSuccessToast(title: string, subtitle?: string) {
+    setSuccessToastTitle(title);
+    setSuccessToastSubtitle(subtitle);
+    setSuccessToastVisible(true);
+    setTimeout(() => setSuccessToastVisible(false), 2800);
+  }
+
+  function handleOpenMarkComplete(appt: any) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setMarkCompleteAppt(appt);
+    setCompleteDate(format(new Date(), "yyyy-MM-dd"));
+    setCompleteCost("");
+    setCompleteProvider(appt.provider_name ?? "");
+    setCompleteNotes("");
+    setCompleteDiy(false);
+    setIsSavingComplete(false);
+  }
+
+  function handleCloseMarkComplete() {
+    setMarkCompleteAppt(null);
+  }
+
+  function computeNextDue(appt: any, completedDateStr: string): string {
+    const completed = parseISO(completedDateStr);
+    if (appt.interval_type === "weekly") return format(addWeeks(completed, 1), "yyyy-MM-dd");
+    if (appt.interval_type === "biweekly") return format(addWeeks(completed, 2), "yyyy-MM-dd");
+    const months = typeof appt.interval_months === "number" && appt.interval_months > 0 ? appt.interval_months : 12;
+    return format(addMonths(completed, months), "yyyy-MM-dd");
+  }
+
+  async function handleSaveMarkComplete() {
+    if (!markCompleteAppt || !user) return;
+    const appt = markCompleteAppt;
+    setIsSavingComplete(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const nextDate = computeNextDue(appt, completeDate);
+    const completedAt = new Date(completeDate + "T12:00:00").toISOString();
+    const now = new Date().toISOString();
+
+    queryClient.setQueryData(["member_appointments", id], (old: any[] | undefined) => {
+      if (!old) return old;
+      return old.map(a =>
+        a.id === appt.id
+          ? { ...a, last_completed_at: completedAt, next_due_date: nextDate, updated_at: now }
+          : a,
+      );
+    });
+
+    handleCloseMarkComplete();
+
+    try {
+      const costNum = completeCost.trim() ? parseFloat(completeCost.replace(/[^0-9.]/g, "")) : null;
+
+      const { error: rpcError } = await completeHealthAppointment({
+        p_appointment_id: appt.id,
+        p_completed_date: completedAt,
+        p_notes: completeNotes.trim() || undefined,
+        p_cost: costNum != null && !isNaN(costNum) ? costNum : undefined,
+        p_provider_name: completeProvider.trim() || undefined,
+        p_did_it_myself: completeDiy,
+      });
+
+      if (rpcError) throw rpcError;
+
+      capture("health_appointment_completed", {
+        appointment_id: appt.id,
+        family_member_id: appt.family_member_id ?? (id ?? ""),
+        appointment_type: appt.appointment_type,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["member_appointments", id] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+
+      fireSuccessToast(
+        `${appt.appointment_type} marked complete`,
+        `Next due ${format(parseISO(nextDate), "MMM d, yyyy")}`,
+      );
+
+      if (user?.id) {
+        try { scheduleMaintenanceNotifications(user.id).catch(() => {}); } catch {}
+      }
+    } catch {
+      queryClient.invalidateQueries({ queryKey: ["member_appointments", id] });
+      fireSaveErrorToast("Failed to save", "Please try again");
+    } finally {
+      setIsSavingComplete(false);
+    }
   }
 
   function handleMemberPhoto() {
@@ -551,6 +660,13 @@ export default function FamilyMemberDetailScreen() {
                                 <Ionicons name="trash-outline" size={13} color={Colors.overdue} />
                                 <Text style={styles.deleteBtnText}>Delete</Text>
                               </Pressable>
+                              <Pressable
+                                style={({ pressed }) => [styles.markCompleteBtn, { opacity: pressed ? 0.85 : 1 }]}
+                                onPress={() => handleOpenMarkComplete(appt)}
+                              >
+                                <Ionicons name="checkmark-circle" size={14} color={Colors.textInverse} />
+                                <Text style={styles.markCompleteBtnText}>Mark Complete</Text>
+                              </Pressable>
                             </View>
                           </View>
                         )}
@@ -608,7 +724,127 @@ export default function FamilyMemberDetailScreen() {
           )}
         </ScrollView>
       )}
+      <SaveToast visible={successToastVisible} message={successToastTitle} subtitle={successToastSubtitle} />
       <SaveToast visible={saveErrorToastVisible} message={saveErrorToastTitle} subtitle={saveErrorToastSubtitle} isError />
+
+      <Modal
+        visible={markCompleteAppt != null}
+        transparent
+        animationType="slide"
+        onRequestClose={handleCloseMarkComplete}
+      >
+        <KeyboardAvoidingView
+          style={styles.sheetOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <Pressable style={styles.sheetBackdrop} onPress={handleCloseMarkComplete} />
+          <View style={[styles.sheetContainer, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>
+              {markCompleteAppt?.appointment_type ?? "Mark Complete"}
+            </Text>
+
+            <ScrollView
+              style={styles.sheetScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.sheetFields}>
+                <View style={styles.sheetField}>
+                  <DatePicker
+                    label="Date Completed"
+                    value={completeDate}
+                    onChange={setCompleteDate}
+                    maximumDate={new Date()}
+                  />
+                </View>
+
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetFieldLabel}>
+                    Cost  <Text style={styles.sheetFieldOptional}>(optional)</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.sheetInput}
+                    value={completeCost}
+                    onChangeText={setCompleteCost}
+                    keyboardType="decimal-pad"
+                    placeholder="e.g. 150.00"
+                    placeholderTextColor={Colors.textTertiary}
+                  />
+                </View>
+
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetFieldLabel}>
+                    Provider  <Text style={styles.sheetFieldOptional}>(optional)</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.sheetInput}
+                    value={completeProvider}
+                    onChangeText={setCompleteProvider}
+                    placeholder="e.g. Family Health Clinic"
+                    placeholderTextColor={Colors.textTertiary}
+                  />
+                </View>
+
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetFieldLabel}>
+                    Notes  <Text style={styles.sheetFieldOptional}>(optional)</Text>
+                  </Text>
+                  <TextInput
+                    style={[styles.sheetInput, styles.sheetInputMultiline]}
+                    value={completeNotes}
+                    onChangeText={setCompleteNotes}
+                    placeholder="e.g. Annual checkup, all clear"
+                    placeholderTextColor={Colors.textTertiary}
+                    multiline
+                    numberOfLines={2}
+                  />
+                </View>
+
+                <Pressable
+                  onPress={() => setCompleteDiy(!completeDiy)}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}
+                >
+                  <View style={{
+                    width: 24, height: 24, borderRadius: 6, borderWidth: 2,
+                    borderColor: completeDiy ? Colors.health : Colors.border,
+                    backgroundColor: completeDiy ? Colors.health : "transparent",
+                    alignItems: "center", justifyContent: "center",
+                  }}>
+                    {completeDiy && <Ionicons name="checkmark" size={16} color="#0C111B" />}
+                  </View>
+                  <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text }}>
+                    At-home / no provider
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+
+            <View style={styles.sheetActions}>
+              <Pressable
+                style={({ pressed }) => [styles.sheetCancelBtn, { opacity: pressed ? 0.8 : 1 }]}
+                onPress={handleCloseMarkComplete}
+              >
+                <Text style={styles.sheetCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.sheetSaveBtn, { opacity: pressed || isSavingComplete ? 0.8 : 1 }]}
+                onPress={handleSaveMarkComplete}
+                disabled={isSavingComplete}
+              >
+                {isSavingComplete ? (
+                  <ActivityIndicator size="small" color={Colors.textInverse} />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
+                    <Text style={styles.sheetSaveText}>Mark Complete</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -786,5 +1022,100 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginTop: 4,
   },
+  markCompleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.health,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  markCompleteBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textInverse,
+  },
+  sheetOverlay: { flex: 1, justifyContent: "flex-end" },
+  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
+  sheetContainer: {
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: Colors.border,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.text,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  sheetScroll: { maxHeight: 400 },
+  sheetFields: { gap: 16 },
+  sheetField: { gap: 6 },
+  sheetFieldLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+  },
+  sheetFieldOptional: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textTertiary,
+    textTransform: "none",
+    letterSpacing: 0,
+  },
+  sheetInput: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontFamily: "Inter_400Regular",
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  sheetInputMultiline: { minHeight: 64, textAlignVertical: "top" },
+  sheetActions: { flexDirection: "row", gap: 10, marginTop: 24 },
+  sheetCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 13,
+    alignItems: "center",
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  sheetCancelText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  sheetSaveBtn: {
+    flex: 2,
+    paddingVertical: 13,
+    borderRadius: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: Colors.health,
+  },
+  sheetSaveText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
   emptyBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 });

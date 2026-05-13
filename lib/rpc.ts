@@ -64,6 +64,26 @@ export async function completePropertyTask(args: CompletePropertyTaskArgs): Prom
   return { data: (data as CompletePropertyTaskResult | null), error };
 }
 
+export type CompleteHealthAppointmentArgs = Functions["complete_health_appointment"]["Args"];
+export type CompleteHealthAppointmentResult = {
+  appointment_id: string;
+  appointment_type: string;
+  family_member_id: string;
+  family_member_name: string;
+  completed_date: string;
+  next_due_date: string | null;
+  log_created: boolean;
+  idempotent: boolean;
+};
+
+export async function completeHealthAppointment(args: CompleteHealthAppointmentArgs): Promise<{
+  data: CompleteHealthAppointmentResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("complete_health_appointment", args);
+  return { data: (data as CompleteHealthAppointmentResult | null), error };
+}
+
 export type GetScanQuotaArgs = Functions["get_scan_quota"]["Args"];
 export type GetScanQuotaResult = {
   tier: string | null;
