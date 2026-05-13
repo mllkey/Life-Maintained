@@ -32,6 +32,7 @@ import DatePicker from "@/components/DatePicker";
 import { completeHealthAppointment } from "@/lib/rpc";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { capture } from "@/lib/analytics";
+import { logMedicationDose, undoLastMedicationDose } from "@/lib/rpc";
 
 function getApptStatus(nextDue: string | null, lastCompleted: string | null) {
   if (!lastCompleted) return "due_soon";
@@ -167,6 +168,51 @@ export default function FamilyMemberDetailScreen() {
     enabled: !!id,
   });
 
+  // Seed dose state for all medications: pull 30 days of dose dates +
+  // today's count + streak. Single query, deterministic order, client-side
+  // aggregation. Runs whenever the medication list changes.
+  useEffect(() => {
+    if (!user || !medications || medications.length === 0) return;
+    const medIds = medications.map((m: any) => m.id);
+    const today = format(new Date(), "yyyy-MM-dd");
+    const cutoff = format(addDays(new Date(), -30), "yyyy-MM-dd");
+
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("medication_dose_logs")
+        .select("medication_id, dose_date")
+        .in("medication_id", medIds)
+        .gte("dose_date", cutoff)
+        .order("dose_date", { ascending: false });
+      if (cancelled) return;
+      const byMed: Record<string, Set<string>> = {};
+      const todayByMed: Record<string, number> = {};
+      for (const m of medIds) { byMed[m] = new Set(); todayByMed[m] = 0; }
+      for (const row of data ?? []) {
+        const mid = row.medication_id;
+        const d = row.dose_date;
+        byMed[mid]?.add(d);
+        if (d === today) todayByMed[mid] = (todayByMed[mid] ?? 0) + 1;
+      }
+      const next: Record<string, { today: number; streak: number; dates: string[] }> = {};
+      const todayDate = new Date();
+      for (const mid of medIds) {
+        const dates = Array.from(byMed[mid] ?? []).sort((a, b) => b.localeCompare(a));
+        // Streak: consecutive days ending today
+        let streak = 0;
+        for (let i = 0; i < dates.length; i++) {
+          const expected = format(addDays(todayDate, -i), "yyyy-MM-dd");
+          if (dates[i] === expected) streak++; else break;
+        }
+        next[mid] = { today: todayByMed[mid] ?? 0, streak, dates };
+      }
+      setDoseState(next);
+    })();
+
+    return () => { cancelled = true; };
+  }, [medications, user]);
+
   const isLoading = loadingMember || loadingAppts || loadingMeds;
 
   const summaryStats = useMemo(() => {
@@ -247,6 +293,96 @@ export default function FamilyMemberDetailScreen() {
     if (appt.interval_type === "biweekly") return format(addWeeks(completed, 2), "yyyy-MM-dd");
     const months = typeof appt.interval_months === "number" && appt.interval_months > 0 ? appt.interval_months : 12;
     return format(addMonths(completed, months), "yyyy-MM-dd");
+  }
+
+  // Per-medication dose state: today_count + streak_days + 30-day filled dates.
+  // Indexed by medication id. Initial state empty; first render seeds from a
+  // separate query, taps update optimistically + on RPC return.
+  const [doseState, setDoseState] = useState<Record<string, { today: number; streak: number; dates: string[] }>>({});
+  const [pendingDoseId, setPendingDoseId] = useState<string | null>(null);
+
+  function dotsFor(medId: string): string[] {
+    return doseState[medId]?.dates ?? [];
+  }
+  function todayCountFor(medId: string): number {
+    return doseState[medId]?.today ?? 0;
+  }
+  function streakFor(medId: string): number {
+    return doseState[medId]?.streak ?? 0;
+  }
+
+  async function handleLogDose(med: any) {
+    if (!user || pendingDoseId === med.id) return;
+    setPendingDoseId(med.id);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+
+    // Optimistic increment
+    const prev = doseState[med.id] ?? { today: 0, streak: 0, dates: [] };
+    const today = format(new Date(), "yyyy-MM-dd");
+    const optimisticDates = prev.dates.includes(today) ? prev.dates : [today, ...prev.dates];
+    setDoseState(s => ({ ...s, [med.id]: { today: prev.today + 1, streak: Math.max(prev.streak, 1), dates: optimisticDates } }));
+
+    try {
+      const { data, error } = await logMedicationDose({
+        p_medication_id: med.id,
+        p_taken_at: new Date().toISOString(),
+        p_dose_date: today,
+      });
+      if (error || !data) throw error ?? new Error("no data");
+
+      setDoseState(s => ({ ...s, [med.id]: { today: data.today_count, streak: data.streak_days, dates: data.dose_dates_30d } }));
+
+      capture("medication_dose_logged", {
+        medication_id: med.id,
+        family_member_id: med.family_member_id ?? null,
+        today_count: data.today_count,
+        streak_days: data.streak_days,
+      });
+
+      const streakLine = data.streak_days >= 3 ? ` · 🔥 ${data.streak_days} day streak` : "";
+      fireSuccessToast(
+        "Dose logged",
+        `${data.today_count} taken today${streakLine}`,
+      );
+    } catch {
+      // Revert optimistic update on failure
+      setDoseState(s => ({ ...s, [med.id]: prev }));
+      fireSaveErrorToast("Failed to log dose", "Please try again");
+    } finally {
+      setPendingDoseId(null);
+    }
+  }
+
+  async function handleUndoDose(med: any) {
+    if (!user || pendingDoseId === med.id) return;
+    if ((doseState[med.id]?.today ?? 0) === 0) return;
+    setPendingDoseId(med.id);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+    const prev = doseState[med.id] ?? { today: 0, streak: 0, dates: [] };
+
+    try {
+      const { data, error } = await undoLastMedicationDose({
+        p_medication_id: med.id,
+        p_today: format(new Date(), "yyyy-MM-dd"),
+      });
+      if (error || !data) throw error ?? new Error("no data");
+
+      setDoseState(s => ({ ...s, [med.id]: { today: data.today_count, streak: data.streak_days, dates: data.dose_dates_30d } }));
+
+      capture("medication_dose_undone", {
+        medication_id: med.id,
+        family_member_id: med.family_member_id ?? null,
+        today_count: data.today_count,
+      });
+
+      fireSuccessToast("Dose undone", `${data.today_count} taken today`);
+    } catch {
+      setDoseState(s => ({ ...s, [med.id]: prev }));
+      fireSaveErrorToast("Failed to undo", "Please try again");
+    } finally {
+      setPendingDoseId(null);
+    }
   }
 
   async function handleSaveMarkComplete() {
@@ -704,16 +840,66 @@ export default function FamilyMemberDetailScreen() {
                       pointerEvents="box-none"
                       style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
                     >
-                      <View style={styles.taskRow}>
+                      <Pressable
+                        style={({ pressed }) => [styles.taskRow, { opacity: pressed ? 0.85 : 1 }]}
+                        onPress={() => { setExpandedId(expandedId === med.id ? null : med.id); Haptics.selectionAsync(); }}
+                        accessibilityRole="button"
+                      >
                         <View style={[styles.taskBar, { backgroundColor: Colors.health }]} />
                         <View style={styles.taskInfo}>
                           <Text style={styles.taskTitle}>{med.name}</Text>
-                          {med.reminder_time && (
-                            <Text style={styles.taskSub}>Daily · {med.reminder_time}</Text>
+                          <Text style={styles.taskSub} numberOfLines={1}>
+                            {med.reminder_time ? `Daily · ${med.reminder_time}` : "No reminder"}
+                            {todayCountFor(med.id) > 0 && ` · ${todayCountFor(med.id)} taken today`}
+                            {streakFor(med.id) >= 3 && ` · 🔥 ${streakFor(med.id)}`}
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() => handleLogDose(med)}
+                          onLongPress={() => handleUndoDose(med)}
+                          delayLongPress={500}
+                          disabled={pendingDoseId === med.id}
+                          style={({ pressed }) => [
+                            styles.takenBtn,
+                            todayCountFor(med.id) > 0 && styles.takenBtnActive,
+                            { opacity: pressed || pendingDoseId === med.id ? 0.7 : 1 },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={todayCountFor(med.id) > 0 ? `${todayCountFor(med.id)} taken today. Tap to log another, long-press to undo.` : "Log dose"}
+                        >
+                          {todayCountFor(med.id) > 0 ? (
+                            <>
+                              <Ionicons name="checkmark" size={14} color={Colors.textInverse} />
+                              <Text style={styles.takenBtnTextActive}>{todayCountFor(med.id)}</Text>
+                            </>
+                          ) : (
+                            <Text style={styles.takenBtnText}>Taken</Text>
+                          )}
+                        </Pressable>
+                      </Pressable>
+                      {expandedId === med.id && (
+                        <View style={styles.medExpanded}>
+                          <Text style={styles.medExpandedLabel}>LAST 7 DAYS</Text>
+                          <View style={styles.medDotRow}>
+                            {Array.from({ length: 7 }).map((_, i) => {
+                              const d = format(addDays(new Date(), -(6 - i)), "yyyy-MM-dd");
+                              const hit = dotsFor(med.id).includes(d);
+                              return (
+                                <View
+                                  key={d}
+                                  style={[
+                                    styles.medDot,
+                                    { backgroundColor: hit ? Colors.health : Colors.border },
+                                  ]}
+                                />
+                              );
+                            })}
+                          </View>
+                          {streakFor(med.id) >= 3 && (
+                            <Text style={styles.medStreakText}>🔥 {streakFor(med.id)} day streak</Text>
                           )}
                         </View>
-                        <View style={[styles.reminderDot, { backgroundColor: med.reminders_enabled ? Colors.good : Colors.border }]} />
-                      </View>
+                      )}
                       {med.id === highlightedItemId && <DeepLinkPulse color={Colors.health} />}
                       {idx < medications.length - 1 && <View style={styles.rowDivider} />}
                     </View>
@@ -1117,5 +1303,62 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.health,
   },
   sheetSaveText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  takenBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    minWidth: 60,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  takenBtnActive: {
+    backgroundColor: Colors.health,
+    borderColor: Colors.health,
+  },
+  takenBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textSecondary,
+  },
+  takenBtnTextActive: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textInverse,
+  },
+  medExpanded: {
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    paddingTop: 4,
+    gap: 8,
+  },
+  medExpandedLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+  },
+  medDotRow: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+  },
+  medDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  medStreakText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.text,
+    marginTop: 4,
+  },
   emptyBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 });

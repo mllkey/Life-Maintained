@@ -691,6 +691,57 @@ export type Database = {
           },
         ]
       }
+      medication_dose_logs: {
+        Row: {
+          created_at: string
+          dose_date: string
+          family_member_id: string | null
+          id: string
+          medication_id: string
+          medication_name: string
+          notes: string | null
+          taken_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dose_date: string
+          family_member_id?: string | null
+          id?: string
+          medication_id: string
+          medication_name: string
+          notes?: string | null
+          taken_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dose_date?: string
+          family_member_id?: string | null
+          id?: string
+          medication_id?: string
+          medication_name?: string
+          notes?: string | null
+          taken_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medication_dose_logs_family_member_id_fkey"
+            columns: ["family_member_id"]
+            isOneToOne: false
+            referencedRelation: "family_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medication_dose_logs_medication_id_fkey"
+            columns: ["medication_id"]
+            isOneToOne: false
+            referencedRelation: "medications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       medications: {
         Row: {
           created_at: string
@@ -2213,6 +2264,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      log_medication_dose: {
+        Args: {
+          p_dose_date?: string
+          p_medication_id: string
+          p_notes?: string
+          p_taken_at?: string
+        }
+        Returns: Json
+      }
       mark_receipt_scan_processing: {
         Args: { p_request_id: string; p_user_id: string }
         Returns: Json
@@ -2233,6 +2293,10 @@ export type Database = {
         Returns: Json
       }
       timeout_stale_scans: { Args: never; Returns: number }
+      undo_last_medication_dose: {
+        Args: { p_medication_id: string; p_today?: string }
+        Returns: Json
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

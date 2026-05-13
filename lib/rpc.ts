@@ -84,6 +84,47 @@ export async function completeHealthAppointment(args: CompleteHealthAppointmentA
   return { data: (data as CompleteHealthAppointmentResult | null), error };
 }
 
+export type LogMedicationDoseArgs = Functions["log_medication_dose"]["Args"];
+export type LogMedicationDoseResult = {
+  medication_id: string;
+  medication_name: string;
+  family_member_id: string | null;
+  dose_date: string;
+  today_count: number;
+  streak_days: number;
+  dose_dates_30d: string[];
+  idempotent: boolean;
+  logged: boolean;
+};
+
+export async function logMedicationDose(args: LogMedicationDoseArgs): Promise<{
+  data: LogMedicationDoseResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("log_medication_dose", args);
+  return { data: (data as LogMedicationDoseResult | null), error };
+}
+
+export type UndoLastMedicationDoseArgs = Functions["undo_last_medication_dose"]["Args"];
+export type UndoLastMedicationDoseResult = {
+  medication_id: string;
+  medication_name: string;
+  family_member_id: string | null;
+  dose_date: string;
+  today_count: number;
+  streak_days: number;
+  dose_dates_30d: string[];
+  undone: boolean;
+};
+
+export async function undoLastMedicationDose(args: UndoLastMedicationDoseArgs): Promise<{
+  data: UndoLastMedicationDoseResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("undo_last_medication_dose", args);
+  return { data: (data as UndoLastMedicationDoseResult | null), error };
+}
+
 export type GetScanQuotaArgs = Functions["get_scan_quota"]["Args"];
 export type GetScanQuotaResult = {
   tier: string | null;

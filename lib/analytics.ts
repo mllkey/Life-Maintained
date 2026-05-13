@@ -32,6 +32,8 @@ export type AnalyticsEvents = {
   task_completed: { task_id: string; vehicle_id: string; task_name: string };
   property_task_completed: { task_id: string; property_id: string; task_name: string };
   health_appointment_completed: { appointment_id: string; family_member_id: string; appointment_type: string };
+  medication_dose_logged: { medication_id: string; family_member_id: string | null; today_count: number; streak_days: number };
+  medication_dose_undone: { medication_id: string; family_member_id: string | null; today_count: number };
   scan_completed: { asset_type: string; asset_id: string; source: "camera" | "library" };
   paywall_viewed: { context_vertical?: string; context_reason?: string };
   notification_opened: { asset_kind: string; task_kind: string };
