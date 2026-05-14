@@ -273,10 +273,17 @@ function RootLayoutNav() {
       }
     };
 
-    routeFromResponse(Notifications.getLastNotificationResponse());
+    // Defer initial routing 500ms so the Stack navigator mounts before router.push fires.
+    // Without this, cold-launches from a notification tap land on the default route.
+    const initialRouteTimer = setTimeout(() => {
+      routeFromResponse(Notifications.getLastNotificationResponse());
+    }, 500);
 
     const sub = Notifications.addNotificationResponseReceivedListener(routeFromResponse);
-    return () => sub.remove();
+    return () => {
+      clearTimeout(initialRouteTimer);
+      sub.remove();
+    };
   }, [session, isLoading]);
 
   const showBanner = !!session && onboardingCompleted === true;
