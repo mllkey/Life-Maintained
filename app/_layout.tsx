@@ -226,6 +226,9 @@ function RootLayoutNav() {
   const handledNotifIds = useRef<Set<string>>(new Set());
   const pendingNotifResponses = useRef<Array<{ response: Notifications.NotificationResponse; source: string }>>([]);
   const notifRoutingReady = useRef(false);
+  const hasEverSeenSession = useRef(false);
+  const unauthClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const readinessRetryTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const [pendingNotifSignal, setPendingNotifSignal] = useState(0);
 
   const emitNotifRouteDiagnostic = (
@@ -410,35 +413,89 @@ function RootLayoutNav() {
   }, []);
 
   useEffect(() => {
-    if (!isLoading && !session) {
-      addNotifDeepLinkBreadcrumb("signed_out_queue_cleared", { pendingQueueLength: pendingNotifResponses.current.length });
-      pendingNotifResponses.current = [];
+    if (isLoading) {
       notifRoutingReady.current = false;
+      addNotifDeepLinkBreadcrumb("routing_waiting_auth", {
+        hasSession: !!session,
+        isLoading,
+        rootKeyPresent: !!rootNavigationState?.key,
+        pendingQueueLength: pendingNotifResponses.current.length,
+        hasEverSeenSession: hasEverSeenSession.current,
+      });
+      return;
+    }
+
+    if (session) {
+      hasEverSeenSession.current = true;
+      if (unauthClearTimer.current !== null) {
+        clearTimeout(unauthClearTimer.current);
+        unauthClearTimer.current = null;
+      }
+      const ready = !!rootNavigationState?.key;
+      notifRoutingReady.current = ready;
       addNotifDeepLinkBreadcrumb("routing_ready_state", {
-        ready: false,
-        hasSession: false,
+        ready,
+        hasSession: true,
         isLoading,
         rootKeyPresent: !!rootNavigationState?.key,
         pendingQueueLength: pendingNotifResponses.current.length,
         pendingNotifSignal,
       });
+      if (ready) {
+        flushPendingNotifResponses();
+        for (const t of readinessRetryTimers.current) {
+          clearTimeout(t);
+        }
+        readinessRetryTimers.current = [];
+        for (const delay of [250, 750]) {
+          const timer = setTimeout(() => {
+            flushPendingNotifResponses();
+          }, delay);
+          readinessRetryTimers.current.push(timer);
+        }
+      }
       return;
     }
 
-    const ready = !!session && !isLoading && !!rootNavigationState?.key;
-    notifRoutingReady.current = ready;
+    notifRoutingReady.current = false;
     addNotifDeepLinkBreadcrumb("routing_ready_state", {
-      ready,
-      hasSession: !!session,
+      ready: false,
+      hasSession: false,
       isLoading,
       rootKeyPresent: !!rootNavigationState?.key,
       pendingQueueLength: pendingNotifResponses.current.length,
       pendingNotifSignal,
     });
-    if (ready) {
-      flushPendingNotifResponses();
+    if (unauthClearTimer.current === null && pendingNotifResponses.current.length > 0) {
+      const graceMs = 1500;
+      addNotifDeepLinkBreadcrumb("unauth_clear_scheduled", {
+        graceMs,
+        pendingQueueLength: pendingNotifResponses.current.length,
+        hasEverSeenSession: hasEverSeenSession.current,
+      });
+      unauthClearTimer.current = setTimeout(() => {
+        unauthClearTimer.current = null;
+        addNotifDeepLinkBreadcrumb("unauth_queue_cleared_after_grace", {
+          pendingQueueLength: pendingNotifResponses.current.length,
+          hasEverSeenSession: hasEverSeenSession.current,
+        });
+        pendingNotifResponses.current = [];
+      }, graceMs);
     }
   }, [session, isLoading, rootNavigationState?.key, pendingNotifSignal]);
+
+  useEffect(() => {
+    return () => {
+      if (unauthClearTimer.current !== null) {
+        clearTimeout(unauthClearTimer.current);
+        unauthClearTimer.current = null;
+      }
+      for (const t of readinessRetryTimers.current) {
+        clearTimeout(t);
+      }
+      readinessRetryTimers.current = [];
+    };
+  }, []);
 
   const showBanner = !!session && onboardingCompleted === true;
 
