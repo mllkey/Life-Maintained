@@ -13,9 +13,9 @@ Sentry.init({
 });
 
 import { QueryClientProvider, focusManager } from "@tanstack/react-query";
-import { Stack, usePathname } from "expo-router";
+import { Stack, router, useRootNavigationState } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AppState, AppStateStatus, Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -64,7 +64,8 @@ let lastActiveUpsertAt = 0;
 
 function RootLayoutNav() {
   const { session, isLoading, onboardingCompleted, refreshProfile } = useAuth();
-  const pathname = usePathname();
+  const rootNavigationState = useRootNavigationState();
+  const lastNotificationResponse = Notifications.useLastNotificationResponse();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
@@ -189,7 +190,6 @@ function RootLayoutNav() {
       try {
         const parsed = Linking.parse(url);
         if (parsed.scheme === "lifemaintained" && parsed.path === "reset-password") {
-          const { router } = require("expo-router");
           setPendingResetUrl(url);
           router.push("/reset-password");
         }
@@ -204,7 +204,6 @@ function RootLayoutNav() {
   // Deep link: lifemaintained://voice-log → navigate to dashboard tab
   useEffect(() => {
     if (!session || isLoading) return;
-    const { router } = require("expo-router");
 
     const handleUrl = (url: string | null) => {
       if (!url) return;
@@ -225,100 +224,120 @@ function RootLayoutNav() {
   // detail screen. Component-scoped ref so dedup survives effect re-runs from
   // session/isLoading hydration.
   const handledNotifIds = useRef<Set<string>>(new Set());
-  const recordNotifDeepLink = (
+  const pendingNotifResponses = useRef<Array<{ response: Notifications.NotificationResponse; source: string }>>([]);
+  const notifRoutingReady = useRef(false);
+  const [pendingNotifSignal, setPendingNotifSignal] = useState(0);
+
+  const addNotifDeepLinkBreadcrumb = (
     message: string,
     data?: Record<string, string | number | boolean | null>,
   ) => {
     Sentry.addBreadcrumb({ category: "notification.deeplink", level: "info", message, data });
-    Sentry.captureMessage(`[NotifDeepLink] ${message}`, { level: "info", extra: data });
+  };
+
+  const queueNotifResponse = (response: Notifications.NotificationResponse | null | undefined, source: string) => {
+    if (!response) return;
+    pendingNotifResponses.current.push({ response, source });
+    setPendingNotifSignal((value) => value + 1);
+  };
+
+  const routeFromResponse = (response: Notifications.NotificationResponse, source: string) => {
+    const reqId = response.notification.request.identifier;
+    if (handledNotifIds.current.has(reqId)) return;
+
+    const raw = response.notification.request.content.data;
+    if (!raw || typeof raw !== "object") {
+      addNotifDeepLinkBreadcrumb("payload_invalid_container", { source, reqId });
+      return;
+    }
+
+    const d = raw as { assetId?: unknown; assetKind?: unknown; taskId?: unknown; taskKind?: unknown };
+    const assetId = typeof d.assetId === "string" ? d.assetId : null;
+    const assetKind = typeof d.assetKind === "string" ? d.assetKind : null;
+    const taskId = typeof d.taskId === "string" ? d.taskId : null;
+    const taskKind = typeof d.taskKind === "string" ? d.taskKind : null;
+
+    if (!assetId || !taskId || !assetKind || !taskKind) {
+      addNotifDeepLinkBreadcrumb("payload_missing_required_field", { source, reqId, hasAssetId: !!assetId, hasTaskId: !!taskId, hasAssetKind: !!assetKind, hasTaskKind: !!taskKind });
+      return;
+    }
+
+    try {
+      let route: string | null = null;
+      if (assetKind === "vehicle" && taskKind === "vehicle_task") {
+        route = "vehicle";
+        router.push({ pathname: "/vehicle/[id]", params: { id: assetId, taskId } });
+      } else if (assetKind === "property" && taskKind === "property_task") {
+        route = "property";
+        router.push({ pathname: "/property/[id]", params: { id: assetId, taskId } });
+      } else if (assetKind === "family_member" && taskKind === "health_appointment") {
+        route = "family_appointment";
+        router.push({ pathname: "/family-member/[id]", params: { id: assetId, appointmentId: taskId } });
+      } else if (assetKind === "family_member" && taskKind === "medication") {
+        route = "family_medication";
+        router.push({ pathname: "/family-member/[id]", params: { id: assetId, medicationId: taskId } });
+      } else {
+        addNotifDeepLinkBreadcrumb("payload_no_matching_route", { source, reqId, assetKind, taskKind });
+        return;
+      }
+
+      handledNotifIds.current.add(reqId);
+      addNotifDeepLinkBreadcrumb("route_completed", { source, reqId, route });
+      void supabase
+        .from("notification_events")
+        .update({ response_received_at: new Date().toISOString() })
+        .eq("notif_id", reqId)
+        .then(
+          ({ error }) => {
+            if (error) {
+              addNotifDeepLinkBreadcrumb("response_update_error", { source, reqId, errorMessage: error.message });
+            }
+          },
+          (error: unknown) => {
+            addNotifDeepLinkBreadcrumb("response_update_error", { source, reqId, errorMessage: error instanceof Error ? error.message : "unknown" });
+          },
+        );
+      capture("notification_opened", { asset_kind: assetKind, task_kind: taskKind });
+    } catch (e) {
+      Sentry.captureException(e, { tags: { area: "notification_deeplink" }, extra: { source, reqId, assetId, assetKind, taskId, taskKind } });
+      console.warn("[NotificationDeepLink] route failed:", e);
+    }
+  };
+
+  const flushPendingNotifResponses = () => {
+    if (!notifRoutingReady.current) return;
+    if (pendingNotifResponses.current.length === 0) return;
+    const queue = pendingNotifResponses.current;
+    pendingNotifResponses.current = [];
+    for (const item of queue) {
+      routeFromResponse(item.response, item.source);
+    }
   };
 
   useEffect(() => {
-    recordNotifDeepLink("pathname_changed", { pathname });
-  }, [pathname]);
+    queueNotifResponse(lastNotificationResponse, "hook");
+  }, [lastNotificationResponse]);
 
   useEffect(() => {
-    recordNotifDeepLink("effect_entered", { hasSession: !!session, isLoading, userId: session?.user?.id ?? null });
-    if (!session || isLoading) {
-      recordNotifDeepLink("effect_blocked", { hasSession: !!session, isLoading });
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      queueNotifResponse(response, "listener");
+    });
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!isLoading && !session) {
+      pendingNotifResponses.current = [];
+      notifRoutingReady.current = false;
       return;
     }
-    const { router } = require("expo-router");
 
-    const routeFromResponse = (response: Notifications.NotificationResponse | null, source: string) => {
-      recordNotifDeepLink("route_start", { source, hasResponse: !!response });
-      if (!response) return;
-      const reqId = response.notification.request.identifier;
-      recordNotifDeepLink("response_seen", { source, reqId });
-      if (handledNotifIds.current.has(reqId)) {
-        recordNotifDeepLink("duplicate_skipped", { source, reqId });
-        return;
-      }
-
-      const raw = response.notification.request.content.data;
-      if (!raw || typeof raw !== "object") {
-        recordNotifDeepLink("payload_invalid_container", { source, reqId });
-        return;
-      }
-      const d = raw as { assetId?: unknown; assetKind?: unknown; taskId?: unknown; taskKind?: unknown };
-      const assetId = typeof d.assetId === "string" ? d.assetId : null;
-      const assetKind = typeof d.assetKind === "string" ? d.assetKind : null;
-      const taskId = typeof d.taskId === "string" ? d.taskId : null;
-      const taskKind = typeof d.taskKind === "string" ? d.taskKind : null;
-      recordNotifDeepLink("payload_parsed", { source, reqId, assetId, assetKind, taskId, taskKind });
-      if (!assetId || !taskId || !assetKind || !taskKind) {
-        recordNotifDeepLink("payload_missing_required_field", { source, reqId, hasAssetId: !!assetId, hasTaskId: !!taskId, hasAssetKind: !!assetKind, hasTaskKind: !!taskKind });
-        return;
-      }
-
-      try {
-        if (assetKind === "vehicle" && taskKind === "vehicle_task") {
-          recordNotifDeepLink("router_push_attempt", { source, reqId, route: "vehicle" });
-          router.push({ pathname: "/vehicle/[id]", params: { id: assetId, taskId } });
-          recordNotifDeepLink("router_push_returned", { source, reqId, route: "vehicle" });
-        } else if (assetKind === "property" && taskKind === "property_task") {
-          recordNotifDeepLink("router_push_attempt", { source, reqId, route: "property" });
-          router.push({ pathname: "/property/[id]", params: { id: assetId, taskId } });
-          recordNotifDeepLink("router_push_returned", { source, reqId, route: "property" });
-        } else if (assetKind === "family_member" && taskKind === "health_appointment") {
-          recordNotifDeepLink("router_push_attempt", { source, reqId, route: "family_appointment" });
-          router.push({ pathname: "/family-member/[id]", params: { id: assetId, appointmentId: taskId } });
-          recordNotifDeepLink("router_push_returned", { source, reqId, route: "family_appointment" });
-        } else if (assetKind === "family_member" && taskKind === "medication") {
-          recordNotifDeepLink("router_push_attempt", { source, reqId, route: "family_medication" });
-          router.push({ pathname: "/family-member/[id]", params: { id: assetId, medicationId: taskId } });
-          recordNotifDeepLink("router_push_returned", { source, reqId, route: "family_medication" });
-        } else {
-          recordNotifDeepLink("payload_no_matching_route", { source, reqId, assetKind, taskKind });
-          return;
-        }
-        handledNotifIds.current.add(reqId);
-        supabase.from("notification_events").update({ response_received_at: new Date().toISOString() }).eq("notif_id", reqId).then(
-          ({ error }) => recordNotifDeepLink("response_update_completed", { source, reqId, hasError: !!error, errorMessage: error?.message ?? null }),
-          (error) => recordNotifDeepLink("response_update_rejected", { source, reqId, errorMessage: error instanceof Error ? error.message : "unknown" }),
-        );
-        capture("notification_opened", { asset_kind: assetKind, task_kind: taskKind });
-      } catch (e) {
-        Sentry.captureException(e, { tags: { area: "notification_deeplink" }, extra: { source, reqId, assetId, assetKind, taskId, taskKind } });
-        recordNotifDeepLink("router_push_threw", { source, reqId, errorMessage: e instanceof Error ? e.message : "unknown" });
-        console.warn("[NotifDeepLink] route failed:", e);
-      }
-    };
-
-    const initialRouteTimer = setTimeout(() => {
-      const lastResponse = Notifications.getLastNotificationResponse();
-      recordNotifDeepLink("initial_response_read", { hasResponse: !!lastResponse, reqId: lastResponse?.notification.request.identifier ?? null });
-      routeFromResponse(lastResponse, "initial_500ms");
-    }, 500);
-
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => routeFromResponse(response, "listener"));
-    recordNotifDeepLink("listener_registered", { isLoading, hasSession: !!session });
-    return () => {
-      clearTimeout(initialRouteTimer);
-      sub.remove();
-      recordNotifDeepLink("listener_removed", { isLoading, hasSession: !!session });
-    };
-  }, [session, isLoading, pathname]);
+    const ready = !!session && !isLoading && !!rootNavigationState?.key;
+    notifRoutingReady.current = ready;
+    if (ready) {
+      flushPendingNotifResponses();
+    }
+  }, [session, isLoading, rootNavigationState?.key, pendingNotifSignal]);
 
   const showBanner = !!session && onboardingCompleted === true;
 
