@@ -499,33 +499,47 @@ export default function SettingsScreen() {
         <View style={styles.maxWidth}>
           {/* Banners */}
           {userIsInTrial && (
-            <View style={styles.banner}>
+            <Pressable
+              style={({ pressed }) => [styles.banner, { opacity: pressed ? 0.9 : 1 }]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                router.push("/subscription" as any);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Upgrade plan"
+              accessibilityHint="Opens subscription options"
+              testID="settings-trial-upgrade-card"
+            >
               <View style={styles.bannerText}>
                 <Text style={styles.bannerTitle}>{trialBannerTitle}</Text>
                 <Text style={styles.bannerSub}>Free trial: {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining</Text>
               </View>
-              <Pressable
-                style={({ pressed }) => [styles.bannerBtn, { opacity: pressed ? 0.8 : 1 }]}
-                onPress={() => router.push("/subscription" as any)}
-              >
+              <View style={styles.bannerBtn} pointerEvents="none">
                 <Text style={styles.bannerBtnText}>Upgrade</Text>
-              </Pressable>
-            </View>
+              </View>
+            </Pressable>
           )}
 
           {userIsFreeTier && !userIsInTrial && (
-            <View style={styles.banner}>
+            <Pressable
+              style={({ pressed }) => [styles.banner, { opacity: pressed ? 0.9 : 1 }]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                router.push("/subscription" as any);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Upgrade plan"
+              accessibilityHint="Opens subscription options"
+              testID="settings-free-upgrade-card"
+            >
               <View style={styles.bannerText}>
                 <Text style={styles.bannerTitle}>Free Plan</Text>
                 <Text style={styles.bannerSub}>Upgrade to unlock vehicles, scans & exports</Text>
               </View>
-              <Pressable
-                style={({ pressed }) => [styles.bannerBtn, { opacity: pressed ? 0.8 : 1 }]}
-                onPress={() => router.push("/subscription" as any)}
-              >
+              <View style={styles.bannerBtn} pointerEvents="none">
                 <Text style={styles.bannerBtnText}>Upgrade</Text>
-              </Pressable>
-            </View>
+              </View>
+            </Pressable>
           )}
 
           {isPremium && !userIsInTrial && (
