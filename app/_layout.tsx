@@ -228,22 +228,60 @@ function RootLayoutNav() {
   const notifRoutingReady = useRef(false);
   const [pendingNotifSignal, setPendingNotifSignal] = useState(0);
 
+  const emitNotifRouteDiagnostic = (
+    message: string,
+    data?: Record<string, string | number | boolean | null>,
+  ) => {
+    Sentry.captureMessage(`[G10_79_NotifRoute] ${message}`, {
+      level: "info",
+      tags: {
+        area: "notification_deeplink",
+        diag: "g10_79",
+        source: typeof data?.source === "string" ? data.source : "unknown",
+      },
+      extra: {
+        ...(data ?? {}),
+        release: `${nativeApplicationVersion ?? "unknown"}+${nativeBuildVersion ?? "unknown"}`,
+        nativeApplicationVersion: nativeApplicationVersion ?? null,
+        nativeBuildVersion: nativeBuildVersion ?? null,
+        sessionUserId: session?.user?.id ?? null,
+        isLoading,
+        hasSession: !!session,
+        rootReady: !!rootNavigationState?.key,
+        pendingQueueLength: pendingNotifResponses.current.length,
+        routingReady: notifRoutingReady.current,
+      },
+    });
+  };
+
   const addNotifDeepLinkBreadcrumb = (
     message: string,
     data?: Record<string, string | number | boolean | null>,
   ) => {
     Sentry.addBreadcrumb({ category: "notification.deeplink", level: "info", message, data });
+    emitNotifRouteDiagnostic(message, data);
   };
 
   const queueNotifResponse = (response: Notifications.NotificationResponse | null | undefined, source: string) => {
-    if (!response) return;
+    if (!response) {
+      addNotifDeepLinkBreadcrumb("queue_null_response", { source });
+      return;
+    }
+    const reqId = response.notification.request.identifier;
+    const queueBefore = pendingNotifResponses.current.length;
     pendingNotifResponses.current.push({ response, source });
+    const queueAfter = pendingNotifResponses.current.length;
+    addNotifDeepLinkBreadcrumb("queue_response", { source, reqId, queueBefore, queueAfter });
     setPendingNotifSignal((value) => value + 1);
   };
 
   const routeFromResponse = (response: Notifications.NotificationResponse, source: string) => {
     const reqId = response.notification.request.identifier;
-    if (handledNotifIds.current.has(reqId)) return;
+    addNotifDeepLinkBreadcrumb("route_response_seen", { source, reqId });
+    if (handledNotifIds.current.has(reqId)) {
+      addNotifDeepLinkBreadcrumb("duplicate_skipped", { source, reqId });
+      return;
+    }
 
     const raw = response.notification.request.content.data;
     if (!raw || typeof raw !== "object") {
@@ -257,6 +295,19 @@ function RootLayoutNav() {
     const taskId = typeof d.taskId === "string" ? d.taskId : null;
     const taskKind = typeof d.taskKind === "string" ? d.taskKind : null;
 
+    addNotifDeepLinkBreadcrumb("payload_shape", {
+      source,
+      reqId,
+      hasAssetId: !!assetId,
+      hasAssetKind: !!assetKind,
+      hasTaskId: !!taskId,
+      hasTaskKind: !!taskKind,
+      assetId: assetId ?? null,
+      assetKind: assetKind ?? null,
+      taskId: taskId ?? null,
+      taskKind: taskKind ?? null,
+    });
+
     if (!assetId || !taskId || !assetKind || !taskKind) {
       addNotifDeepLinkBreadcrumb("payload_missing_required_field", { source, reqId, hasAssetId: !!assetId, hasTaskId: !!taskId, hasAssetKind: !!assetKind, hasTaskKind: !!taskKind });
       return;
@@ -266,16 +317,24 @@ function RootLayoutNav() {
       let route: string | null = null;
       if (assetKind === "vehicle" && taskKind === "vehicle_task") {
         route = "vehicle";
+        addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,taskId" });
         router.push({ pathname: "/vehicle/[id]", params: { id: assetId, taskId } });
+        addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
       } else if (assetKind === "property" && taskKind === "property_task") {
         route = "property";
+        addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,taskId" });
         router.push({ pathname: "/property/[id]", params: { id: assetId, taskId } });
+        addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
       } else if (assetKind === "family_member" && taskKind === "health_appointment") {
         route = "family_appointment";
+        addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,appointmentId" });
         router.push({ pathname: "/family-member/[id]", params: { id: assetId, appointmentId: taskId } });
+        addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
       } else if (assetKind === "family_member" && taskKind === "medication") {
         route = "family_medication";
+        addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,medicationId" });
         router.push({ pathname: "/family-member/[id]", params: { id: assetId, medicationId: taskId } });
+        addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
       } else {
         addNotifDeepLinkBreadcrumb("payload_no_matching_route", { source, reqId, assetKind, taskKind });
         return;
@@ -305,35 +364,77 @@ function RootLayoutNav() {
   };
 
   const flushPendingNotifResponses = () => {
-    if (!notifRoutingReady.current) return;
-    if (pendingNotifResponses.current.length === 0) return;
+    if (!notifRoutingReady.current) {
+      addNotifDeepLinkBreadcrumb("flush_blocked_not_ready", { pendingQueueLength: pendingNotifResponses.current.length });
+      return;
+    }
+    if (pendingNotifResponses.current.length === 0) {
+      addNotifDeepLinkBreadcrumb("flush_empty", {});
+      return;
+    }
+    addNotifDeepLinkBreadcrumb("flush_start", { queueLength: pendingNotifResponses.current.length });
     const queue = pendingNotifResponses.current;
     pendingNotifResponses.current = [];
     for (const item of queue) {
+      addNotifDeepLinkBreadcrumb("flush_item", { source: item.source, reqId: item.response.notification.request.identifier });
       routeFromResponse(item.response, item.source);
     }
   };
 
   useEffect(() => {
+    addNotifDeepLinkBreadcrumb("component_rendered", {
+      sessionUserId: session?.user?.id ?? null,
+      isLoading,
+      rootKeyPresent: !!rootNavigationState?.key,
+    });
+  }, [session?.user?.id, isLoading, rootNavigationState?.key]);
+
+  useEffect(() => {
+    const hasResponse = !!lastNotificationResponse;
+    const reqId = lastNotificationResponse?.notification.request.identifier ?? null;
+    addNotifDeepLinkBreadcrumb("hook_effect", { hasResponse, reqId });
     queueNotifResponse(lastNotificationResponse, "hook");
   }, [lastNotificationResponse]);
 
   useEffect(() => {
+    addNotifDeepLinkBreadcrumb("listener_registered", {});
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const reqId = response.notification.request.identifier;
+      addNotifDeepLinkBreadcrumb("listener_received", { reqId });
       queueNotifResponse(response, "listener");
     });
-    return () => sub.remove();
+    return () => {
+      addNotifDeepLinkBreadcrumb("listener_removed", {});
+      sub.remove();
+    };
   }, []);
 
   useEffect(() => {
     if (!isLoading && !session) {
+      addNotifDeepLinkBreadcrumb("signed_out_queue_cleared", { pendingQueueLength: pendingNotifResponses.current.length });
       pendingNotifResponses.current = [];
       notifRoutingReady.current = false;
+      addNotifDeepLinkBreadcrumb("routing_ready_state", {
+        ready: false,
+        hasSession: false,
+        isLoading,
+        rootKeyPresent: !!rootNavigationState?.key,
+        pendingQueueLength: pendingNotifResponses.current.length,
+        pendingNotifSignal,
+      });
       return;
     }
 
     const ready = !!session && !isLoading && !!rootNavigationState?.key;
     notifRoutingReady.current = ready;
+    addNotifDeepLinkBreadcrumb("routing_ready_state", {
+      ready,
+      hasSession: !!session,
+      isLoading,
+      rootKeyPresent: !!rootNavigationState?.key,
+      pendingQueueLength: pendingNotifResponses.current.length,
+      pendingNotifSignal,
+    });
     if (ready) {
       flushPendingNotifResponses();
     }
