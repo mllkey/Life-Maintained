@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, View } from "react-native";
+import { Colors } from "@/constants/colors";
 
-const SHAPE = "#2C2E42";
 
 export function usePulse() {
   const anim = useRef(new Animated.Value(0.45)).current;
@@ -36,7 +36,7 @@ export function S({ anim, w = "100%", h, r = 8, mt = 0, mb = 0, ml = 0, flex }: 
         width: flex !== undefined ? undefined : (w as any),
         height: h,
         borderRadius: r,
-        backgroundColor: SHAPE,
+        backgroundColor: Colors.skeleton,
         opacity: anim,
         marginTop: mt,
         marginBottom: mb,
