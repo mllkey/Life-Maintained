@@ -96,7 +96,7 @@ export default function PropertyDetailScreen() {
 
     const t1 = setTimeout(performScroll, 250);
     const t2 = setTimeout(performScroll, 750);
-    const clear = setTimeout(() => setHighlightedTaskId(null), 2400);
+    const clear = setTimeout(() => setHighlightedTaskId(null), 2800);
 
     return () => {
       clearTimeout(t1);
@@ -1067,10 +1067,9 @@ function DeepLinkPulse({ color }: { color: string }) {
   const opacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const seq = Animated.sequence([
-      Animated.timing(opacity, { toValue: 0.6, duration: 350, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 0, duration: 450, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 0.6, duration: 350, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 0, duration: 450, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.34, duration: 220, useNativeDriver: true }),
+      Animated.delay(1300),
+      Animated.timing(opacity, { toValue: 0, duration: 900, useNativeDriver: true }),
     ]);
     seq.start();
     return () => seq.stop();

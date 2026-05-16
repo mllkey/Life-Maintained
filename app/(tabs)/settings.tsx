@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
-  TouchableOpacity,
   Alert,
   Platform,
   TextInput,
@@ -128,6 +127,17 @@ export default function SettingsScreen() {
   const isDeletingAccountRef = useRef(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const upgradeTapLockRef = useRef(false);
+
+  const openSubscriptionFromSettings = () => {
+    if (upgradeTapLockRef.current) return;
+    upgradeTapLockRef.current = true;
+    Haptics.selectionAsync();
+    router.push("/subscription" as any);
+    setTimeout(() => {
+      upgradeTapLockRef.current = false;
+    }, 500);
+  };
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -500,15 +510,12 @@ export default function SettingsScreen() {
         <View style={styles.maxWidth}>
           {/* Banners */}
           {userIsInTrial && (
-            <TouchableOpacity
-              style={styles.banner}
-              activeOpacity={0.9}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              pressRetentionOffset={{ top: 20, bottom: 20, left: 20, right: 20 }}
-              onPress={() => {
-                Haptics.selectionAsync();
-                router.push("/subscription" as any);
-              }}
+            <Pressable
+              style={({ pressed }) => [styles.banner, pressed && styles.bannerPressed]}
+              onPress={openSubscriptionFromSettings}
+              unstable_pressDelay={0}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              pressRetentionOffset={{ top: 24, bottom: 24, left: 24, right: 24 }}
               accessibilityRole="button"
               accessibilityLabel="Upgrade plan"
               accessibilityHint="Opens subscription options"
@@ -521,19 +528,16 @@ export default function SettingsScreen() {
               <View style={styles.bannerBtn} pointerEvents="none">
                 <Text style={styles.bannerBtnText}>Upgrade</Text>
               </View>
-            </TouchableOpacity>
+            </Pressable>
           )}
 
           {userIsFreeTier && !userIsInTrial && (
-            <TouchableOpacity
-              style={styles.banner}
-              activeOpacity={0.9}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              pressRetentionOffset={{ top: 20, bottom: 20, left: 20, right: 20 }}
-              onPress={() => {
-                Haptics.selectionAsync();
-                router.push("/subscription" as any);
-              }}
+            <Pressable
+              style={({ pressed }) => [styles.banner, pressed && styles.bannerPressed]}
+              onPress={openSubscriptionFromSettings}
+              unstable_pressDelay={0}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              pressRetentionOffset={{ top: 24, bottom: 24, left: 24, right: 24 }}
               accessibilityRole="button"
               accessibilityLabel="Upgrade plan"
               accessibilityHint="Opens subscription options"
@@ -546,7 +550,7 @@ export default function SettingsScreen() {
               <View style={styles.bannerBtn} pointerEvents="none">
                 <Text style={styles.bannerBtnText}>Upgrade</Text>
               </View>
-            </TouchableOpacity>
+            </Pressable>
           )}
 
           {isPremium && !userIsInTrial && (
@@ -984,6 +988,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     backgroundColor: Colors.card,
   },
+  bannerPressed: { opacity: 0.9 },
   bannerText: { flex: 1 },
   bannerTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
   bannerSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
