@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
+  TouchableOpacity,
   Alert,
   Platform,
   TextInput,
@@ -499,8 +500,11 @@ export default function SettingsScreen() {
         <View style={styles.maxWidth}>
           {/* Banners */}
           {userIsInTrial && (
-            <Pressable
-              style={({ pressed }) => [styles.banner, { opacity: pressed ? 0.9 : 1 }]}
+            <TouchableOpacity
+              style={styles.banner}
+              activeOpacity={0.9}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              pressRetentionOffset={{ top: 20, bottom: 20, left: 20, right: 20 }}
               onPress={() => {
                 Haptics.selectionAsync();
                 router.push("/subscription" as any);
@@ -517,12 +521,15 @@ export default function SettingsScreen() {
               <View style={styles.bannerBtn} pointerEvents="none">
                 <Text style={styles.bannerBtnText}>Upgrade</Text>
               </View>
-            </Pressable>
+            </TouchableOpacity>
           )}
 
           {userIsFreeTier && !userIsInTrial && (
-            <Pressable
-              style={({ pressed }) => [styles.banner, { opacity: pressed ? 0.9 : 1 }]}
+            <TouchableOpacity
+              style={styles.banner}
+              activeOpacity={0.9}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              pressRetentionOffset={{ top: 20, bottom: 20, left: 20, right: 20 }}
               onPress={() => {
                 Haptics.selectionAsync();
                 router.push("/subscription" as any);
@@ -539,7 +546,7 @@ export default function SettingsScreen() {
               <View style={styles.bannerBtn} pointerEvents="none">
                 <Text style={styles.bannerBtnText}>Upgrade</Text>
               </View>
-            </Pressable>
+            </TouchableOpacity>
           )}
 
           {isPremium && !userIsInTrial && (

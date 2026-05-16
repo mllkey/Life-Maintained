@@ -13,7 +13,7 @@ Sentry.init({
 });
 
 import { QueryClientProvider, focusManager } from "@tanstack/react-query";
-import { Stack, router, useRootNavigationState } from "expo-router";
+import { Stack, router, usePathname, useRootNavigationState } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef, useState } from "react";
 import { AppState, AppStateStatus, Platform, View } from "react-native";
@@ -229,6 +229,9 @@ function RootLayoutNav() {
   const hasEverSeenSession = useRef(false);
   const unauthClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const readinessRetryTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  const routeVerifyTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const [pendingNotifSignal, setPendingNotifSignal] = useState(0);
 
   const emitNotifRouteDiagnostic = (
@@ -263,6 +266,50 @@ function RootLayoutNav() {
   ) => {
     Sentry.addBreadcrumb({ category: "notification.deeplink", level: "info", message, data });
     emitNotifRouteDiagnostic(message, data);
+  };
+
+  const clearNotifRouteVerificationTimers = () => {
+    for (const t of routeVerifyTimers.current) {
+      clearTimeout(t);
+    }
+    routeVerifyTimers.current = [];
+  };
+
+  const scheduleNotifRouteVerification = (
+    source: string,
+    reqId: string,
+    route: string,
+    expectedPath: string,
+    navigate: () => void,
+  ) => {
+    clearNotifRouteVerificationTimers();
+
+    for (const delayMs of [300, 900, 1600]) {
+      const timer = setTimeout(() => {
+        const currentPath = pathnameRef.current;
+
+        if (currentPath === expectedPath) {
+          addNotifDeepLinkBreadcrumb("route_verify_ok", { source, reqId, route, expectedPath, currentPath });
+          return;
+        }
+
+        if (currentPath !== "/" && currentPath !== "/(tabs)" && currentPath !== "/(tabs)/index") {
+          addNotifDeepLinkBreadcrumb("route_verify_user_navigated", { source, reqId, route, expectedPath, currentPath });
+          return;
+        }
+
+        addNotifDeepLinkBreadcrumb("route_verify_retry", { source, reqId, route, expectedPath, currentPath, delayMs });
+        try {
+          navigate();
+        } catch (e) {
+          Sentry.captureException(e, {
+            tags: { area: "notification_deeplink" },
+            extra: { source, reqId, route, expectedPath, currentPath, delayMs },
+          });
+        }
+      }, delayMs);
+      routeVerifyTimers.current.push(timer);
+    }
   };
 
   const queueNotifResponse = (response: Notifications.NotificationResponse | null | undefined, source: string) => {
@@ -323,21 +370,25 @@ function RootLayoutNav() {
         addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,taskId" });
         router.push({ pathname: "/vehicle/[id]", params: { id: assetId, taskId } });
         addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
+        scheduleNotifRouteVerification(source, reqId, route, `/vehicle/${assetId}`, () => router.replace({ pathname: "/vehicle/[id]", params: { id: assetId, taskId } }));
       } else if (assetKind === "property" && taskKind === "property_task") {
         route = "property";
         addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,taskId" });
         router.push({ pathname: "/property/[id]", params: { id: assetId, taskId } });
         addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
+        scheduleNotifRouteVerification(source, reqId, route, `/property/${assetId}`, () => router.replace({ pathname: "/property/[id]", params: { id: assetId, taskId } }));
       } else if (assetKind === "family_member" && taskKind === "health_appointment") {
         route = "family_appointment";
         addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,appointmentId" });
         router.push({ pathname: "/family-member/[id]", params: { id: assetId, appointmentId: taskId } });
         addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
+        scheduleNotifRouteVerification(source, reqId, route, `/family-member/${assetId}`, () => router.replace({ pathname: "/family-member/[id]", params: { id: assetId, appointmentId: taskId } }));
       } else if (assetKind === "family_member" && taskKind === "medication") {
         route = "family_medication";
         addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,medicationId" });
         router.push({ pathname: "/family-member/[id]", params: { id: assetId, medicationId: taskId } });
         addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
+        scheduleNotifRouteVerification(source, reqId, route, `/family-member/${assetId}`, () => router.replace({ pathname: "/family-member/[id]", params: { id: assetId, medicationId: taskId } }));
       } else {
         addNotifDeepLinkBreadcrumb("payload_no_matching_route", { source, reqId, assetKind, taskKind });
         return;
@@ -485,6 +536,10 @@ function RootLayoutNav() {
   }, [session, isLoading, rootNavigationState?.key, pendingNotifSignal]);
 
   useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
+
+  useEffect(() => {
     return () => {
       if (unauthClearTimer.current !== null) {
         clearTimeout(unauthClearTimer.current);
@@ -494,6 +549,7 @@ function RootLayoutNav() {
         clearTimeout(t);
       }
       readinessRetryTimers.current = [];
+      clearNotifRouteVerificationTimers();
     };
   }, []);
 
