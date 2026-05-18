@@ -18,6 +18,7 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef, useState } from "react";
 import { AppState, AppStateStatus, Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
@@ -636,7 +637,8 @@ function RootLayout() {
       }}>
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <KeyboardProvider>
+          <BottomSheetModalProvider>
+            <KeyboardProvider>
             {analyticsClient ? (
               <PostHogProvider client={analyticsClient}>
                 <AuthProvider>
@@ -648,7 +650,8 @@ function RootLayout() {
                 <RootLayoutNav />
               </AuthProvider>
             )}
-          </KeyboardProvider>
+            </KeyboardProvider>
+          </BottomSheetModalProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>
     </ErrorBoundary>

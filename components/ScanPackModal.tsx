@@ -1,20 +1,26 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Modal,
   Platform,
 } from "react-native";
+import {
+  BottomSheetModal,
+  BottomSheetView,
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+} from "@gorhom/bottom-sheet";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PaidActionCTA } from "@/components/PaidActionCTA";
 
 interface ScanPack {
   id: "scan_pack_10" | "scan_pack_25";
@@ -36,11 +42,63 @@ interface ScanPackModalProps {
 }
 
 export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackModalProps) {
-  const insets = useSafeAreaInsets();
   const { user, refreshProfile } = useAuth();
+  const insets = useSafeAreaInsets();
+  const sheetRef = useRef<BottomSheetModal>(null);
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+
+  // Drive sheet open/close from `visible` prop. Parents own the open state;
+  // the sheet animates in/out via imperative ref calls.
+  useEffect(() => {
+    if (visible) {
+      sheetRef.current?.present();
+    } else {
+      sheetRef.current?.dismiss();
+    }
+  }, [visible]);
+
+  // Called by the sheet when its dismiss animation completes (pan-down,
+  // backdrop tap, or programmatic dismiss). Sync parent state.
+  const handleDismiss = useCallback(() => {
+    setPurchaseError(null);
+    onClose();
+  }, [onClose]);
+
+  // Block tap-to-dismiss while a purchase is in flight (StoreKit dialog +
+  // RPC roundtrip ≈ 3-8s). Otherwise allow normal tap-outside-to-close.
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.5}
+        pressBehavior={purchasingId === null ? "close" : "none"}
+      />
+    ),
+    [purchasingId]
+  );
+
+  const handleStyle = useMemo(
+    () => ({
+      backgroundColor: Colors.card,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+    }),
+    []
+  );
+
+  const handleIndicatorStyle = useMemo(
+    () => ({ backgroundColor: Colors.border, width: 36, height: 4 }),
+    []
+  );
+
+  const backgroundStyle = useMemo(
+    () => ({ backgroundColor: Colors.card }),
+    []
+  );
 
   async function handlePurchase(pack: ScanPack) {
     setPurchaseError(null);
@@ -102,19 +160,20 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
     }
   }
 
-  const botPad = Platform.OS === "web" ? 34 : insets.bottom;
-
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
+    <BottomSheetModal
+      ref={sheetRef}
+      enableDynamicSizing
+      enablePanDownToClose={purchasingId === null}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      backdropComponent={renderBackdrop}
+      backgroundStyle={backgroundStyle}
+      handleStyle={handleStyle}
+      handleIndicatorStyle={handleIndicatorStyle}
+      onDismiss={handleDismiss}
     >
-      <Pressable style={styles.overlay} onPress={onClose} />
-      <View style={[styles.sheet, { paddingBottom: botPad + 16 }]}>
-        <View style={styles.handle} />
-
+      <BottomSheetView style={[styles.content, { paddingBottom: 24 + insets.bottom }]}>
         <View style={styles.titleRow}>
           <View style={styles.titleIconWrap}>
             <Ionicons name="scan-outline" size={22} color={Colors.accent} />
@@ -129,6 +188,13 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
           <View style={styles.errorCard}>
             <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
             <Text style={styles.errorText}>{purchaseError}</Text>
+          </View>
+        ) : null}
+
+        {purchasingId !== null ? (
+          <View style={styles.processingCard}>
+            <ActivityIndicator size="small" color={Colors.accent} />
+            <Text style={styles.processingText}>Completing purchase… keep LifeMaintained open.</Text>
           </View>
         ) : null}
 
@@ -166,39 +232,26 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
           );
         })}
 
-        <Pressable
-          style={({ pressed }) => [styles.cancelBtn, { opacity: pressed ? 0.6 : 1 }]}
+        <PaidActionCTA
+          label="Cancel"
+          variant="secondary"
           onPress={onClose}
-        >
-          <Text style={styles.cancelText}>Cancel</Text>
-        </Pressable>
+          disabled={purchasingId !== null}
+          accessibilityLabel="Cancel scan pack purchase"
+          testID="scan-pack-cancel"
+        />
 
         <SaveToast visible={toastVisible} message="Scans added to your account" />
-      </View>
-    </Modal>
+      </BottomSheetView>
+    </BottomSheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  sheet: {
-    backgroundColor: Colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+  content: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 4,
     gap: 12,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.border,
-    alignSelf: "center",
-    marginBottom: 4,
   },
   titleRow: {
     flexDirection: "row",
@@ -247,8 +300,6 @@ const styles = StyleSheet.create({
   packTitle: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary, flex: 1 },
   packRight: { minWidth: 52, alignItems: "flex-end" },
   packPrice: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.text },
-  cancelBtn: { alignItems: "center", paddingVertical: 8 },
-  cancelText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   errorCard: {
     flexDirection: "row",
     gap: 8,
@@ -265,6 +316,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_500Medium",
     color: Colors.overdue,
+    lineHeight: 18,
+  },
+  processingCard: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.accentMuted,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  processingText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.text,
     lineHeight: 18,
   },
 });
