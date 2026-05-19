@@ -23,7 +23,10 @@
       "ios": {
         "appleId": "mikeyfieldman@yahoo.com",
         "ascAppId": "6761281360",
-        "appleTeamId": "7Y595M4H3Z"
+        "appleTeamId": "7Y595M4H3Z",
+        "ascApiKeyPath": "./credentials/apple/AuthKey_7TFWU9P7JV.p8",
+        "ascApiKeyId": "7TFWU9P7JV",
+        "ascApiKeyIssuerId": "c42aae9c-f9e1-4ffe-b5d2-4e95ed6222e6"
       }
     }
   }

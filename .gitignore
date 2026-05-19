@@ -55,3 +55,6 @@ tools/promptforge/.env
 tools/promptforge/.venv/
 tools/promptforge/__pycache__/
 LifeMaintained-Pass-*-Audit*.docx
+
+# App Store Connect API private keys
+credentials/apple/*.p8
