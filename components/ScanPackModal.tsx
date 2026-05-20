@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 import {
   View,
   Text,
@@ -35,13 +35,20 @@ const PACKS: ScanPack[] = [
   { id: "scan_pack_25", title: "25 scans", scans: 25, price: "$4.99", popular: true },
 ];
 
+export type ScanPackModalHandle = {
+  present: () => boolean;
+  dismiss: () => void;
+};
+
 interface ScanPackModalProps {
-  visible: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackModalProps) {
+export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function ScanPackModal(
+  { onClose, onSuccess },
+  ref
+) {
   const { user, refreshProfile } = useAuth();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
@@ -49,15 +56,21 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
   const [toastVisible, setToastVisible] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
-  // Drive sheet open/close from `visible` prop. Parents own the open state;
-  // the sheet animates in/out via imperative ref calls.
-  useEffect(() => {
-    if (visible) {
-      sheetRef.current?.present();
-    } else {
+  useImperativeHandle(ref, () => ({
+    present: () => {
+      const sheet = sheetRef.current;
+      if (!sheet) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        return false;
+      }
+      setPurchaseError(null);
+      sheet.present();
+      return true;
+    },
+    dismiss: () => {
       sheetRef.current?.dismiss();
-    }
-  }, [visible]);
+    },
+  }), []);
 
   // Called by the sheet when its dismiss animation completes (pan-down,
   // backdrop tap, or programmatic dismiss). Sync parent state.
@@ -149,6 +162,7 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
       setToastVisible(true);
       setTimeout(() => {
         setToastVisible(false);
+        sheetRef.current?.dismiss();
         onSuccess();
       }, 1200);
     } catch (err: any) {
@@ -241,7 +255,10 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
         <PaidActionCTA
           label="Cancel"
           variant="secondary"
-          onPress={onClose}
+          onPress={() => {
+            if (purchasingId !== null) return;
+            sheetRef.current?.dismiss();
+          }}
           disabled={purchasingId !== null}
           accessibilityLabel="Cancel scan pack purchase"
           testID="scan-pack-cancel"
@@ -251,7 +268,7 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
       </BottomSheetView>
     </BottomSheetModal>
   );
-}
+});
 
 const styles = StyleSheet.create({
   content: {

@@ -31,7 +31,7 @@ import {
   getLiveScanQuota,
   scanLimit,
 } from "@/lib/subscription";
-import ScanPackModal from "@/components/ScanPackModal";
+import ScanPackModal, { type ScanPackModalHandle } from "@/components/ScanPackModal";
 import { PaidActionCTA } from "@/components/PaidActionCTA";
 
 const SETTINGS_KEY = "app_settings_v2";
@@ -149,7 +149,7 @@ export default function SettingsScreen() {
     enabled: !!user,
   });
 
-    const [showScanPackModal, setShowScanPackModal] = useState(false);
+  const scanPackModalRef = useRef<ScanPackModalHandle>(null);
   const isPaidNonTrialUser =
     hasPersonalOrAbove(profile) && profile?.subscription_tier !== "trial";
   const { data: scanQuota } = useQuery({
@@ -623,7 +623,12 @@ export default function SettingsScreen() {
                     label="Buy more scans"
                     icon="add-circle-outline"
                     variant="secondary"
-                    onPress={() => setShowScanPackModal(true)}
+                    onPress={() => {
+                      const opened = scanPackModalRef.current?.present();
+                      if (!opened) {
+                        fireSaveErrorToast("Couldn't open scan packs", "Please try again.");
+                      }
+                    }}
                     testID="settings-buy-scans"
                   />
                 </View>
@@ -845,9 +850,9 @@ export default function SettingsScreen() {
           <Text style={styles.version}>LifeMaintained v1.0.0</Text>
 
           <ScanPackModal
-            visible={showScanPackModal}
-            onClose={() => setShowScanPackModal(false)}
-            onSuccess={() => setShowScanPackModal(false)}
+            ref={scanPackModalRef}
+            onClose={() => {}}
+            onSuccess={() => {}}
           />
 
           <View style={{ height: 32 }} />
