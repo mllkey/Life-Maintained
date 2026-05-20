@@ -17,6 +17,7 @@ import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
+import DeveloperTestNotifications from "@/components/DeveloperTestNotifications";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -885,7 +886,8 @@ export default function SettingsScreen() {
           )}
 
         </View>
-      </ScrollView>
+                {(__DEV__ || user?.email === "mikeyfieldman@yahoo.com" || user?.email === "test123456@gmail.com") && <DeveloperTestNotifications />}
+        </ScrollView>
 
       {hasChanges && (
         <View style={[styles.saveBar, { paddingBottom: insets.bottom + 8 + (Platform.OS === "web" ? 34 : 0) }]}>
