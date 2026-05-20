@@ -100,6 +100,8 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
     []
   );
 
+  const snapPoints = useMemo(() => ["55%"], []);
+
   async function handlePurchase(pack: ScanPack) {
     setPurchaseError(null);
     if (!user || Platform.OS === "web") {
@@ -163,7 +165,11 @@ export default function ScanPackModal({ visible, onClose, onSuccess }: ScanPackM
   return (
     <BottomSheetModal
       ref={sheetRef}
-      enableDynamicSizing
+      index={0}
+      snapPoints={snapPoints}
+      enableDynamicSizing={false}
+      animateOnMount={false}
+      stackBehavior="replace"
       enablePanDownToClose={purchasingId === null}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
