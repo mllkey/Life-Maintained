@@ -9,7 +9,6 @@ import {
   Platform,
   Image,
   ActivityIndicator,
-  Animated,
   TextInput,
   Modal,
   KeyboardAvoidingView,
