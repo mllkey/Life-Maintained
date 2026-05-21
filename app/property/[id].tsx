@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -14,17 +14,19 @@ import {
   Platform,
   Animated,
   Image,
-  findNodeHandle,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { completePropertyTask } from "@/lib/rpc";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
+import { useDeepLinkHighlight } from "@/lib/useDeepLinkHighlight";
+import { HighlightBackdrop } from "@/components/HighlightBackdrop";
 import { formatShopAndDiy } from "@/lib/costFormat";
 import { useAuth } from "@/context/AuthContext";
 import { capture } from "@/lib/analytics";
@@ -64,46 +66,21 @@ export default function PropertyDetailScreen() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"tasks" | "history">("tasks");
   const [actionNeededExpanded, setActionNeededExpanded] = useState(true);
-  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
-  const propertyScrollRef = useRef<ScrollView>(null);
-  const taskRowRefs = useRef<Record<string, React.ElementRef<typeof View> | null>>({});
-  const lastHandledTaskIdRef = useRef<string | null>(null);
+  const { highlightedId: highlightedTaskId, scrollProps: highlightScrollProps, registerRow: registerTaskRow, dismissImmediately: dismissHighlight } = useDeepLinkHighlight(taskId);
 
-  // Deep-link — see vehicle/[id].tsx for pattern docs.
+  // Deep-link: switch tab + expand section. Highlight + scroll handled by hook.
   useEffect(() => {
     if (!taskId) return;
-    if (lastHandledTaskIdRef.current === taskId) return;
-    lastHandledTaskIdRef.current = taskId;
-
     setActiveTab("tasks");
     setActionNeededExpanded(true);
-    setHighlightedTaskId(taskId);
-
-    const performScroll = () => {
-      const row = taskRowRefs.current[taskId];
-      const scroll = propertyScrollRef.current;
-      if (!row || !scroll) return;
-      const scrollNode = findNodeHandle(scroll);
-      if (scrollNode == null) return;
-      row.measureLayout(
-        scrollNode,
-        (_x, y) => {
-          scroll.scrollTo({ y: Math.max(0, y - 80), animated: true });
-        },
-        () => {},
-      );
-    };
-
-    const t1 = setTimeout(performScroll, 250);
-    const t2 = setTimeout(performScroll, 750);
-    const clear = setTimeout(() => setHighlightedTaskId(null), 2800);
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(clear);
-    };
   }, [taskId]);
+
+  // Blur cleanup — dismiss the highlight when the screen loses focus.
+  useFocusEffect(
+    useCallback(() => {
+      return () => { dismissHighlight(); };
+    }, [dismissHighlight]),
+  );
   const [upToDateExpanded, setUpToDateExpanded] = useState(false);
   const [upcomingExpanded, setUpcomingExpanded] = useState(false);
 
@@ -671,7 +648,7 @@ export default function PropertyDetailScreen() {
         </View>
       ) : (
         <ScrollView
-          ref={propertyScrollRef}
+          {...highlightScrollProps}
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[0]}
           refreshControl={
@@ -773,7 +750,7 @@ export default function PropertyDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
                       highlightedTaskId={highlightedTaskId}
-                      taskRowRefs={taskRowRefs}
+                      registerRow={registerTaskRow}
                     />
                   )}
                   {goodTasks.length > 0 && (
@@ -786,7 +763,7 @@ export default function PropertyDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
                       highlightedTaskId={highlightedTaskId}
-                      taskRowRefs={taskRowRefs}
+                      registerRow={registerTaskRow}
                     />
                   )}
                   {upcomingTasks.length > 0 && (
@@ -799,7 +776,7 @@ export default function PropertyDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
                       highlightedTaskId={highlightedTaskId}
-                      taskRowRefs={taskRowRefs}
+                      registerRow={registerTaskRow}
                     />
                   )}
                 </Animated.View>
@@ -1063,37 +1040,6 @@ export default function PropertyDetailScreen() {
   );
 }
 
-function DeepLinkPulse({ color }: { color: string }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const seq = Animated.sequence([
-      Animated.timing(opacity, { toValue: 0.34, duration: 220, useNativeDriver: true }),
-      Animated.delay(1300),
-      Animated.timing(opacity, { toValue: 0, duration: 900, useNativeDriver: true }),
-    ]);
-    seq.start();
-    return () => seq.stop();
-  }, [opacity]);
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        borderRadius: 14,
-        borderWidth: 2,
-        borderColor: color,
-        backgroundColor: color + "22",
-        opacity,
-        zIndex: 1,
-      }}
-    />
-  );
-}
-
 function TaskSection({
   title,
   titleColor,
@@ -1103,7 +1049,7 @@ function TaskSection({
   onMarkComplete,
   costEstimates,
   highlightedTaskId,
-  taskRowRefs,
+  registerRow,
 }: {
   title: string;
   titleColor?: string;
@@ -1113,7 +1059,7 @@ function TaskSection({
   onMarkComplete: (task: any) => void;
   costEstimates?: Record<string, any>;
   highlightedTaskId?: string | null;
-  taskRowRefs?: React.MutableRefObject<Record<string, React.ElementRef<typeof View> | null>>;
+  registerRow?: (id: string, node: React.ElementRef<typeof View> | null) => void;
 }) {
   return (
     <View style={styles.taskSection}>
@@ -1130,11 +1076,7 @@ function TaskSection({
             return (
               <View
                 key={task.id}
-                ref={(node) => {
-                  if (taskRowRefs) {
-                    taskRowRefs.current[task.id] = node;
-                  }
-                }}
+                ref={(node) => { registerRow?.(task.id, node); }}
                 collapsable={false}
                 pointerEvents="box-none"
                 style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
@@ -1145,7 +1087,7 @@ function TaskSection({
                   isLast={i === tasks.length - 1}
                   costEstimates={costEstimates}
                 />
-                {isDeepLink && <DeepLinkPulse color={Colors.home} />}
+                <HighlightBackdrop color={Colors.homeMuted} visible={isDeepLink} />
               </View>
             );
           })}

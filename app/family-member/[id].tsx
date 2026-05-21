@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,13 +10,13 @@ import {
   Image,
   ActivityIndicator,
   Animated,
-  findNodeHandle,
   TextInput,
   Modal,
   KeyboardAvoidingView,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
@@ -33,6 +33,8 @@ import { completeHealthAppointment } from "@/lib/rpc";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { capture } from "@/lib/analytics";
 import { logMedicationDose, undoLastMedicationDose } from "@/lib/rpc";
+import { useDeepLinkHighlight } from "@/lib/useDeepLinkHighlight";
+import { HighlightBackdrop } from "@/components/HighlightBackdrop";
 
 function getApptStatus(nextDue: string | null, lastCompleted: string | null) {
   if (!lastCompleted) return "due_soon";
@@ -41,37 +43,6 @@ function getApptStatus(nextDue: string | null, lastCompleted: string | null) {
   if (isBefore(d, new Date())) return "overdue";
   if (isBefore(d, addDays(new Date(), 30))) return "due_soon";
   return "good";
-}
-
-function DeepLinkPulse({ color }: { color: string }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const seq = Animated.sequence([
-      Animated.timing(opacity, { toValue: 0.34, duration: 220, useNativeDriver: true }),
-      Animated.delay(1300),
-      Animated.timing(opacity, { toValue: 0, duration: 900, useNativeDriver: true }),
-    ]);
-    seq.start();
-    return () => seq.stop();
-  }, [opacity]);
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        borderRadius: 14,
-        borderWidth: 2,
-        borderColor: color,
-        backgroundColor: color + "22",
-        opacity,
-        zIndex: 1,
-      }}
-    />
-  );
 }
 
 export default function FamilyMemberDetailScreen() {
@@ -83,47 +54,22 @@ export default function FamilyMemberDetailScreen() {
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
   const [activeTab, setActiveTab] = useState<"appointments" | "medications">("appointments");
-  const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
-  const familyScrollRef = useRef<ScrollView>(null);
-  const itemRefs = useRef<Record<string, React.ElementRef<typeof View> | null>>({});
-  const lastHandledRef = useRef<string | null>(null);
+  const deepLinkTarget = appointmentId ?? medicationId;
+  const { highlightedId: highlightedItemId, scrollProps: highlightScrollProps, registerRow: registerItemRow, dismissImmediately: dismissHighlight } = useDeepLinkHighlight(deepLinkTarget);
 
-  // Deep-link — see vehicle/[id].tsx for pattern docs.
+  // Deep-link: switch tab + expand target. Highlight + scroll handled by hook.
   useEffect(() => {
-    const target = appointmentId ?? medicationId;
-    if (!target) return;
-    if (lastHandledRef.current === target) return;
-    lastHandledRef.current = target;
-
+    if (!deepLinkTarget) return;
     setActiveTab(appointmentId ? "appointments" : "medications");
-    setExpandedId(target);
-    setHighlightedItemId(target);
+    setExpandedId(deepLinkTarget);
+  }, [appointmentId, medicationId, deepLinkTarget]);
 
-    const performScroll = () => {
-      const row = itemRefs.current[target];
-      const scroll = familyScrollRef.current;
-      if (!row || !scroll) return;
-      const scrollNode = findNodeHandle(scroll);
-      if (scrollNode == null) return;
-      row.measureLayout(
-        scrollNode,
-        (_x, y) => {
-          scroll.scrollTo({ y: Math.max(0, y - 80), animated: true });
-        },
-        () => {},
-      );
-    };
-
-    const t1 = setTimeout(performScroll, 250);
-    const t2 = setTimeout(performScroll, 750);
-    const clear = setTimeout(() => setHighlightedItemId(null), 2800);
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(clear);
-    };
-  }, [appointmentId, medicationId]);
+  // Blur cleanup — dismiss the highlight when the screen loses focus.
+  useFocusEffect(
+    useCallback(() => {
+      return () => { dismissHighlight(); };
+    }, [dismissHighlight]),
+  );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const isDeletingMemberRef = useRef(false);
@@ -633,7 +579,7 @@ export default function FamilyMemberDetailScreen() {
         </View>
       ) : (
         <ScrollView
-          ref={familyScrollRef}
+          {...highlightScrollProps}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scroll,
@@ -739,7 +685,7 @@ export default function FamilyMemberDetailScreen() {
                     return (
                       <View
                         key={appt.id}
-                        ref={(node) => { itemRefs.current[appt.id] = node; }}
+                        ref={(node) => { registerItemRow(appt.id, node); }}
                         collapsable={false}
                         pointerEvents="box-none"
                         style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
@@ -806,7 +752,7 @@ export default function FamilyMemberDetailScreen() {
                           </View>
                         )}
 
-                        {appt.id === highlightedItemId && <DeepLinkPulse color={Colors.health} />}
+                        <HighlightBackdrop color={Colors.healthMuted} visible={appt.id === highlightedItemId} />
                         {!isLast && <View style={styles.rowDivider} />}
                       </View>
                     );
@@ -834,7 +780,7 @@ export default function FamilyMemberDetailScreen() {
                   {medications.map((med, idx) => (
                     <View
                       key={med.id}
-                      ref={(node) => { itemRefs.current[med.id] = node; }}
+                      ref={(node) => { registerItemRow(med.id, node); }}
                       collapsable={false}
                       pointerEvents="box-none"
                       style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
@@ -899,7 +845,7 @@ export default function FamilyMemberDetailScreen() {
                           )}
                         </View>
                       )}
-                      {med.id === highlightedItemId && <DeepLinkPulse color={Colors.health} />}
+                      <HighlightBackdrop color={Colors.healthMuted} visible={med.id === highlightedItemId} />
                       {idx < medications.length - 1 && <View style={styles.rowDivider} />}
                     </View>
                   ))}

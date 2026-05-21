@@ -15,7 +15,6 @@ import {
   KeyboardAvoidingView,
   Linking,
   Animated,
-  findNodeHandle,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -54,6 +53,8 @@ import {
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 import UpdateBanner from "@/components/UpdateBanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
+import { useDeepLinkHighlight } from "@/lib/useDeepLinkHighlight";
+import { HighlightBackdrop } from "@/components/HighlightBackdrop";
 
 function taskUsesHoursUsage(task: any, mode: TrackingMode): boolean {
   if (mode === "hours" || mode === "both") {
@@ -148,50 +149,23 @@ export default function VehicleDetailScreen() {
   const [scheduleInsight, setScheduleInsight] = useState<string | null>(null);
   const [insightTaskName, setInsightTaskName] = useState<string | null>(null);
   const [highlightedTask, setHighlightedTask] = useState<string | null>(null);
-  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
-  const scheduleScrollRef = useRef<ScrollView>(null);
-  const taskRowRefs = useRef<Record<string, React.ElementRef<typeof View> | null>>({});
-  const lastHandledTaskIdRef = useRef<string | null>(null);
+  const { highlightedId: highlightedTaskId, scrollProps: highlightScrollProps, registerRow: registerTaskRow, dismissImmediately: dismissHighlight } = useDeepLinkHighlight(taskId);
 
-  // Deep-link: switch to schedule tab, expand sections, scroll target row to
-  // absolute Y (80px top offset), pulse for 2.4s. lastHandledRef prevents
-  // re-trigger on refocus.
+  // Deep-link: switch tabs + expand sections. Highlight + scroll handled by hook.
   useEffect(() => {
     if (!taskId) return;
-    if (lastHandledTaskIdRef.current === taskId) return;
-    lastHandledTaskIdRef.current = taskId;
-
     setActiveTab("schedule");
     setActionNeededExpanded(true);
     setUpcomingExpanded(true);
     setCompletedExpanded(true);
-    setHighlightedTaskId(taskId);
-
-    const performScroll = () => {
-      const row = taskRowRefs.current[taskId];
-      const scroll = scheduleScrollRef.current;
-      if (!row || !scroll) return;
-      const scrollNode = findNodeHandle(scroll);
-      if (scrollNode == null) return;
-      row.measureLayout(
-        scrollNode,
-        (_x, y) => {
-          scroll.scrollTo({ y: Math.max(0, y - 80), animated: true });
-        },
-        () => {},
-      );
-    };
-
-    const t1 = setTimeout(performScroll, 250);
-    const t2 = setTimeout(performScroll, 750);
-    const clear = setTimeout(() => setHighlightedTaskId(null), 2800);
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(clear);
-    };
   }, [taskId]);
+
+  // Blur cleanup — when this screen loses focus, dismiss the highlight.
+  useFocusEffect(
+    useCallback(() => {
+      return () => { dismissHighlight(); };
+    }, [dismissHighlight]),
+  );
   const prevScheduleCountRef = useRef(0);
   const lastStatusHashRef = useRef("");
   const pollStartRef = useRef<number | null>(null);
@@ -1213,7 +1187,7 @@ export default function VehicleDetailScreen() {
         <ActivityIndicator color={Colors.accent} style={{ marginTop: 60 }} />
       ) : vehicle ? (
         <ScrollView
-          ref={scheduleScrollRef}
+          {...highlightScrollProps}
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[1]}
           refreshControl={
@@ -1401,7 +1375,7 @@ export default function VehicleDetailScreen() {
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
-                      taskRowRefs={taskRowRefs}
+                      registerRow={registerTaskRow}
                     />
                   )}
                   <ScheduleSection
@@ -1417,7 +1391,7 @@ export default function VehicleDetailScreen() {
                     onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                     highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
-                      taskRowRefs={taskRowRefs}
+                      registerRow={registerTaskRow}
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
@@ -1433,7 +1407,7 @@ export default function VehicleDetailScreen() {
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
-                      taskRowRefs={taskRowRefs}
+                      registerRow={registerTaskRow}
                     />
                   )}
                   {Object.keys(costEstimates ?? {}).length > 0 && (
@@ -1488,7 +1462,7 @@ export default function VehicleDetailScreen() {
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
-                      taskRowRefs={taskRowRefs}
+                      registerRow={registerTaskRow}
                     />
                   )}
                   <ScheduleSection
@@ -1504,7 +1478,7 @@ export default function VehicleDetailScreen() {
                     onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                     highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
-                      taskRowRefs={taskRowRefs}
+                      registerRow={registerTaskRow}
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
@@ -1520,7 +1494,7 @@ export default function VehicleDetailScreen() {
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
-                      taskRowRefs={taskRowRefs}
+                      registerRow={registerTaskRow}
                     />
                   )}
                   {Object.keys(costEstimates ?? {}).length > 0 && (
@@ -1803,7 +1777,7 @@ function ScheduleSection({
   onShowDifficultyInfo,
   highlightedTask,
   highlightedTaskId,
-  taskRowRefs,
+  registerRow,
 }: {
   title: string;
   titleColor?: string;
@@ -1818,7 +1792,7 @@ function ScheduleSection({
   onShowDifficultyInfo?: () => void;
   highlightedTask?: string | null;
   highlightedTaskId?: string | null;
-  taskRowRefs?: React.MutableRefObject<Record<string, React.ElementRef<typeof View> | null>>;
+  registerRow?: (id: string, node: React.ElementRef<typeof View> | null) => void;
 }) {
   return (
     <View style={styles.scheduleSection}>
@@ -1842,11 +1816,7 @@ function ScheduleSection({
               return (
                 <View
                   key={task.id}
-                  ref={(node) => {
-                    if (taskRowRefs) {
-                      taskRowRefs.current[task.id] = node;
-                    }
-                  }}
+                  ref={(node) => { registerRow?.(task.id, node); }}
                   collapsable={false}
                   pointerEvents="box-none"
                   style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
@@ -1861,7 +1831,7 @@ function ScheduleSection({
                     onShowDifficultyInfo={onShowDifficultyInfo}
                     isHighlighted={task.name === highlightedTask}
                   />
-                  {isDeepLink && <DeepLinkPulse color={Colors.vehicle} />}
+                  <HighlightBackdrop color={Colors.vehicleMuted} visible={isDeepLink} />
                 </View>
               );
             })
@@ -1869,37 +1839,6 @@ function ScheduleSection({
         </View>
       )}
     </View>
-  );
-}
-
-function DeepLinkPulse({ color }: { color: string }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const seq = Animated.sequence([
-      Animated.timing(opacity, { toValue: 0.34, duration: 220, useNativeDriver: true }),
-      Animated.delay(1300),
-      Animated.timing(opacity, { toValue: 0, duration: 900, useNativeDriver: true }),
-    ]);
-    seq.start();
-    return () => seq.stop();
-  }, [opacity]);
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        borderRadius: 14,
-        borderWidth: 2,
-        borderColor: color,
-        backgroundColor: color + "22",
-        opacity,
-        zIndex: 1,
-      }}
-    />
   );
 }
 
