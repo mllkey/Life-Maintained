@@ -158,6 +158,7 @@ export default function HealthProfileScreen() {
               <Ionicons name="calendar-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
               <TextInput style={styles.inputInner} value={dob} onChangeText={t => setDob(formatDob(t))} placeholder="MM/DD/YYYY" placeholderTextColor={Colors.textTertiary} keyboardType="numeric" maxLength={10} />
             </View>
+            <Text style={styles.fieldHelper}>Used to recommend age-appropriate screenings and care reminders.</Text>
           </View>
 
           <View style={styles.section}>
@@ -190,6 +191,7 @@ const styles = StyleSheet.create({
   infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 20 },
   section: { gap: 8 },
   sectionTitle: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 1.5 },
+  fieldHelper: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, lineHeight: 17 },
   inputWrapper: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14, height: 52 },
   inputIcon: { marginRight: 10 },
   inputInner: { flex: 1, fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
