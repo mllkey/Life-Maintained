@@ -49,8 +49,8 @@ const PROPERTY_DISMISS_KEY = "@yma_crosssell_dismissed_property_only";
 const HEALTH_DISMISS_KEY = "@yma_crosssell_dismissed_health_only";
 
 const CAT = {
-  vehicles: { color: Colors.blue, muted: Colors.blueMuted, icon: "car" as const, label: "Vehicles", desc: "Cars, trucks, motorcycles & more", addRoute: "/add-vehicle" as any, tab: "/(tabs)/vehicles" as any },
-  properties: { color: Colors.good, muted: Colors.goodMuted, icon: "home" as const, label: "Properties", desc: "Home, HVAC, roof & appliances", addRoute: "/add-property" as any, tab: "/(tabs)/home-tab" as any },
+  vehicles: { color: Colors.vehicle, muted: Colors.vehicleMuted, icon: "car" as const, label: "Vehicles", desc: "Cars, trucks, motorcycles & more", addRoute: "/add-vehicle" as any, tab: "/(tabs)/vehicles" as any },
+  properties: { color: Colors.home, muted: Colors.homeMuted, icon: "home" as const, label: "Home", desc: "Home, HVAC, roof & appliances", addRoute: "/add-property" as any, tab: "/(tabs)/home-tab" as any },
   health: { color: Colors.health, muted: Colors.healthMuted, icon: "heart" as const, label: "Health", desc: "Appointments & medications", addRoute: "/add-appointment" as any, tab: "/(tabs)/health" as any },
 } as const;
 
@@ -226,10 +226,18 @@ export default function DashboardScreen() {
         supabase.from("properties").select("id", { count: "exact", head: true }).eq("user_id", user.id),
         supabase.from("health_appointments").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       ]);
+      // Health vertical includes family members + medications + appointments.
+      // Counting only appointments under-represents Health users in the dashboard
+      // header and incorrectly classifies users who added family or medications
+      // as new-user (isNewUser = WelcomeView).
+      const [fam, meds] = await Promise.all([
+        supabase.from("family_members").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+        supabase.from("medications").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      ]);
       return {
         vehicles: veh.count ?? 0,
         properties: prop.count ?? 0,
-        health: health.count ?? 0,
+        health: (health.count ?? 0) + (fam.count ?? 0) + (meds.count ?? 0),
       };
     },
     enabled: !!user,
@@ -958,8 +966,17 @@ function YourMonthAheadCard({
   const categories = verticalCount(items);
 
   const isMultiVertical = categories >= 2 && heroItems.length >= 2;
+  const hasAnyTracked = counts.vehicles > 0 || counts.properties > 0 || counts.health > 0;
+  const hasMultipleVerticalsTracked =
+    (counts.vehicles > 0 ? 1 : 0) +
+      (counts.properties > 0 ? 1 : 0) +
+      (counts.health > 0 ? 1 : 0) >= 2;
 
-  if (!isMultiVertical && !singleVerticalActive) return null;
+  // Hero is always present once the user has tracked anything. Three render branches below:
+  // (1) multi-vertical with due items → narrative summary
+  // (2) single-vertical → vertical-specific narrative (existing)
+  // (3) all-clear → calm "Nothing due this month" state with cross-sell
+  if (!hasAnyTracked) return null;
 
   function handlePress(item?: MonthAheadItem) {
     if (!item) {
@@ -991,11 +1008,11 @@ function YourMonthAheadCard({
       >
         <View style={styles.monthAheadTopRow}>
           <View style={styles.monthAheadIconStack}>
-            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.blueMuted, marginRight: -8 }]}>
-              <Ionicons name="car" size={15} color={Colors.blue} />
+            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.vehicles.muted, marginRight: -8 }]}>
+              <Ionicons name={CAT.vehicles.icon} size={15} color={CAT.vehicles.color} />
             </View>
-            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.goodMuted, marginRight: -8 }]}>
-              <Ionicons name="home" size={15} color={Colors.good} />
+            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.properties.muted, marginRight: -8 }]}>
+              <Ionicons name={CAT.properties.icon} size={15} color={CAT.properties.color} />
             </View>
             <View style={[styles.monthAheadIcon, { backgroundColor: Colors.healthMuted }]}>
               <Ionicons name="heart" size={15} color={Colors.health} />
@@ -1041,6 +1058,33 @@ function YourMonthAheadCard({
     );
   }
 
+  // All-clear: user tracks 2+ verticals but nothing is due this month.
+  // Render a calm hero that confirms status and points to the next action.
+  if (hasMultipleVerticalsTracked && items.length === 0) {
+    return (
+      <View style={styles.monthAheadCard}>
+        <View style={styles.monthAheadTopRow}>
+          <View style={styles.monthAheadIconStack}>
+            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.vehicles.muted, marginRight: -8 }]}>
+              <Ionicons name={CAT.vehicles.icon} size={15} color={CAT.vehicles.color} />
+            </View>
+            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.properties.muted, marginRight: -8 }]}>
+              <Ionicons name={CAT.properties.icon} size={15} color={CAT.properties.color} />
+            </View>
+            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.health.muted }]}>
+              <Ionicons name={CAT.health.icon} size={15} color={CAT.health.color} />
+            </View>
+          </View>
+          <Text style={styles.monthAheadEyebrow}>YOUR MONTH AHEAD</Text>
+        </View>
+        <Text style={styles.monthAheadTitle}>You're all caught up</Text>
+        <Text style={styles.monthAheadNarrative}>
+          Nothing due this month across vehicles, home, or health. We'll let you know the moment something needs attention.
+        </Text>
+      </View>
+    );
+  }
+
   const activeCategory: "vehicles" | "properties" | "health" = onlyVehicle ? "vehicles" : onlyProperty ? "properties" : "health";
   const verticalItems = items.filter(i => i.category === activeCategory);
   const verticalHero = verticalItems.slice(0, 3);
@@ -1064,12 +1108,12 @@ function YourMonthAheadCard({
 
   const crossSellRoute = onlyVehicle ? CAT.properties.addRoute : CAT.vehicles.addRoute;
   const crossSellIconName: "home" | "car" = onlyVehicle ? "home" : "car";
-  const crossSellIconColor = onlyVehicle ? Colors.good : Colors.blue;
-  const crossSellIconBg = onlyVehicle ? Colors.goodMuted : Colors.blueMuted;
+  const crossSellIconColor = onlyVehicle ? Colors.home : Colors.vehicle;
+  const crossSellIconBg = onlyVehicle ? Colors.homeMuted : Colors.vehicleMuted;
 
   const activeIconName: "car" | "home" | "heart" = activeCategory === "vehicles" ? "car" : activeCategory === "properties" ? "home" : "heart";
-  const activeIconColor = activeCategory === "vehicles" ? Colors.blue : activeCategory === "properties" ? Colors.good : Colors.health;
-  const activeIconBg = activeCategory === "vehicles" ? Colors.blueMuted : activeCategory === "properties" ? Colors.goodMuted : Colors.healthMuted;
+  const activeIconColor = activeCategory === "vehicles" ? Colors.vehicle : activeCategory === "properties" ? Colors.home : Colors.health;
+  const activeIconBg = activeCategory === "vehicles" ? Colors.vehicleMuted : activeCategory === "properties" ? Colors.homeMuted : Colors.healthMuted;
 
   const narrative = verticalHero.length > 0
     ? `This month: ${joinNatural(verticalHero.map(monthAheadPhrase))}.`
@@ -1321,8 +1365,8 @@ function WelcomeView() {
       key: "vehicles" as const,
       icon: "car" as const,
       route: "/add-vehicle" as Href,
-      color: Colors.blue,
-      muted: Colors.blueMuted,
+      color: Colors.vehicle,
+      muted: Colors.vehicleMuted,
       title: "Start with your vehicle",
       body: "Never forget an oil change again. Takes 30 seconds to set up.",
       chips: ["Oil", "Tires", "Battery"],
@@ -1331,8 +1375,8 @@ function WelcomeView() {
       key: "properties" as const,
       icon: "home" as const,
       route: "/add-property" as Href,
-      color: Colors.good,
-      muted: Colors.goodMuted,
+      color: Colors.home,
+      muted: Colors.homeMuted,
       title: "Add your home",
       body: "Your house runs on a schedule. We'll tell you what it is.",
       chips: ["HVAC", "Filters", "Seasonal"],

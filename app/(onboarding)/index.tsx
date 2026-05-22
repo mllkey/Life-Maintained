@@ -185,7 +185,9 @@ export default function OnboardingStartScreen() {
     } else if (selected === "home") {
       completeAndGo("/(tabs)", "/add-property");
     } else {
-      completeAndGo("/(tabs)");
+      // Health: route into add-family-member so the user's first chosen
+      // intent becomes the next action, not a drop on the dashboard.
+      completeAndGo("/(tabs)", "/add-family-member");
     }
   }
 
@@ -214,7 +216,7 @@ export default function OnboardingStartScreen() {
           accessibilityRole="button"
           accessibilityLabel="Choose vehicle"
           onPress={() => handleSelect("vehicle")}
-          style={[styles.orb, styles.vehicleOrb, selected === "vehicle" && styles.selectedOrb, vehicleOrbStyle]}
+          style={[styles.orb, styles.vehicleOrb, selected === "vehicle" && { borderColor: VERTICALS[0].color, shadowColor: VERTICALS[0].color, shadowOpacity: 0.35 }, vehicleOrbStyle]}
         >
           <Ionicons name="car-sport-outline" size={30} color={Colors.accent} />
           <Text style={styles.orbText}>Vehicle</Text>
@@ -224,7 +226,7 @@ export default function OnboardingStartScreen() {
           accessibilityRole="button"
           accessibilityLabel="Choose home"
           onPress={() => handleSelect("home")}
-          style={[styles.orb, styles.homeOrb, selected === "home" && styles.selectedOrb, homeOrbStyle]}
+          style={[styles.orb, styles.homeOrb, selected === "home" && { borderColor: VERTICALS[1].color, shadowColor: VERTICALS[1].color, shadowOpacity: 0.35 }, homeOrbStyle]}
         >
           <Ionicons name="home-outline" size={30} color={Colors.home} />
           <Text style={styles.orbText}>Home</Text>
@@ -234,7 +236,7 @@ export default function OnboardingStartScreen() {
           accessibilityRole="button"
           accessibilityLabel="Choose health"
           onPress={() => handleSelect("health")}
-          style={[styles.orb, styles.healthOrb, selected === "health" && styles.selectedOrb, healthOrbStyle]}
+          style={[styles.orb, styles.healthOrb, selected === "health" && { borderColor: VERTICALS[2].color, shadowColor: VERTICALS[2].color, shadowOpacity: 0.35 }, healthOrbStyle]}
         >
           <Ionicons name="heart-outline" size={30} color={Colors.health} />
           <Text style={styles.orbText}>Health</Text>
@@ -354,9 +356,6 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 12 },
     elevation: 6,
-  },
-  selectedOrb: {
-    borderColor: Colors.accent,
   },
   vehicleOrb: {
     left: "50%",

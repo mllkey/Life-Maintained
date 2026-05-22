@@ -21,19 +21,26 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
 import { PaidActionCTA } from "@/components/PaidActionCTA";
+import { usePulse, S } from "@/components/Skeleton";
+import { loadConsumableProducts, type LocalizedProduct } from "@/lib/revenuecat";
 
-interface ScanPack {
+// Pack metadata (id, title, scan count, popularity). Price is loaded from
+// StoreKit via loadConsumableProducts at modal-present time so users see
+// localized currency and any App Store pricing changes propagate without
+// a code change.
+type ScanPackMeta = {
   id: "scan_pack_10" | "scan_pack_25";
   title: string;
   scans: number;
-  price: string;
   popular?: boolean;
-}
+};
 
-const PACKS: ScanPack[] = [
-  { id: "scan_pack_10", title: "10 scans", scans: 10, price: "$2.99" },
-  { id: "scan_pack_25", title: "25 scans", scans: 25, price: "$4.99", popular: true },
+const PACK_META: ScanPackMeta[] = [
+  { id: "scan_pack_10", title: "10 scans", scans: 10 },
+  { id: "scan_pack_25", title: "25 scans", scans: 25, popular: true },
 ];
+
+const PACK_IDS = PACK_META.map(p => p.id);
 
 export type ScanPackModalHandle = {
   present: () => boolean;
@@ -55,6 +62,16 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [products, setProducts] = useState<LocalizedProduct[] | null>(null);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const skeletonAnim = usePulse();
+
+  const loadProducts = useCallback(async () => {
+    setProductsLoading(true);
+    const list = await loadConsumableProducts(PACK_IDS);
+    setProducts(list);
+    setProductsLoading(false);
+  }, []);
 
   useImperativeHandle(ref, () => ({
     present: () => {
@@ -64,13 +81,16 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
         return false;
       }
       setPurchaseError(null);
+      // Kick product load. If already loaded, refresh in background so
+      // currency / price changes propagate the next time the sheet opens.
+      loadProducts();
       sheet.present();
       return true;
     },
     dismiss: () => {
       sheetRef.current?.dismiss();
     },
-  }), []);
+  }), [loadProducts]);
 
   // Called by the sheet when its dismiss animation completes (pan-down,
   // backdrop tap, or programmatic dismiss). Sync parent state.
@@ -115,7 +135,7 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
 
   const snapPoints = useMemo(() => ["55%"], []);
 
-  async function handlePurchase(pack: ScanPack) {
+  async function handlePurchase(pack: ScanPackMeta, _product: LocalizedProduct) {
     setPurchaseError(null);
     if (!user || Platform.OS === "web") {
       setPurchaseError("Open LifeMaintained on iPhone to buy a scan pack.");
@@ -218,19 +238,28 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
           </View>
         ) : null}
 
-        {PACKS.map(pack => {
+        {PACK_META.map(pack => {
           const isPurchasing = purchasingId === pack.id;
+          const product = products?.find(p => p.identifier === pack.id);
+          const isPriceReady = product !== undefined;
+          const isCardDisabled = purchasingId !== null || !isPriceReady;
           return (
             <Pressable
               key={pack.id}
               style={({ pressed }) => [
                 styles.packCard,
                 pack.popular && styles.packCardPopular,
-                { opacity: pressed || (purchasingId !== null && !isPurchasing) ? 0.6 : 1 },
+                { opacity: pressed || (purchasingId !== null && !isPurchasing) || !isPriceReady ? 0.6 : 1 },
               ]}
-              onPress={() => handlePurchase(pack)}
-              disabled={purchasingId !== null}
+              onPress={() => {
+                if (!product) return;
+                handlePurchase(pack, product);
+              }}
+              disabled={isCardDisabled}
               testID={`scan-pack-${pack.scans}`}
+              accessibilityRole="button"
+              accessibilityLabel={product ? `${pack.title}, ${product.priceString}` : `${pack.title}, loading price`}
+              accessibilityState={{ disabled: isCardDisabled, busy: isPurchasing }}
             >
               {pack.popular && (
                 <View style={styles.bestValueBadge}>
@@ -244,13 +273,27 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
               <View style={styles.packRight}>
                 {isPurchasing ? (
                   <ActivityIndicator size="small" color={Colors.accent} />
+                ) : product ? (
+                  <Text style={[styles.packPrice, pack.popular && { color: Colors.accent }]}>{product.priceString}</Text>
                 ) : (
-                  <Text style={[styles.packPrice, pack.popular && { color: Colors.accent }]}>{pack.price}</Text>
+                  <S anim={skeletonAnim} w={56} h={18} r={6} />
                 )}
               </View>
             </Pressable>
           );
         })}
+
+        {products === null && !productsLoading ? (
+          <Pressable
+            onPress={loadProducts}
+            style={({ pressed }) => [styles.retryRow, { opacity: pressed ? 0.7 : 1 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading prices"
+          >
+            <Ionicons name="refresh" size={14} color={Colors.textSecondary} />
+            <Text style={styles.retryText}>Couldn't load pricing — tap to retry</Text>
+          </Pressable>
+        ) : null}
 
         <PaidActionCTA
           label="Cancel"
@@ -358,5 +401,17 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: Colors.text,
     lineHeight: 18,
+  },
+  retryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+  },
+  retryText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
   },
 });

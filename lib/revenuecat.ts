@@ -49,6 +49,35 @@ function parseSyncResponse(data: unknown): SyncResult {
   return { ok: true, tier, expiresAt, action };
 }
 
+export type LocalizedProduct = {
+  identifier: string;
+  priceString: string;
+  price: number;
+  currencyCode: string;
+};
+
+/**
+ * Load StoreKit-localized product metadata for one-time consumable IAPs
+ * (scan packs). Returns `null` on failure. Caller decides UX (skeleton,
+ * retry, etc.) without coupling to RevenueCat types.
+ */
+export async function loadConsumableProducts(productIds: string[]): Promise<LocalizedProduct[] | null> {
+  try {
+    await rcReady;
+    const Purchases = (await import("react-native-purchases")).default;
+    const products = await Purchases.getProducts(productIds);
+    return products.map(p => ({
+      identifier: p.identifier,
+      priceString: p.priceString,
+      price: p.price,
+      currencyCode: p.currencyCode,
+    }));
+  } catch (e) {
+    if (__DEV__) console.error("[revenuecat] loadConsumableProducts failed:", e);
+    return null;
+  }
+}
+
 export async function syncSubscriptionFromRc(): Promise<SyncResult> {
   const { supabase } = await import("./supabase");
   const { data, error } = await supabase.functions.invoke("sync-subscription-from-rc", {
