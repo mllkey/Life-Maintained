@@ -17,7 +17,7 @@ import {
   Keyboard,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -141,6 +141,9 @@ export default function AddPropertyScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
+  const { onboarding } = useLocalSearchParams<{ onboarding?: string | string[] }>();
+  const onboardingParam = Array.isArray(onboarding) ? onboarding[0] : onboarding;
+  const isOnboarding = onboardingParam === "true";
 
   const [street, setStreet] = useState("");
   const [unit, setUnit] = useState("");
@@ -309,7 +312,7 @@ export default function AddPropertyScreen() {
       return;
     }
 
-    if (newProperty?.id) {
+    if (!isOnboarding && newProperty?.id) {
       // Fire-and-forget: generate AI schedule in background (same pattern as vehicles)
       (async () => {
         try {
@@ -346,6 +349,20 @@ export default function AddPropertyScreen() {
         property_type: propertyType,
       });
     }
+    if (isOnboarding && newProperty?.id) {
+      router.replace({
+        pathname: "/(onboarding)/building-property-plan",
+        params: {
+          propertyId: newProperty.id,
+          propertyName: nickname.trim() || street.trim() || "home",
+          propertyType,
+          yearBuilt: yearBuilt || "",
+          squareFootage: sqft || "",
+          zipCode: zip.trim() || "",
+        },
+      });
+      return;
+    }
     setShowToast(true);
     setTimeout(() => router.back(), 900);
   }
@@ -360,7 +377,7 @@ export default function AddPropertyScreen() {
           <Pressable onPress={() => router.back()} style={styles.closeBtn}>
             <Ionicons name="close" size={22} color={Colors.text} />
           </Pressable>
-          <Text style={styles.title}>Add Property</Text>
+          <Text style={styles.title}>{isOnboarding ? "Tell us about your home" : "Add Property"}</Text>
           <Pressable
             style={({ pressed }) => [styles.saveBtn, { opacity: pressed ? 0.8 : 1 }]}
             onPress={handleSave}
@@ -368,7 +385,7 @@ export default function AddPropertyScreen() {
           >
             {isLoading
               ? <ActivityIndicator size="small" color={Colors.textInverse} />
-              : <Text style={styles.saveBtnText}>Add Property</Text>}
+              : <Text style={styles.saveBtnText}>{isOnboarding ? "Continue" : "Add Property"}</Text>}
           </Pressable>
         </View>
 

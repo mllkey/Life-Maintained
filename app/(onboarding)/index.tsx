@@ -183,11 +183,11 @@ export default function OnboardingStartScreen() {
     if (selected === "vehicle") {
       router.push("/add-vehicle?onboarding=true");
     } else if (selected === "home") {
-      completeAndGo("/(tabs)", "/add-property");
+      completeAndGo("/(tabs)", "/add-property?onboarding=true");
     } else {
       // Health: route into add-family-member so the user's first chosen
       // intent becomes the next action, not a drop on the dashboard.
-      completeAndGo("/(tabs)", "/add-family-member");
+      completeAndGo("/(tabs)", "/add-family-member?onboarding=true");
     }
   }
 

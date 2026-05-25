@@ -32,8 +32,10 @@ export default function AddFamilyMemberScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
-  const { type } = useLocalSearchParams<{ type?: string | string[] }>();
+  const { type, onboarding } = useLocalSearchParams<{ type?: string | string[]; onboarding?: string | string[] }>();
   const typeParam = Array.isArray(type) ? type[0] : type;
+  const onboardingParam = Array.isArray(onboarding) ? onboarding[0] : onboarding;
+  const isOnboarding = onboardingParam === "true";
 
   const [name, setName] = useState("");
   const [memberType, setMemberType] = useState(typeParam === "pet" ? "pet" : "person");
@@ -99,19 +101,21 @@ export default function AddFamilyMemberScreen() {
     if (err) { setIsLoading(false); setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
     else {
       queryClient.invalidateQueries({ queryKey: ["family_members"] });
-      (async () => {
-        try {
-          await supabase.functions.invoke("generate-health-schedule", {
-            body: { family_member_id: newMember?.id },
-          });
-        } catch (scheduleErr) {
-          console.error("[generate-health-schedule] Caught:", scheduleErr);
-        } finally {
-          queryClient.invalidateQueries({ queryKey: ["health_appointments", user.id] });
-          queryClient.invalidateQueries({ queryKey: ["member_appointments", newMember?.id] });
-          queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-        }
-      })();
+      if (!isOnboarding) {
+        (async () => {
+          try {
+            await supabase.functions.invoke("generate-health-schedule", {
+              body: { family_member_id: newMember?.id },
+            });
+          } catch (scheduleErr) {
+            console.error("[generate-health-schedule] Caught:", scheduleErr);
+          } finally {
+            queryClient.invalidateQueries({ queryKey: ["health_appointments", user.id] });
+            queryClient.invalidateQueries({ queryKey: ["member_appointments", newMember?.id] });
+            queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+          }
+        })();
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (newMember?.id) {
         const analyticsMemberType: "person" | "pet" = memberType === "pet" ? "pet" : "person";
@@ -119,6 +123,19 @@ export default function AddFamilyMemberScreen() {
           family_member_id: newMember.id,
           member_type: analyticsMemberType,
         });
+      }
+      if (isOnboarding && newMember?.id) {
+        router.replace({
+          pathname: "/(onboarding)/building-health-plan",
+          params: {
+            familyMemberId: newMember.id,
+            memberName: name.trim(),
+            memberType,
+            petType: memberType === "pet" ? petType : "",
+            relationship: memberType === "person" ? relationship : "",
+          },
+        });
+        return;
       }
       setShowToast(true);
       setTimeout(() => router.back(), 900);
@@ -132,9 +149,9 @@ export default function AddFamilyMemberScreen() {
           <Pressable onPress={() => router.back()} style={styles.closeBtn}>
             <Ionicons name="close" size={22} color={Colors.text} />
           </Pressable>
-          <Text style={styles.title}>Add Family Member</Text>
+          <Text style={styles.title}>{isOnboarding ? "Tell us who to care for" : "Add Family Member"}</Text>
           <Pressable style={({ pressed }) => [styles.saveBtn, { opacity: pressed ? 0.8 : 1 }]} onPress={handleSave} disabled={isLoading}>
-            {isLoading ? <ActivityIndicator size="small" color={Colors.textInverse} /> : <Text style={styles.saveBtnText}>Add Family Member</Text>}
+            {isLoading ? <ActivityIndicator size="small" color={Colors.textInverse} /> : <Text style={styles.saveBtnText}>{isOnboarding ? "Continue" : "Add Family Member"}</Text>}
           </Pressable>
         </View>
 
