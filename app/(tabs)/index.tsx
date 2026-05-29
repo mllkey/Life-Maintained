@@ -484,8 +484,10 @@ export default function DashboardScreen() {
             <View style={styles.dashboardErrorIcon}>
               <Ionicons name="cloud-offline-outline" size={28} color={Colors.overdue} />
             </View>
-            <Text style={styles.dashboardErrorTitle}>Dashboard couldn't load</Text>
-            <Text style={styles.dashboardErrorBody}>Check your connection and try again.</Text>
+            <Text style={styles.dashboardErrorTitle}>We couldn’t refresh your dashboard</Text>
+            <Text style={styles.dashboardErrorBody}>
+              Your saved vehicles, properties, and health items are still safe. Try again when your connection looks steady.
+            </Text>
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -497,9 +499,13 @@ export default function DashboardScreen() {
                 { opacity: isRetrying ? 0.5 : pressed ? 0.85 : 1 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Try again"
+              accessibilityLabel={isRetrying ? "Retrying dashboard" : "Try loading dashboard again"}
             >
-              <Text style={styles.dashboardErrorBtnText}>Try again</Text>
+              {isRetrying ? (
+                <ActivityIndicator size="small" color={Colors.background} />
+              ) : (
+                <Text style={styles.dashboardErrorBtnText}>Try again</Text>
+              )}
             </Pressable>
           </View>
         ) : isNewUser ? (
@@ -1558,7 +1564,7 @@ const styles = StyleSheet.create({
   dashboardErrorBtnText: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
-    color: "#0C111B",
+    color: Colors.background,
     letterSpacing: -0.1,
   },
 
