@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
   ctaText: {
     fontSize: 17,
     fontFamily: "Inter_600SemiBold",
-    color: "#0C111B",
+    color: Colors.textInverse,
   },
   skip: {
     alignItems: "center",

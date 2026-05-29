@@ -146,8 +146,8 @@ export default function HomeTabScreen() {
           accessibilityLabel="Add a new property"
           accessibilityRole="button"
         >
-          <Ionicons name="add" size={18} color="#0C111B" />
-          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#0C111B" }}>Property</Text>
+          <Ionicons name="add" size={18} color={Colors.textInverse} />
+          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse }}>Property</Text>
         </Pressable>
       </View>
 

@@ -154,8 +154,8 @@ export default function VehiclesScreen() {
           accessibilityLabel="Add a new vehicle"
           accessibilityRole="button"
         >
-          <Ionicons name="add" size={18} color="#0C111B" />
-          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#0C111B" }}>Vehicle</Text>
+          <Ionicons name="add" size={18} color={Colors.textInverse} />
+          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse }}>Vehicle</Text>
         </Pressable>
       </View>
 

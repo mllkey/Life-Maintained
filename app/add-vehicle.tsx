@@ -1418,7 +1418,7 @@ export default function AddVehicleScreen() {
                       <GestureDetector gesture={onboardingSheetPan}>
                         <Reanimated.View
                           style={[
-                            { backgroundColor: "#0C111B", borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 12, paddingBottom: Math.max(insets.bottom, 16) },
+                            { backgroundColor: Colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 12, paddingBottom: Math.max(insets.bottom, 16) },
                             onboardingSheetStyle,
                           ]}
                         >
@@ -2082,8 +2082,8 @@ export default function AddVehicleScreen() {
         disabled={isLoading}
       >
         {isLoading
-          ? <ActivityIndicator size="small" color="#0C111B" />
-          : <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: "#0C111B" }}>Add Vehicle</Text>}
+          ? <ActivityIndicator size="small" color={Colors.textInverse} />
+          : <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.textInverse }}>Add Vehicle</Text>}
       </Pressable>
         </ScrollView>
       </View>

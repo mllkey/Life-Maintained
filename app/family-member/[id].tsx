@@ -941,7 +941,7 @@ export default function FamilyMemberDetailScreen() {
                     backgroundColor: completeDiy ? Colors.health : "transparent",
                     alignItems: "center", justifyContent: "center",
                   }}>
-                    {completeDiy && <Ionicons name="checkmark" size={16} color="#0C111B" />}
+                    {completeDiy && <Ionicons name="checkmark" size={16} color={Colors.textInverse} />}
                   </View>
                   <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text }}>
                     At-home / no provider

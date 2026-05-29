@@ -1441,7 +1441,7 @@ export default function VehicleDetailScreen() {
                       accessibilityRole="button"
                       accessibilityLabel="Generate maintenance schedule"
                     >
-                      <Text style={{ color: '#0C111B', fontSize: 16, fontFamily: 'Inter_600SemiBold' }}>Generate Schedule</Text>
+                      <Text style={{ color: Colors.textInverse, fontSize: 16, fontFamily: 'Inter_600SemiBold' }}>Generate Schedule</Text>
                     </Pressable>
                   )}
                   <ScheduleSkeleton />
@@ -2420,7 +2420,7 @@ function MarkCompleteSheet({
                 backgroundColor: diy ? "#E8943A" : "transparent",
                 alignItems: "center", justifyContent: "center",
               }}>
-                {diy && <Ionicons name="checkmark" size={16} color="#0C111B" />}
+                {diy && <Ionicons name="checkmark" size={16} color={Colors.textInverse} />}
               </View>
               <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text }}>I did this myself</Text>
             </Pressable>
@@ -2887,7 +2887,7 @@ const walletStyles = StyleSheet.create({
   slotCopyLink: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
-    color: "#0C111B",
+    color: Colors.textInverse,
     backgroundColor: "#E8943A",
     paddingHorizontal: 14,
     paddingVertical: 8,

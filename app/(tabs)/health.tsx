@@ -552,7 +552,7 @@ export default function HealthScreen() {
             accessibilityLabel="Add health item"
             accessibilityRole="button"
           >
-            <Ionicons name="add" size={18} color="#0C111B" />
+            <Ionicons name="add" size={18} color={Colors.textInverse} />
             <Text style={styles.addHeaderBtnText}>Add</Text>
           </Pressable>
         </View>
@@ -1009,7 +1009,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 10,
   },
-  addHeaderBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#0C111B" },
+  addHeaderBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 
   content: { paddingHorizontal: 20, paddingTop: 8, gap: 20 },
 

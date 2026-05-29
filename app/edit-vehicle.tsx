@@ -295,7 +295,7 @@ export default function EditVehicleScreen() {
             onPress={handleSave}
             disabled={saving}
           >
-            {saving ? <ActivityIndicator color="#0C111B" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
+            {saving ? <ActivityIndicator color={Colors.textInverse} /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -365,5 +365,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 8,
   },
-  saveBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#0C111B" },
+  saveBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.textInverse },
 });

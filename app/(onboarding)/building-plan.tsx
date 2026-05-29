@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
   readyText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.text },
   errorButtons: { paddingHorizontal: 20, gap: 12, marginTop: 20 },
   cta: { backgroundColor: Colors.accent, borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" },
-  ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: "#0C111B" },
+  ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
   skip: { alignItems: "center", paddingVertical: 4 },
   skipText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
   inlineError: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue, lineHeight: 19, textAlign: "center" },

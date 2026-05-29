@@ -595,7 +595,7 @@ const styles = StyleSheet.create({
   actions: { paddingHorizontal: 20, gap: 12 },
   errorButtons: { paddingHorizontal: 20, gap: 12, marginTop: 20 },
   cta: { backgroundColor: Colors.accent, borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" },
-  ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: "#0C111B" },
+  ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
   secondary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
   secondaryText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.health },
   skip: { alignItems: "center", paddingVertical: 4 },
