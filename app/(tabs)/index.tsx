@@ -35,6 +35,7 @@ import TrialBanner from "@/components/TrialBanner";
 import { resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode, isHoursTracked, isTimeOnly } from "@/lib/usageHelpers";
 import * as Linking from "expo-linking";
 import { LogSheet } from "@/components/LogSheet";
+import { SaveToast } from "@/components/SaveToast";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 import UpdateBanner from "@/components/UpdateBanner";
 
@@ -711,6 +712,16 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [toastVisible, setToastVisible] = useState(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current !== null) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
 
   const isStale = (v: MileageVehicle) => {
     if (!v.updated_at) return true;
@@ -740,6 +751,18 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
     const k = fieldKey(v, field);
     if (field === "hours") return inputs[k] ?? (v.hours != null ? String(v.hours) : "");
     return inputs[k] ?? (v.mileage != null ? String(v.mileage) : "");
+  }
+
+  function showUsageSavedToast() {
+    if (toastTimerRef.current !== null) {
+      clearTimeout(toastTimerRef.current);
+    }
+    setToastVisible(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    toastTimerRef.current = setTimeout(() => {
+      setToastVisible(false);
+      toastTimerRef.current = null;
+    }, 1800);
   }
 
   async function handleSave(v: MileageVehicle, field: "mileage" | "hours") {
@@ -788,6 +811,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
+      showUsageSavedToast();
       setTimeout(() => {
         setSaved(s => ({ ...s, [k]: false }));
       }, 1500);
@@ -812,24 +836,28 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
     const v = vehicles[0];
     const vehicleName = v.nickname ?? [v.year, v.make, v.model].filter(Boolean).join(" ");
     return (
-      <View style={styles.qmCard}>
-        <View style={styles.qmCardHeaderStatic}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.qmCardTitle}>{vehicleName}</Text>
-            <Text style={styles.qmCardSub}>{isHoursTracked(v) ? "Update hours" : "Update mileage"}</Text>
+      <>
+        <View style={styles.qmCard}>
+          <View style={styles.qmCardHeaderStatic}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.qmCardTitle}>{vehicleName}</Text>
+              <Text style={styles.qmCardSub}>{isHoursTracked(v) ? "Update hours" : "Update mileage"}</Text>
+            </View>
+          </View>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+            <UsageInputs {...usageProps} v={v} hideName />
           </View>
         </View>
-        <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
-          <UsageInputs {...usageProps} v={v} hideName />
-        </View>
-      </View>
+        <SaveToast visible={toastVisible} message="Usage updated" />
+      </>
     );
   }
 
   return (
-    <View style={styles.qmCard}>
-      <Pressable
-        style={styles.qmCardHeader}
+    <>
+      <View style={styles.qmCard}>
+        <Pressable
+          style={styles.qmCardHeader}
         onPress={() => {
           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           setExpanded(e => !e);
@@ -862,7 +890,9 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
           ))}
         </View>
       )}
-    </View>
+      </View>
+      <SaveToast visible={toastVisible} message="Usage updated" />
+    </>
   );
 }
 
