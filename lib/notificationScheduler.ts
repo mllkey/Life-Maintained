@@ -576,7 +576,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
             minute: medMinute,
           },
         });
-        // G10.3 — non-blocking schedule-event insert (PASS-E-005a).
+        // Best-effort schedule-event insert for notification audit history.
         supabase
           .from("notification_events")
           .insert({
@@ -652,7 +652,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
             date: triggerDate,
           },
         });
-        // G10.3 — non-blocking schedule-event insert (PASS-E-005a).
+        // Best-effort schedule-event insert for notification audit history.
         supabase
           .from("notification_events")
           .insert({

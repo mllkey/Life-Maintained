@@ -1,4 +1,4 @@
-// DEV-ONLY TEST TOOL — Build 85 Item 1.
+// DEV-ONLY TEST TOOL — notification deep-link validation.
 //
 // TODO POST-VALIDATION: revert the gate in app/(tabs)/settings.tsx from
 //   {(__DEV__ || user?.email === "...") && <DeveloperTestNotifications />}

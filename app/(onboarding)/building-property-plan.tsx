@@ -85,8 +85,8 @@ export default function BuildingPropertyPlanScreen() {
   const docGlow = useSharedValue(0);
   const readyOpacity = useSharedValue(0);
 
-  // Top-level shared values for particles. Mirrors building-plan.tsx PASS-D-002
-  // fix: each useSharedValue must be at a stable hook position on every render.
+  // Top-level shared values for particles. Mirrors the building-plan.tsx
+  // hook-stability pattern so every useSharedValue has a stable position.
   const particle0 = useSharedValue(0);
   const particle1 = useSharedValue(0);
   const particle2 = useSharedValue(0);

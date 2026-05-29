@@ -59,7 +59,7 @@ focusManager.setEventListener((handleFocus) => {
   return () => subscription.remove();
 });
 
-// G10.2 — module-scope debounce ref for profiles.last_active_at upsert.
+// Module-scope debounce ref for profiles.last_active_at upsert.
 // Survives component remounts; resets only on cold start.
 let lastActiveUpsertAt = 0;
 
@@ -92,8 +92,8 @@ function RootLayoutNav() {
         Notifications.setBadgeCountAsync(0).catch(() => {});
         scheduleMaintenanceNotifications(userId);
         capture("app_foregrounded", {});
-        // G10.2 — debounced last_active_at upsert (60s). Closes PASS-E-002.
-        // Non-blocking; rolls back ref on error so next foreground retries.
+        // Debounced last_active_at upsert. Non-blocking; rolls back the
+        // ref on error so the next foreground can retry.
         const nowMs = Date.now();
         if (nowMs - lastActiveUpsertAt >= 60000) {
           lastActiveUpsertAt = nowMs;
@@ -239,11 +239,11 @@ function RootLayoutNav() {
     message: string,
     data?: Record<string, string | number | boolean | null>,
   ) => {
-    Sentry.captureMessage(`[G10_79_NotifRoute] ${message}`, {
+    Sentry.captureMessage(`[notification_deeplink] ${message}`, {
       level: "info",
       tags: {
         area: "notification_deeplink",
-        diag: "g10_79",
+        diagnostic: "route_verification",
         source: typeof data?.source === "string" ? data.source : "unknown",
       },
       extra: {

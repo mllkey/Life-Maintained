@@ -96,7 +96,7 @@ export default function BuildingPlanScreen() {
   const docGlow = useSharedValue(0);
   const readyOpacity = useSharedValue(0);
 
-  // PASS-D-002 fix: useSharedValue must be called at top level on EVERY render.
+  // useSharedValue must be called at top level on every render.
   // Previous useMemo([]) wrapper called these 12 hooks only on first render,
   // causing a hook-count mismatch on re-renders that surfaced as a Reanimated
   // ".length of undefined" crash. Each line below is a stable hook position.
