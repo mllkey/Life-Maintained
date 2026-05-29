@@ -12,6 +12,13 @@ import { useAuth, getOnboardingKey } from "@/context/AuthContext";
 import { capture } from "@/lib/analytics";
 import { useQuery } from "@tanstack/react-query";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from "react-native-reanimated";
 
 const MAX_POLL_ATTEMPTS = 15; // 15 * 2s = 30 seconds max
 
@@ -19,6 +26,75 @@ const MAX_POLL_ATTEMPTS = 15; // 15 * 2s = 30 seconds max
 function oneParam(v: string | string[] | undefined): string {
   if (v == null) return "";
   return Array.isArray(v) ? (v[0] ?? "") : v;
+}
+
+type RevealTask = {
+  name: string;
+  next_due_date: string | null;
+  next_due_miles: number | null;
+  next_due_hours: number | null;
+  interval_miles: number | null;
+  interval_hours: number | null;
+  interval_months: number | null;
+};
+
+type CostEstimate = {
+  shop_low: number | null;
+  shop_high: number | null;
+};
+
+function getDueLabel(task: RevealTask): string {
+  const dateStr = task.next_due_date != null ? String(task.next_due_date).trim() : "";
+  const parsedDate = dateStr.length > 0 ? new Date(dateStr + (dateStr.includes("T") ? "" : "T12:00:00")) : null;
+  const isValidDate = parsedDate != null && !isNaN(parsedDate.getTime());
+
+  if (isValidDate) {
+    return "Due " + parsedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  if (task.next_due_miles != null) {
+    return "Due at " + Number(task.next_due_miles).toLocaleString() + " mi";
+  }
+  if (task.next_due_hours != null) {
+    return "Due at " + Number(task.next_due_hours).toLocaleString() + " hrs";
+  }
+  if (task.interval_months != null) {
+    return "Every " + task.interval_months + " months";
+  }
+  if (task.interval_miles != null) {
+    return "Every " + Number(task.interval_miles).toLocaleString() + " mi";
+  }
+  if (task.interval_hours != null) {
+    return "Every " + Number(task.interval_hours).toLocaleString() + " hrs";
+  }
+  return "Added to your maintenance plan";
+}
+
+function getHeroSentence(task: RevealTask, displayName: string): string {
+  const name = task.name.trim();
+  const service = name.toLowerCase();
+
+  if (task.next_due_miles != null) {
+    return `${displayName} needs ${service} at ${Number(task.next_due_miles).toLocaleString()} miles.`;
+  }
+  if (task.next_due_hours != null) {
+    return `${displayName} needs ${service} at ${Number(task.next_due_hours).toLocaleString()} hours.`;
+  }
+
+  const dateStr = task.next_due_date != null ? String(task.next_due_date).trim() : "";
+  const parsedDate = dateStr.length > 0 ? new Date(dateStr + (dateStr.includes("T") ? "" : "T12:00:00")) : null;
+  if (parsedDate != null && !isNaN(parsedDate.getTime())) {
+    return `${name} is coming up ${parsedDate.toLocaleDateString("en-US", { month: "long", day: "numeric" })}.`;
+  }
+
+  return `${name} is first in your maintenance plan.`;
+}
+
+function getCostString(est: CostEstimate | undefined): string | null {
+  if (!est) return null;
+  return formatCostDisplay(
+    est.shop_low != null ? Number(est.shop_low) : null,
+    est.shop_high != null ? Number(est.shop_high) : null,
+  ) || null;
 }
 
 export default function ValueRevealScreen() {
@@ -31,6 +107,15 @@ export default function ValueRevealScreen() {
   const [pollTimedOut, setPollTimedOut] = useState(false);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const skeletonAnim = usePulse();
+  const revealHapticsFired = useRef(false);
+
+  const heroOpacity = useSharedValue(0);
+  const heroY = useSharedValue(16);
+  const supportOneOpacity = useSharedValue(0);
+  const supportOneY = useSharedValue(12);
+  const supportTwoOpacity = useSharedValue(0);
+  const supportTwoY = useSharedValue(12);
+  const bridgeOpacity = useSharedValue(0);
 
   useEffect(() => {
     capture("onboarding_step_viewed", { step: "value_reveal" });
@@ -128,9 +213,61 @@ export default function ValueRevealScreen() {
     Haptics.selectionAsync();
   }
 
-  const tasksToShow = (topTasks ?? []).slice(0, 3);
+  const tasksToShow: RevealTask[] = (topTasks ?? []).slice(0, 3);
   const hasTasks = tasksToShow.length > 0;
   const displayName = vehicleName || "vehicle";
+  const heroTask = tasksToShow[0] ?? null;
+  const supportingTasks = tasksToShow.slice(1, 3);
+
+  useEffect(() => {
+    if (!hasTasks) {
+      revealHapticsFired.current = false;
+      heroOpacity.value = 0;
+      heroY.value = 16;
+      supportOneOpacity.value = 0;
+      supportOneY.value = 12;
+      supportTwoOpacity.value = 0;
+      supportTwoY.value = 12;
+      bridgeOpacity.value = 0;
+      return;
+    }
+
+    heroOpacity.value = withTiming(1, { duration: 360, easing: Easing.out(Easing.cubic) });
+    heroY.value = withTiming(0, { duration: 360, easing: Easing.out(Easing.cubic) });
+    supportOneOpacity.value = withDelay(150, withTiming(1, { duration: 280, easing: Easing.out(Easing.cubic) }));
+    supportOneY.value = withDelay(150, withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }));
+    supportTwoOpacity.value = withDelay(300, withTiming(1, { duration: 280, easing: Easing.out(Easing.cubic) }));
+    supportTwoY.value = withDelay(300, withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }));
+    bridgeOpacity.value = withDelay(420, withTiming(1, { duration: 260, easing: Easing.out(Easing.ease) }));
+
+    if (revealHapticsFired.current) return;
+    revealHapticsFired.current = true;
+    const timers = [
+      setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}), 80),
+      setTimeout(() => Haptics.selectionAsync().catch(() => {}), 230),
+      setTimeout(() => Haptics.selectionAsync().catch(() => {}), 380),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [hasTasks, heroOpacity, heroY, supportOneOpacity, supportOneY, supportTwoOpacity, supportTwoY, bridgeOpacity]);
+
+  const heroRevealStyle = useAnimatedStyle(() => ({
+    opacity: heroOpacity.value,
+    transform: [{ translateY: heroY.value }],
+  }));
+
+  const supportOneRevealStyle = useAnimatedStyle(() => ({
+    opacity: supportOneOpacity.value,
+    transform: [{ translateY: supportOneY.value }],
+  }));
+
+  const supportTwoRevealStyle = useAnimatedStyle(() => ({
+    opacity: supportTwoOpacity.value,
+    transform: [{ translateY: supportTwoY.value }],
+  }));
+
+  const bridgeRevealStyle = useAnimatedStyle(() => ({
+    opacity: bridgeOpacity.value,
+  }));
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 40 }]}>
@@ -164,41 +301,68 @@ export default function ValueRevealScreen() {
         )}
 
         {/* Task preview — skeletons while waiting; empty after poll timeout */}
-        {hasTasks ? (
+        {hasTasks && heroTask ? (
           <View style={styles.tasksSection}>
-            <Text style={styles.sectionLabel}>Coming up first</Text>
-            {tasksToShow.map((task, i) => {
-              const est = estimates?.[task.name.toLowerCase().trim()];
-              const costStr = est
-                ? formatCostDisplay(
-                    est.shop_low != null ? Number(est.shop_low) : null,
-                    est.shop_high != null ? Number(est.shop_high) : null,
-                  ) || null
-                : null;
+            <Text style={styles.sectionLabel}>First up</Text>
+            {(() => {
+              const heroCostStr = getCostString(estimates?.[heroTask.name.toLowerCase().trim()]);
               return (
-                <View key={i} style={styles.taskCard}>
-                  <View style={{ flex: 1, gap: 3 }}>
-                    <Text style={styles.taskName}>{task.name}</Text>
-                    <Text style={styles.taskMeta}>
-                      {(() => {
-                        const dateStr = task.next_due_date != null ? String(task.next_due_date).trim() : "";
-                        const parsedDate = dateStr.length > 0 ? new Date(dateStr + (dateStr.includes("T") ? "" : "T12:00:00")) : null;
-                        const isValidDate = parsedDate != null && !isNaN(parsedDate.getTime());
-                        return isValidDate ? "Due " + parsedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                          : task.next_due_miles != null ? "Due at " + Number(task.next_due_miles).toLocaleString() + " mi"
-                          : task.next_due_hours != null ? "Due at " + Number(task.next_due_hours).toLocaleString() + " hrs"
-                          : task.interval_months != null ? "Every " + task.interval_months + " months"
-                          : task.interval_miles != null ? "Every " + Number(task.interval_miles).toLocaleString() + " mi"
-                          : "";
-                      })()}
-                    </Text>
+                <Animated.View style={[styles.heroTaskCard, heroRevealStyle]}>
+                  <View style={styles.heroBadgeRow}>
+                    <View style={styles.heroBadgeIcon}>
+                      <Ionicons name="sparkles" size={15} color={Colors.accent} />
+                    </View>
+                    <Text style={styles.heroBadgeText}>Added to your plan</Text>
                   </View>
-                  {costStr && (
-                    <Text style={styles.taskCost}>{costStr}</Text>
-                  )}
-                </View>
+                  <Text style={styles.heroTaskName}>{heroTask.name}</Text>
+                  <Text style={styles.heroTaskSentence}>{getHeroSentence(heroTask, displayName)}</Text>
+                  <View style={styles.heroMetaRow}>
+                    <View style={styles.heroMetaPill}>
+                      <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} />
+                      <Text style={styles.heroMetaText}>{getDueLabel(heroTask)}</Text>
+                    </View>
+                    {heroCostStr ? (
+                      <View style={[styles.heroMetaPill, styles.heroCostPill]}>
+                        <Ionicons name="cash-outline" size={14} color={Colors.good} />
+                        <Text style={styles.heroCostText}>{heroCostStr}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Pressable
+                    onPress={handleOpenDashboard}
+                    style={({ pressed }) => [styles.planCta, { opacity: pressed ? 0.86 : 1 }]}
+                  >
+                    <Text style={styles.planCtaText}>Add to my plan</Text>
+                  </Pressable>
+                </Animated.View>
               );
-            })}
+            })()}
+
+            {supportingTasks.length > 0 ? (
+              <View style={styles.supportingSection}>
+                <Text style={styles.supportingLabel}>Also ready</Text>
+                {supportingTasks.map((task, i) => {
+                  const costStr = getCostString(estimates?.[task.name.toLowerCase().trim()]);
+                  return (
+                    <Animated.View
+                      key={task.name + i}
+                      style={[styles.supportTaskCard, i === 0 ? supportOneRevealStyle : supportTwoRevealStyle]}
+                    >
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <Text style={styles.taskName}>{task.name}</Text>
+                        <Text style={styles.taskMeta}>{getDueLabel(task)}</Text>
+                      </View>
+                      {costStr ? <Text style={styles.taskCost}>{costStr}</Text> : null}
+                    </Animated.View>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            <Animated.View style={[styles.bridgeBox, bridgeRevealStyle]}>
+              <Ionicons name="home-outline" size={15} color={Colors.home} />
+              <Text style={styles.bridgeText}>You’re tracking 1 vehicle. Add your property next to see what you’ve been missing.</Text>
+            </Animated.View>
           </View>
         ) : !pollTimedOut ? (
           // Still loading — show skeletons
@@ -262,8 +426,41 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text },
   subtitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
   trust: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
-  tasksSection: { gap: 10 },
+  tasksSection: { gap: 12 },
   sectionLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
+  heroTaskCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: Colors.accentMuted,
+    gap: 12,
+  },
+  heroBadgeRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  heroBadgeIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.accentMuted,
+  },
+  heroBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.accent, textTransform: "uppercase", letterSpacing: 0.5 },
+  heroTaskName: { fontSize: 23, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 29 },
+  heroTaskSentence: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
+  heroMetaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  heroMetaPill: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: Colors.surface },
+  heroCostPill: { backgroundColor: Colors.goodMuted },
+  heroMetaText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  heroCostText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.good },
+  planCta: { backgroundColor: Colors.accent, borderRadius: 14, height: 48, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  planCtaText: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.background },
+  supportingSection: { gap: 9, marginTop: 2 },
+  supportingLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.5 },
+  supportTaskCard: {
+    flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 14,
+    padding: 14, borderWidth: 1, borderColor: Colors.border,
+  },
   taskCard: {
     flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 14,
     padding: 14, borderWidth: 1, borderColor: Colors.border,
@@ -271,12 +468,14 @@ const styles = StyleSheet.create({
   taskName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
   taskMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   taskCost: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.good },
+  bridgeBox: { flexDirection: "row", gap: 8, alignItems: "center", backgroundColor: Colors.surface, borderRadius: 14, padding: 12 },
+  bridgeText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary, lineHeight: 19 },
   infoBox: {
     flexDirection: "row", gap: 8, backgroundColor: Colors.surface ?? Colors.card, borderRadius: 10, padding: 12, alignItems: "center",
   },
   infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, lineHeight: 19 },
   cta: { backgroundColor: Colors.accent, borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" },
-  ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: "#0C111B" },
+  ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.background },
   secondary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
   secondaryText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.home },
   inlineError: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue, lineHeight: 19, textAlign: "center" },
