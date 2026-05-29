@@ -7,12 +7,12 @@ import {
   ScrollView,
   Text,
   Modal,
-  useColorScheme,
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { queryClient } from "@/lib/query-client";
+import { Colors } from "@/constants/colors";
 
 export type ErrorFallbackProps = {
   error: Error;
@@ -20,17 +20,16 @@ export type ErrorFallbackProps = {
 };
 
 export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
 
   const theme = {
-    background: isDark ? "#000000" : "#FFFFFF",
-    backgroundSecondary: isDark ? "#1C1C1E" : "#F2F2F7",
-    text: isDark ? "#FFFFFF" : "#000000",
-    textSecondary: isDark ? "rgba(255, 255, 255, 0.7)" : "rgba(0, 0, 0, 0.7)",
-    link: "#007AFF",
-    buttonText: "#FFFFFF",
+    background: Colors.background,
+    backgroundSecondary: Colors.card,
+    text: Colors.text,
+    textSecondary: Colors.textSecondary,
+    link: Colors.accent,
+    buttonText: Colors.textInverse,
+    border: Colors.border,
   };
 
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -133,9 +132,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                 style={[
                   styles.modalHeader,
                   {
-                    borderBottomColor: isDark
-                      ? "rgba(255, 255, 255, 0.1)"
-                      : "rgba(0, 0, 0, 0.1)",
+                    borderBottomColor: theme.border,
                   },
                 ]}
               >
