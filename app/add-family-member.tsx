@@ -220,6 +220,7 @@ export default function AddFamilyMemberScreen() {
               <Ionicons name="calendar-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
               <TextInput style={styles.inputInner} value={dob} onChangeText={t => setDob(formatDob(t))} placeholder="MM/DD/YYYY" placeholderTextColor={Colors.textTertiary} keyboardType="numeric" maxLength={10} />
             </View>
+            <Text style={styles.fieldHelper}>Used to recommend age-appropriate screenings and care reminders.</Text>
           </View>
         </ScrollView>
       </View>
@@ -249,6 +250,7 @@ const styles = StyleSheet.create({
   errorText: { flex: 1, fontSize: 13, color: Colors.overdue, fontFamily: "Inter_400Regular" },
   section: { gap: 8 },
   sectionTitle: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 1.5 },
+  fieldHelper: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, lineHeight: 17 },
   typeRow: { flexDirection: "row", gap: 10 },
   typeBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 14, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
   typeBtnSelected: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },

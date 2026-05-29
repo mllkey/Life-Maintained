@@ -1101,7 +1101,7 @@ function YourMonthAheadCard({
       : "Nothing due this month in health.";
 
   const crossSellCopy = onlyVehicle
-    ? `Tracking ${vehicleDisplayName} is a strong start. Add your home next so LifeMaintained can plan more of your month.`
+    ? `Tracking ${vehicleDisplayName} is a strong start. Add your property next so LifeMaintained can plan more of your month.`
     : onlyProperty
       ? "Your home is covered. Add your vehicle next so your month feels easier to see."
       : "Health reminders are in one place. Add your vehicle next to bring more of your maintenance into view.";
@@ -1377,7 +1377,7 @@ function WelcomeView() {
       route: "/add-property" as Href,
       color: Colors.home,
       muted: Colors.homeMuted,
-      title: "Add your home",
+      title: "Add your property",
       body: "Your house runs on a schedule. We'll tell you what it is.",
       chips: ["HVAC", "Filters", "Seasonal"],
     },
