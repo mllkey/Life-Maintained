@@ -963,7 +963,7 @@ export default function AddVehicleScreen() {
       setError("Please select a valid year");
       return;
     }
-    if (MILEAGE_TRACKED_TYPES.has(vehicleType) && !avgMilesPerMonth.trim()) {
+    if ((MILEAGE_TRACKED_TYPES.has(vehicleType) || HOURS_TRACKED_TYPES.has(vehicleType)) && !avgMilesPerMonth.trim()) {
       setError(
         HOURS_TRACKED_TYPES.has(vehicleType)
           ? "Estimated monthly hours is required for this vehicle type"
