@@ -332,7 +332,7 @@ export default function ValueRevealScreen() {
                     onPress={handleOpenDashboard}
                     style={({ pressed }) => [styles.planCta, { opacity: pressed ? 0.86 : 1 }]}
                   >
-                    <Text style={styles.planCtaText}>Add to my plan</Text>
+                    <Text style={styles.planCtaText}>View my plan</Text>
                   </Pressable>
                 </Animated.View>
               );
@@ -410,7 +410,7 @@ export default function ValueRevealScreen() {
           style={({ pressed }) => [styles.cta, { opacity: pressed ? 0.85 : 1 }]}
           onPress={handleOpenDashboard}
         >
-          <Text style={styles.ctaText}>Open my dashboard</Text>
+          <Text style={styles.ctaText}>View my plan</Text>
         </Pressable>
       </ScrollView>
     </View>

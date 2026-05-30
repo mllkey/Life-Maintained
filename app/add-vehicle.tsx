@@ -964,7 +964,11 @@ export default function AddVehicleScreen() {
       return;
     }
     if (MILEAGE_TRACKED_TYPES.has(vehicleType) && !avgMilesPerMonth.trim()) {
-      setError("Estimated monthly miles is required for this vehicle type");
+      setError(
+        HOURS_TRACKED_TYPES.has(vehicleType)
+          ? "Estimated monthly hours is required for this vehicle type"
+          : "Estimated monthly miles is required for this vehicle type"
+      );
       return;
     }
 
@@ -1355,13 +1359,13 @@ export default function AddVehicleScreen() {
 
                   {MILEAGE_TRACKED_TYPES.has(vehicleType) ? (
                     <View style={styles.field}>
-                      <Text style={styles.fieldLabel}>Usage</Text>
+                      <Text style={styles.fieldLabel}>Estimated monthly miles *</Text>
                       <TextInput
                         accessibilityLabel="Avg miles per month"
                         style={styles.fieldInput}
                         value={avgMilesPerMonth}
                         onChangeText={setAvgMilesPerMonth}
-                        placeholder="Avg miles per month"
+                        placeholder="e.g. 800"
                         placeholderTextColor={Colors.textTertiary}
                         keyboardType="number-pad"
                         returnKeyType="done"
@@ -1378,13 +1382,13 @@ export default function AddVehicleScreen() {
                     </View>
                   ) : HOURS_TRACKED_TYPES.has(vehicleType) ? (
                     <View style={styles.field}>
-                      <Text style={styles.fieldLabel}>Usage</Text>
+                      <Text style={styles.fieldLabel}>Estimated monthly hours *</Text>
                       <TextInput
                         accessibilityLabel="Avg hours per month"
                         style={styles.fieldInput}
                         value={avgMilesPerMonth}
                         onChangeText={setAvgMilesPerMonth}
-                        placeholder="Avg hours per month"
+                        placeholder="e.g. 40"
                         placeholderTextColor={Colors.textTertiary}
                         keyboardType="number-pad"
                         returnKeyType="done"

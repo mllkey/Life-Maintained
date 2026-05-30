@@ -454,7 +454,7 @@ export default function BuildingPlanScreen() {
       {!failed && ready && (
         <View style={{ paddingHorizontal: 20 }}>
           <Pressable style={styles.cta} onPress={handleViewPlan}>
-            <Text style={styles.ctaText}>See my plan</Text>
+            <Text style={styles.ctaText}>View my plan</Text>
           </Pressable>
         </View>
       )}
