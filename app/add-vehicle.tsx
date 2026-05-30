@@ -985,7 +985,7 @@ export default function AddVehicleScreen() {
     } catch {}
 
     const hasCandidates = walletCandidates && walletCandidates.length > 0;
-    const inferredMode = isOnboarding ? "mileage" : inferTrackingMode(selectedVehicleCategory);
+    const inferredMode = inferTrackingMode(selectedVehicleCategory);
     const vehicleData = isOnboarding
       ? {
           user_id: user.id,
@@ -1269,6 +1269,27 @@ export default function AddVehicleScreen() {
                   </Text>
                 </FieldGroup>
 
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    setOnboardingTypeSheetVisible(true);
+                  }}
+                  style={{ height: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginTop: 8, marginBottom: 8 }}
+                >
+                  <View>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 15, color: "#8E93A1" }}>Vehicle type</Text>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 17, color: Colors.text, marginTop: 2 }}>
+                      {({ car: "Car", motorcycle: "Motorcycle", rv: "RV", atv: "ATV", utv: "UTV", snowmobile: "Snowmobile", boat: "Boat", dump_truck: "Dump Truck", semi_truck: "Semi Truck" } as Record<string, string>)[vehicleType] ?? "Car"}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 15, color: "#E8943A" }}>Change</Text>
+                    <Ionicons name="chevron-forward" size={18} color="#E8943A" />
+                  </View>
+                </Pressable>
+
                 <FieldGroup label="Basic Info">
                   <View style={styles.row}>
                     <View style={{ flex: 1 }}>
@@ -1289,7 +1310,18 @@ export default function AddVehicleScreen() {
                     </View>
                   </View>
 
-                  {modelLoadFailed && nhtsaModels.length === 0 ? (
+                  {SKIP_NHTSA_MODELS.has(vehicleType) ? (
+                    <View style={styles.field}>
+                      <Text style={styles.fieldLabel}>Model *</Text>
+                      <TextInput
+                        style={styles.fieldInput}
+                        value={model}
+                        onChangeText={setModel}
+                        placeholder={vehicleType === "boat" ? "e.g. Yamaha AR190" : "e.g. Model name"}
+                        placeholderTextColor={Colors.textTertiary}
+                      />
+                    </View>
+                  ) : modelLoadFailed && nhtsaModels.length === 0 ? (
                     <View style={styles.field}>
                       <Text style={styles.fieldLabel}>Model *</Text>
                       <TextInput
@@ -1311,27 +1343,6 @@ export default function AddVehicleScreen() {
                     />
                   )}
                 </FieldGroup>
-
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    setOnboardingTypeSheetVisible(true);
-                  }}
-                  style={{ height: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginTop: 8, marginBottom: 8 }}
-                >
-                  <View>
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 15, color: "#8E93A1" }}>Vehicle type</Text>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 17, color: Colors.text, marginTop: 2 }}>
-                      {({ car: "Car", motorcycle: "Motorcycle", rv: "RV", atv: "ATV", utv: "UTV", boat: "Boat", dump_truck: "Dump Truck", semi_truck: "Semi Truck" } as Record<string, string>)[vehicleType] ?? "Car"}
-                    </Text>
-                  </View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 15, color: "#E8943A" }}>Change</Text>
-                    <Ionicons name="chevron-forward" size={18} color="#E8943A" />
-                  </View>
-                </Pressable>
 
                 <FieldGroup label="Mileage">
                   {!HOURS_TRACKED_TYPES.has(vehicleType) && (
@@ -1436,6 +1447,7 @@ export default function AddVehicleScreen() {
                             { value: "rv", label: "RV", icon: "cube-outline" as const },
                             { value: "atv", label: "ATV", icon: "cube-outline" as const },
                             { value: "utv", label: "UTV", icon: "cube-outline" as const },
+                            { value: "snowmobile", label: "Snowmobile", icon: "snow-outline" as const },
                             { value: "boat", label: "Boat", icon: "boat-outline" as const },
                             { value: "dump_truck", label: "Dump Truck", icon: "cube-outline" as const },
                             { value: "semi_truck", label: "Semi Truck", icon: "cube-outline" as const },
