@@ -971,6 +971,13 @@ export default function AddVehicleScreen() {
       );
       return;
     }
+    if (isOnboarding && HOURS_TRACKED_TYPES.has(vehicleType)) {
+      const h = parseFloat(engineHours.replace(/,/g, ""));
+      if (!engineHours.trim() || /[eE]/.test(engineHours) || !Number.isFinite(h) || h < 0 || h > 999999) {
+        setError("Current engine hours is required for this vehicle type");
+        return;
+      }
+    }
 
     // 2. Paywall check (must await before dismissing — can't dismiss if paywall needs to show)
     try {
@@ -986,6 +993,10 @@ export default function AddVehicleScreen() {
 
     const hasCandidates = walletCandidates && walletCandidates.length > 0;
     const inferredMode = inferTrackingMode(selectedVehicleCategory);
+    const parsedEngineHours = (() => {
+      const n = parseFloat(engineHours.replace(/,/g, ""));
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    })();
     const vehicleData = isOnboarding
       ? {
           user_id: user.id,
@@ -1000,7 +1011,7 @@ export default function AddVehicleScreen() {
           is_awd: isAwd,
           tracking_mode: (MILEAGE_TRACKED_TYPES.has(vehicleType) ? 'mileage' : HOURS_TRACKED_TYPES.has(vehicleType) ? 'hours' : 'time'),
           mileage: HOURS_TRACKED_TYPES.has(vehicleType) ? null : (mileage ? parseInt(mileage.replace(/,/g, ""), 10) : null),
-          hours: null,
+          hours: HOURS_TRACKED_TYPES.has(vehicleType) ? parsedEngineHours : null,
           average_miles_per_month: (MILEAGE_TRACKED_TYPES.has(vehicleType) || HOURS_TRACKED_TYPES.has(vehicleType)) ? Number(avgMilesPerMonth) : null,
           last_mileage_update: new Date().toISOString(),
           is_seasonal: false,
@@ -1067,7 +1078,7 @@ export default function AddVehicleScreen() {
               model: model.trim(),
               year: String(yearNum),
               currentMileage: String(mileage ? parseInt(mileage.replace(/,/g, ""), 10) : 0),
-              currentHours: String(vehicleData.hours ?? 0),
+              currentHours: String(HOURS_TRACKED_TYPES.has(vehicleType) ? (parsedEngineHours ?? 0) : 0),
               trackingMode: inferredMode,
               fuelType: fuelType,
               vehicleCategory: selectedVehicleCategory,
@@ -1392,6 +1403,27 @@ export default function AddVehicleScreen() {
                       })()}
                     </View>
                   ) : HOURS_TRACKED_TYPES.has(vehicleType) ? (
+                    <>
+                    <View style={styles.field}>
+                      <Text style={styles.fieldLabel}>Current engine hours *</Text>
+                      <TextInput
+                        style={styles.fieldInput}
+                        value={engineHours}
+                        onChangeText={(t) => {
+                          if (/[eE]/.test(t)) return;
+                          const n = parseFloat(t.replace(/,/g, ""));
+                          if (!isNaN(n) && n > 999999) return;
+                          setEngineHours(t);
+                        }}
+                        placeholder="e.g. 125.5"
+                        placeholderTextColor={Colors.textTertiary}
+                        keyboardType="decimal-pad"
+                        returnKeyType="done"
+                      />
+                      <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 4 }}>
+                        Use the hour-meter reading for this asset. You can update it later.
+                      </Text>
+                    </View>
                     <View style={styles.field}>
                       <Text style={styles.fieldLabel}>Estimated monthly hours *</Text>
                       <TextInput
@@ -1414,6 +1446,7 @@ export default function AddVehicleScreen() {
                         ) : null;
                       })()}
                     </View>
+                    </>
                   ) : null}
                 </FieldGroup>
 
