@@ -321,6 +321,7 @@ const VEHICLE_TYPES = VEHICLE_TYPE_GROUPS.flatMap(g => g.types);
 const SKIP_FUEL_TYPES = new Set(["lawnmower", "chainsaw", "generator", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder", "excavator", "skid_steer", "mini_excavator", "compact_track_loader", "backhoe", "wheel_loader", "telehandler", "forklift", "trailer", "dump_trailer", "dumpster"]);
 
 const SKIP_NHTSA_MODELS = new Set(["boat", "pwc", "atv", "utv", "snowmobile", "rv", "lawnmower", "chainsaw", "generator", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder", "excavator", "skid_steer", "mini_excavator", "compact_track_loader", "backhoe", "wheel_loader", "telehandler", "forklift", "trailer", "dump_trailer", "dumpster"]);
+const MANUAL_MODEL_TYPES = new Set(["lawnmower", "chainsaw", "generator", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder", "excavator", "skid_steer", "mini_excavator", "compact_track_loader", "backhoe", "wheel_loader", "telehandler", "forklift", "trailer", "dump_trailer", "dumpster"]);
 
 const FUEL_TYPES: { value: "gas" | "diesel" | "hybrid" | "ev"; label: string }[] = [
   { value: "gas",     label: "Gas" },
@@ -1321,7 +1322,7 @@ export default function AddVehicleScreen() {
                     </View>
                   </View>
 
-                  {SKIP_NHTSA_MODELS.has(vehicleType) ? (
+                  {MANUAL_MODEL_TYPES.has(vehicleType) ? (
                     <View style={styles.field}>
                       <Text style={styles.fieldLabel}>Model *</Text>
                       <TextInput
@@ -1861,7 +1862,7 @@ export default function AddVehicleScreen() {
               </View>
             )}
 
-            {SKIP_NHTSA_MODELS.has(vehicleType) ? (
+            {MANUAL_MODEL_TYPES.has(vehicleType) ? (
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>Model *</Text>
                 <TextInput
@@ -2166,6 +2167,7 @@ export default function AddVehicleScreen() {
         showCustomModel={showCustomModel}
         isLoadingModels={isLoadingModels}
         yearAndMakeSet={!!year && !!make}
+        hasRemoteSource={vehicleType === "car" || vehicleType === "motorcycle"}
         onSelect={selectModel}
         onClose={() => { setModelPickerVisible(false); setModelSearch(""); }}
         insets={insets}
@@ -2495,7 +2497,7 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
   );
 }
 
-function ModelPickerModal({ visible, search, onSearchChange, filteredModels, showCustomModel, isLoadingModels, yearAndMakeSet, onSelect, onClose, insets }: {
+function ModelPickerModal({ visible, search, onSearchChange, filteredModels, showCustomModel, isLoadingModels, yearAndMakeSet, hasRemoteSource, onSelect, onClose, insets }: {
   visible: boolean;
   search: string;
   onSearchChange: (s: string) => void;
@@ -2503,6 +2505,7 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
   showCustomModel: boolean;
   isLoadingModels: boolean;
   yearAndMakeSet: boolean;
+  hasRemoteSource: boolean;
   onSelect: (m: string) => void;
   onClose: () => void;
   insets: { bottom: number };
@@ -2566,9 +2569,11 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
               style={{ maxHeight: 320 }}
               contentContainerStyle={{ paddingBottom: 20 }}
               ListHeaderComponent={
-                <Text style={styles.modelHint}>
-                  Don't see your model? Type it in the search bar above.
-                </Text>
+                filteredModels.length > 0 ? (
+                  <Text style={styles.modelHint}>
+                    Don't see your model? Type it in the search bar above.
+                  </Text>
+                ) : null
               }
               getItemLayout={(_, index) => ({
                 length: MODEL_ITEM_HEIGHT,
@@ -2599,9 +2604,11 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
               ListEmptyComponent={
                 <View style={styles.listEmpty}>
                   <Text style={styles.listEmptyText}>
-                    {filteredModels.length === 0 && !search
-                      ? "Models are loading slowly. Type your model in the search bar above — it works even without the list."
-                      : "No matches. Type your model above."}
+                    {search.trim().length > 0
+                      ? "No matches. Type your model in the search bar above."
+                      : hasRemoteSource
+                      ? "No models found. Type your model in the search bar above."
+                      : "Type your model in the search bar above to add it."}
                   </Text>
                 </View>
               }
