@@ -36,9 +36,10 @@ function getTemplateTasks(memberType: string, age: number, sexAtBirth: string, p
         { appointment_type: "Flea Prevention", interval_months: 1, priority: "medium" },
       ];
     }
+    // Non-dog/cat pets (fish, bird, rabbit, other): annual vet visit only.
+    // Vaccination needs are species-specific — never force a generic vaccine.
     return [
       { appointment_type: "Annual Vet Visit", interval_months: 12, priority: "high" },
-      { appointment_type: "Vaccinations", interval_months: 12, priority: "high" },
     ];
   }
 
@@ -114,9 +115,10 @@ function injectRequired(tasks: HealthTask[], memberType: string, petType: string
     if (!hasType("Annual Physical")) result.push({ appointment_type: "Annual Physical", interval_months: 12, priority: "high" });
     if (!hasType("Dental Cleaning")) result.push({ appointment_type: "Dental Cleaning", interval_months: 6, priority: "medium" });
   } else {
+    const pt = petType.toLowerCase();
     if (!hasType("Annual Vet Visit")) result.push({ appointment_type: "Annual Vet Visit", interval_months: 12, priority: "high" });
-    if (!hasType("Vaccinations")) result.push({ appointment_type: "Vaccinations", interval_months: 12, priority: "high" });
-    if (petType.toLowerCase() === "dog" && !hasType("Dental Cleaning")) {
+    if ((pt === "dog" || pt === "cat") && !hasType("Vaccinations")) result.push({ appointment_type: "Vaccinations", interval_months: 12, priority: "high" });
+    if (pt === "dog" && !hasType("Dental Cleaning")) {
       result.push({ appointment_type: "Dental Cleaning", interval_months: 12, priority: "medium" });
     }
   }

@@ -479,8 +479,6 @@ Deno.serve(async (req: Request) => {
     const MOTORCYCLE_REQUIRED: RequiredTask[] = [
       { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], task: "Engine Oil & Filter Change", description: "Change engine oil and replace oil filter per manufacturer spec", category: "Engine", interval_miles: 4000, interval_hours: null, interval_months: 6, priority: "high" },
       { match: [/brake.*fluid/i], task: "Brake Fluid Flush", description: "Replace brake fluid to maintain stopping performance", category: "Brakes", interval_miles: null, interval_hours: null, interval_months: 24, priority: "high" },
-      { match: [/chain.*clean/i, /chain.*lube/i, /chain.*lubrication/i, /chain maintenance/i], task: "Chain Clean & Lube", description: "Clean and lubricate the drive chain", category: "Drivetrain", interval_miles: 400, interval_hours: null, interval_months: 1, priority: "high" },
-      { match: [/chain.*adjust/i, /chain.*tension/i], task: "Chain Adjustment", description: "Check and adjust chain tension and alignment", category: "Drivetrain", interval_miles: 3000, interval_hours: null, interval_months: 6, priority: "medium" },
       { match: [/valve.*check/i, /valve.*clearance/i, /valve.*adjust/i, /valve.*inspection/i], task: "Valve Check / Adjustment", description: "Check and adjust valve clearances per manufacturer spec", category: "Engine", interval_miles: 15000, interval_hours: null, interval_months: 24, priority: "high" },
       { match: [/brake.*pad/i, /brake.*inspection/i], task: "Brake Pad Inspection", description: "Inspect brake pads for wear and replace if needed", category: "Brakes", interval_miles: 7500, interval_hours: null, interval_months: 12, priority: "high" },
       { match: [/tire.*inspect/i, /tire.*check/i, /tire.*wear/i, /tire.*pressure/i], task: "Tire Inspection", description: "Inspect tires for wear, damage, and proper pressure", category: "Safety", interval_miles: 3000, interval_hours: null, interval_months: 3, priority: "high" },
@@ -557,12 +555,21 @@ Deno.serve(async (req: Request) => {
       }
       return t;
     }
+    // EV guard: electric vehicles have no internal-combustion tasks. Strip any the
+    // model emitted AND never force-inject them. Deterministic on fuel_type. NOTE:
+    // drivetrain belts (final-drive belt on an electric motorcycle) are intentionally
+    // NOT in ICE_ONLY — only engine accessory/serpentine/timing belts are.
+    const ICE_ONLY: RegExp[] = [/oil.*change/i, /oil.*filter/i, /engine oil/i, /spark.*plug/i, /fuel.*filter/i, /fuel.*system/i, /fuel.*inject/i, /emission/i, /\bpcv\b/i, /catalytic/i, /muffler/i, /exhaust/i, /smog/i, /timing belt/i, /serpentine/i, /accessory belt/i];
+    const isEvFuel = resolvedVehicleType === "ev";
+    const isIceOnly = (name: string) => ICE_ONLY.some(re => re.test(name));
     function validateAndEnforce(tasks: ValidatedTask[], vCat: string): ValidatedTask[] {
       const clamps = getClampsForCategory(vCat);
       const required = getRequiredForCategory(vCat);
       let v = tasks.map(t => ({ ...clampTask(t, clamps), category: normalizeCategory(t.category), priority: normalizePriority(t.priority) }));
       v = v.filter(t => t.task.trim() !== "" && (t.interval_miles !== null || t.interval_hours !== null || t.interval_months !== null));
+      if (isEvFuel) v = v.filter(t => !isIceOnly(t.task));
       for (const req of required) {
+        if (isEvFuel && isIceOnly(req.task)) continue;
         if (!v.some(t => req.match.some(re => re.test(t.task)))) {
           v.push({ task: req.task, description: req.description, category: normalizeCategory(req.category), interval_miles: req.interval_miles, interval_hours: req.interval_hours, interval_months: req.interval_months, priority: normalizePriority(req.priority) });
         }
@@ -747,7 +754,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
                 { key: "steering_bearing", patterns: [/steering.*head.*bearing/i], canonical: "", description: "", remove: true, removeCondition: () => isSmallMoto },
                 { key: "wheel_bearing", patterns: [/wheel.*bearing/i], canonical: "", description: "", remove: true, removeCondition: () => isSmallMoto },
                 { key: "general_inspection", patterns: [/general.*inspect/i, /safety.*inspect/i, /multi.*point/i], canonical: "", description: "", remove: true },
-                { key: "winterization", patterns: [/winteriz/i], canonical: "", description: "", remove: true, removeCondition: () => isSmallMoto || vehicleCategory === "motorcycle" || vehicleCategory === "atv" || vehicleCategory === "utv" },
+                { key: "winterization", patterns: [/winteriz/i], canonical: "", description: "", remove: true, removeCondition: () => vehicleCategory === "motorcycle" || vehicleCategory === "atv" || vehicleCategory === "utv" },
               ];
 
               // Step 1: Map each task to a family
