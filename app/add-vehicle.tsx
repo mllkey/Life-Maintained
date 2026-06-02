@@ -321,7 +321,6 @@ const VEHICLE_TYPES = VEHICLE_TYPE_GROUPS.flatMap(g => g.types);
 const SKIP_FUEL_TYPES = new Set(["lawnmower", "chainsaw", "generator", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder", "excavator", "skid_steer", "mini_excavator", "compact_track_loader", "backhoe", "wheel_loader", "telehandler", "forklift", "trailer", "dump_trailer", "dumpster"]);
 
 const SKIP_NHTSA_MODELS = new Set(["boat", "pwc", "atv", "utv", "snowmobile", "rv", "lawnmower", "chainsaw", "generator", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder", "excavator", "skid_steer", "mini_excavator", "compact_track_loader", "backhoe", "wheel_loader", "telehandler", "forklift", "trailer", "dump_trailer", "dumpster"]);
-const MANUAL_MODEL_TYPES = new Set(["lawnmower", "chainsaw", "generator", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder", "excavator", "skid_steer", "mini_excavator", "compact_track_loader", "backhoe", "wheel_loader", "telehandler", "forklift", "trailer", "dump_trailer", "dumpster"]);
 
 const FUEL_TYPES: { value: "gas" | "diesel" | "hybrid" | "ev"; label: string }[] = [
   { value: "gas",     label: "Gas" },
@@ -407,6 +406,26 @@ const HARDCODED_MODELS: Record<string, Record<string, string[]>> = {
       "Rave RE 3700 850 E-TEC",
       "Shredder RE 3700 850 E-TEC",
     ],
+  },
+  atv: {
+    "Polaris": ["Sportsman", "Scrambler", "Outlaw", "Phoenix"],
+    "Can-Am": ["Outlander", "Renegade", "DS"],
+    "Honda": ["Rancher", "Foreman", "Rubicon", "Recon", "TRX"],
+    "Yamaha": ["Grizzly", "Kodiak", "Raptor", "YFZ450R"],
+    "Kawasaki": ["Brute Force", "KFX"],
+    "Suzuki": ["KingQuad", "QuadSport"],
+    "Arctic Cat": ["Alterra"],
+    "CFMoto": ["CForce"],
+  },
+  utv: {
+    "Polaris": ["Ranger", "RZR", "General", "Xpedition"],
+    "Can-Am": ["Maverick", "Commander", "Defender"],
+    "Kawasaki": ["Mule", "Teryx", "Teryx KRX", "Ridge"],
+    "Yamaha": ["Wolverine", "Viking", "YXZ1000R"],
+    "Honda": ["Pioneer", "Talon"],
+    "Arctic Cat": ["Prowler", "Wildcat"],
+    "CFMoto": ["ZForce", "UForce"],
+    "Segway": ["Villain", "Super Villain", "Fugleman"],
   },
   semi_truck: {
     "Freightliner": ["Cascadia", "M2 106", "M2 112", "Columbia", "Century", "Coronado", "122SD", "114SD", "108SD", "Econic"],
@@ -703,6 +722,11 @@ export default function AddVehicleScreen() {
     modelSearch.trim().length > 0 &&
     !nhtsaModels.some(m => m.toLowerCase() === modelSearch.toLowerCase().trim());
 
+  const showModelPicker =
+    vehicleType === "car" || vehicleType === "motorcycle"
+      ? !(modelLoadFailed && nhtsaModels.length === 0)
+      : nhtsaModels.length > 0;
+
   useEffect(() => {
     const yearNum = parseInt(year);
     if (!year || !make.trim() || isNaN(yearNum)) {
@@ -732,7 +756,7 @@ export default function AddVehicleScreen() {
       setNhtsaModels([]);
       setIsLoadingModels(false);
       setModelLoadFailed(false);
-    } else if (vehicleType === "pwc" || vehicleType === "snowmobile" || vehicleType === "semi_truck") {
+    } else if (vehicleType === "pwc" || vehicleType === "snowmobile" || vehicleType === "semi_truck" || vehicleType === "atv" || vehicleType === "utv") {
       const byMake = HARDCODED_MODELS[vehicleType] ?? {};
       const models = byMake[make.trim()] ?? [];
       setNhtsaModels(models);
@@ -1322,7 +1346,7 @@ export default function AddVehicleScreen() {
                     </View>
                   </View>
 
-                  {MANUAL_MODEL_TYPES.has(vehicleType) ? (
+                  {(!showModelPicker && !(modelLoadFailed && nhtsaModels.length === 0)) ? (
                     <View style={styles.field}>
                       <Text style={styles.fieldLabel}>Model *</Text>
                       <TextInput
@@ -1862,7 +1886,7 @@ export default function AddVehicleScreen() {
               </View>
             )}
 
-            {MANUAL_MODEL_TYPES.has(vehicleType) ? (
+            {(!showModelPicker && !(modelLoadFailed && nhtsaModels.length === 0)) ? (
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>Model *</Text>
                 <TextInput
