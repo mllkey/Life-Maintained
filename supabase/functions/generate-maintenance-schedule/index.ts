@@ -787,7 +787,10 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
                 keepIndexes.add(keepIdx);
                 const ov: Partial<ValidatedTask> = {};
                 if (fam.canonical) ov.task = fam.canonical;
-                if (fam.description) ov.description = fam.description;
+                // Loosen: keep the model-specific AI description; only fall back to the
+                // generic family description when the AI provided none. Preserves model
+                // differentiation (a Panigale no longer reads like a Gold Wing).
+                if (fam.description && !(validatedTasks[keepIdx].description ?? '').trim()) ov.description = fam.description;
                 if (fam.priorityOverride) ov.priority = fam.priorityOverride;
                 if (fam.mergeIntervals && taskIdxs.length > 1) {
                   let minMiles: number | null = null;
@@ -810,11 +813,12 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
                 if (Object.keys(ov).length > 0) overrides.set(keepIdx, ov);
               }
 
-              // Keep unmatched tasks ONLY for non-small-moto vehicles
+              // Loosen: keep unmatched tasks for ALL vehicles, including small motos.
+              // Known junk is already stripped by the explicit remove families above
+              // (hardware, general_inspection, steering/wheel bearing, etc.), so
+              // surviving unmatched tasks are model-specific real services.
               for (let i = 0; i < validatedTasks.length; i++) {
-                if (!matched.has(i)) {
-                  if (!isSmallMoto) keepIndexes.add(i);
-                }
+                if (!matched.has(i)) keepIndexes.add(i);
               }
 
               // Step 3: Build filtered list with overrides (safe index mapping)
