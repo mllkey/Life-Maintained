@@ -37,36 +37,116 @@ function normalize(s: string): string {
   return s.toLowerCase().replace(/[&,.()\-\/+]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+// --- Precision-first auto-complete matcher (F-003) -------------------------
+// Used ONLY by matchAndUpdateVehicleTask / matchAndUpdatePropertyTask to decide
+// whether a logged service should auto-mark a scheduled task complete. It must
+// never mark the WRONG task done: it refuses (returns null, silently) on any
+// categoryless service, cross-category conflict, or ambiguous tie. The exported
+// CATEGORY_GROUPS above is intentionally left untouched and stays loose for the
+// pricing-hint path.
+type MatchCategory = { id: string; keywords: string[] };
+
+const MATCH_CATEGORIES: MatchCategory[] = [
+  { id: "engine_oil", keywords: ["oil change", "motor oil", "engine oil", "oil and filter", "oil & filter"] },
+  { id: "tire_rotation", keywords: ["tire rotation", "tyre rotation", "rotate tires", "wheel rotation"] },
+  { id: "wheel_alignment", keywords: ["wheel alignment", "alignment"] },
+  { id: "brakes", keywords: ["brake pad", "brake rotor", "brake caliper", "brake service", "brake fluid", "brakes"] },
+  { id: "cabin_air_filter", keywords: ["cabin air filter", "cabin filter", "pollen filter"] },
+  { id: "engine_air_filter", keywords: ["engine air filter", "engine air", "air filter element", "intake filter"] },
+  { id: "transmission", keywords: ["transmission fluid", "transmission service", "transmission", "gearbox", "trans fluid"] },
+  { id: "battery", keywords: ["battery replacement", "battery"] },
+  { id: "spark_plugs", keywords: ["spark plug", "spark plugs", "ignition coil"] },
+  { id: "coolant", keywords: ["coolant flush", "coolant", "antifreeze", "radiator flush", "radiator coolant"] },
+  { id: "wiper_blades", keywords: ["wiper blade", "wiper blades", "windshield wiper"] },
+  { id: "timing_belt", keywords: ["timing belt", "timing chain", "serpentine belt", "drive belt"] },
+  { id: "hvac", keywords: ["hvac", "furnace", "air conditioner", "heat pump", "furnace filter", "hvac filter"] },
+  { id: "gutters", keywords: ["gutter", "gutters", "downspout"] },
+  { id: "roof", keywords: ["roof", "shingle", "shingles"] },
+  { id: "pest_control", keywords: ["pest control", "termite", "exterminator", "pest treatment"] },
+  { id: "exterior_paint", keywords: ["exterior paint", "repaint", "paint exterior", "house paint"] },
+  { id: "plumbing", keywords: ["plumbing", "water heater", "drain clog", "sump pump", "burst pipe", "leaky pipe"] },
+];
+
+const MATCH_STOPWORDS = new Set<string>([
+  "the", "and", "for", "with", "service", "services", "replace", "replacement",
+  "change", "changed", "check", "checked", "inspect", "inspection", "maintenance",
+  "system", "fluid", "filter", "new", "kit", "front", "rear", "left", "right",
+  "annual", "yearly", "scheduled", "general", "full", "complete",
+]);
+
+function matchTokens(norm: string): string[] {
+  return norm.split(" ").filter(w => w.length >= 3 && MATCH_STOPWORDS.has(w) === false);
+}
+
+function matchCategoriesFor(norm: string): Set<string> {
+  const out = new Set<string>();
+  for (const cat of MATCH_CATEGORIES) {
+    if (cat.keywords.some(kw => norm.includes(kw))) out.add(cat.id);
+  }
+  return out;
+}
+
+const MATCH_MARGIN = 2;
+
 export function fuzzyMatchTask(serviceName: string, tasks: any[]): any | null {
   const serviceNorm = normalize(serviceName);
-  let bestMatch: any = null;
+  if (serviceNorm.length === 0) return null;
+
+  const svcCats = matchCategoriesFor(serviceNorm);
+  if (svcCats.size === 0) return null;
+  const svcTokens = matchTokens(serviceNorm);
+
+  let best: any = null;
   let bestScore = 0;
+  let secondScore = 0;
 
   for (const t of tasks) {
     const taskNorm = normalize(t.name ?? t.task ?? "");
-    let score = 0;
+    if (taskNorm.length === 0) continue;
 
-    const sWords = serviceNorm.split(" ").filter(w => w.length >= 3);
-    const tWords = taskNorm.split(" ").filter(w => w.length >= 3);
+    const tskCats = matchCategoriesFor(taskNorm);
 
-    for (const sw of sWords) {
-      if (tWords.some(tw => tw === sw || tw.includes(sw) || sw.includes(tw))) score += 2;
+    // Conflict veto: both sides categorized but to disjoint categories.
+    let sharedCategory = false;
+    if (svcCats.size > 0 && tskCats.size > 0) {
+      for (const id of svcCats) {
+        if (tskCats.has(id)) { sharedCategory = true; break; }
+      }
+      if (sharedCategory === false) continue;
     }
 
-    for (const group of CATEGORY_GROUPS) {
-      const svcHas = group.some(kw => serviceNorm.includes(kw));
-      const tskHas = group.some(kw => taskNorm.includes(kw));
-      if (svcHas && tskHas) score += 3;
+    // Exact-token overlap on specific (non-stopword) words.
+    const taskTokenSet = new Set(matchTokens(taskNorm));
+    const counted = new Set<string>();
+    let sharedWords = 0;
+    for (const w of svcTokens) {
+      if (counted.has(w) === false && taskTokenSet.has(w)) {
+        sharedWords += 1;
+        counted.add(w);
+      }
     }
+
+    // Require a genuine signal: a shared category, or >= 2 shared specific words.
+    const hasSignal = sharedCategory || sharedWords >= 2;
+    if (hasSignal === false) continue;
+
+    const score = (sharedCategory ? 4 : 0) + sharedWords;
 
     if (score > bestScore) {
+      secondScore = bestScore;
       bestScore = score;
-      bestMatch = t;
+      best = t;
+    } else if (score > secondScore) {
+      secondScore = score;
     }
   }
 
-  return bestScore >= 3 ? bestMatch : null;
+  if (best === null) return null;
+  if (bestScore - secondScore < MATCH_MARGIN) return null; // ambiguous -> refuse
+
+  return best;
 }
+// --- end F-003 -------------------------------------------------------------
 
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
