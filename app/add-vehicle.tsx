@@ -337,6 +337,13 @@ const FUEL_OPTIONS_BY_TYPE: Record<string, ("gas" | "diesel" | "hybrid" | "ev")[
   other:      ["gas", "diesel", "hybrid", "ev"],
 };
 
+// Battery-electric-only brands. Selecting one defaults fuel to electric so the
+// schedule's EV guard fires. (VIN-added EVs are already handled via FuelTypePrimary;
+// this covers the picker/manual path.) Lowercase — compared against a normalized make.
+const EV_ONLY_MAKES = new Set([
+  "tesla", "rivian", "lucid", "livewire", "zero motorcycles",
+]);
+
 const AWD_TYPES = new Set(["car", "rv", "utv", "other"]);
 
 const HARDCODED_MODELS: Record<string, Record<string, string[]>> = {
@@ -869,6 +876,14 @@ export default function AddVehicleScreen() {
       setFuelType("gas");
     }
   }, [vehicleType]);
+
+  // G-01: EV-only makes default fuel to electric (normalized match). User can override.
+  useEffect(() => {
+    const normalizedMake = make.trim().toLowerCase();
+    if (EV_ONLY_MAKES.has(normalizedMake) && FUEL_OPTIONS_BY_TYPE[vehicleType]?.includes("ev")) {
+      setFuelType("ev");
+    }
+  }, [make, vehicleType]);
 
   async function handleVinLookup() {
     Keyboard.dismiss();
