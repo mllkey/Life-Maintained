@@ -2207,6 +2207,7 @@ export default function AddVehicleScreen() {
         isLoadingModels={isLoadingModels}
         yearAndMakeSet={!!year && !!make}
         hasRemoteSource={vehicleType === "car" || vehicleType === "motorcycle"}
+        isMotorcycle={vehicleType === "motorcycle"}
         onSelect={selectModel}
         onClose={() => { setModelPickerVisible(false); setModelSearch(""); }}
         insets={insets}
@@ -2536,7 +2537,7 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
   );
 }
 
-function ModelPickerModal({ visible, search, onSearchChange, filteredModels, showCustomModel, isLoadingModels, yearAndMakeSet, hasRemoteSource, onSelect, onClose, insets }: {
+function ModelPickerModal({ visible, search, onSearchChange, filteredModels, showCustomModel, isLoadingModels, yearAndMakeSet, hasRemoteSource, isMotorcycle, onSelect, onClose, insets }: {
   visible: boolean;
   search: string;
   onSearchChange: (s: string) => void;
@@ -2545,6 +2546,7 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
   isLoadingModels: boolean;
   yearAndMakeSet: boolean;
   hasRemoteSource: boolean;
+  isMotorcycle: boolean;
   onSelect: (m: string) => void;
   onClose: () => void;
   insets: { bottom: number };
@@ -2574,6 +2576,15 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
               clearButtonMode="while-editing"
             />
           </View>
+
+          {isMotorcycle && yearAndMakeSet ? (
+            <View style={styles.motoVariantTip}>
+              <Ionicons name="bulb-outline" size={14} color={Colors.accent} />
+              <Text style={styles.motoVariantTipText}>
+                Type your exact variant — e.g. Panigale V4, not just Panigale — for the most accurate plan.
+              </Text>
+            </View>
+          ) : null}
 
           {isLoadingModels ? (
             <View style={styles.listEmpty}>
@@ -3044,6 +3055,24 @@ const styles = StyleSheet.create({
     fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
     fontStyle: "italic", textAlign: "center",
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4,
+  },
+  motoVariantTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 12,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: Colors.accentLight,
+    borderRadius: 12,
+  },
+  motoVariantTipText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.accent,
+    lineHeight: 17,
   },
   monthPickerWrap: {
     marginTop: 8,
