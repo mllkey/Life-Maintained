@@ -551,6 +551,12 @@ export default function VehicleDetailScreen() {
         },
       });
       if (error) {
+        const httpStatus = (error as { context?: { status?: number } })?.context?.status;
+        if (httpStatus === 409) {
+          await refetchSchedule();
+          showToast("Schedule is already updating, check back in a moment.");
+          return;
+        }
         showToast("Failed to refresh schedule. Please try again.", true);
         return;
       }
