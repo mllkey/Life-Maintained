@@ -781,11 +781,18 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
                   /harley|h-?d\b|sportster|softail|street\s*glide|road\s*glide|road\s*king|fat\s*boy|electra\s*glide|\bdyna\b|\bflh|\bfxd|\bxl\d/i,
                   /\bindian\b|chieftain|roadmaster|\bscout\b|\bchief\b|springfield/i,
                   /\bbuell\b/i, /\bvulcan\b/i, /boulevard/i, /\bshadow\b/i,
+                  // Shaft/belt models the LLM commonly mis-tags as chain (verified; no chain-bike overlap).
+                  /concours/i, /\bgtr\s?14\d{2}\b/i, /\b14\d{2}\s?gtr\b/i,
+                  /\bvfr\s?1200/i, /\bctx\s?1300\b/i, /pacific\s*coast/i,
+                  /rocket\s*(iii|3\b)/i, /tiger\s*explorer/i, /\btiger\s?1200\b/i,
+                  /roadliner|stratoliner|\braider\b|road\s*star|\bstryker\b|\beluder\b|star\s*venture|\bbolt\b/i,
+                  /\bcavalcade\b/i, /\bvictory\b/i,
                 ];
                 const mkmdl = `${make} ${vehicleModel}`;
                 const isBmwShaft = /\bbmw\b/i.test(mkmdl)
-                  && /\b(r\s?\d{3,4}|rt|rs|gs|r18|r9t|k\s?\d{3,4}|gtl)\b/i.test(mkmdl)
-                  && !/\b(g\s?\d{2,3}|f\s?\d{2,3}|s\s?1000)\b/i.test(mkmdl);
+                  && (/\br\s?\d{2,4}/i.test(mkmdl) || /\bk\s?\d{3,4}/i.test(mkmdl) || /\br\s?9\s?t\b/i.test(mkmdl) || /\br\s?nine\s?t\b/i.test(mkmdl))
+                  && !/\b[fg]\s?\d{2,4}/i.test(mkmdl)
+                  && !/\bs\s?1000/i.test(mkmdl);
                 const isNonChainDrive = NON_CHAIN_DRIVE.some((re) => re.test(mkmdl)) || isBmwShaft;
                 const hasChainWord = (name: string): boolean => {
                   const n = name.toLowerCase();
