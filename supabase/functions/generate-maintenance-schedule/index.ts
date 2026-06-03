@@ -720,6 +720,65 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
             if (validatedTasks && !isHoursOnlyMode) {
               const isSmallMoto = (vehicleCategory === "motorcycle" || vehicleCategory === "atv" || vehicleCategory === "utv" || vehicleCategory === "snowmobile");
 
+              // ── Motorcycle drive-chain correctness (deterministic) ───────────
+              // Drive chain exists only on chain-driven bikes; the LLM is unreliable
+              // about drive type, so this is the hard guard. (1) Known shaft/belt
+              // models get every final-drive chain/sprocket task stripped. (2) Otherwise
+              // all final-drive chain MAINTENANCE tasks collapse into one canonical entry
+              // (the family matcher below is word-order sensitive and misses natural
+              // titles). Chain REPLACEMENT stays distinct; primary/timing/cam chains and
+              // cars are never touched. Scoped to motorcycles only (not ATV/UTV/snowmobile).
+              if (vehicleCategory === "motorcycle" && validatedTasks) {
+                const vt = validatedTasks;
+                const NON_CHAIN_DRIVE: RegExp[] = [
+                  /gold\s*wing/i, /\bgl1\d{3}\b/i, /\bvalkyrie\b/i, /\bst1\d{3}\b/i, /\bnt\d{3}\b/i, /deauville/i,
+                  /moto\s*guzzi/i, /\bural\b/i,
+                  /\bfjr\s?1300\b|\bfjr\b/i, /super\s*t[eé]n[eé]r[eé]|\bxt1200\b/i, /\bv-?max\b/i, /royal\s*star|\bventure\b/i,
+                  /harley|h-?d\b|sportster|softail|street\s*glide|road\s*glide|road\s*king|fat\s*boy|electra\s*glide|\bdyna\b|\bflh|\bfxd|\bxl\d/i,
+                  /\bindian\b|chieftain|roadmaster|\bscout\b|\bchief\b|springfield/i,
+                  /\bbuell\b/i, /\bvulcan\b/i, /boulevard/i, /\bshadow\b/i,
+                ];
+                const mkmdl = `${make} ${vehicleModel}`;
+                const isBmwShaft = /\bbmw\b/i.test(mkmdl)
+                  && /\b(r\s?\d{3,4}|rt|rs|gs|r18|r9t|k\s?\d{3,4}|gtl)\b/i.test(mkmdl)
+                  && !/\b(g\s?\d{2,3}|f\s?\d{2,3}|s\s?1000)\b/i.test(mkmdl);
+                const isNonChainDrive = NON_CHAIN_DRIVE.some((re) => re.test(mkmdl)) || isBmwShaft;
+                const hasChainWord = (name: string): boolean => {
+                  const n = name.toLowerCase();
+                  if (/timing chain|cam chain|primary chain/.test(n)) return false;
+                  return /\bchain\b/.test(n) || /sprocket/.test(n);
+                };
+                const isChainMaintenance = (name: string): boolean => {
+                  if (!hasChainWord(name)) return false;
+                  const n = name.toLowerCase();
+                  return /clean|lube|lubric|adjust|tension|maintenance|service|inspect/.test(n) && !/replace/.test(n);
+                };
+                if (isNonChainDrive) {
+                  validatedTasks = vt.filter((t) => !hasChainWord(t.task));
+                } else {
+                  const chainIdxs: number[] = [];
+                  vt.forEach((t, i) => { if (isChainMaintenance(t.task)) chainIdxs.push(i); });
+                  if (chainIdxs.length >= 1) {
+                    let minMiles: number | null = null;
+                    for (const ci of chainIdxs) {
+                      const mi = vt[ci].interval_miles;
+                      if (mi !== null && (minMiles === null || mi < minMiles)) minMiles = mi;
+                    }
+                    const keepIdx = chainIdxs[0];
+                    const existingDesc = (vt[keepIdx].description ?? "").trim();
+                    vt[keepIdx] = {
+                      ...vt[keepIdx],
+                      task: "Clean, Lubricate, and Adjust Chain",
+                      description: existingDesc !== "" ? existingDesc : "Clean and lubricate drive chain, check and adjust tension. Recommended every 300-600 miles depending on riding conditions.",
+                      interval_miles: minMiles !== null ? Math.max(minMiles, 300) : 500,
+                      priority: "high",
+                    };
+                    const drop = new Set<number>(chainIdxs.slice(1));
+                    validatedTasks = vt.filter((_, i) => !drop.has(i));
+                  }
+                }
+              }
+
               interface TaskFamily {
                 key: string;
                 patterns: RegExp[];
