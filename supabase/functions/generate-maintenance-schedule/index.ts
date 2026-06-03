@@ -39,6 +39,9 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Method not allowed" }, 405);
   }
 
+  // Released in the finally below; set once the generation claim is acquired.
+  let releaseClaim: (() => Promise<void>) | null = null;
+
   try {
     // ── 1. Parse & validate request body ──────────────────────────────────
     let body: Record<string, unknown>;
@@ -265,6 +268,47 @@ Deno.serve(async (req: Request) => {
       await requirePaidTier(adminClient, authUserId);
       // Rate limit on user calls only. Internal admin calls skip.
       await enforceAiRateLimit(adminClient, authUserId, "generate-maintenance-schedule");
+    }
+
+    // Concurrency claim: serialize generation per vehicle.
+    // Several client surfaces can trigger generation near-simultaneously. Without
+    // this, two invocations both pass the existing-tasks check below (a TOCTOU
+    // window spanning the multi-second AI call) and each insert a full schedule.
+    // The claim is atomic and TTL-backed; released in the handler finally on every path.
+    {
+      const lockToken = crypto.randomUUID();
+
+      const { data: claimedLockToken, error: claimError } = await adminClient.rpc(
+        "claim_schedule_generation",
+        {
+          p_vehicle_id: vehicle_id,
+          p_lock_token: lockToken,
+          p_ttl_seconds: 180,
+        },
+      );
+
+      if (claimError) {
+        console.error("[CLAIM] acquire error:", claimError.message);
+        return json({ error: "Failed to acquire generation lock", detail: claimError.message }, 500);
+      }
+
+      if (claimedLockToken !== lockToken) {
+        return json({ error: "Schedule generation already in progress for this vehicle." }, 409);
+      }
+
+      releaseClaim = async () => {
+        const { error: releaseError } = await adminClient.rpc(
+          "release_schedule_generation",
+          {
+            p_vehicle_id: vehicle_id,
+            p_lock_token: lockToken,
+          },
+        );
+
+        if (releaseError) {
+          throw new Error(releaseError.message);
+        }
+      };
     }
 
     // ── 4. Check for existing tasks (prevent duplicate schedules) ──────────
@@ -1390,6 +1434,14 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     console.error("Unhandled error:", err);
     const message = err instanceof Error ? err.message : String(err);
     return json({ error: "Failed to generate schedule", detail: message }, 500);
+  } finally {
+    if (releaseClaim) {
+      try {
+        await releaseClaim();
+      } catch (relErr) {
+        console.error("[CLAIM] release error:", relErr instanceof Error ? relErr.message : relErr);
+      }
+    }
   }
 });
 
