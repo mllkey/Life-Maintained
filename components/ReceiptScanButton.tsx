@@ -12,6 +12,7 @@ import {
   ReceiptAssetType,
   ReceiptScanSource,
 } from "../lib/receiptScanner";
+import { getLiveScanQuota } from "../lib/subscription";
 
 interface Props {
   assetType: ReceiptAssetType;
@@ -41,7 +42,7 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
 
   const handleScan = async (useCamera: boolean) => {
 
-    if (scansRemaining <= 0) {
+    const fireCapHandler = async () => {
       try {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       } catch {}
@@ -50,6 +51,22 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
       } else if (onScanLimitReached) {
         onScanLimitReached();
       }
+    };
+
+    // Fast path: prop already shows no scans left -- gate instantly, no network.
+    if (scansRemaining <= 0) {
+      await fireCapHandler();
+      return;
+    }
+
+    // Authoritative pre-pick gate: receipt_scans rows are source of truth, not
+    // the legacy profile counter. Confirm live quota BEFORE the picker + AI
+    // roundtrip so a capped paid user is routed to top-up instantly. On a null
+    // result (network hiccup) we do NOT block -- the post-scan server branch
+    // remains the backstop, so a paying user is never falsely blocked.
+    const live = await getLiveScanQuota();
+    if (live && live.scans_remaining <= 0) {
+      await fireCapHandler();
       return;
     }
     const source: ReceiptScanSource = useCamera ? "camera" : "photo_library";
