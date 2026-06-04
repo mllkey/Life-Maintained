@@ -42,6 +42,22 @@ const PACK_META: ScanPackMeta[] = [
 
 const PACK_IDS = PACK_META.map(p => p.id);
 
+// Unit price shown beneath each pack total so "Best Value" is demonstrated,
+// not just asserted. Falls back to a plain format if a currency is unsupported.
+function formatPerScan(price: number, scans: number, currencyCode: string): string {
+  const per = price / scans;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(per);
+  } catch {
+    return currencyCode + " " + per.toFixed(2);
+  }
+}
+
 export type ScanPackModalHandle = {
   present: () => boolean;
   dismiss: () => void;
@@ -274,7 +290,10 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
                 {isPurchasing ? (
                   <ActivityIndicator size="small" color={Colors.accent} />
                 ) : product ? (
-                  <Text style={[styles.packPrice, pack.popular && { color: Colors.accent }]}>{product.priceString}</Text>
+                  <>
+                    <Text style={[styles.packPrice, pack.popular && { color: Colors.accent }]}>{product.priceString}</Text>
+                    <Text style={styles.packPerScan}>{formatPerScan(product.price, pack.scans, product.currencyCode)}/scan</Text>
+                  </>
                 ) : (
                   <S anim={skeletonAnim} w={56} h={18} r={6} />
                 )}
@@ -366,6 +385,7 @@ const styles = StyleSheet.create({
   packTitle: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary, flex: 1 },
   packRight: { minWidth: 52, alignItems: "flex-end" },
   packPrice: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.text },
+  packPerScan: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textTertiary, marginTop: 2 },
   errorCard: {
     flexDirection: "row",
     gap: 8,
