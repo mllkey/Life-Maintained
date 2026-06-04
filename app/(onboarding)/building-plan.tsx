@@ -179,7 +179,7 @@ export default function BuildingPlanScreen() {
     if (hasFinalized.current) return;
     hasFinalized.current = true;
     setReady(true);
-    setSubtitleText("Your plan is ready.");
+    setSubtitleText("Your plan\u2019s ready \u2014 tap to see it.");
     docScale.value = withSpring(1.15, { damping: 10, stiffness: 140 }, () => {
       docScale.value = withSpring(1, { damping: 14, stiffness: 180 });
     });

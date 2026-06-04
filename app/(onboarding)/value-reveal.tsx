@@ -243,7 +243,7 @@ export default function ValueRevealScreen() {
     if (revealHapticsFired.current) return;
     revealHapticsFired.current = true;
     const timers = [
-      setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}), 80),
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}), 80),
       setTimeout(() => Haptics.selectionAsync().catch(() => {}), 230),
       setTimeout(() => Haptics.selectionAsync().catch(() => {}), 380),
     ];
@@ -280,20 +280,19 @@ export default function ValueRevealScreen() {
           <View style={[styles.progressFill, { width: "100%" }]} />
         </View>
 
-        {/* Header */}
-        <View style={styles.header}>
-          <Ionicons name="checkmark-circle" size={48} color={Colors.good} />
-          <Text style={styles.title}>
-            {hasTasks ? "Your plan is ready" : pollTimedOut ? "Your vehicle is saved" : "Building your schedule"}
-          </Text>
-          <Text style={styles.subtitle}>
-            {hasTasks
-              ? `Built for your ${displayName}.`
-              : pollTimedOut
+        {/* Header — status only; hero card is the single payoff when tasks exist */}
+        {!hasTasks && (
+          <View style={styles.header}>
+            <Text style={styles.title}>
+              {pollTimedOut ? "Your vehicle is saved" : "Building your schedule"}
+            </Text>
+            <Text style={styles.subtitle}>
+              {pollTimedOut
                 ? "Your schedule is still generating. It\u2019ll appear in the app shortly."
                 : `Waiting for your ${displayName} schedule...`}
-          </Text>
-        </View>
+            </Text>
+          </View>
+        )}
 
         {/* Trust signal */}
         {hasTasks && (
