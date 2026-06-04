@@ -360,7 +360,7 @@ export default function ValueRevealScreen() {
 
             <Animated.View style={[styles.bridgeBox, bridgeRevealStyle]}>
               <Ionicons name="home-outline" size={15} color={Colors.home} />
-              <Text style={styles.bridgeText}>You’re tracking 1 vehicle. Add your property next to see what you’ve been missing.</Text>
+              <Text style={styles.bridgeText}>You’re tracking 1 vehicle. Add your home next to see what you’ve been missing.</Text>
             </Animated.View>
           </View>
         ) : !pollTimedOut ? (
