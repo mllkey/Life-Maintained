@@ -244,7 +244,8 @@ export default function HealthScreen() {
         Alert.alert("Reminder off", `Daily reminder for ${med.name} has been turned off.`);
       }
     } catch (e: any) {
-      Alert.alert("Reminder didn't update", e.message ?? "Try again in a moment.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      showToast("Couldn't update reminder. Try again in a moment.", true);
     } finally {
       setSchedulingMed(null);
     }
