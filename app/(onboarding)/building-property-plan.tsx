@@ -28,6 +28,12 @@ const MIN_SCENE_MS = 6000;
 const MAX_WAIT_MS = 25000;
 const PARTICLE_COUNT = 12;
 
+const ORBIT_RADIUS = 96;
+const ORBIT_DOTS = Array.from({ length: 8 }, (_, i) => {
+  const a = (i / 8) * Math.PI * 2;
+  return { x: Math.cos(a) * ORBIT_RADIUS, y: Math.sin(a) * ORBIT_RADIUS };
+});
+
 function oneParam(v: string | string[] | undefined): string {
   if (v == null) return "";
   return Array.isArray(v) ? (v[0] ?? "") : v;
@@ -82,6 +88,9 @@ export default function BuildingPropertyPlanScreen() {
 
   const docScale = useSharedValue(0);
   const docOpacity = useSharedValue(0);
+  // Continuous "assembling core" — runs the whole scene so the center is never static.
+  const haloPulse = useSharedValue(0);
+  const orbitSpin = useSharedValue(0);
   const docGlow = useSharedValue(0);
   const readyOpacity = useSharedValue(0);
 
@@ -222,6 +231,10 @@ export default function BuildingPropertyPlanScreen() {
 
     void generateSchedule();
 
+    // Continuous core motion (independent of beats + generation wait) so nothing reads as frozen.
+    haloPulse.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.inOut(Easing.ease) }), -1, true);
+    orbitSpin.value = withRepeat(withTiming(1, { duration: 9000, easing: Easing.linear }), -1);
+
     maxWaitTimer.current = setTimeout(() => {
       if (!scheduleDone.current && !failed) {
         finalizeReveal();
@@ -257,6 +270,10 @@ export default function BuildingPropertyPlanScreen() {
     docGlow.value = 0;
     readyOpacity.value = 0;
     particleProgress.forEach((p) => { p.value = 0; });
+    haloPulse.value = 0;
+    orbitSpin.value = 0;
+    haloPulse.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.inOut(Easing.ease) }), -1, true);
+    orbitSpin.value = withRepeat(withTiming(1, { duration: 9000, easing: Easing.linear }), -1);
 
     chip1Opacity.value = withDelay(1400, withTiming(1, { duration: 400 }));
     chip1Y.value = withDelay(1400, withSpring(0, { damping: 14, stiffness: 180 }));
@@ -377,6 +394,14 @@ export default function BuildingPropertyPlanScreen() {
 
   const readyStyle = useAnimatedStyle(() => ({ opacity: readyOpacity.value }));
 
+  const haloStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(haloPulse.value, [0, 1], [0.10, 0.26]),
+    transform: [{ scale: interpolate(haloPulse.value, [0, 1], [0.92, 1.12]) }],
+  }));
+  const orbitStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${orbitSpin.value * 360}deg` }],
+  }));
+
   return (
     <View style={[styles.container, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 }]}>
       <View style={[styles.progressBar, { marginHorizontal: 20 }]}>
@@ -426,6 +451,12 @@ export default function BuildingPropertyPlanScreen() {
 
       {!failed && (
         <View style={styles.stage}>
+          <Animated.View style={[styles.halo, haloStyle]} />
+          <Animated.View style={[styles.orbit, orbitStyle]}>
+            {ORBIT_DOTS.map((d, i) => (
+              <View key={i} style={[styles.orbitDot, { transform: [{ translateX: d.x }, { translateY: d.y }] }]} />
+            ))}
+          </Animated.View>
           <Animated.View style={[styles.docGlow, docGlowStyle]} />
 
           {particleProgress.map((p, i) => (
@@ -551,6 +582,28 @@ const styles = StyleSheet.create({
     height: 140,
     borderRadius: 70,
     backgroundColor: Colors.home,
+  },
+  halo: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: Colors.home,
+  },
+  orbit: {
+    position: "absolute",
+    width: 0,
+    height: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  orbitDot: {
+    position: "absolute",
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: Colors.home,
+    opacity: 0.5,
   },
   doc: {
     width: 88,
