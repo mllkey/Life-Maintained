@@ -98,7 +98,7 @@ export default function AddFamilyMemberScreen() {
       updated_at: new Date().toISOString(),
     }).select("id").single();
 
-    if (err) { setIsLoading(false); setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
+    if (err) { setIsLoading(false); setError("Couldn't save that just now. Please try again."); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
     else {
       queryClient.invalidateQueries({ queryKey: ["family_members"] });
       if (!isOnboarding) {

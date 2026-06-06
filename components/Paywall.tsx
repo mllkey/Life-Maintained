@@ -402,7 +402,7 @@ export default function Paywall({
       if (!err?.userCancelled) {
         showInlineError({
           title: "Purchase didn't go through",
-          message: err?.message ?? "No charge was made. Try again or pick a different plan.",
+          message: "No charge was made. Try again or pick a different plan.",
           actionLabel: "Try again",
           onAction: handlePurchase,
         });
@@ -486,9 +486,8 @@ export default function Paywall({
       });
 
       if (error) {
-        const msg = (error as any)?.message ?? "Could not validate code. Please try again.";
         setPromoStatus("error");
-        setPromoMessage(msg);
+        setPromoMessage("That code didn't work. Double-check it and try again.");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }

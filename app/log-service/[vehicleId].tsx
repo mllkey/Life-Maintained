@@ -390,7 +390,7 @@ export default function LogServiceScreen() {
         setTimeout(() => router.back(), 1200);
       }
     } catch (err: any) {
-      setError(err.message);
+      setError("Couldn't save that just now. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setIsLoading(false);

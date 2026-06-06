@@ -77,7 +77,7 @@ export default function PropertyTaskHistoryScreen() {
               queryClient.invalidateQueries({ queryKey: ["property_task_logs", propertyId, task] });
               queryClient.invalidateQueries({ queryKey: ["property_logs", propertyId] });
             } catch (err: any) {
-              fireSaveErrorToast("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+              fireSaveErrorToast("Delete Failed", "Something went wrong. Please try again.");
             }
           },
         },

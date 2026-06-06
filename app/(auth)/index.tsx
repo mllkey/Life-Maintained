@@ -44,7 +44,7 @@ export default function LoginScreen() {
     const { error } = await signIn(email.trim(), password);
     if (error) {
       setIsLoading(false);
-      setError(error.message);
+      setError(error.message?.toLowerCase().includes("invalid") ? "Incorrect email or password." : "Couldn't sign you in. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

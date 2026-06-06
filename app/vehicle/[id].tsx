@@ -989,7 +989,7 @@ export default function VehicleDetailScreen() {
       }
     } catch (e: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast("Export didn't work", true, e.message ?? "Try again in a moment.");
+      showToast("Export didn't work", true, "Try again in a moment.");
     } finally {
       setIsExporting(false);
     }

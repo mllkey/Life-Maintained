@@ -36,7 +36,7 @@ export default function ForgotPasswordScreen() {
     });
     setIsLoading(false);
     if (err) {
-      setError(err.message);
+      setError("Couldn't send the reset email. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

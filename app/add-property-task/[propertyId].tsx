@@ -92,7 +92,7 @@ export default function AddPropertyTaskScreen() {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
-    if (err) { setIsLoading(false); setError(err.message); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
+    if (err) { setIsLoading(false); setError("Couldn't save that just now. Please try again."); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
     else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["property_tasks"] });

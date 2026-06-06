@@ -94,7 +94,7 @@ export default function VehicleTaskHistoryScreen() {
               queryClient.invalidateQueries({ queryKey: ["vehicle_task_logs", vehicleId, task] });
               queryClient.invalidateQueries({ queryKey: ["maintenance_logs", vehicleId] });
             } catch (err: any) {
-              fireSaveErrorToast("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+              fireSaveErrorToast("Delete Failed", "Something went wrong. Please try again.");
             }
           },
         },

@@ -84,7 +84,7 @@ export default function UpdateMileageScreen() {
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setIsLoading(false);
-      setMileageWarning(err?.message ?? "Save failed. Give it another shot.");
+      setMileageWarning("Save failed. Give it another shot.");
     }
   }
 

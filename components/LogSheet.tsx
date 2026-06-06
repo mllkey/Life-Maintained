@@ -678,16 +678,22 @@ export function LogSheet({
       if (__DEV__) console.log("[extract-maintenance-data] error:", error);
 
       if (error) {
-        const msg = (error as any)?.message ?? String(error);
-        console.error("[extract-maintenance-data] invoke error:", msg);
-        setErrorMsg(`Error: ${msg}`);
+        console.error("[extract-maintenance-data] invoke error:", error);
+        const status = error instanceof FunctionsHttpError ? error.context?.status : undefined;
+        setErrorMsg(
+          status === 402 || status === 403
+            ? "Upgrade to log by voice or text. Describe the work and we'll file it for you."
+            : status === 429
+              ? "You're sending those a little fast. Try again in a moment."
+              : "Couldn't process that. Please try again.",
+        );
         setPhase("error");
         return;
       }
 
       if (data?.error) {
         console.error("[extract-maintenance-data] function error:", data.error);
-        setErrorMsg(`Error: ${data.error}`);
+        setErrorMsg("Couldn't read that one. Try adding a bit more detail.");
         setPhase("error");
         return;
       }
@@ -702,10 +708,9 @@ export function LogSheet({
       setDoneCount(0);
       setPhase("results");
       dismissFirstOpenProminence();
-    } catch (err: any) {
-      const msg = err?.message ?? String(err);
-      console.error("[extract-maintenance-data] caught:", msg);
-      setErrorMsg(`Error: ${msg}`);
+    } catch (err) {
+      console.error("[extract-maintenance-data] caught:", err);
+      setErrorMsg("Couldn't process that. Please try again.");
       setPhase("error");
     }
   }

@@ -446,8 +446,7 @@ export default function SettingsScreen() {
                     router.replace("/(auth)");
                   } catch (err) {
                     isDeletingAccountRef.current = false;
-                    const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
-                    fireSaveErrorToast("Delete Failed", message);
+                    fireSaveErrorToast("Delete Failed", "Something went wrong. Please try again.");
                   }
                 },
               },

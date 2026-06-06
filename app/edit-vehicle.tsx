@@ -141,7 +141,7 @@ export default function EditVehicleScreen() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setTimeout(() => router.back(), 150);
     } catch (err: any) {
-      setSaveErrorSubtitle(err?.message ?? "Give it another shot.");
+      setSaveErrorSubtitle("Give it another shot.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setShowSaveErrorToast(true);
       setTimeout(() => setShowSaveErrorToast(false), 2800);

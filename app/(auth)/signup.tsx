@@ -65,7 +65,7 @@ export default function SignUpScreen() {
     const { error, data } = await signUp(email.trim(), password);
     if (error) {
       setIsLoading(false);
-      setError(error.message);
+      setError(error.message?.toLowerCase().includes("already") ? "That email is already in use. Try signing in instead." : "Couldn't create your account. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } else if (data?.session) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

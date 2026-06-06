@@ -307,7 +307,7 @@ export default function AddPropertyScreen() {
 
     if (err) {
       setIsLoading(false);
-      setError(err.message);
+      setError("Couldn't save that just now. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }

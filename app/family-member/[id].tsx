@@ -476,7 +476,7 @@ export default function FamilyMemberDetailScreen() {
               if (router.canGoBack()) router.back(); else router.replace("/(tabs)" as any);
             } catch (err: any) {
               isDeletingMemberRef.current = false;
-              fireSaveErrorToast("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+              fireSaveErrorToast("Delete Failed", "Something went wrong. Please try again.");
             }
           },
         },
@@ -500,7 +500,7 @@ export default function FamilyMemberDetailScreen() {
               queryClient.invalidateQueries({ queryKey: ["member_appointments", id] });
               queryClient.invalidateQueries({ queryKey: ["health_appointments"] });
             } catch (err: any) {
-              fireSaveErrorToast("Delete Failed", err?.message ?? "Something went wrong. Please try again.");
+              fireSaveErrorToast("Delete Failed", "Something went wrong. Please try again.");
             }
           },
         },
