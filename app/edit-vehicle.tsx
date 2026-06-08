@@ -23,6 +23,7 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES, inferTrackingMode } from "@/lib/vehicleTypes";
 import { SaveToast } from "@/components/SaveToast";
+import { currentUsageValue } from "@/lib/usageHelpers";
 import type { Database } from "@/lib/supabase-types";
 
 type VehicleUpdate = Database["public"]["Tables"]["vehicles"]["Update"];
@@ -57,6 +58,7 @@ export default function EditVehicleScreen() {
   const [color, setColor] = useState("");
   const [trim, setTrim] = useState("");
   const [vehicleType, setVehicleType] = useState("car");
+  const [avgMilesPerMonth, setAvgMilesPerMonth] = useState("");
   const [mileageWarning, setMileageWarning] = useState<string | null>(null);
   const [showSaveErrorToast, setShowSaveErrorToast] = useState(false);
   const [saveErrorSubtitle, setSaveErrorSubtitle] = useState<string | undefined>(undefined);
@@ -77,6 +79,7 @@ export default function EditVehicleScreen() {
           setColor(data.color ?? "");
           setTrim(data.trim ?? "");
           setVehicleType(data.vehicle_type ?? "car");
+          setAvgMilesPerMonth(data.average_miles_per_month != null ? String(data.average_miles_per_month) : "");
         }
         setLoading(false);
       });
@@ -114,8 +117,10 @@ export default function EditVehicleScreen() {
         setSaving(false);
         return;
       }
-      updates.mileage = newMileage;
-      updates.last_mileage_update = new Date().toISOString();
+      if (newMileage > currentMileage) {
+        updates.mileage = newMileage;
+        updates.last_mileage_update = new Date().toISOString();
+      }
     }
 
     if (tracksHours && hours.trim()) {
@@ -128,6 +133,36 @@ export default function EditVehicleScreen() {
           return;
         }
         updates.hours = newHours;
+      }
+    }
+
+    // Driving habits change: when the monthly estimate is edited or cleared,
+    // crystallize the miles accrued at the OLD rate into stored mileage and reset
+    // the clock, so the new rate only drives accrual going forward (never the past).
+    if (tracksMileage || tracksHours) {
+      const raw = avgMilesPerMonth.trim();
+      let newRate: number | null = null;
+      if (raw !== "") {
+        if (!/^[0-9]+$/.test(raw)) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          setSaving(false);
+          return;
+        }
+        const n = parseInt(raw, 10);
+        if (n < 1 || n > 10000) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          setSaving(false);
+          return;
+        }
+        newRate = n;
+      }
+      if (newRate !== (vehicle.average_miles_per_month ?? null)) {
+        updates.average_miles_per_month = newRate;
+        if (tracksMileage && updates.mileage == null) {
+          const effective = currentUsageValue(vehicle);
+          if (effective != null) updates.mileage = effective;
+          updates.last_mileage_update = new Date().toISOString();
+        }
       }
     }
 
@@ -244,6 +279,38 @@ export default function EditVehicleScreen() {
               <Text style={styles.label}>Hours</Text>
               <TextInput style={styles.input} value={hours} onChangeText={setHours} keyboardType="number-pad" placeholder="e.g. 1250" placeholderTextColor={Colors.textTertiary} />
               <Text style={styles.hint}>Hours can be increased but cannot be lowered.</Text>
+            </View>
+          )}
+
+          {(tracksMileage || tracksHours) && (
+            <View style={styles.field}>
+              <Text style={styles.label}>{tracksHours ? "Estimated Monthly Hours" : "Estimated Monthly Miles"}</Text>
+              <TextInput
+                accessibilityLabel={tracksHours ? "Estimated monthly hours" : "Estimated monthly miles"}
+                style={styles.input}
+                value={avgMilesPerMonth}
+                onChangeText={(t) => {
+                  setAvgMilesPerMonth(t);
+                  setMileageWarning(null);
+                }}
+                keyboardType="number-pad"
+                inputAccessoryViewID="mileageToolbar"
+                placeholder={tracksHours ? "e.g. 40" : "e.g. 800"}
+                placeholderTextColor={Colors.textTertiary}
+              />
+              {avgMilesPerMonth.trim().length > 0 && (() => {
+                const raw = avgMilesPerMonth.trim();
+                const n = parseInt(raw, 10);
+                const invalid = !/^[0-9]+$/.test(raw) || n < 1 || n > 10000;
+                return invalid ? (
+                  <Text style={styles.warning}>Must be a whole number from 1 to 10,000.</Text>
+                ) : null;
+              })()}
+              <Text style={styles.hint}>
+                {tracksHours
+                  ? "Used to estimate when usage-based service is due."
+                  : "We use this to estimate mileage between updates as your driving changes. Clear it to stop estimating."}
+              </Text>
             </View>
           )}
 
