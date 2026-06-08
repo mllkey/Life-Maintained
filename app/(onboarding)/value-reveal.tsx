@@ -198,6 +198,9 @@ export default function ValueRevealScreen() {
     const completed = await completeOnboarding();
     if (!completed) return;
     router.replace("/(tabs)");
+    if (vehicleId) {
+      setTimeout(() => router.push({ pathname: "/vehicle/[id]", params: { id: vehicleId } }), 400);
+    }
   }
 
   async function handleAddHome() {
