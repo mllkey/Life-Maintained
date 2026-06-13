@@ -84,6 +84,8 @@ export default function BuildingPlanScreen() {
   const sceneStart = useRef(Date.now());
   const scheduleDone = useRef(false);
   const maxWaitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const failedRef = useRef(false);
 
   // Shared values
   const titleGlow = useSharedValue(0);
@@ -194,8 +196,14 @@ export default function BuildingPlanScreen() {
     });
     docGlow.value = withTiming(1, { duration: 400 });
     readyOpacity.value = withTiming(1, { duration: 300 });
+    setSubtitleText("Your plan is ready.");
     runOnJS(Haptics.notificationAsync)(Haptics.NotificationFeedbackType.Success);
-  }, [failed, docScale, docGlow, readyOpacity]);
+    autoAdvanceTimer.current = setTimeout(() => {
+      autoAdvanceTimer.current = null;
+      if (failedRef.current) return;
+      handleViewPlan();
+    }, 1100);
+  }, [failed, docScale, docGlow, readyOpacity, handleViewPlan]);
 
   // Typewriter
   useEffect(() => {
@@ -214,6 +222,10 @@ export default function BuildingPlanScreen() {
     }, Math.max(40, Math.min(80, 1200 / displayName.length)));
     return () => clearInterval(interval);
   }, [displayName, titleGlow]);
+
+  useEffect(() => {
+    failedRef.current = failed;
+  }, [failed]);
 
   // Scene orchestration
   useEffect(() => {
@@ -276,6 +288,7 @@ export default function BuildingPlanScreen() {
 
     return () => {
       if (maxWaitTimer.current) clearTimeout(maxWaitTimer.current);
+      if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
       subtitleTimers.forEach(clearTimeout);
     };
   }, []);
@@ -479,14 +492,6 @@ export default function BuildingPlanScreen() {
             <Ionicons name="checkmark-circle" size={16} color={Colors.good} />
             <Text style={styles.readyText}>Ready</Text>
           </Animated.View>
-        </View>
-      )}
-
-      {!failed && ready && (
-        <View style={{ paddingHorizontal: 20 }}>
-          <Pressable style={styles.cta} onPress={handleViewPlan}>
-            <Text style={styles.ctaText}>View my plan</Text>
-          </Pressable>
         </View>
       )}
 

@@ -330,12 +330,6 @@ export default function ValueRevealScreen() {
                       </View>
                     ) : null}
                   </View>
-                  <Pressable
-                    onPress={handleOpenDashboard}
-                    style={({ pressed }) => [styles.planCta, { opacity: pressed ? 0.86 : 1 }]}
-                  >
-                    <Text style={styles.planCtaText}>View my plan</Text>
-                  </Pressable>
                 </Animated.View>
               );
             })()}
