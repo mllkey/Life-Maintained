@@ -12,7 +12,7 @@ Sentry.init({
   tracesSampleRate: 0.2,
 });
 
-import { QueryClientProvider, focusManager } from "@tanstack/react-query";
+import { QueryClientProvider, focusManager, onlineManager } from "@tanstack/react-query";
 import { Stack, router, usePathname, useRootNavigationState } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef, useState } from "react";
@@ -33,6 +33,7 @@ import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { BudgetAlertProvider } from "@/context/BudgetAlertContext";
 import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
+import * as Network from "expo-network";
 import { setPendingResetUrl } from "@/lib/pendingResetUrl";
 import { signalRcReady, rcReady } from "@/lib/revenuecat";
 import Constants from 'expo-constants';
@@ -58,6 +59,18 @@ focusManager.setEventListener((handleFocus) => {
   });
   return () => subscription.remove();
 });
+
+if (Platform.OS !== "web") {
+  onlineManager.setEventListener((setOnline) => {
+    const sub = Network.addNetworkStateListener((state) => {
+      setOnline(state.isInternetReachable ?? state.isConnected ?? true);
+    });
+    return () => sub.remove();
+  });
+  Network.getNetworkStateAsync()
+    .then((state) => onlineManager.setOnline(state.isInternetReachable ?? state.isConnected ?? true))
+    .catch(() => {});
+}
 
 // Module-scope debounce ref for profiles.last_active_at upsert.
 // Survives component remounts; resets only on cold start.

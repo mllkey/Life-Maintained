@@ -6,7 +6,35 @@ import type { Database } from './supabase-types';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 25000;
+const FUNCTIONS_REQUEST_TIMEOUT_MS = 75000;
+
+const timeoutFetch: typeof fetch = (input, init) => {
+  const url =
+    typeof input === "string"
+      ? input
+      : input instanceof Request
+        ? input.url
+        : String(input);
+  const timeoutMs = url.includes("/functions/v1/")
+    ? FUNCTIONS_REQUEST_TIMEOUT_MS
+    : DEFAULT_REQUEST_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const external = init?.signal;
+  const onExternalAbort = () => controller.abort();
+  if (external) {
+    if (external.aborted) controller.abort();
+    else external.addEventListener("abort", onExternalAbort, { once: true });
+  }
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
+    clearTimeout(timer);
+    external?.removeEventListener("abort", onExternalAbort);
+  });
+};
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  global: { fetch: timeoutFetch },
   auth: {
     ...(Platform.OS !== "web" ? { storage: AsyncStorage } : {}),
     autoRefreshToken: true,

@@ -75,15 +75,16 @@ export default function VehiclesScreen() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallReason, setPaywallReason] = useState<"limit_reached" | "locked_existing">("limit_reached");
 
-  const { data: vehicles, isLoading, refetch } = useQuery({
+  const { data: vehicles, isLoading, isError, fetchStatus, refetch } = useQuery({
     queryKey: ["vehicles", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("vehicles")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
+      if (error) throw error;
       return (data ?? []) as Vehicle[];
     },
     enabled: !!user,
@@ -94,10 +95,11 @@ export default function VehiclesScreen() {
     queryFn: async () => {
       if (!user || !vehicles?.length) return {};
       const ids = vehicles.map(v => v.id);
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("user_vehicle_maintenance_tasks")
         .select("vehicle_id, next_due_date, interval_miles")
         .in("vehicle_id", ids);
+      if (error) throw error;
 
       const map: Record<string, {
         worstStatus: "overdue" | "due_soon" | "good";
@@ -173,6 +175,8 @@ export default function VehiclesScreen() {
         )}
         {isLoading ? (
           <VehicleListSkeleton />
+        ) : (!vehicles?.length && (isError || fetchStatus === "paused")) ? (
+          <VehiclesLoadError onRetry={refetch} />
         ) : vehicles?.length === 0 ? (
           <EmptyVehicles onAddPress={guardedAddVehiclePress} />
         ) : (
@@ -321,6 +325,25 @@ function VehicleListSkeleton() {
   );
 }
 
+function VehiclesLoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={styles.errorWrap}>
+      <Ionicons name="cloud-offline-outline" size={34} color={Colors.textSecondary} />
+      <Text style={styles.errorTitle}>Unable to load your vehicles</Text>
+      <Text style={styles.errorBody}>Your vehicles are saved and safe. Check your connection and try again.</Text>
+      <Pressable
+        style={({ pressed }) => [styles.errorRetry, { opacity: pressed ? 0.85 : 1 }]}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onRetry(); }}
+        accessibilityRole="button"
+        accessibilityLabel="Try loading vehicles again"
+      >
+        <Ionicons name="refresh" size={16} color={Colors.textInverse} />
+        <Text style={styles.errorRetryText}>Try again</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function EmptyVehicles({ onAddPress }: { onAddPress: () => void }) {
   return (
     <View style={styles.emptyWrap}>
@@ -373,4 +396,10 @@ const styles = StyleSheet.create({
   emptyWrap: { flex: 1, paddingTop: 60, alignItems: "center", gap: 10 },
   emptyTitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   emptyLink: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.accent },
+
+  errorWrap: { flex: 1, paddingTop: 80, paddingHorizontal: 24, alignItems: "center", gap: 12 },
+  errorTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
+  errorBody: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 20, maxWidth: 300 },
+  errorRetry: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: Colors.accent, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, marginTop: 4 },
+  errorRetryText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
 });
