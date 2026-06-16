@@ -24,6 +24,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
+import LoadErrorState from "@/components/LoadErrorState";
 import { parseISO, isBefore, addDays, addMonths, addWeeks, format, differenceInYears } from "date-fns";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
@@ -73,40 +74,43 @@ export default function FamilyMemberDetailScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const isDeletingMemberRef = useRef(false);
 
-  const { data: member, isLoading: loadingMember } = useQuery({
+  const { data: member, isLoading: loadingMember, isError: memberError, fetchStatus: memberFetchStatus, refetch: refetchMember } = useQuery({
     queryKey: ["family_member", id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("family_members")
         .select("*")
         .eq("id", id!)
         .maybeSingle();
+      if (error) throw error;
       return data;
     },
     enabled: !!id,
   });
 
-  const { data: appointments, isLoading: loadingAppts, refetch } = useQuery({
+  const { data: appointments, isLoading: loadingAppts, refetch: refetchAppointments } = useQuery({
     queryKey: ["member_appointments", id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("health_appointments")
         .select("*")
         .eq("family_member_id", id!)
         .order("next_due_date", { ascending: true });
+      if (error) throw error;
       return data ?? [];
     },
     enabled: !!id,
   });
 
-  const { data: medications, isLoading: loadingMeds } = useQuery({
+  const { data: medications, isLoading: loadingMeds, refetch: refetchMeds } = useQuery({
     queryKey: ["member_medications", id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("medications")
         .select("*")
         .eq("family_member_id", id!)
         .order("name");
+      if (error) throw error;
       return data ?? [];
     },
     enabled: !!id,
@@ -158,6 +162,8 @@ export default function FamilyMemberDetailScreen() {
   }, [medications, user]);
 
   const isLoading = loadingMember || loadingAppts || loadingMeds;
+  const showMemberLoadError = !member && (memberError || memberFetchStatus === "paused");
+  function handleMemberRetry() { refetchMember(); refetchAppointments(); refetchMeds(); }
 
   const summaryStats = useMemo(() => {
     if (!appointments) return { total: 0, overdue: 0, dueSoon: 0, upcoming90: 0 };
@@ -576,6 +582,8 @@ export default function FamilyMemberDetailScreen() {
             </View>
           ))}
         </View>
+      ) : showMemberLoadError ? (
+        <LoadErrorState onRetry={handleMemberRetry} title="Unable to load this profile" body="Your records are saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading profile again" />
       ) : (
         <ScrollView
           {...highlightScrollProps}
