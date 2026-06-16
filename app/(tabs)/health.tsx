@@ -31,6 +31,7 @@ import Paywall from "@/components/Paywall";
 import DatePicker from "@/components/DatePicker";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
+import LoadErrorState from "@/components/LoadErrorState";
 
 
 function getStatus(nextDueDate: string | null, lastCompletedAt?: string | null): "overdue" | "due_soon" | "good" {
@@ -92,43 +93,46 @@ export default function HealthScreen() {
     setTimeout(() => setToastVisible(false), 2800);
   }
 
-  const { data: appointments, isLoading: loadingAppts, refetch: refetchAppts } = useQuery({
+  const { data: appointments, isLoading: loadingAppts, isError: errAppts, fetchStatus: fsAppts, refetch: refetchAppts } = useQuery({
     queryKey: ["health_appointments", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("health_appointments")
         .select("*, family_members(name, relationship, member_type)")
         .eq("user_id", user.id)
         .order("next_due_date", { ascending: true });
+      if (error) throw error;
       return data ?? [];
     },
     enabled: !!user,
   });
 
-  const { data: medications, isLoading: loadingMeds, refetch: refetchMeds } = useQuery({
+  const { data: medications, isLoading: loadingMeds, isError: errMeds, fetchStatus: fsMeds, refetch: refetchMeds } = useQuery({
     queryKey: ["medications", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("medications")
         .select("*, family_members(name)")
         .eq("user_id", user.id)
         .order("name");
+      if (error) throw error;
       return data ?? [];
     },
     enabled: !!user,
   });
 
-  const { data: familyMembers, isLoading: loadingFamily, refetch: refetchFamily } = useQuery({
+  const { data: familyMembers, isLoading: loadingFamily, isError: errFamily, fetchStatus: fsFamily, refetch: refetchFamily } = useQuery({
     queryKey: ["family_members", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("family_members")
         .select("*")
         .eq("user_id", user.id)
         .order("name");
+      if (error) throw error;
       return data ?? [];
     },
     enabled: !!user,
@@ -138,7 +142,8 @@ export default function HealthScreen() {
     queryKey: ["health_profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase.from("health_profiles").select("*").eq("user_id", user.id).maybeSingle();
+      const { data, error } = await supabase.from("health_profiles").select("*").eq("user_id", user.id).maybeSingle();
+      if (error) throw error;
       return data ?? null;
     },
     enabled: !!user,
@@ -153,11 +158,12 @@ export default function HealthScreen() {
     queryKey: ["previous_providers", user?.id, completingForPet ? "pet" : "person"],
     queryFn: async () => {
       if (!user) return [];
-      const { data: members } = await supabase
+      const { data: members, error: membersError } = await supabase
         .from("family_members")
         .select("id")
         .eq("user_id", user.id)
         .eq("member_type", completingForPet ? "pet" : "person");
+      if (membersError) throw membersError;
       const memberIds = (members ?? []).map((m: { id: string }) => m.id);
 
       let query = supabase
@@ -175,7 +181,8 @@ export default function HealthScreen() {
         query = query.is("family_member_id", null);
       }
 
-      const { data } = await query;
+      const { data, error } = await query;
+      if (error) throw error;
       const seen = new Map<string, string>();
       for (const d of data ?? []) {
         const raw = (d.provider_name ?? "").trim();
@@ -525,6 +532,14 @@ export default function HealthScreen() {
     }
   }
 
+  const healthLoadError = errAppts || errMeds || errFamily;
+  const healthLoadPaused = fsAppts === "paused" || fsMeds === "paused" || fsFamily === "paused";
+  const showHealthLoadError =
+    (healthLoadError || healthLoadPaused) &&
+    hasNoMembers &&
+    (!appointments || appointments.length === 0) &&
+    (!medications || medications.length === 0);
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
@@ -580,6 +595,8 @@ export default function HealthScreen() {
               </View>
             ))}
           </View>
+        ) : showHealthLoadError ? (
+          <LoadErrorState onRetry={refetch} title="Unable to load your health info" body="Your health records are saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading health info again" />
         ) : (
           <>
             <Tooltip
