@@ -21,6 +21,7 @@ import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays } from "date-fns";
 import { propertyLimit } from "@/lib/subscription";
 import Paywall from "@/components/Paywall";
+import LoadErrorState from "@/components/LoadErrorState";
 
 type Property = {
   id: string;
@@ -76,15 +77,16 @@ export default function HomeTabScreen() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallReason, setPaywallReason] = useState<"limit_reached" | "locked_existing">("limit_reached");
 
-  const { data: properties, isLoading, refetch } = useQuery({
+  const { data: properties, isLoading, isError, fetchStatus, refetch } = useQuery({
     queryKey: ["properties", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("properties")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
+      if (error) throw error;
       return (data ?? []) as Property[];
     },
     enabled: !!user,
@@ -95,10 +97,11 @@ export default function HomeTabScreen() {
     queryFn: async () => {
       if (!user || !properties?.length) return {};
       const ids = properties.map(p => p.id);
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("property_maintenance_tasks")
         .select("property_id, next_due_date, last_completed_at")
         .in("property_id", ids);
+      if (error) throw error;
 
       const map: Record<string, { overdue: number; due_soon: number; total: number }> = {};
       for (const t of data ?? []) {
@@ -158,6 +161,8 @@ export default function HomeTabScreen() {
       >
         {isLoading ? (
           <PropertyListSkeleton />
+        ) : (!properties?.length && (isError || fetchStatus === "paused")) ? (
+          <LoadErrorState onRetry={refetch} title="Unable to load your properties" body="Your properties are saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading properties again" />
         ) : properties?.length === 0 ? (
           <EmptyProperties />
         ) : (
