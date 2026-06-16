@@ -144,7 +144,8 @@ export default function SettingsScreen() {
     queryKey: ["profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
+      const { data, error } = await supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
+      if (error) throw error;
       return data;
     },
     enabled: !!user,
@@ -166,10 +167,11 @@ export default function SettingsScreen() {
     queryKey: ["budget_threshold", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await (supabase.from("user_notification_preferences") as any)
+      const { data, error } = await (supabase.from("user_notification_preferences") as any)
         .select("budget_threshold")
         .eq("user_id", user.id)
         .maybeSingle();
+      if (error) throw error;
       return data;
     },
     enabled: !!user,
@@ -182,11 +184,12 @@ export default function SettingsScreen() {
     queryKey: ["settings_pred_vehicles", user?.id],
     queryFn: async () => {
       if (!user) return [] as PredVehicle[];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("vehicles")
         .select("id, year, make, model, nickname, mileage, average_miles_per_month")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
+      if (error) throw error;
       return (data ?? []) as PredVehicle[];
     },
     enabled: !!user,
@@ -204,11 +207,12 @@ export default function SettingsScreen() {
     queryKey: ["settings_pred_tasks", selectedVehicleId],
     queryFn: async () => {
       if (!selectedVehicleId) return [] as PredTask[];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("user_vehicle_maintenance_tasks")
         .select("id, name, interval_months, interval_miles, next_due_date, last_completed_miles, priority")
         .eq("vehicle_id", selectedVehicleId)
         .order("next_due_date", { ascending: true, nullsFirst: false });
+      if (error) throw error;
       return (data ?? []) as PredTask[];
     },
     enabled: !!selectedVehicleId,
