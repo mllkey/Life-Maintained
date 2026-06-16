@@ -227,6 +227,9 @@ export default function DashboardScreen() {
         supabase.from("properties").select("id", { count: "exact", head: true }).eq("user_id", user.id),
         supabase.from("health_appointments").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       ]);
+      if (veh.error) throw veh.error;
+      if (prop.error) throw prop.error;
+      if (health.error) throw health.error;
       // Health vertical includes family members + medications + appointments.
       // Counting only appointments under-represents Health users in the dashboard
       // header and incorrectly classifies users who added family or medications
@@ -235,6 +238,8 @@ export default function DashboardScreen() {
         supabase.from("family_members").select("id", { count: "exact", head: true }).eq("user_id", user.id),
         supabase.from("medications").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       ]);
+      if (fam.error) throw fam.error;
+      if (meds.error) throw meds.error;
       return {
         vehicles: veh.count ?? 0,
         properties: prop.count ?? 0,
@@ -254,6 +259,9 @@ export default function DashboardScreen() {
         supabase.from("property_maintenance_tasks").select("*, properties!inner(address, nickname)").eq("properties.user_id", user.id),
         supabase.from("health_appointments").select("*").eq("user_id", user.id),
       ]);
+      if (vehicleTasks.error) throw vehicleTasks.error;
+      if (propertyTasks.error) throw propertyTasks.error;
+      if (healthAppts.error) throw healthAppts.error;
       for (const t of vehicleTasks.data ?? []) {
         const v = (t as any).vehicles;
         if (!v) continue;
@@ -296,16 +304,18 @@ export default function DashboardScreen() {
     queryKey: ["dashboard_spending", user?.id],
     queryFn: async () => {
       if (!user) return {};
-      const { data: veh } = await supabase.from("vehicles").select("id").eq("user_id", user.id);
+      const { data: veh, error: vehErr } = await supabase.from("vehicles").select("id").eq("user_id", user.id);
+      if (vehErr) throw vehErr;
       if (!veh || veh.length === 0) return {};
       const ids = veh.map(v => v.id);
       const sixMonthsAgo = startOfMonth(subMonths(new Date(), 5)).toISOString().split("T")[0];
-      const { data: logs } = await supabase
+      const { data: logs, error: logsErr } = await supabase
         .from("maintenance_logs")
         .select("service_date, cost")
         .in("vehicle_id", ids)
         .gte("service_date", sixMonthsAgo)
         .not("cost", "is", null);
+      if (logsErr) throw logsErr;
       const map: Record<string, number> = {};
       for (const log of logs ?? []) {
         if (!log.service_date || log.cost == null) continue;
@@ -321,10 +331,11 @@ export default function DashboardScreen() {
     queryKey: ["mileage_vehicles", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("vehicles")
         .select("id, year, make, model, nickname, mileage, hours, vehicle_type, tracking_mode, updated_at, average_miles_per_month, last_mileage_update")
         .eq("user_id", user.id);
+      if (error) throw error;
       const rows = (data ?? []) as MileageVehicle[];
       return rows.filter(v => !isTimeOnly(v));
     },
@@ -335,7 +346,8 @@ export default function DashboardScreen() {
     queryKey: ["health_profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase.from("health_profiles").select("*").eq("user_id", user.id).maybeSingle();
+      const { data, error } = await supabase.from("health_profiles").select("*").eq("user_id", user.id).maybeSingle();
+      if (error) throw error;
       return data;
     },
     enabled: !!user,
@@ -345,7 +357,8 @@ export default function DashboardScreen() {
     queryKey: ["family_members_count", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase.from("family_members").select("id").eq("user_id", user.id);
+      const { data, error } = await supabase.from("family_members").select("id").eq("user_id", user.id);
+      if (error) throw error;
       return data ?? [];
     },
     enabled: !!user,
@@ -360,6 +373,9 @@ export default function DashboardScreen() {
         supabase.from("property_maintenance_tasks").select("properties!inner(user_id)", { count: "exact", head: true }).eq("properties.user_id", user.id),
         supabase.from("health_appointments").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       ]);
+      if (veh.error) throw veh.error;
+      if (prop.error) throw prop.error;
+      if (health.error) throw health.error;
       return (veh.count ?? 0) + (prop.count ?? 0) + (health.count ?? 0);
     },
     enabled: !!user,
@@ -372,13 +388,15 @@ export default function DashboardScreen() {
       const onlyVehicle = counts.vehicles > 0 && counts.properties === 0 && counts.health === 0;
       const onlyProperty = counts.properties > 0 && counts.vehicles === 0 && counts.health === 0;
       if (onlyVehicle) {
-        const { data } = await supabase.from("vehicles").select("nickname, year, make, model").eq("user_id", user.id).limit(1).maybeSingle();
+        const { data, error } = await supabase.from("vehicles").select("nickname, year, make, model").eq("user_id", user.id).limit(1).maybeSingle();
+        if (error) throw error;
         if (!data) return null;
         const vehicleName = [data.year, data.make, data.model].filter(Boolean).join(" ");
         return data.nickname ?? (vehicleName.length > 0 ? vehicleName : null);
       }
       if (onlyProperty) {
-        const { data } = await supabase.from("properties").select("nickname, address").eq("user_id", user.id).limit(1).maybeSingle();
+        const { data, error } = await supabase.from("properties").select("nickname, address").eq("user_id", user.id).limit(1).maybeSingle();
+        if (error) throw error;
         if (!data) return null;
         return data.nickname ?? data.address ?? null;
       }
