@@ -36,6 +36,7 @@ import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
 import { parseISO, isBefore, addDays, addMonths, format } from "date-fns";
 import { SaveToast } from "@/components/SaveToast";
+import LoadErrorState from "@/components/LoadErrorState";
 import DatePicker from "@/components/DatePicker";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
@@ -129,10 +130,11 @@ export default function PropertyDetailScreen() {
     return [header, ...rows, "", "Data is self-reported by the property owner and has not been independently verified."].join("\n");
   }
 
-  const { data: property, isLoading: loadingProperty } = useQuery({
+  const { data: property, isLoading: loadingProperty, isError: propertyError, fetchStatus: propertyFetchStatus, refetch: refetchProperty } = useQuery({
     queryKey: ["property", id],
     queryFn: async () => {
-      const { data } = await supabase.from("properties").select("*").eq("id", id).maybeSingle();
+      const { data, error } = await supabase.from("properties").select("*").eq("id", id).maybeSingle();
+      if (error) throw error;
       return data;
     },
   });
@@ -140,11 +142,12 @@ export default function PropertyDetailScreen() {
   const { data: tasks, isLoading: loadingTasks, refetch } = useQuery({
     queryKey: ["property_tasks", id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("property_maintenance_tasks")
         .select("*")
         .eq("property_id", id!)
         .order("next_due_date", { ascending: true });
+      if (error) throw error;
       return data ?? [];
     },
     enabled: !!id,
@@ -175,17 +178,20 @@ export default function PropertyDetailScreen() {
   const { data: logs, refetch: refetchLogs } = useQuery({
     queryKey: ["property_logs", id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("maintenance_logs")
         .select("*")
         .eq("property_id", id!)
         .order("service_date", { ascending: false });
+      if (error) throw error;
       return data ?? [];
     },
     enabled: !!id,
   });
 
   const scheduleTasks = tasks;
+
+  function handlePropertyRetry() { refetchProperty(); handleRetrySchedule(); refetchLogs(); }
 
   const { data: costEstimates } = useQuery({
     queryKey: ["property_repair_costs", id, property?.property_type, scheduleTasks?.length ?? 0],
@@ -635,6 +641,8 @@ export default function PropertyDetailScreen() {
 
       {isLoading ? (
         <ActivityIndicator color={Colors.accent} style={{ marginTop: 60 }} />
+      ) : (!property && (propertyError || propertyFetchStatus === "paused")) ? (
+        <LoadErrorState onRetry={handlePropertyRetry} title="Unable to load this property" body="Your property is saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading property again" />
       ) : !property ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 }}>
           <Text style={{ fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" }}>Property not found</Text>

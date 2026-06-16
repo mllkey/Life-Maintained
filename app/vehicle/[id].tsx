@@ -36,6 +36,7 @@ import { capture } from "@/lib/analytics";
 import Paywall from "@/components/Paywall";
 import { hasPersonalOrAbove } from "@/lib/subscription";
 import { SaveToast } from "@/components/SaveToast";
+import LoadErrorState from "@/components/LoadErrorState";
 import DatePicker from "@/components/DatePicker";
 import { HOURS_TRACKED_TYPES, MILEAGE_TRACKED_TYPES } from "@/lib/vehicleTypes";
 import { formatShopAndDiy } from "@/lib/costFormat";
@@ -185,10 +186,11 @@ export default function VehicleDetailScreen() {
 
   const [editTaskSheet, setEditTaskSheet] = useState<any | null>(null);
 
-  const { data: vehicle, isLoading: loadingVehicle } = useQuery({
+  const { data: vehicle, isLoading: loadingVehicle, isError: vehicleError, fetchStatus: vehicleFetchStatus, refetch: refetchVehicle } = useQuery({
     queryKey: ["vehicle", id],
     queryFn: async () => {
-      const { data } = await supabase.from("vehicles").select("*").eq("id", id).maybeSingle();
+      const { data, error } = await supabase.from("vehicles").select("*").eq("id", id).maybeSingle();
+      if (error) throw error;
       return data;
     },
     enabled: !!id,
@@ -281,14 +283,17 @@ export default function VehicleDetailScreen() {
   const { data: logs, refetch: refetchLogs } = useQuery({
     queryKey: ["maintenance_logs", id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("maintenance_logs")
         .select("*")
         .eq("vehicle_id", id)
         .order("service_date", { ascending: false });
+      if (error) throw error;
       return data ?? [];
     },
   });
+
+  function handleVehicleRetry() { refetchVehicle(); refetchSchedule(); refetchLogs(); }
 
   const vehicleMode = useMemo(
     () => (vehicle ? resolveTrackingMode(vehicle) : "mileage"),
@@ -1628,6 +1633,8 @@ export default function VehicleDetailScreen() {
             </View>
           )}
         </ScrollView>
+      ) : (vehicleError || vehicleFetchStatus === "paused") ? (
+        <LoadErrorState onRetry={handleVehicleRetry} title="Unable to load this vehicle" body="Your vehicle is saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading vehicle again" />
       ) : (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 }}>
           <Text style={{ fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" }}>Vehicle not found</Text>
