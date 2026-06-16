@@ -36,6 +36,7 @@ const PROFILE_SELECT =
   "onboarding_completed, subscription_tier, trial_started_at, trial_expires_at, subscription_expires_at, revenuecat_customer_id, push_token, monthly_scan_count, scan_count_reset_at";
 
 export const getOnboardingKey = (userId: string) => `@onboarding_completed_${userId}`;
+const getProfileKey = (userId: string) => `@profile_snapshot_${userId}`;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -107,6 +108,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const writeProfileCache = useCallback(async (userId: string, p: Profile) => {
+    try {
+      await AsyncStorage.setItem(getProfileKey(userId), JSON.stringify(p));
+    } catch {}
+  }, []);
+
+  const readProfileCache = useCallback(
+    async (userId: string): Promise<Profile | null> => {
+      try {
+        const raw = await AsyncStorage.getItem(getProfileKey(userId));
+        if (!raw) return null;
+        return buildProfile(userId, JSON.parse(raw));
+      } catch {
+        return null;
+      }
+    },
+    [buildProfile]
+  );
+
+  const clearProfileCache = useCallback(async (userId: string) => {
+    try {
+      await AsyncStorage.removeItem(getProfileKey(userId));
+    } catch {}
+  }, []);
+
   const fetchProfileFromDb = useCallback(
     async (userId: string, attempt = 0): Promise<Profile | null> => {
       if (profileFetchPromiseRef.current && profileFetchUserIdRef.current === userId) {
@@ -155,24 +181,99 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hydrateFromSession = useCallback(
     async (
       nextSession: Session,
-      options?: { showLoading?: boolean; quiet?: boolean }
+      options?: { showLoading?: boolean; quiet?: boolean; instant?: boolean }
     ) => {
       const showLoading = options?.showLoading ?? true;
       const quiet = options?.quiet ?? false;
+      const instant = options?.instant ?? false;
       const runId = ++hydrateRunIdRef.current;
 
       if (!mountedRef.current) return;
 
+      const userId = nextSession.user.id;
       sessionRef.current = nextSession;
       setSession(nextSession);
-      userIdRef.current = nextSession.user.id;
+      userIdRef.current = userId;
 
       if (showLoading) setIsLoading(true);
       if (!quiet) setProfileLoaded(false);
 
-      const cachedOnboarding = await readOnboardingCache(nextSession.user.id);
+      const isStale = () => !mountedRef.current || hydrateRunIdRef.current !== runId;
 
-      if (!mountedRef.current || hydrateRunIdRef.current !== runId) {
+      // Reconcile against the authoritative DB profile. Updates state + cache.
+      // Shared by the instant (background) and default (awaited) paths.
+      const applyDbProfile = (fullProfile: Profile | null, cachedOnboarding: boolean) => {
+        if (isStale()) return;
+        if (fullProfile) {
+          setProfile(fullProfile);
+          writeProfileCache(userId, fullProfile).catch(() => {});
+          identifyUser(userId, {
+            subscription_tier: fullProfile.subscription_tier ?? null,
+            onboarding_completed: !!fullProfile.onboarding_completed,
+          });
+          if (fullProfile.onboarding_completed) {
+            setOnboardingCompleted(true);
+            setOnboardingCacheTrue(userId).catch(() => {});
+          } else {
+            setOnboardingCompleted(false);
+            clearOnboardingCache(userId).catch(() => {});
+          }
+          checkAndResetScanCount(userId, fullProfile).catch(() => {});
+        } else if (!instant) {
+          // Default path only: an authoritative empty result means no profile
+          // row yet. Clear the stale snapshot so the next cold start does not
+          // resurrect it; instant path keeps cached state rather than clobbering.
+          setProfile(null);
+          clearProfileCache(userId).catch(() => {});
+          setOnboardingCompleted(cachedOnboarding);
+        }
+      };
+
+      if (instant) {
+        // COLD-START / OFFLINE-FIRST PATH.
+        // Apply locally cached session + profile + onboarding synchronously so
+        // routing and tier are correct with zero network on the critical path,
+        // then reconcile from the DB in the background. This removes the
+        // cold-start hang when the device is offline or the network is slow.
+        let cachedOnboarding = false;
+        let cachedProfile: Profile | null = null;
+        try {
+          [cachedOnboarding, cachedProfile] = await Promise.all([
+            readOnboardingCache(userId),
+            readProfileCache(userId),
+          ]);
+        } catch {
+          // Cache read failed: fall back to defaults and still release the gates.
+        }
+
+        if (isStale()) {
+          if (showLoading && mountedRef.current) setIsLoading(false);
+          return;
+        }
+
+        if (cachedProfile) {
+          setProfile(cachedProfile);
+          setOnboardingCompleted(cachedProfile.onboarding_completed || cachedOnboarding);
+        } else if (cachedOnboarding) {
+          setOnboardingCompleted(true);
+        }
+
+        setProfileLoaded(true);
+        if (showLoading) setIsLoading(false);
+
+        fetchProfileFromDb(userId)
+          .then((fullProfile) => applyDbProfile(fullProfile, cachedOnboarding))
+          .catch((e) => {
+            console.error("[AUTH] background profile refresh failed:", e);
+          });
+        return;
+      }
+
+      // DEFAULT PATH (fresh sign-in, token refresh, manual refresh): await the
+      // DB so routing reflects the authoritative profile, exactly as before.
+      const cachedOnboarding = await readOnboardingCache(userId);
+
+      if (isStale()) {
         if (showLoading && mountedRef.current) setIsLoading(false);
         return;
       }
@@ -180,44 +281,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cachedOnboarding) setOnboardingCompleted(true);
 
       try {
-        const fullProfile = await fetchProfileFromDb(nextSession.user.id);
-
-        if (!mountedRef.current || hydrateRunIdRef.current !== runId) {
-          if (showLoading && mountedRef.current) setIsLoading(false);
-          return;
-        }
-
-        if (fullProfile) {
-          setProfile(fullProfile);
-
-          identifyUser(nextSession.user.id, {
-            subscription_tier: fullProfile.subscription_tier ?? null,
-            onboarding_completed: !!fullProfile.onboarding_completed,
-          });
-
-          if (fullProfile.onboarding_completed) {
-            setOnboardingCompleted(true);
-            setOnboardingCacheTrue(nextSession.user.id).catch(() => {});
-          } else {
-            setOnboardingCompleted(false);
-            clearOnboardingCache(nextSession.user.id).catch(() => {});
-          }
-
-          checkAndResetScanCount(nextSession.user.id, fullProfile).catch(() => {});
-        } else {
-          setProfile(null);
-          setOnboardingCompleted(cachedOnboarding);
-        }
-
-        setProfileLoaded(true);
+        const fullProfile = await fetchProfileFromDb(userId);
+        applyDbProfile(fullProfile, cachedOnboarding);
+        if (!isStale()) setProfileLoaded(true);
       } catch (e) {
         console.error("[AUTH] hydrateFromSession profile fetch failed:", e);
-
-        if (!mountedRef.current || hydrateRunIdRef.current !== runId) {
+        if (isStale()) {
           if (showLoading && mountedRef.current) setIsLoading(false);
           return;
         }
-
         if (cachedOnboarding) setOnboardingCompleted(true);
         setProfileLoaded(true);
       } finally {
@@ -226,7 +298,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [clearOnboardingCache, fetchProfileFromDb, readOnboardingCache, setOnboardingCacheTrue]
+    [
+      clearOnboardingCache,
+      clearProfileCache,
+      fetchProfileFromDb,
+      readOnboardingCache,
+      readProfileCache,
+      setOnboardingCacheTrue,
+      writeProfileCache,
+    ]
   );
 
   const refreshProfile = useCallback(async () => {
@@ -248,7 +328,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mountedRef.current) return;
 
         if (existingSession?.user) {
-          await hydrateFromSession(existingSession, { showLoading: false, quiet: false });
+          void hydrateFromSession(existingSession, { showLoading: false, quiet: false, instant: true });
         } else {
           applySignedOutState();
         }
@@ -325,6 +405,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userIdToClear = sessionRef.current?.user?.id ?? userIdRef.current;
     if (userIdToClear) {
       await clearOnboardingCache(userIdToClear);
+      await clearProfileCache(userIdToClear);
     }
 
     hydrateRunIdRef.current += 1;
