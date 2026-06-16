@@ -20,6 +20,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
+import LoadErrorState from "@/components/LoadErrorState";
 import { parseISO, format } from "date-fns";
 
 const { width: SW, height: SH } = Dimensions.get("window");
@@ -35,15 +36,16 @@ export default function PropertyTaskHistoryScreen() {
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [receiptGeneratingId, setReceiptGeneratingId] = useState<string | null>(null);
 
-  const { data: logs, isLoading } = useQuery({
+  const { data: logs, isLoading, isError, fetchStatus, refetch } = useQuery({
     queryKey: ["property_task_logs", propertyId, task],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("maintenance_logs")
         .select("*")
         .eq("property_id", propertyId!)
         .eq("service_name", task!)
         .order("service_date", { ascending: false });
+      if (error) throw error;
       return data ?? [];
     },
     enabled: !!(propertyId && task),
@@ -116,6 +118,8 @@ export default function PropertyTaskHistoryScreen() {
 
       {isLoading ? (
         <ActivityIndicator color={Colors.accent} style={{ marginTop: 60 }} />
+      ) : (!logs?.length && (isError || fetchStatus === "paused")) ? (
+        <LoadErrorState onRetry={refetch} title="Unable to load service history" body="Your records are saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading service history again" />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

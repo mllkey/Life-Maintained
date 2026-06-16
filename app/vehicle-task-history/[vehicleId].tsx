@@ -20,6 +20,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
+import LoadErrorState from "@/components/LoadErrorState";
 import { parseISO, format } from "date-fns";
 import { isHoursTracked } from "@/lib/usageHelpers";
 
@@ -51,16 +52,17 @@ export default function VehicleTaskHistoryScreen() {
 
   const tracksHours = isHoursTracked(vehicleMeta ?? {});
 
-  const { data: logs, isLoading } = useQuery({
+  const { data: logs, isLoading, isError, fetchStatus, refetch } = useQuery({
     queryKey: ["vehicle_task_logs", vehicleId, task],
     queryFn: async () => {
       if (__DEV__) console.log("[taskHistory] Querying:", { vehicle_id: vehicleId, service_name: task });
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("maintenance_logs")
         .select("*")
         .eq("vehicle_id", vehicleId!)
         .eq("service_name", task!)
         .order("service_date", { ascending: false });
+      if (error) throw error;
       return data ?? [];
     },
     enabled: !!(vehicleId && task),
@@ -135,6 +137,8 @@ export default function VehicleTaskHistoryScreen() {
 
       {isLoading ? (
         <ActivityIndicator color={Colors.accent} style={{ marginTop: 60 }} />
+      ) : (!logs?.length && (isError || fetchStatus === "paused")) ? (
+        <LoadErrorState onRetry={refetch} title="Unable to load service history" body="Your records are saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading service history again" />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
