@@ -47,7 +47,7 @@ export default function ForgotPasswordScreen() {
           <View style={styles.formContainer}>
             <Image source={require("@/assets/images/brand-logo.png")} style={{ width: 64, height: 64, alignSelf: "center", marginBottom: 4 }} resizeMode="contain" />
             <Text style={styles.title}>Reset password</Text>
-            <Text style={styles.subtitle}>Enter your email and we'll send you a 6-digit reset code.</Text>
+            <Text style={styles.subtitle}>Enter your email and we&apos;ll send you a 6-digit reset code.</Text>
             {error && (
               <View style={styles.errorBox}>
                 <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
