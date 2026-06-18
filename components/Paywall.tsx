@@ -107,7 +107,7 @@ type PaywallInlineError = {
   feedback?: "error" | "warning";
 };
 
-export type PaywallVertical = "vehicle" | "property" | "family" | "scans" | "general";
+export type PaywallVertical = "vehicle" | "property" | "family" | "scans" | "voice" | "general";
 export type PaywallReason = "limit_reached" | "feature_locked" | "locked_existing" | "general";
 export interface PaywallContext {
   vertical: PaywallVertical;
@@ -147,6 +147,7 @@ function contextualSubtitle(ctx: PaywallContext | undefined): string {
     if (ctx.vertical === "property") return "Upgrade to add more properties";
     if (ctx.vertical === "family") return "Upgrade to add more family members";
     if (ctx.vertical === "scans") return "Upgrade for more receipt scans";
+    if (ctx.vertical === "voice") return "Upgrade for more voice logging";
     return "Upgrade to keep going";
   }
   if (ctx.reason === "feature_locked") {

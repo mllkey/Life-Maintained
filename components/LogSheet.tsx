@@ -17,7 +17,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { FunctionsHttpError } from "@supabase/supabase-js";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import type { Profile } from "@/lib/subscription";
 import { hasPersonalOrAbove, hasProOrAbove } from "@/lib/subscription";
@@ -794,7 +794,7 @@ export function LogSheet({
                       const cta = voiceCapCtaActionFor(profile);
                       handleClose();
                       if (cta === "paywall") {
-                        setTimeout(() => router.push("/subscription"), 50);
+                        setTimeout(() => router.push("/subscription?vertical=voice&reason=limit_reached" as Href), 50);
                       }
                     }}
                     accessibilityRole="button"
