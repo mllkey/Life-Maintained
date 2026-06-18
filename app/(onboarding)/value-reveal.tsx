@@ -332,7 +332,7 @@ export default function ValueRevealScreen() {
             </View>
             <Text style={styles.coverageTitle}>{displayName} is covered</Text>
             <Text style={styles.coverageSub}>
-              {`We’re watching ${coverageCountLabel}. We’ll remind you before the first one is due.`}
+              {`We\u2019re watching ${coverageCountLabel}. We\u2019ll remind you before the first one is due.`}
             </Text>
           </Animated.View>
         )}
