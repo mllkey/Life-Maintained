@@ -20,26 +20,20 @@ Deno.serve(async (req: Request) => {
     return json({ error: "OPENAI_API_KEY secret is not configured" }, 500);
   }
 
-  // --- Authenticate, abuse rate-limit, daily voice cap ---
-  // Order matters: abuse rate-limit fires BEFORE daily cap, so attempts
-  // rejected by the abuse limiter do not consume the user's daily quota.
-  // Daily voice cap: Free 5/day, Personal 30/day. Pro/Business get NO daily
-  // cap; abuse protection is the only limit they hit.
-  // Daily cap response is HTTP 200 with a structured error code so the
-  // client can distinguish it from the abuse-limit 429.
-  // The fn_name "transcribe-audio:daily" is namespaced separately from the
-  // per-minute "transcribe-audio" so the two windows do not collide.
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+
+  // --- Authenticate, resolve tier, per-minute abuse rate-limit ---
+  // Order: auth FIRST (never read the audio body before authenticating), then
+  // the per-minute abuse limiter. The daily cap is consumed later, AFTER the
+  // body is validated, so a malformed request can never burn a daily slot.
   let resolvedUserId = "";
   let voiceDailyCap: number | null = null;
-  let voiceRemainingToday: number | null = null;
   try {
     const { userId } = await requireUser(req);
     resolvedUserId = userId;
-    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Resolve current effective tier for this user.
     const { data: profileRow, error: profileErr } = await adminClient
       .from("profiles")
       .select("subscription_tier, trial_expires_at, subscription_expires_at")
@@ -56,7 +50,7 @@ Deno.serve(async (req: Request) => {
     const trialActive = tier === "trial" && trialMs > now;
     const subActive = ["personal", "pro", "business"].includes(tier) && subMs > now;
 
-    // Trial is treated as Pro/Business equivalence — no daily cap.
+    // Trial is treated as Pro/Business equivalence: no daily cap.
     if (trialActive || (subActive && (tier === "pro" || tier === "business"))) {
       voiceDailyCap = null;
     } else if (subActive && tier === "personal") {
@@ -65,40 +59,9 @@ Deno.serve(async (req: Request) => {
       voiceDailyCap = 5;
     }
 
-    // 1. Per-minute abuse rate-limit (all tiers). Fires FIRST so rejected
-    //    attempts do not consume daily voice quota. On cap, throws
-    //    RateLimitError -> handled by existing 429 branch below.
+    // Per-minute abuse rate-limit (all tiers). Fires before the daily cap so
+    // rejected attempts never consume daily quota. Throws RateLimitError -> 429.
     await enforceAiRateLimit(adminClient, userId, "transcribe-audio");
-
-    // 2. Daily voice cap (Free/Personal only).
-    if (voiceDailyCap !== null) {
-      const { data: dailyOk, error: dailyErr } = await adminClient.rpc("check_rate_limit", {
-        p_user_id: userId,
-        p_fn_name: "transcribe-audio:daily",
-        p_max_calls: voiceDailyCap,
-        p_window_seconds: 86400,
-      });
-      if (dailyErr) {
-        console.error("[transcribe-audio] daily check_rate_limit RPC error:", dailyErr.message);
-        return json({ error: "Could not verify your voice quota. Please try again." }, 500);
-      }
-      if (dailyOk === false) {
-        // Daily cap hit — short-circuit with HTTP 200 structured payload.
-        return json({ error: "voice_cap_reached", voice_remaining_today: 0 }, 200);
-      }
-
-      // Compute remaining-today after this attempt was logged.
-      const sinceIso = new Date(now - 86400 * 1000).toISOString();
-      const { count: dailyCount } = await adminClient
-        .from("rate_limit_events")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .eq("fn_name", "transcribe-audio:daily")
-        .gte("occurred_at", sinceIso);
-      voiceRemainingToday = Math.max(0, voiceDailyCap - (dailyCount ?? 0));
-    } else {
-      voiceRemainingToday = null;
-    }
   } catch (err) {
     if (err instanceof AuthError) {
       return json({ error: err.message }, err.status);
@@ -109,11 +72,12 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
       });
     }
-    console.error("[transcribe-audio] auth/gate/rate error:", err);
+    console.error("[transcribe-audio] auth/tier/rate error:", err);
     return json({ error: "Internal server error" }, 500);
   }
 
-  // --- Parse request body ---
+  // --- Parse + validate body BEFORE consuming the daily quota ---
+  // A malformed or empty body is a user error and must never burn a daily slot.
   let audioBase64: string;
   let mimeType: string;
   try {
@@ -123,12 +87,51 @@ Deno.serve(async (req: Request) => {
     if (!audioBase64) throw new Error("No audio provided");
   } catch (err) {
     console.error("[transcribe-audio] Bad request body:", err);
-    return json({ error: "Invalid request body — expected { audio: base64string, mimeType: string }" }, 400);
+    return json({ error: "Invalid request body - expected { audio: base64string, mimeType: string }" }, 400);
   }
 
   console.log("[transcribe-audio] audio base64 length:", audioBase64.length, "mimeType:", mimeType);
 
-  // --- Convert base64 to binary ---
+  // --- Daily voice cap (Free/Personal only), per LOCAL CALENDAR DAY ---
+  // Consume happens after body validation and before the paid Whisper call.
+  // On a hard provider/function failure we refund the slot so a timeout or 5xx
+  // never costs the user one of their daily logs.
+  let voiceRemainingToday: number | null = null;
+  let voiceEventId: string | null = null;
+  if (voiceDailyCap !== null) {
+    const tzHeader = req.headers.get("x-client-tz");
+    const clientTz = (tzHeader && tzHeader.length > 0 && tzHeader.length <= 64) ? tzHeader : "UTC";
+    const { data: capData, error: capErr } = await adminClient.rpc("consume_voice_daily", {
+      p_user_id: resolvedUserId,
+      p_max_calls: voiceDailyCap,
+      p_tz: clientTz,
+    });
+    if (capErr) {
+      console.error("[transcribe-audio] consume_voice_daily RPC error:", capErr.message);
+      return json({ error: "Could not verify your voice quota. Please try again." }, 500);
+    }
+    const cap = capData as { allowed?: boolean; remaining?: number; event_id?: string } | null;
+    if (!cap || cap.allowed !== true) {
+      return json({ error: "voice_cap_reached", voice_remaining_today: 0 }, 200);
+    }
+    voiceRemainingToday = cap.remaining ?? null;
+    voiceEventId = cap.event_id ?? null;
+  }
+
+  // Best-effort refund of a consumed daily slot on hard failure only.
+  const refundVoiceSlot = async () => {
+    if (voiceDailyCap === null || !voiceEventId) return;
+    try {
+      await adminClient.rpc("refund_voice_daily", {
+        p_user_id: resolvedUserId,
+        p_event_id: voiceEventId,
+      });
+    } catch (refundErr) {
+      console.error("[transcribe-audio] refund_voice_daily failed:", refundErr);
+    }
+  };
+
+  // --- Convert base64 to binary + call Whisper ---
   try {
     const binaryStr = atob(audioBase64);
     const bytes = new Uint8Array(binaryStr.length);
@@ -136,7 +139,6 @@ Deno.serve(async (req: Request) => {
       bytes[i] = binaryStr.charCodeAt(i);
     }
 
-    // Determine file extension from mime type
     const ext = mimeType === "audio/mp4" || mimeType === "audio/m4a" ? "m4a"
       : mimeType === "audio/wav" ? "wav"
       : mimeType === "audio/mpeg" || mimeType === "audio/mp3" ? "mp3"
@@ -158,9 +160,7 @@ Deno.serve(async (req: Request) => {
     try {
       whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-        },
+        headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
         body: formData,
         signal: aiController.signal,
       });
@@ -170,6 +170,7 @@ Deno.serve(async (req: Request) => {
     } catch (fetchErr) {
       clearTimeout(aiTimeoutId);
       const elapsedMs = Date.now() - aiStartedAt;
+      await refundVoiceSlot();
       if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
         console.error(`[transcribe-audio] AI call timed out after ${elapsedMs}ms (limit ${TIMEOUT_MS}ms)`);
         return json({ error: "Transcription timed out. Please try again." }, 504);
@@ -180,6 +181,7 @@ Deno.serve(async (req: Request) => {
 
     if (!whisperRes.ok) {
       const errText = await whisperRes.text();
+      await refundVoiceSlot();
       console.error(`[transcribe-audio] Whisper API error ${whisperRes.status}:`, errText);
       return json({ error: `Whisper API returned ${whisperRes.status}: ${errText}` }, 502);
     }
@@ -189,6 +191,7 @@ Deno.serve(async (req: Request) => {
 
     return json({ text: whisperData.text ?? "", voice_remaining_today: voiceRemainingToday });
   } catch (err) {
+    await refundVoiceSlot();
     console.error("[transcribe-audio] Unexpected error:", err);
     return json({ error: "Internal server error" }, 500);
   }

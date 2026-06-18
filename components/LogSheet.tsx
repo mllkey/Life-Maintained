@@ -607,8 +607,14 @@ export function LogSheet({
       const fileContent = await FileSystem.readAsStringAsync(uri, {
         encoding: "base64" as any,
       });
+      let clientTz = "UTC";
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (typeof tz === "string" && tz.length > 0) clientTz = tz;
+      } catch {}
       const { data, error } = await supabase.functions.invoke<TranscribeAudioResponse>("transcribe-audio", {
         body: { audio: fileContent, mimeType: "audio/m4a" },
+        headers: { "x-client-tz": clientTz },
       });
 
       // Daily voice cap is a structured HTTP 200 payload with error="voice_cap_reached".

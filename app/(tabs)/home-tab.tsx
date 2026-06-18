@@ -164,7 +164,7 @@ export default function HomeTabScreen() {
         ) : (!properties?.length && (isError || fetchStatus === "paused")) ? (
           <LoadErrorState onRetry={refetch} title="Unable to load your properties" body="Your properties are saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading properties again" />
         ) : properties?.length === 0 ? (
-          <EmptyProperties />
+          <EmptyProperties onAddPress={guardedAddPropertyPress} />
         ) : (
           properties?.map((p, idx) => {
             const isLocked = idx >= propertyLimit(profile);
@@ -259,11 +259,16 @@ function PropertyListSkeleton() {
   );
 }
 
-function EmptyProperties() {
+function EmptyProperties({ onAddPress }: { onAddPress: () => void }) {
   return (
     <View style={styles.emptyWrap}>
       <Text style={styles.emptyTitle}>No properties yet</Text>
-      <Text style={styles.emptyText}>Add your first property</Text>
+      <Pressable
+        style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onAddPress(); }}
+      >
+        <Text style={styles.emptyLink}>Add your first property</Text>
+      </Pressable>
     </View>
   );
 }
@@ -303,5 +308,5 @@ const styles = StyleSheet.create({
 
   emptyWrap: { paddingTop: 60, alignItems: "center", gap: 6 },
   emptyTitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.accent },
+  emptyLink: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.accent },
 });
