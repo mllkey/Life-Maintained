@@ -116,6 +116,8 @@ export default function ValueRevealScreen() {
   const supportTwoOpacity = useSharedValue(0);
   const supportTwoY = useSharedValue(12);
   const bridgeOpacity = useSharedValue(0);
+  const coverageOpacity = useSharedValue(0);
+  const coverageY = useSharedValue(16);
 
   useEffect(() => {
     capture("onboarding_step_viewed", { step: "value_reveal" });
@@ -173,6 +175,19 @@ export default function ValueRevealScreen() {
     enabled: (topTasks?.length ?? 0) > 0,
   });
 
+  const { data: watchedCount } = useQuery({
+    queryKey: ["onboarding_watched_count", vehicleId],
+    queryFn: async () => {
+      if (!vehicleId) return 0;
+      const { count } = await supabase
+        .from("user_vehicle_maintenance_tasks")
+        .select("*", { count: "exact", head: true })
+        .eq("vehicle_id", vehicleId);
+      return count ?? 0;
+    },
+    enabled: (topTasks?.length ?? 0) > 0,
+  });
+
   async function completeOnboarding(): Promise<boolean> {
     setCompletionError(null);
     if (user) {
@@ -219,6 +234,8 @@ export default function ValueRevealScreen() {
   const tasksToShow: RevealTask[] = (topTasks ?? []).slice(0, 3);
   const hasTasks = tasksToShow.length > 0;
   const displayName = vehicleName || "vehicle";
+  const watchedTotal = watchedCount && watchedCount > 0 ? watchedCount : tasksToShow.length;
+  const coverageCountLabel = watchedTotal === 1 ? "1 maintenance item" : `${watchedTotal} maintenance items`;
   const heroTask = tasksToShow[0] ?? null;
   const supportingTasks = tasksToShow.slice(1, 3);
 
@@ -232,26 +249,31 @@ export default function ValueRevealScreen() {
       supportTwoOpacity.value = 0;
       supportTwoY.value = 12;
       bridgeOpacity.value = 0;
+      coverageOpacity.value = 0;
+      coverageY.value = 16;
       return;
     }
 
-    heroOpacity.value = withTiming(1, { duration: 360, easing: Easing.out(Easing.cubic) });
-    heroY.value = withTiming(0, { duration: 360, easing: Easing.out(Easing.cubic) });
-    supportOneOpacity.value = withDelay(150, withTiming(1, { duration: 280, easing: Easing.out(Easing.cubic) }));
-    supportOneY.value = withDelay(150, withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }));
-    supportTwoOpacity.value = withDelay(300, withTiming(1, { duration: 280, easing: Easing.out(Easing.cubic) }));
-    supportTwoY.value = withDelay(300, withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }));
-    bridgeOpacity.value = withDelay(420, withTiming(1, { duration: 260, easing: Easing.out(Easing.ease) }));
+    coverageOpacity.value = withTiming(1, { duration: 340, easing: Easing.out(Easing.cubic) });
+    coverageY.value = withTiming(0, { duration: 340, easing: Easing.out(Easing.cubic) });
+    heroOpacity.value = withDelay(160, withTiming(1, { duration: 340, easing: Easing.out(Easing.cubic) }));
+    heroY.value = withDelay(160, withTiming(0, { duration: 340, easing: Easing.out(Easing.cubic) }));
+    supportOneOpacity.value = withDelay(320, withTiming(1, { duration: 280, easing: Easing.out(Easing.cubic) }));
+    supportOneY.value = withDelay(320, withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }));
+    supportTwoOpacity.value = withDelay(460, withTiming(1, { duration: 280, easing: Easing.out(Easing.cubic) }));
+    supportTwoY.value = withDelay(460, withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }));
+    bridgeOpacity.value = withDelay(600, withTiming(1, { duration: 260, easing: Easing.out(Easing.ease) }));
 
     if (revealHapticsFired.current) return;
     revealHapticsFired.current = true;
     const timers = [
       setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}), 80),
-      setTimeout(() => Haptics.selectionAsync().catch(() => {}), 230),
-      setTimeout(() => Haptics.selectionAsync().catch(() => {}), 380),
+      setTimeout(() => Haptics.selectionAsync().catch(() => {}), 240),
+      setTimeout(() => Haptics.selectionAsync().catch(() => {}), 400),
+      setTimeout(() => Haptics.selectionAsync().catch(() => {}), 540),
     ];
     return () => timers.forEach(clearTimeout);
-  }, [hasTasks, heroOpacity, heroY, supportOneOpacity, supportOneY, supportTwoOpacity, supportTwoY, bridgeOpacity]);
+  }, [hasTasks, heroOpacity, heroY, supportOneOpacity, supportOneY, supportTwoOpacity, supportTwoY, bridgeOpacity, coverageOpacity, coverageY]);
 
   const heroRevealStyle = useAnimatedStyle(() => ({
     opacity: heroOpacity.value,
@@ -270,6 +292,11 @@ export default function ValueRevealScreen() {
 
   const bridgeRevealStyle = useAnimatedStyle(() => ({
     opacity: bridgeOpacity.value,
+  }));
+
+  const coverageRevealStyle = useAnimatedStyle(() => ({
+    opacity: coverageOpacity.value,
+    transform: [{ translateY: coverageY.value }],
   }));
 
   return (
@@ -297,9 +324,17 @@ export default function ValueRevealScreen() {
           </View>
         )}
 
-        {/* Trust signal */}
+        {/* Protection receipt: coverage confirmation, first reveal beat */}
         {hasTasks && (
-          <Text style={styles.trust}>Based on your vehicle and current usage</Text>
+          <Animated.View style={[styles.coverageBlock, coverageRevealStyle]}>
+            <View style={styles.coverageIcon}>
+              <Ionicons name="shield-checkmark" size={20} color={Colors.good} />
+            </View>
+            <Text style={styles.coverageTitle}>{displayName} is covered</Text>
+            <Text style={styles.coverageSub}>
+              {`We’re watching ${coverageCountLabel}. We’ll remind you before the first one is due.`}
+            </Text>
+          </Animated.View>
         )}
 
         {/* Task preview — skeletons while waiting; empty after poll timeout */}
@@ -422,6 +457,10 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text },
   subtitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
   trust: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
+  coverageBlock: { backgroundColor: Colors.card, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: Colors.goodMuted, gap: 8, alignItems: "flex-start" },
+  coverageIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: Colors.goodMuted, marginBottom: 2 },
+  coverageTitle: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5, lineHeight: 32 },
+  coverageSub: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
   tasksSection: { gap: 12 },
   sectionLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
   heroTaskCard: {
