@@ -175,6 +175,22 @@ export default function DeveloperTestNotifications() {
         return;
       }
 
+      // DEV-ONLY: force the deep-linked item into a genuinely date-overdue state so the
+      // reminder-fired moment has a reason to present. Medication is intentionally excluded
+      // and must never be mutated (it must never fire the moment).
+      const devPastDue = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
+      const devPastCompleted = new Date(Date.now() - 180 * 86400000).toISOString().slice(0, 10);
+      // Each update ends with .select("id").single().throwOnError() so an RLS failure, a
+      // zero-row update, or any error THROWS into the catch below and stops the notification
+      // from firing — never produce a false "moment didn't fire" result from a silent write.
+      if (kind === "vehicle_task") {
+        await supabase.from("user_vehicle_maintenance_tasks").update({ next_due_date: devPastDue }).eq("id", seedEntry.taskId).select("id").single().throwOnError();
+      } else if (kind === "property_task") {
+        await supabase.from("property_maintenance_tasks").update({ next_due_date: devPastDue }).eq("id", seedEntry.taskId).select("id").single().throwOnError();
+      } else if (kind === "health_appointment") {
+        await supabase.from("health_appointments").update({ next_due_date: devPastDue, last_completed_at: devPastCompleted }).eq("id", seedEntry.taskId).select("id").single().throwOnError();
+      }
+
       await Notifications.scheduleNotificationAsync({
         content: {
           title,
@@ -222,7 +238,7 @@ export default function DeveloperTestNotifications() {
           seed.vehicleTask,
           "vehicle",
           "LifeMaintained",
-          `🔧 ${seed.vehicleTask?.taskName ?? "Task"} on ${seed.vehicleTask?.assetName ?? "your vehicle"} is due soon`,
+          `🔧 ${seed.vehicleTask?.taskName ?? "Task"} on ${seed.vehicleTask?.assetName ?? "your vehicle"} is overdue`,
         ),
     },
     {
@@ -237,7 +253,7 @@ export default function DeveloperTestNotifications() {
           seed.propertyTask,
           "property",
           "LifeMaintained",
-          `🏠 ${seed.propertyTask?.taskName ?? "Task"} on ${seed.propertyTask?.assetName ?? "your property"} is due soon`,
+          `🏠 ${seed.propertyTask?.taskName ?? "Task"} on ${seed.propertyTask?.assetName ?? "your property"} is overdue`,
         ),
     },
     {
@@ -252,7 +268,7 @@ export default function DeveloperTestNotifications() {
           seed.healthAppointment,
           "family_member",
           "LifeMaintained",
-          `📅 ${seed.healthAppointment?.assetName ?? "Family member"}'s ${seed.healthAppointment?.taskName ?? "appointment"} is due soon`,
+          `📅 ${seed.healthAppointment?.assetName ?? "Family member"}'s ${seed.healthAppointment?.taskName ?? "appointment"} is overdue`,
         ),
     },
     {
