@@ -363,9 +363,9 @@ function RootLayoutNav() {
       if (assetKind === "vehicle" && taskKind === "vehicle_task") {
         route = "vehicle";
         addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,taskId" });
-        router.push({ pathname: "/vehicle/[id]", params: { id: assetId, taskId } });
+        router.push({ pathname: "/vehicle/[id]", params: { id: assetId, taskId, reminder: "1" } });
         addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
-        scheduleNotifRouteVerification(source, reqId, route, `/vehicle/${assetId}`, () => router.replace({ pathname: "/vehicle/[id]", params: { id: assetId, taskId } }));
+        scheduleNotifRouteVerification(source, reqId, route, `/vehicle/${assetId}`, () => router.replace({ pathname: "/vehicle/[id]", params: { id: assetId, taskId, reminder: "1" } }));
       } else if (assetKind === "property" && taskKind === "property_task") {
         route = "property";
         addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,taskId" });

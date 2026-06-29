@@ -56,6 +56,7 @@ import UpdateBanner from "@/components/UpdateBanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { useDeepLinkHighlight } from "@/lib/useDeepLinkHighlight";
 import { HighlightBackdrop } from "@/components/HighlightBackdrop";
+import ReminderMoment, { type ReminderMomentHandle } from "@/components/ReminderMoment";
 
 function taskUsesHoursUsage(task: any, mode: TrackingMode): boolean {
   if (mode === "hours" || mode === "both") {
@@ -107,6 +108,25 @@ function nextUsageSortKey(
   return Infinity;
 }
 
+// Human "Overdue by ..." line for the reminder-fired moment. Usage first
+// (matches the app's usage-forward bias for vehicles), then date.
+function buildOverdueLine(task: any, vehicle: any): string {
+  const cur = currentUsageValue(vehicle);
+  const due = taskNextDueUsage(task, vehicle);
+  if (cur != null && due != null && cur >= due) {
+    const over = Math.max(0, Math.round(cur - due));
+    const unit = isHoursTracked(vehicle) ? "hours" : "miles";
+    return `Overdue by ${over.toLocaleString()} ${unit}`;
+  }
+  if (task.next_due_date) {
+    const days = differenceInDays(new Date(), parseISO(task.next_due_date));
+    if (days > 1) return `Overdue by ${days} days`;
+    if (days === 1) return "Overdue by 1 day";
+    if (days === 0) return "Due today";
+  }
+  return "Needs attention now";
+}
+
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   engine:     { bg: Colors.blueMuted,      text: Colors.blue },
   brakes:     { bg: Colors.overdueMuted,   text: Colors.overdue },
@@ -126,7 +146,7 @@ const STATUS_BORDER: Record<string, string> = {
 };
 
 export default function VehicleDetailScreen() {
-  const { id, taskId } = useLocalSearchParams<{ id: string; taskId?: string }>();
+  const { id, taskId, reminder } = useLocalSearchParams<{ id: string; taskId?: string; reminder?: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { profile, user } = useAuth();
@@ -152,6 +172,12 @@ export default function VehicleDetailScreen() {
   const [highlightedTask, setHighlightedTask] = useState<string | null>(null);
   const { highlightedId: highlightedTaskId, scrollProps: highlightScrollProps, registerRow: registerTaskRow, dismissImmediately: dismissHighlight } = useDeepLinkHighlight(taskId);
 
+  const [reminderMoment, setReminderMoment] = useState<{ task: any; title: string; statusLine: string; costLine: string | null } | null>(null);
+  const reminderRef = useRef<ReminderMomentHandle>(null);
+  const reminderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reminderFiredRef = useRef<string | null>(null);
+  const costEstimatesRef = useRef<Record<string, any> | undefined>(undefined);
+
   // Deep-link: switch tabs + expand sections. Highlight + scroll handled by hook.
   useEffect(() => {
     if (!taskId) return;
@@ -164,7 +190,11 @@ export default function VehicleDetailScreen() {
   // Blur cleanup — when this screen loses focus, dismiss the highlight.
   useFocusEffect(
     useCallback(() => {
-      return () => { dismissHighlight(); };
+      return () => {
+        dismissHighlight();
+        if (reminderTimerRef.current) { clearTimeout(reminderTimerRef.current); reminderTimerRef.current = null; }
+        reminderRef.current?.dismiss();
+      };
     }, [dismissHighlight]),
   );
   const prevScheduleCountRef = useRef(0);
@@ -280,6 +310,8 @@ export default function VehicleDetailScreen() {
     staleTime: 1000 * 60 * 60, // 1 hour
   });
 
+  costEstimatesRef.current = costEstimates;
+
   const { data: logs, refetch: refetchLogs } = useQuery({
     queryKey: ["maintenance_logs", id],
     queryFn: async () => {
@@ -307,6 +339,47 @@ export default function VehicleDetailScreen() {
       status: calcStatus(t, vehicle),
     }));
   }, [scheduleTasks, vehicle]);
+
+  // Reminder-fired moment: when opened from a maintenance reminder
+  // (reminder === "1") and the tapped task is genuinely overdue, surface a
+  // calm "flagged for you" sheet after the scroll-to-highlight settles.
+  // Fires once per tapped task; never for due-soon/upcoming reminders.
+  useEffect(() => {
+    if (reminder !== "1" || !taskId) return;
+    if (!vehicle) return;
+    if (reminderFiredRef.current === taskId) return;
+    if (!processedScheduleTasks || processedScheduleTasks.length === 0) return;
+    const task = processedScheduleTasks.find((t: any) => t.id === taskId);
+    if (!task) { reminderFiredRef.current = taskId; return; }
+    if (task.status !== "overdue" && task.status !== "needs_attention") {
+      reminderFiredRef.current = taskId;
+      return;
+    }
+    reminderFiredRef.current = taskId;
+    const vName = vehicle ? (vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`) : "your vehicle";
+    const est = costEstimatesRef.current?.[String(task.name ?? "").toLowerCase().trim()];
+    const costLine = est
+      ? formatShopAndDiy(
+          est.shop_low != null ? Number(est.shop_low) : null,
+          est.shop_high != null ? Number(est.shop_high) : null,
+          est.diy_low != null ? Number(est.diy_low) : null,
+          est.diy_high != null ? Number(est.diy_high) : null,
+        )
+      : null;
+    setReminderMoment({
+      task,
+      title: String(task.name ?? "Maintenance"),
+      statusLine: `${buildOverdueLine(task, vehicle)} · ${vName}`,
+      costLine,
+    });
+    // Intentionally NO cleanup: the timer must survive dependency-driven
+    // re-renders (the fired-guard prevents re-scheduling). It is cleared on
+    // blur and unmount.
+    reminderTimerRef.current = setTimeout(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      reminderRef.current?.present();
+    }, 700);
+  }, [reminder, taskId, processedScheduleTasks, vehicle]);
 
   const scheduleOpacity = useRef(new Animated.Value(0)).current;
 
@@ -1756,6 +1829,21 @@ export default function VehicleDetailScreen() {
           />
         </Modal>
       )}
+
+      <ReminderMoment
+        ref={reminderRef}
+        title={reminderMoment?.title ?? ""}
+        statusLine={reminderMoment?.statusLine ?? ""}
+        costLine={reminderMoment?.costLine ?? null}
+        onMarkDone={() => {
+          const t = reminderMoment?.task;
+          reminderRef.current?.dismiss();
+          if (t) setTimeout(() => handleOpenMarkComplete(t), 280);
+        }}
+        onDismiss={() => {
+          if (reminderTimerRef.current) { clearTimeout(reminderTimerRef.current); reminderTimerRef.current = null; }
+        }}
+      />
     </View>
   );
 }
