@@ -35,6 +35,7 @@ import { capture } from "@/lib/analytics";
 import { logMedicationDose, undoLastMedicationDose } from "@/lib/rpc";
 import { useDeepLinkHighlight } from "@/lib/useDeepLinkHighlight";
 import { HighlightBackdrop } from "@/components/HighlightBackdrop";
+import ReminderMoment, { type ReminderMomentHandle } from "@/components/ReminderMoment";
 
 function getApptStatus(nextDue: string | null, lastCompleted: string | null) {
   if (!lastCompleted) return "due_soon";
@@ -45,8 +46,22 @@ function getApptStatus(nextDue: string | null, lastCompleted: string | null) {
   return "good";
 }
 
+// Date-only "Overdue by ..." line for the reminder-fired moment.
+function buildOverdueDaysLine(nextDueDate: string | null): string {
+  if (!nextDueDate) return "Overdue";
+  const due = parseISO(nextDueDate);
+  const days = Math.max(1, Math.round((new Date().getTime() - due.getTime()) / 86400000));
+  if (days === 1) return "Overdue by 1 day";
+  if (days < 30) return `Overdue by ${days} days`;
+  const months = Math.round(days / 30);
+  if (months === 1) return "Overdue by about a month";
+  if (months < 12) return `Overdue by about ${months} months`;
+  const years = Math.round(months / 12);
+  return years === 1 ? "Overdue by about a year" : `Overdue by about ${years} years`;
+}
+
 export default function FamilyMemberDetailScreen() {
-  const { id, appointmentId, medicationId } = useLocalSearchParams<{ id: string; appointmentId?: string; medicationId?: string }>();
+  const { id, appointmentId, medicationId, reminder } = useLocalSearchParams<{ id: string; appointmentId?: string; medicationId?: string; reminder?: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -56,6 +71,11 @@ export default function FamilyMemberDetailScreen() {
   const [activeTab, setActiveTab] = useState<"appointments" | "medications">("appointments");
   const deepLinkTarget = appointmentId ?? medicationId;
   const { highlightedId: highlightedItemId, scrollProps: highlightScrollProps, registerRow: registerItemRow, dismissImmediately: dismissHighlight } = useDeepLinkHighlight(deepLinkTarget);
+
+  const [reminderMoment, setReminderMoment] = useState<{ appt: any; title: string; statusLine: string } | null>(null);
+  const reminderRef = useRef<ReminderMomentHandle>(null);
+  const reminderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reminderFiredRef = useRef<string | null>(null);
 
   // Deep-link: switch tab + expand target. Highlight + scroll handled by hook.
   useEffect(() => {
@@ -67,7 +87,11 @@ export default function FamilyMemberDetailScreen() {
   // Blur cleanup — dismiss the highlight when the screen loses focus.
   useFocusEffect(
     useCallback(() => {
-      return () => { dismissHighlight(); };
+      return () => {
+        dismissHighlight();
+        if (reminderTimerRef.current) { clearTimeout(reminderTimerRef.current); reminderTimerRef.current = null; }
+        reminderRef.current?.dismiss();
+      };
     }, [dismissHighlight]),
   );
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -190,6 +214,33 @@ export default function FamilyMemberDetailScreen() {
       return (order[sa] ?? 2) - (order[sb] ?? 2);
     });
   }, [appointments]);
+
+  // Reminder-fired moment: fires ONLY for an overdue APPOINTMENT opened from a
+  // reminder (reminder set to one AND an appointmentId is present). Medication
+  // reminders are routine daily prompts and NEVER fire this moment.
+  useEffect(() => {
+    if (reminder !== "1" || !appointmentId) return;
+    if (!member) return;
+    if (reminderFiredRef.current === appointmentId) return;
+    if (!appointments || appointments.length === 0) return;
+    const appt = appointments.find((a: any) => a.id === appointmentId);
+    if (!appt) return; // do NOT latch — appointment may arrive on next data update
+    if (getApptStatus(appt.next_due_date, appt.last_completed_at) !== "overdue") {
+      reminderFiredRef.current = appointmentId;
+      return;
+    }
+    reminderFiredRef.current = appointmentId;
+    const who = member.name ?? "your family";
+    setReminderMoment({
+      appt,
+      title: appt.appointment_type,
+      statusLine: `${buildOverdueDaysLine(appt.next_due_date)} · ${who}`,
+    });
+    reminderTimerRef.current = setTimeout(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      reminderRef.current?.present();
+    }, 700);
+  }, [reminder, appointmentId, appointments, member]);
 
   const [saveErrorToastVisible, setSaveErrorToastVisible] = useState(false);
   const [saveErrorToastTitle, setSaveErrorToastTitle] = useState("");
@@ -983,6 +1034,24 @@ export default function FamilyMemberDetailScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <ReminderMoment
+        ref={reminderRef}
+        accent={Colors.health}
+        ringBg={Colors.healthMuted}
+        ringBorder={Colors.healthMuted}
+        title={reminderMoment?.title ?? ""}
+        statusLine={reminderMoment?.statusLine ?? ""}
+        costLine={null}
+        onMarkDone={() => {
+          const a = reminderMoment?.appt;
+          reminderRef.current?.dismiss();
+          if (a) setTimeout(() => handleOpenMarkComplete(a), 280);
+        }}
+        onDismiss={() => {
+          if (reminderTimerRef.current) { clearTimeout(reminderTimerRef.current); reminderTimerRef.current = null; }
+        }}
+      />
     </View>
   );
 }

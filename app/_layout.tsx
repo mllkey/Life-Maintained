@@ -369,15 +369,15 @@ function RootLayoutNav() {
       } else if (assetKind === "property" && taskKind === "property_task") {
         route = "property";
         addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,taskId" });
-        router.push({ pathname: "/property/[id]", params: { id: assetId, taskId } });
+        router.push({ pathname: "/property/[id]", params: { id: assetId, taskId, reminder: "1" } });
         addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
-        scheduleNotifRouteVerification(source, reqId, route, `/property/${assetId}`, () => router.replace({ pathname: "/property/[id]", params: { id: assetId, taskId } }));
+        scheduleNotifRouteVerification(source, reqId, route, `/property/${assetId}`, () => router.replace({ pathname: "/property/[id]", params: { id: assetId, taskId, reminder: "1" } }));
       } else if (assetKind === "family_member" && taskKind === "health_appointment") {
         route = "family_appointment";
         addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,appointmentId" });
-        router.push({ pathname: "/family-member/[id]", params: { id: assetId, appointmentId: taskId } });
+        router.push({ pathname: "/family-member/[id]", params: { id: assetId, appointmentId: taskId, reminder: "1" } });
         addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
-        scheduleNotifRouteVerification(source, reqId, route, `/family-member/${assetId}`, () => router.replace({ pathname: "/family-member/[id]", params: { id: assetId, appointmentId: taskId } }));
+        scheduleNotifRouteVerification(source, reqId, route, `/family-member/${assetId}`, () => router.replace({ pathname: "/family-member/[id]", params: { id: assetId, appointmentId: taskId, reminder: "1" } }));
       } else if (assetKind === "family_member" && taskKind === "medication") {
         route = "family_medication";
         addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "id,medicationId" });

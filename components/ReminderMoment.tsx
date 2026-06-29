@@ -21,10 +21,13 @@ interface ReminderMomentProps {
   costLine: string | null;
   onMarkDone: () => void;
   onDismiss: () => void;
+  accent?: string;
+  ringBg?: string;
+  ringBorder?: string;
 }
 
 export default forwardRef<ReminderMomentHandle, ReminderMomentProps>(function ReminderMoment(
-  { title, statusLine, costLine, onMarkDone, onDismiss },
+  { title, statusLine, costLine, onMarkDone, onDismiss, accent = Colors.accent, ringBg = Colors.accentLight, ringBorder = Colors.accentMuted },
   ref,
 ) {
   const insets = useSafeAreaInsets();
@@ -72,10 +75,10 @@ export default forwardRef<ReminderMomentHandle, ReminderMomentProps>(function Re
       onDismiss={onDismiss}
     >
       <BottomSheetView style={[styles.content, { paddingBottom: 24 + insets.bottom }]}>
-        <View style={styles.iconWrap}>
-          <Ionicons name="shield-checkmark-outline" size={26} color={Colors.accent} />
+        <View style={[styles.iconWrap, { backgroundColor: ringBg, borderColor: ringBorder }]}>
+          <Ionicons name="shield-checkmark-outline" size={26} color={accent} />
         </View>
-        <Text style={styles.eyebrow}>FLAGGED FOR YOU</Text>
+        <Text style={[styles.eyebrow, { color: accent }]}>FLAGGED FOR YOU</Text>
         <Text style={styles.title} numberOfLines={2}>{title}</Text>
         <Text style={styles.statusLine}>{statusLine}</Text>
         {costLine ? (
@@ -87,7 +90,7 @@ export default forwardRef<ReminderMomentHandle, ReminderMomentProps>(function Re
         {costLine ? <Text style={styles.costCaption}>Estimate — varies by shop and location</Text> : null}
         <View style={styles.actions}>
           <Pressable
-            style={({ pressed }) => [styles.primaryBtn, { opacity: pressed ? 0.85 : 1 }]}
+            style={({ pressed }) => [styles.primaryBtn, { backgroundColor: accent, opacity: pressed ? 0.85 : 1 }]}
             onPress={onMarkDone}
             accessibilityRole="button"
             accessibilityLabel="Mark this service done"

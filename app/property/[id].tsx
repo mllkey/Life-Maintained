@@ -39,6 +39,7 @@ import { SaveToast } from "@/components/SaveToast";
 import LoadErrorState from "@/components/LoadErrorState";
 import DatePicker from "@/components/DatePicker";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
+import ReminderMoment, { type ReminderMomentHandle } from "@/components/ReminderMoment";
 
 function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): "overdue" | "due_soon" | "upcoming" | "good" {
   const now = new Date();
@@ -53,6 +54,20 @@ function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): 
   return "good";
 }
 
+// Date-only "Overdue by ..." line for the reminder-fired moment.
+function buildOverdueDaysLine(nextDueDate: string | null): string {
+  if (!nextDueDate) return "Overdue";
+  const due = parseISO(nextDueDate);
+  const days = Math.max(1, Math.round((new Date().getTime() - due.getTime()) / 86400000));
+  if (days === 1) return "Overdue by 1 day";
+  if (days < 30) return `Overdue by ${days} days`;
+  const months = Math.round(days / 30);
+  if (months === 1) return "Overdue by about a month";
+  if (months < 12) return `Overdue by about ${months} months`;
+  const years = Math.round(months / 12);
+  return years === 1 ? "Overdue by about a year" : `Overdue by about ${years} years`;
+}
+
 const INTERVAL_MONTHS: Record<string, number> = {
   "Monthly": 1, "Quarterly": 3, "Bi-Annually": 6, "Annually": 12,
   "Every 2 Years": 24, "Every 5 Years": 60, "As Needed": 12,
@@ -61,13 +76,19 @@ const INTERVAL_MONTHS: Record<string, number> = {
 };
 
 export default function PropertyDetailScreen() {
-  const { id, taskId } = useLocalSearchParams<{ id: string; taskId?: string }>();
+  const { id, taskId, reminder } = useLocalSearchParams<{ id: string; taskId?: string; reminder?: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"tasks" | "history">("tasks");
   const [actionNeededExpanded, setActionNeededExpanded] = useState(true);
   const { highlightedId: highlightedTaskId, scrollProps: highlightScrollProps, registerRow: registerTaskRow, dismissImmediately: dismissHighlight } = useDeepLinkHighlight(taskId);
+
+  const [reminderMoment, setReminderMoment] = useState<{ task: any; title: string; statusLine: string; costLine: string | null } | null>(null);
+  const reminderRef = useRef<ReminderMomentHandle>(null);
+  const reminderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reminderFiredRef = useRef<string | null>(null);
+  const costEstimatesRef = useRef<Record<string, any> | undefined>(undefined);
 
   // Deep-link: switch tab + expand section. Highlight + scroll handled by hook.
   useEffect(() => {
@@ -79,7 +100,11 @@ export default function PropertyDetailScreen() {
   // Blur cleanup — dismiss the highlight when the screen loses focus.
   useFocusEffect(
     useCallback(() => {
-      return () => { dismissHighlight(); };
+      return () => {
+        dismissHighlight();
+        if (reminderTimerRef.current) { clearTimeout(reminderTimerRef.current); reminderTimerRef.current = null; }
+        reminderRef.current?.dismiss();
+      };
     }, [dismissHighlight]),
   );
   const [upToDateExpanded, setUpToDateExpanded] = useState(false);
@@ -214,6 +239,8 @@ export default function PropertyDetailScreen() {
     },
     enabled: !!property && (scheduleTasks?.length ?? 0) > 0,
   });
+
+  costEstimatesRef.current = costEstimates;
 
   async function handleExportHistory() {
     if (!logs || logs.length === 0 || !property) return;
@@ -540,6 +567,46 @@ export default function PropertyDetailScreen() {
     [tasks],
   );
   const actionNeededTasks = useMemo(() => [...overdueTasks, ...dueSoonTasks], [overdueTasks, dueSoonTasks]);
+
+  // Reminder-fired moment: when opened from a maintenance reminder
+  // (reminder set to one) and the tapped task is genuinely overdue, surface a
+  // calm "flagged for you" sheet after the scroll-to-highlight settles.
+  // Fires once per tapped task; never for due-soon/upcoming reminders.
+  useEffect(() => {
+    if (reminder !== "1" || !taskId) return;
+    if (!property) return;
+    if (reminderFiredRef.current === taskId) return;
+    if (!tasks || tasks.length === 0) return;
+    const task = tasks.find((t: any) => t.id === taskId);
+    if (!task) return; // do NOT latch — task may arrive on next data update
+    if (getStatus(task.next_due_date, task.last_completed_at) !== "overdue") {
+      reminderFiredRef.current = taskId;
+      return;
+    }
+    reminderFiredRef.current = taskId;
+    const propName = property.nickname ?? property.address ?? "your home";
+    const est = costEstimatesRef.current?.[task.task.toLowerCase().trim()];
+    let costLine: string | null = null;
+    if (est?.shop_low != null) {
+      const cl = formatShopAndDiy(
+        Number(est.shop_low),
+        Number(est.shop_high),
+        est.diy_low != null ? Number(est.diy_low) : null,
+        est.diy_high != null ? Number(est.diy_high) : null,
+      );
+      costLine = cl || null;
+    }
+    setReminderMoment({
+      task,
+      title: task.task,
+      statusLine: `${buildOverdueDaysLine(task.next_due_date)} · ${propName}`,
+      costLine,
+    });
+    reminderTimerRef.current = setTimeout(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      reminderRef.current?.present();
+    }, 700);
+  }, [reminder, taskId, tasks, property]);
 
   const groupedHistory = useMemo(() => {
     if (!logs || logs.length === 0) return [];
@@ -1044,6 +1111,24 @@ export default function PropertyDetailScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <ReminderMoment
+        ref={reminderRef}
+        accent={Colors.home}
+        ringBg={Colors.homeMuted}
+        ringBorder={Colors.homeMuted}
+        title={reminderMoment?.title ?? ""}
+        statusLine={reminderMoment?.statusLine ?? ""}
+        costLine={reminderMoment?.costLine ?? null}
+        onMarkDone={() => {
+          const t = reminderMoment?.task;
+          reminderRef.current?.dismiss();
+          if (t) setTimeout(() => handleOpenMarkComplete(t), 280);
+        }}
+        onDismiss={() => {
+          if (reminderTimerRef.current) { clearTimeout(reminderTimerRef.current); reminderTimerRef.current = null; }
+        }}
+      />
     </View>
   );
 }
