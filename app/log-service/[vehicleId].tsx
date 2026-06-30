@@ -331,15 +331,20 @@ export default function LogServiceScreen() {
         if (err) throw err;
       }
 
-      // 2. Update vehicle usage reading and history
-      await updateVehicleUsage(
-        vehicleId,
-        milesVal,
-        hoursVal,
-        date || new Date().toISOString(),
-        vehicleData?.mileage ?? null,
-        vehicleData?.hours ?? null,
-      );
+      // 2. Update vehicle usage reading and history (non-blocking: a usage-update
+      // failure must not make a successfully-saved log look failed).
+      try {
+        await updateVehicleUsage(
+          vehicleId,
+          milesVal,
+          hoursVal,
+          date || new Date().toISOString(),
+          vehicleData?.mileage ?? null,
+          vehicleData?.hours ?? null,
+        );
+      } catch (usageErr) {
+        console.error("updateVehicleUsage failed (non-blocking):", usageErr);
+      }
 
       // 3. Auto-match and update maintenance tasks
       const serviceNames = scannedItems.length > 0

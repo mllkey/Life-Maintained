@@ -2247,6 +2247,7 @@ export type Database = {
         }
         Returns: Json
       }
+      delete_vehicle_cascade: { Args: { p_vehicle_id: string }; Returns: Json }
       get_scan_quota: { Args: { p_user_id: string }; Returns: Json }
       grant_scan_pack_credits: {
         Args: {

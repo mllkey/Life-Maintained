@@ -140,3 +140,21 @@ export async function getScanQuota(args: GetScanQuotaArgs): Promise<{
   const { data, error } = await supabase.rpc("get_scan_quota", args);
   return { data: (data as GetScanQuotaResult | null), error };
 }
+
+export type DeleteVehicleCascadeArgs = Functions["delete_vehicle_cascade"]["Args"];
+export type DeleteVehicleCascadeResult = {
+  vehicle_id: string;
+  tasks_deleted: number;
+  logs_deleted: number;
+  history_deleted: number;
+  wallet_deleted: number;
+  vehicle_deleted: number;
+};
+
+export async function deleteVehicleCascade(args: DeleteVehicleCascadeArgs): Promise<{
+  data: DeleteVehicleCascadeResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("delete_vehicle_cascade", args);
+  return { data: (data as DeleteVehicleCascadeResult | null), error };
+}

@@ -328,16 +328,21 @@ function ConfirmCard({
       });
       if (insertErr) throw insertErr;
 
-      // 2. Update vehicle usage reading and history
+      // 2. Update vehicle usage reading and history (non-blocking: a usage-update
+      // failure must not make a successfully-saved log look failed).
       if (isVehicle && item.asset_id && (milesVal != null || hoursVal != null)) {
-        await updateVehicleUsage(
-          item.asset_id,
-          milesVal,
-          hoursVal,
-          date || now,
-          vehicleData?.mileage ?? null,
-          vehicleData?.hours ?? null,
-        );
+        try {
+          await updateVehicleUsage(
+            item.asset_id,
+            milesVal,
+            hoursVal,
+            date || now,
+            vehicleData?.mileage ?? null,
+            vehicleData?.hours ?? null,
+          );
+        } catch (usageErr) {
+          console.error("updateVehicleUsage failed (non-blocking):", usageErr);
+        }
       }
 
       // 3. Match and update maintenance tasks

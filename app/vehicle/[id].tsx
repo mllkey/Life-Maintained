@@ -24,7 +24,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
-import { completeVehicleTask } from "@/lib/rpc";
+import { completeVehicleTask, deleteVehicleCascade } from "@/lib/rpc";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
@@ -1116,34 +1116,34 @@ export default function VehicleDetailScreen() {
               router.replace("/(tabs)/vehicles");
             }
 
-            // Background delete
+            // Background delete: one atomic server-side RPC deletes all DB child
+            // rows + the vehicle in a single transaction (all-or-nothing). Storage
+            // files are purged best-effort AFTER the DB delete confirms success.
             (async () => {
               try {
-                await supabase.from("user_vehicle_maintenance_tasks").delete().eq("vehicle_id", vehicleId);
-                await supabase.from("maintenance_logs").delete().eq("vehicle_id", vehicleId);
-                await supabase.from("vehicle_mileage_history").delete().eq("vehicle_id", vehicleId);
+                const { error: rpcErr } = await deleteVehicleCascade({ p_vehicle_id: vehicleId });
+                if (rpcErr) throw rpcErr;
 
-                const { data: walletFiles } = await supabase.storage
-                  .from("wallet-documents")
-                  .list(`${userId}/${vehicleId}`);
-
-                if (walletFiles?.length) {
-                  await supabase.storage
+                try {
+                  const { data: walletFiles } = await supabase.storage
                     .from("wallet-documents")
-                    .remove(walletFiles.map(f => `${userId}/${vehicleId}/${f.name}`));
+                    .list(`${userId}/${vehicleId}`);
+                  if (walletFiles?.length) {
+                    await supabase.storage
+                      .from("wallet-documents")
+                      .remove(walletFiles.map(f => `${userId}/${vehicleId}/${f.name}`));
+                  }
+                } catch (storageErr: any) {
+                  console.warn("[DELETE] storage purge (non-blocking):", storageErr?.message ?? storageErr);
                 }
 
-                await supabase.from("vehicle_wallet_documents").delete().eq("vehicle_id", vehicleId);
-                await supabase.from("vehicles").delete().eq("id", vehicleId);
-
                 queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+                queryClient.invalidateQueries({ queryKey: ["vehicles", userId] });
                 queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-
               } catch (err: any) {
-                console.warn("[DELETE] Background delete error:", err?.message ?? err);
-
-                // Re-sync state if something failed
+                console.warn("[DELETE] vehicle delete failed:", err?.message ?? err);
                 queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+                queryClient.invalidateQueries({ queryKey: ["vehicles", userId] });
               }
             })();
           },
