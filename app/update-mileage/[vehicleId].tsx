@@ -51,8 +51,8 @@ export default function UpdateMileageScreen() {
     if (currentMileage > 0 && newMileage < currentMileage) {
       setMileageWarning(
         tracksHours
-          ? `Hours can only go up. Current: ${currentMileage.toLocaleString()} hrs. If you made a typo, contact support@lifemaintained.com.`
-          : `Mileage can only go up. Current: ${currentMileage.toLocaleString()} mi. If you made a typo, contact support@lifemaintained.com.`,
+          ? `Hours can only go up. Current: ${currentMileage.toLocaleString()} hrs. Open Edit Vehicle to correct this reading.`
+          : `Mileage can only go up. Current: ${currentMileage.toLocaleString()} mi. Open Edit Vehicle to correct this reading.`,
       );
       return;
     }

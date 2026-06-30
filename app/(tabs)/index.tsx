@@ -800,7 +800,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
       }
       const currentReading = v.hours ?? 0;
       if (currentReading > 0 && newH < currentReading) {
-        setErrors(e => ({ ...e, [k]: "Hours can't be less than current reading" }));
+        setErrors(e => ({ ...e, [k]: "Open Edit Vehicle to correct this reading" }));
         return;
       }
     } else {
@@ -811,7 +811,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
       }
       const currentReading = v.mileage ?? 0;
       if (currentReading > 0 && newM < currentReading) {
-        setErrors(e => ({ ...e, [k]: "Mileage can't be less than current reading" }));
+        setErrors(e => ({ ...e, [k]: "Open Edit Vehicle to correct this reading" }));
         return;
       }
     }

@@ -60,6 +60,7 @@ export default function EditVehicleScreen() {
   const [vehicleType, setVehicleType] = useState("car");
   const [avgMilesPerMonth, setAvgMilesPerMonth] = useState("");
   const [mileageWarning, setMileageWarning] = useState<string | null>(null);
+  const [correctingReading, setCorrectingReading] = useState(false);
   const [showSaveErrorToast, setShowSaveErrorToast] = useState(false);
   const [saveErrorSubtitle, setSaveErrorSubtitle] = useState<string | undefined>(undefined);
 
@@ -110,14 +111,16 @@ export default function EditVehicleScreen() {
         return;
       }
       const currentMileage = vehicle.mileage ?? 0;
-      if (currentMileage > 0 && newMileage < currentMileage) {
+      if (currentMileage > 0 && newMileage < currentMileage && !correctingReading) {
         setMileageWarning(
-          `Mileage can only go up. Current: ${currentMileage.toLocaleString()} mi. If you made a typo, contact support@lifemaintained.com.`,
+          `Mileage can only go up. Current: ${currentMileage.toLocaleString()} mi. If the shown number is wrong, tap "Correct reading" below.`,
         );
         setSaving(false);
         return;
       }
-      if (newMileage > currentMileage) {
+      if (newMileage !== currentMileage) {
+        // Re-anchor on every accepted reading write (up OR corrected-down) so the projection
+        // clock restarts from the value the user just entered.
         updates.mileage = newMileage;
         updates.last_mileage_update = new Date().toISOString();
       }
@@ -127,8 +130,8 @@ export default function EditVehicleScreen() {
       const newHours = parseFloat(hours);
       if (!isNaN(newHours) && newHours >= 0) {
         const currentHours = vehicle.hours ?? 0;
-        if (currentHours > 0 && newHours < currentHours) {
-          setMileageWarning("Hours can only go up. If you made a typo, email support@lifemaintained.com.");
+        if (currentHours > 0 && newHours < currentHours && !correctingReading) {
+          setMileageWarning('Hours can only go up. If the shown number is wrong, tap "Correct reading" below.');
           setSaving(false);
           return;
         }
@@ -158,9 +161,12 @@ export default function EditVehicleScreen() {
       }
       if (newRate !== (vehicle.average_miles_per_month ?? null)) {
         updates.average_miles_per_month = newRate;
+        // Re-anchor the projection clock to NOW at the stored value, WITHOUT writing the
+        // projected estimate into stored mileage. The new rate then only drives future
+        // accrual; past time is never retroactively recomputed at the new rate. (Previously
+        // this crystallized the always-inflated projection into stored mileage, which the
+        // up-only guard then locked in — a guaranteed trap on every rate edit.)
         if (tracksMileage && updates.mileage == null) {
-          const effective = currentUsageValue(vehicle);
-          if (effective != null) updates.mileage = effective;
           updates.last_mileage_update = new Date().toISOString();
         }
       }
@@ -174,6 +180,7 @@ export default function EditVehicleScreen() {
       queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setCorrectingReading(false);
       setTimeout(() => router.back(), 150);
     } catch (err: any) {
       setSaveErrorSubtitle("Give it another shot.");
@@ -271,6 +278,32 @@ export default function EditVehicleScreen() {
                 )
               )}
               <Text style={styles.hint}>Mileage can be increased but cannot be lowered.</Text>
+              {correctingReading ? (
+                <View>
+                  <Text style={[styles.hint, { color: Colors.accent }]}>
+                    Correction on — only change this if the shown number is wrong; it should match your real odometer.
+                  </Text>
+                  <Pressable
+                    onPress={() => { setCorrectingReading(false); setMileageWarning(null); }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel correction"
+                  >
+                    <Text style={[styles.hint, { color: Colors.textSecondary, textDecorationLine: "underline" }]}>
+                      Cancel correction
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => { setCorrectingReading(true); setMileageWarning(null); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Correct reading"
+                >
+                  <Text style={[styles.hint, { color: Colors.accent, textDecorationLine: "underline" }]}>
+                    Correct reading
+                  </Text>
+                </Pressable>
+              )}
             </View>
           )}
 
@@ -279,6 +312,32 @@ export default function EditVehicleScreen() {
               <Text style={styles.label}>Hours</Text>
               <TextInput style={styles.input} value={hours} onChangeText={setHours} keyboardType="number-pad" placeholder="e.g. 1250" placeholderTextColor={Colors.textTertiary} />
               <Text style={styles.hint}>Hours can be increased but cannot be lowered.</Text>
+              {correctingReading ? (
+                <View>
+                  <Text style={[styles.hint, { color: Colors.accent }]}>
+                    Correction on — only change this if the shown number is wrong; it should match your real hour meter.
+                  </Text>
+                  <Pressable
+                    onPress={() => { setCorrectingReading(false); setMileageWarning(null); }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel correction"
+                  >
+                    <Text style={[styles.hint, { color: Colors.textSecondary, textDecorationLine: "underline" }]}>
+                      Cancel correction
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => { setCorrectingReading(true); setMileageWarning(null); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Correct reading"
+                >
+                  <Text style={[styles.hint, { color: Colors.accent, textDecorationLine: "underline" }]}>
+                    Correct reading
+                  </Text>
+                </Pressable>
+              )}
             </View>
           )}
 
