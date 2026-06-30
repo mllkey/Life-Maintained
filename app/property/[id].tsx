@@ -76,7 +76,7 @@ const INTERVAL_MONTHS: Record<string, number> = {
 };
 
 export default function PropertyDetailScreen() {
-  const { id, taskId, reminder } = useLocalSearchParams<{ id: string; taskId?: string; reminder?: string }>();
+  const { id, taskId, reminder, rid } = useLocalSearchParams<{ id: string; taskId?: string; reminder?: string; rid?: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -574,16 +574,17 @@ export default function PropertyDetailScreen() {
   // Fires once per tapped task; never for due-soon/upcoming reminders.
   useEffect(() => {
     if (reminder !== "1" || !taskId) return;
+    const reminderFireKey = rid ?? taskId;
     if (!property) return;
-    if (reminderFiredRef.current === taskId) return;
+    if (reminderFiredRef.current === reminderFireKey) return;
     if (!tasks || tasks.length === 0) return;
     const task = tasks.find((t: any) => t.id === taskId);
     if (!task) return; // do NOT latch — task may arrive on next data update
     if (getStatus(task.next_due_date, task.last_completed_at) !== "overdue") {
-      reminderFiredRef.current = taskId;
+      reminderFiredRef.current = reminderFireKey;
       return;
     }
-    reminderFiredRef.current = taskId;
+    reminderFiredRef.current = reminderFireKey;
     const propName = property.nickname ?? property.address ?? "your home";
     const est = costEstimatesRef.current?.[task.task.toLowerCase().trim()];
     let costLine: string | null = null;
@@ -606,7 +607,7 @@ export default function PropertyDetailScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       reminderRef.current?.present();
     }, 700);
-  }, [reminder, taskId, tasks, property]);
+  }, [reminder, rid, taskId, tasks, property]);
 
   const groupedHistory = useMemo(() => {
     if (!logs || logs.length === 0) return [];

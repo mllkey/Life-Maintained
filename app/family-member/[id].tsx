@@ -61,7 +61,7 @@ function buildOverdueDaysLine(nextDueDate: string | null): string {
 }
 
 export default function FamilyMemberDetailScreen() {
-  const { id, appointmentId, medicationId, reminder } = useLocalSearchParams<{ id: string; appointmentId?: string; medicationId?: string; reminder?: string }>();
+  const { id, appointmentId, medicationId, reminder, rid } = useLocalSearchParams<{ id: string; appointmentId?: string; medicationId?: string; reminder?: string; rid?: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -220,16 +220,17 @@ export default function FamilyMemberDetailScreen() {
   // reminders are routine daily prompts and NEVER fire this moment.
   useEffect(() => {
     if (reminder !== "1" || !appointmentId) return;
+    const reminderFireKey = rid ?? appointmentId;
     if (!member) return;
-    if (reminderFiredRef.current === appointmentId) return;
+    if (reminderFiredRef.current === reminderFireKey) return;
     if (!appointments || appointments.length === 0) return;
     const appt = appointments.find((a: any) => a.id === appointmentId);
     if (!appt) return; // do NOT latch — appointment may arrive on next data update
     if (getApptStatus(appt.next_due_date, appt.last_completed_at) !== "overdue") {
-      reminderFiredRef.current = appointmentId;
+      reminderFiredRef.current = reminderFireKey;
       return;
     }
-    reminderFiredRef.current = appointmentId;
+    reminderFiredRef.current = reminderFireKey;
     const who = member.name ?? "your family";
     setReminderMoment({
       appt,
@@ -240,7 +241,7 @@ export default function FamilyMemberDetailScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       reminderRef.current?.present();
     }, 700);
-  }, [reminder, appointmentId, appointments, member]);
+  }, [reminder, rid, appointmentId, appointments, member]);
 
   const [saveErrorToastVisible, setSaveErrorToastVisible] = useState(false);
   const [saveErrorToastTitle, setSaveErrorToastTitle] = useState("");

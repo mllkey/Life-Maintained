@@ -146,7 +146,7 @@ const STATUS_BORDER: Record<string, string> = {
 };
 
 export default function VehicleDetailScreen() {
-  const { id, taskId, reminder } = useLocalSearchParams<{ id: string; taskId?: string; reminder?: string }>();
+  const { id, taskId, reminder, rid } = useLocalSearchParams<{ id: string; taskId?: string; reminder?: string; rid?: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { profile, user } = useAuth();
@@ -346,16 +346,17 @@ export default function VehicleDetailScreen() {
   // Fires once per tapped task; never for due-soon/upcoming reminders.
   useEffect(() => {
     if (reminder !== "1" || !taskId) return;
+    const reminderFireKey = rid ?? taskId;
     if (!vehicle) return;
-    if (reminderFiredRef.current === taskId) return;
+    if (reminderFiredRef.current === reminderFireKey) return;
     if (!processedScheduleTasks || processedScheduleTasks.length === 0) return;
     const task = processedScheduleTasks.find((t: any) => t.id === taskId);
-    if (!task) { reminderFiredRef.current = taskId; return; }
+    if (!task) return;
     if (task.status !== "overdue" && task.status !== "needs_attention") {
-      reminderFiredRef.current = taskId;
+      reminderFiredRef.current = reminderFireKey;
       return;
     }
-    reminderFiredRef.current = taskId;
+    reminderFiredRef.current = reminderFireKey;
     const vName = vehicle ? (vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`) : "your vehicle";
     const est = costEstimatesRef.current?.[String(task.name ?? "").toLowerCase().trim()];
     const costLine = est
@@ -379,7 +380,7 @@ export default function VehicleDetailScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       reminderRef.current?.present();
     }, 700);
-  }, [reminder, taskId, processedScheduleTasks, vehicle]);
+  }, [reminder, rid, taskId, processedScheduleTasks, vehicle]);
 
   const scheduleOpacity = useRef(new Animated.Value(0)).current;
 
