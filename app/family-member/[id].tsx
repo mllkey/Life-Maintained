@@ -805,7 +805,7 @@ export default function FamilyMemberDetailScreen() {
                                 onPress={() => handleOpenMarkComplete(appt)}
                               >
                                 <Ionicons name="checkmark-circle" size={14} color={Colors.textInverse} />
-                                <Text style={styles.markCompleteBtnText}>Mark Complete</Text>
+                                <Text style={styles.markCompleteBtnText}>Mark as Done</Text>
                               </Pressable>
                             </View>
                           </View>
@@ -1027,7 +1027,7 @@ export default function FamilyMemberDetailScreen() {
                 ) : (
                   <>
                     <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
-                    <Text style={styles.sheetSaveText}>Mark Complete</Text>
+                    <Text style={styles.sheetSaveText}>Mark as Done</Text>
                   </>
                 )}
               </Pressable>

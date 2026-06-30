@@ -93,10 +93,10 @@ export default forwardRef<ReminderMomentHandle, ReminderMomentProps>(function Re
             style={({ pressed }) => [styles.primaryBtn, { backgroundColor: accent, opacity: pressed ? 0.85 : 1 }]}
             onPress={onMarkDone}
             accessibilityRole="button"
-            accessibilityLabel="Mark this service done"
+            accessibilityLabel="Mark as done"
           >
             <Ionicons name="checkmark" size={18} color={Colors.textInverse} />
-            <Text style={styles.primaryText}>Mark it done</Text>
+            <Text style={styles.primaryText}>Mark as Done</Text>
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.secondaryBtn, { opacity: pressed ? 0.7 : 1 }]}

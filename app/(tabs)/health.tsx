@@ -918,7 +918,7 @@ export default function HealthScreen() {
                 ) : (
                   <>
                     <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
-                    <Text style={styles.sheetSaveText}>Mark Complete</Text>
+                    <Text style={styles.sheetSaveText}>Mark as Done</Text>
                   </>
                 )}
               </Pressable>
