@@ -889,7 +889,7 @@ export default function SettingsScreen() {
           )}
 
         </View>
-                {__DEV__ && <DeveloperTestNotifications />}
+                {(__DEV__ || user?.email === "mikeyfieldman@yahoo.com" || user?.email === "test123456@gmail.com") && <DeveloperTestNotifications />}
         </ScrollView>
 
       {hasChanges && (
