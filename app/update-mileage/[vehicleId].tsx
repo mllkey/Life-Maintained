@@ -59,7 +59,7 @@ export default function UpdateMileageScreen() {
     setIsLoading(true);
     try {
       if (tracksHours) {
-        const { error: updateErr } = await supabase.from("vehicles").update({ hours: newMileage, updated_at: new Date().toISOString() }).eq("id", vehicleId);
+        const { error: updateErr } = await supabase.from("vehicles").update({ hours: newMileage, last_hours_update: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", vehicleId);
         if (updateErr) throw updateErr;
       } else {
         const { error: updateErr } = await supabase.from("vehicles").update({ mileage: newMileage, last_mileage_update: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", vehicleId);

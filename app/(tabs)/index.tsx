@@ -822,7 +822,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
       const now = new Date().toISOString();
       if (field === "hours") {
         const newH = parseFloat(input);
-        const { error: updateErr } = await supabase.from("vehicles").update({ hours: newH, updated_at: now }).eq("id", v.id);
+        const { error: updateErr } = await supabase.from("vehicles").update({ hours: newH, last_hours_update: now, updated_at: now }).eq("id", v.id);
         if (updateErr) throw updateErr;
       } else {
         const newM = parseInt(input, 10);

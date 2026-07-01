@@ -2045,6 +2045,7 @@ export type Database = {
           id: string
           is_awd: boolean
           is_seasonal: boolean
+          last_hours_update: string | null
           last_mileage_update: string | null
           license_plate: string | null
           make: string
@@ -2076,6 +2077,7 @@ export type Database = {
           id?: string
           is_awd?: boolean
           is_seasonal?: boolean
+          last_hours_update?: string | null
           last_mileage_update?: string | null
           license_plate?: string | null
           make: string
@@ -2107,6 +2109,7 @@ export type Database = {
           id?: string
           is_awd?: boolean
           is_seasonal?: boolean
+          last_hours_update?: string | null
           last_mileage_update?: string | null
           license_plate?: string | null
           make?: string

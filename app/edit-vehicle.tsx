@@ -136,6 +136,7 @@ export default function EditVehicleScreen() {
           return;
         }
         updates.hours = newHours;
+        updates.last_hours_update = new Date().toISOString();
       }
     }
 

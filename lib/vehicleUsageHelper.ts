@@ -56,7 +56,7 @@ export async function updateVehicleUsage(
   if (hoursVal != null && hoursVal > (currentHours ?? 0)) {
     await supabase
       .from("vehicles")
-      .update({ hours: hoursVal, updated_at: now })
+      .update({ hours: hoursVal, last_hours_update: now, updated_at: now })
       .eq("id", vehicleId);
   }
 }
