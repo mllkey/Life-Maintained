@@ -160,7 +160,6 @@ export default function VehicleDetailScreen() {
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
   const [refreshingSchedule, setRefreshingSchedule] = useState(false);
-  const [vehicleScheduleBannerVisible, setVehicleScheduleBannerVisible] = useState(false);
   const [scheduleToast, setScheduleToast] = useState("");
   const [showScheduleToast, setShowScheduleToast] = useState(false);
   const [scheduleToastIsError, setScheduleToastIsError] = useState(false);
@@ -389,20 +388,6 @@ export default function VehicleDetailScreen() {
       refetchSchedule();
     }, [refetchSchedule]),
   );
-
-  useEffect(() => {
-    if (!scheduleTasks?.length || !id) return;
-    const oldest = scheduleTasks.reduce((a: any, b: any) =>
-      (a.created_at ?? "") < (b.created_at ?? "") ? a : b
-    );
-    const ageInDays = oldest?.created_at
-      ? differenceInDays(new Date(), new Date(oldest.created_at))
-      : 0;
-    if (ageInDays < 7) return;
-    AsyncStorage.getItem(`@schedule_refresh_dismissed_${id}`).then(val => {
-      if (val !== "true") setVehicleScheduleBannerVisible(true);
-    }).catch(() => {});
-  }, [scheduleTasks, id]);
 
   // Reset polling state when vehicle changes
   React.useEffect(() => {
@@ -1381,34 +1366,6 @@ export default function VehicleDetailScreen() {
                 message="Your schedule gets smarter when you log past services. Tap any task to mark it complete."
                 icon="checkmark-circle-outline"
               />
-              {vehicleScheduleBannerVisible && processedScheduleTasks.length > 0 && (
-                <View style={{ flexDirection: "row", alignItems: "flex-start", backgroundColor: Colors.card, borderRadius: 14, borderWidth: 1, borderColor: Colors.good + "44", padding: 14, gap: 12, marginHorizontal: 16, marginBottom: 8 }}>
-                  <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: Colors.goodMuted, alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
-                    <Ionicons name="sparkles-outline" size={18} color={Colors.good} />
-                  </View>
-                  <View style={{ flex: 1, gap: 6 }}>
-                    <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 18 }}>
-                      A better schedule is available for this vehicle.
-                    </Text>
-                    <Pressable
-                      onPress={() => { setVehicleScheduleBannerVisible(false); handleRefreshSchedulePress(); }}
-                      style={({ pressed }) => [{ alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: Colors.good, opacity: pressed ? 0.75 : 1 }]}
-                    >
-                      <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#fff" }}>Refresh Now</Text>
-                    </Pressable>
-                  </View>
-                  <Pressable
-                    onPress={async () => {
-                      setVehicleScheduleBannerVisible(false);
-                      if (id) await AsyncStorage.setItem(`@schedule_refresh_dismissed_${id}`, "true").catch(() => {});
-                    }}
-                    hitSlop={12}
-                    style={{ width: 28, height: 28, alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-                  >
-                    <Ionicons name="close" size={18} color={Colors.textTertiary} />
-                  </Pressable>
-                </View>
-              )}
               {(loadingSchedule || refreshingSchedule) ? (
                 <ScheduleSkeleton />
               ) : scheduleError ? (
