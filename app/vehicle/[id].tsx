@@ -46,6 +46,8 @@ import {
   isMileageTracked,
   isTimeOnly,
   currentUsageValue,
+  projectedMileage,
+  projectedHours,
   formatUsageValue,
   taskNextDueUsage,
   taskLastCompletedUsage,
@@ -1225,13 +1227,13 @@ export default function VehicleDetailScreen() {
           {vehicle?.mileage != null && isMileageTracked(vehicle) && (
             <View style={styles.headerMileageRow}>
               <Ionicons name="speedometer-outline" size={11} color={Colors.textTertiary} />
-              <Text style={styles.headerMileage}>{vehicle.mileage.toLocaleString()} mi</Text>
+              <Text style={styles.headerMileage}>{(projectedMileage(vehicle) ?? vehicle.mileage).toLocaleString()} mi</Text>
             </View>
           )}
           {vehicle?.hours != null && isHoursTracked(vehicle) && (
             <View style={styles.headerMileageRow}>
               <Ionicons name="timer-outline" size={11} color={Colors.textTertiary} />
-              <Text style={styles.headerMileage}>{vehicle.hours.toLocaleString()} hrs</Text>
+              <Text style={styles.headerMileage}>{(projectedHours(vehicle) ?? vehicle.hours).toLocaleString()} hrs</Text>
             </View>
           )}
         </View>

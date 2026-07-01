@@ -18,7 +18,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { isHoursTracked } from "@/lib/usageHelpers";
+import { isHoursTracked, projectedMileage, projectedHours } from "@/lib/usageHelpers";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 
 export default function UpdateMileageScreen() {
@@ -51,8 +51,8 @@ export default function UpdateMileageScreen() {
     if (currentMileage > 0 && newMileage < currentMileage) {
       setMileageWarning(
         tracksHours
-          ? `Hours can only go up. Current: ${currentMileage.toLocaleString()} hrs. Open Edit Vehicle to correct this reading.`
-          : `Mileage can only go up. Current: ${currentMileage.toLocaleString()} mi. Open Edit Vehicle to correct this reading.`,
+          ? `Hours can only go up. Last recorded: ${currentMileage.toLocaleString()} hrs. Open Edit Vehicle to correct this reading.`
+          : `Mileage can only go up. Last recorded: ${currentMileage.toLocaleString()} mi. Open Edit Vehicle to correct this reading.`,
       );
       return;
     }
@@ -106,11 +106,11 @@ export default function UpdateMileageScreen() {
             <Text style={styles.vehicleName}>{vehicleName}</Text>
             {tracksHours ? (
               vehicle?.hours != null && (
-                <Text style={styles.currentMileage}>Current: {vehicle.hours.toLocaleString()} hours</Text>
+                <Text style={styles.currentMileage}>Estimated now: {(projectedHours(vehicle) ?? vehicle.hours).toLocaleString()} hours</Text>
               )
             ) : (
               vehicle?.mileage != null && (
-                <Text style={styles.currentMileage}>Current: {vehicle.mileage.toLocaleString()} miles</Text>
+                <Text style={styles.currentMileage}>Estimated now: {(projectedMileage(vehicle) ?? vehicle.mileage).toLocaleString()} miles</Text>
               )
             )}
           </View>

@@ -25,6 +25,7 @@ export interface VehicleRow {
   hours?: number | null;
   average_miles_per_month?: number | null;
   last_mileage_update?: string | null;
+  last_hours_update?: string | null;
 }
 
 export interface TaskRow {
@@ -96,34 +97,70 @@ export function usageUnitShort(vehicle: VehicleRow | null | undefined): string {
 }
 
 /**
- * Returns the current usage reading from the vehicle row.
+ * Project a stored usage reading forward in whole-day steps.
+ *
+ * The estimate advances only when the local calendar day rolls over, so the
+ * value is stable for the entire day (no continuous mid-day ticking). It never
+ * reads below the stored value. Returns null only when there is no stored
+ * reading to project from.
+ *
+ * avgPerMonth is the monthly accrual rate: miles/month for mileage vehicles,
+ * hours/month for hours vehicles. A vehicle is one or the other, so the single
+ * average_miles_per_month column is unambiguous per vehicle.
+ */
+function projectUsage(
+  stored: number | null,
+  avgPerMonth: number | null | undefined,
+  anchorRaw: string | null | undefined,
+): number | null {
+  if (stored == null) return null;
+  const avg = Math.max(0, avgPerMonth ?? 0);
+  if (avg > 0 && anchorRaw) {
+    const anchor = new Date(anchorRaw);
+    if (Number.isFinite(anchor.getTime())) {
+      const days = fullCalendarDaysBetween(new Date(), anchor);
+      if (days > 0) {
+        const estimated = stored + Math.round(avg * (days / 30.44));
+        return Math.max(stored, estimated);
+      }
+    }
+  }
+  return stored;
+}
+
+/**
+ * Daily-stepped mileage estimate. Mode-independent: returns projected mileage
+ * whenever a stored mileage exists, else null.
+ */
+export function projectedMileage(vehicle: VehicleRow | null | undefined): number | null {
+  if (!vehicle) return null;
+  return projectUsage(vehicle.mileage ?? null, vehicle.average_miles_per_month, vehicle.last_mileage_update);
+}
+
+/**
+ * Daily-stepped hours estimate. Mode-independent: returns projected hours
+ * whenever a stored hours reading exists, else null. Anchored to
+ * last_hours_update; a null anchor means no projection (returns raw hours).
+ */
+export function projectedHours(vehicle: VehicleRow | null | undefined): number | null {
+  if (!vehicle) return null;
+  return projectUsage(vehicle.hours ?? null, vehicle.average_miles_per_month, vehicle.last_hours_update);
+}
+
+/**
+ * Returns the current usage reading for the vehicle's primary tracking mode,
+ * projected forward in whole-day steps.
  */
 export function currentUsageValue(vehicle: VehicleRow | null | undefined): number | null {
   if (!vehicle) return null;
   const mode = resolveTrackingMode(vehicle);
 
   if (mode === "hours" || mode === "both") {
-    return vehicle.hours ?? null;
+    return projectedHours(vehicle);
   }
 
   if (mode === "mileage") {
-    const stored = vehicle.mileage ?? null;
-    if (stored == null) return null;
-
-    const avg = Math.max(0, vehicle.average_miles_per_month ?? 0);
-    const lastUpdateRaw = vehicle.last_mileage_update;
-
-    if (avg > 0 && lastUpdateRaw) {
-      const lastUpdateMs = new Date(lastUpdateRaw).getTime();
-      if (Number.isFinite(lastUpdateMs)) {
-        const nowMs = Date.now();
-        const monthsElapsed = Math.max(0, (nowMs - lastUpdateMs) / (1000 * 60 * 60 * 24 * 30.44));
-        const estimated = stored + Math.round(avg * monthsElapsed);
-        return Math.max(stored, estimated);
-      }
-    }
-
-    return stored;
+    return projectedMileage(vehicle);
   }
 
   return null;

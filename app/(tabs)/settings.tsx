@@ -34,6 +34,7 @@ import {
 } from "@/lib/subscription";
 import ScanPackModal, { type ScanPackModalHandle } from "@/components/ScanPackModal";
 import { PaidActionCTA } from "@/components/PaidActionCTA";
+import { projectedMileage } from "@/lib/usageHelpers";
 
 const SETTINGS_KEY = "app_settings_v2";
 
@@ -53,6 +54,7 @@ type PredVehicle = {
   nickname: string | null;
   mileage: number | null;
   average_miles_per_month: number | null;
+  last_mileage_update: string | null;
 };
 
 type PredTask = {
@@ -186,7 +188,7 @@ export default function SettingsScreen() {
       if (!user) return [] as PredVehicle[];
       const { data, error } = await supabase
         .from("vehicles")
-        .select("id, year, make, model, nickname, mileage, average_miles_per_month")
+        .select("id, year, make, model, nickname, mileage, average_miles_per_month, last_mileage_update")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -735,7 +737,7 @@ export default function SettingsScreen() {
                   <View style={styles.vehicleMeta}>
                     <Ionicons name="speedometer-outline" size={13} color={Colors.textTertiary} />
                     <Text style={styles.vehicleMetaText}>
-                      {selectedVehicle.mileage != null ? `${selectedVehicle.mileage.toLocaleString()} mi current · ` : ""}
+                      {selectedVehicle.mileage != null ? `${(projectedMileage(selectedVehicle) ?? selectedVehicle.mileage).toLocaleString()} mi est. now · ` : ""}
                       {selectedVehicle.average_miles_per_month.toLocaleString()} mi/mo avg
                     </Text>
                   </View>

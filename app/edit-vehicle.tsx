@@ -170,6 +170,12 @@ export default function EditVehicleScreen() {
         if (tracksMileage && updates.mileage == null) {
           updates.last_mileage_update = new Date().toISOString();
         }
+        // Same parity for hours-tracked vehicles: a rate change with no new hours
+        // reading re-anchors the hours projection clock so projected hours never
+        // jump retroactively at the new rate.
+        if (tracksHours && updates.hours == null) {
+          updates.last_hours_update = new Date().toISOString();
+        }
       }
     }
 

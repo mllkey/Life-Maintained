@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import Constants from "expo-constants";
 import { supabase } from "./supabase";
 import { loadNotifPrefs } from "./notificationPrefs";
-import { currentUsageValue } from "./usageHelpers";
+import { projectedMileage, projectedHours } from "./usageHelpers";
 import * as Sentry from "@sentry/react-native";
 
 function parseNotifTime(timeStr: string): { hour: number; minute: number } {
@@ -190,7 +190,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     const [vehiclesRes, propertiesRes, medicationsRes] = await Promise.all([
       supabase
         .from("vehicles")
-        .select("id, year, make, model, nickname, mileage, hours, tracking_mode, vehicle_type, average_miles_per_month, last_mileage_update")
+        .select("id, year, make, model, nickname, mileage, hours, tracking_mode, vehicle_type, average_miles_per_month, last_mileage_update, last_hours_update")
         .eq("user_id", userId),
       supabase
         .from("properties")
@@ -337,15 +337,14 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
 
       // Check hours
       let hoursRemaining: number | null = null;
-      if (isHoursMode && (vehicle as any).hours != null && task.next_due_hours != null) {
-        hoursRemaining = Number(task.next_due_hours) - Number((vehicle as any).hours);
+      const projLoopHours = projectedHours(vehicle as any);
+      if (isHoursMode && projLoopHours != null && task.next_due_hours != null) {
+        hoursRemaining = Number(task.next_due_hours) - projLoopHours;
       }
 
-      // Check miles (use estimated mileage for pure mileage-tracked vehicles)
+      // Check miles (projected, whole-day stepped; mode-independent so display and scheduler agree)
       let milesRemaining: number | null = null;
-      const effectiveMileage: number | null = trackingMode === "mileage"
-        ? currentUsageValue(vehicle)
-        : ((vehicle as any).mileage ?? null);
+      const effectiveMileage: number | null = projectedMileage(vehicle as any);
       if (isMilesMode && effectiveMileage != null && task.next_due_miles != null) {
         milesRemaining = Number(task.next_due_miles) - effectiveMileage;
       }
@@ -721,12 +720,11 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         const tm = vehicle.tracking_mode ?? "";
         const isH = tm === "hours" || tm === "both";
         const isM = tm === "mileage" || tm === "both";
-        if (isH && (vehicle as any).hours != null && t.next_due_hours != null) {
-          if (Number((vehicle as any).hours) >= Number(t.next_due_hours)) return true;
+        const projBadgeHours = projectedHours(vehicle as any);
+        if (isH && projBadgeHours != null && t.next_due_hours != null) {
+          if (projBadgeHours >= Number(t.next_due_hours)) return true;
         }
-        const effectiveBadgeMileage: number | null = vehicle.tracking_mode === "mileage"
-          ? currentUsageValue(vehicle)
-          : ((vehicle as any).mileage ?? null);
+        const effectiveBadgeMileage: number | null = projectedMileage(vehicle as any);
         if (isM && effectiveBadgeMileage != null && t.next_due_miles != null) {
           if (effectiveBadgeMileage >= Number(t.next_due_miles)) return true;
         }
