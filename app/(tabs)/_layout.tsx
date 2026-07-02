@@ -152,6 +152,8 @@ export default function TabLayout() {
     if (intent.kind === "add-vehicle") router.push("/add-vehicle");
     else if (intent.kind === "add-property") router.push("/add-property");
     else if (intent.kind === "open-vehicle") router.push({ pathname: "/vehicle/[id]", params: { id: intent.id } });
+    else if (intent.kind === "open-property") router.push({ pathname: "/property/[id]", params: { id: intent.id } });
+    else if (intent.kind === "open-member") router.push({ pathname: "/family-member/[id]", params: { id: intent.id } });
   }, []);
 
   return (

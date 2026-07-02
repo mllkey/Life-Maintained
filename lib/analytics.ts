@@ -25,7 +25,7 @@ import { PostHog } from "posthog-react-native";
 export type AnalyticsEvents = {
   app_opened: {};
   app_foregrounded: {};
-  onboarding_step_viewed: { step: "start" | "building_plan" | "value_reveal" | "building_property_plan" | "building_health_plan" };
+  onboarding_step_viewed: { step: "start" | "building_plan" | "value_reveal" | "building_property_plan" | "building_health_plan" | "plan_reveal"; vertical?: "home" | "health" };
   vehicle_added: { vehicle_id: string; make: string; model: string; year: number };
   property_added: { property_id: string; property_type: string };
   family_member_added: { family_member_id: string; member_type: "person" | "pet" };

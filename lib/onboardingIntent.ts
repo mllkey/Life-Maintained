@@ -1,7 +1,9 @@
 export type OnboardingIntent =
   | { kind: "add-vehicle" }
   | { kind: "add-property" }
-  | { kind: "open-vehicle"; id: string };
+  | { kind: "open-vehicle"; id: string }
+  | { kind: "open-property"; id: string }
+  | { kind: "open-member"; id: string };
 
 let pending: OnboardingIntent | null = null;
 

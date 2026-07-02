@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { setPendingIntent } from "@/lib/onboardingIntent";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -336,17 +335,10 @@ export default function BuildingPropertyPlanScreen() {
 
   async function handleOpenDashboard() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const done = await completeOnboarding();
-    if (!done) return;
-    router.replace("/(tabs)");
-  }
-
-  async function handleAddVehicleNext() {
-    const done = await completeOnboarding();
-    if (!done) return;
-    setPendingIntent({ kind: "add-vehicle" });
-    router.replace("/(tabs)");
-    Haptics.selectionAsync();
+    router.replace({
+      pathname: "/(onboarding)/plan-reveal",
+      params: { vertical: "home", assetId: propertyId, assetName: propertyName },
+    });
   }
 
   async function handleContinueAnyway() {
@@ -482,11 +474,6 @@ export default function BuildingPropertyPlanScreen() {
           {continueError ? (
             <Text style={styles.inlineError}>{continueError}</Text>
           ) : null}
-
-          <Pressable onPress={handleAddVehicleNext} style={styles.secondary}>
-            <Ionicons name="car-outline" size={16} color={Colors.vehicle} />
-            <Text style={[styles.secondaryText, { color: Colors.vehicle }]}>Add vehicle next</Text>
-          </Pressable>
 
           <Pressable
             style={({ pressed }) => [styles.cta, { opacity: pressed ? 0.85 : 1 }]}
