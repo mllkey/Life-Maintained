@@ -1,6 +1,6 @@
 // Shared reveal choreography — beat + haptic timings for onboarding reveals.
-// plan-reveal (home/health) consumes these now; value-reveal (vehicle) adopts
-// them in a follow-up so all three reveals stay in lockstep.
+// plan-reveal consumes these for all three verticals (vehicle/home/health)
+// so every onboarding reveal stays in lockstep.
 export const REVEAL_BEATS = {
   coverage: 0,
   hero: 160,

@@ -133,10 +133,11 @@ export default function BuildingPlanScreen() {
     setContinueError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.replace({
-      pathname: "/(onboarding)/value-reveal",
+      pathname: "/(onboarding)/plan-reveal",
       params: {
-        vehicleId,
-        vehicleName: displayName,
+        vertical: "vehicle",
+        assetId: vehicleId,
+        assetName: displayName,
       },
     });
   }
