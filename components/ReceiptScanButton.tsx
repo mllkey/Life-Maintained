@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { TouchableOpacity, Text, Alert, ActivityIndicator, StyleSheet, View } from "react-native";
+import { Pressable, Text, Alert, ActivityIndicator, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as Haptics from "expo-haptics";
@@ -138,6 +139,7 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
   };
 
   const showOptions = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     Alert.alert("Scan Receipt", "How would you like to add a receipt?", [
       { text: "Take Photo", onPress: () => handleScan(true) },
       { text: "Choose from Library", onPress: () => handleScan(false) },
@@ -156,9 +158,15 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
 
   return (
     <View>
-      <TouchableOpacity style={styles.button} onPress={showOptions}>
-        <Text style={styles.buttonText}>📷 Scan Receipt</Text>
-      </TouchableOpacity>
+      <Pressable
+        style={({ pressed }) => [styles.button, { opacity: pressed ? 0.85 : 1 }]}
+        onPress={showOptions}
+        accessibilityRole="button"
+        accessibilityLabel="Scan a receipt"
+      >
+        <Ionicons name="scan-outline" size={18} color={Colors.textInverse} />
+        <Text style={styles.buttonText}>Scan Receipt</Text>
+      </Pressable>
       <SaveToast visible={toastVisible} message={toastMessage} subtitle={toastSubtitle ?? undefined} isError={toastIsError} />
     </View>
   );
@@ -166,14 +174,16 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: Colors.accent,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.accent,
+    paddingVertical: 14,
+    borderRadius: 14,
     marginVertical: 8,
   },
-  buttonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
+  buttonText: { color: Colors.textInverse, fontSize: 16, fontFamily: "Inter_600SemiBold" },
   scanningContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -181,5 +191,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 8,
   },
-  scanningText: { color: Colors.accent, fontSize: 14 },
+  scanningText: { color: Colors.accent, fontSize: 14, fontFamily: "Inter_500Medium" },
 });
