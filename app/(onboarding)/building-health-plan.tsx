@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { setPendingIntent } from "@/lib/onboardingIntent";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -347,8 +348,8 @@ export default function BuildingHealthPlanScreen() {
   async function handleAddVehicleNext() {
     const done = await completeOnboarding();
     if (!done) return;
+    setPendingIntent({ kind: "add-vehicle" });
     router.replace("/(tabs)");
-    setTimeout(() => router.push("/add-vehicle"), 400);
     Haptics.selectionAsync();
   }
 

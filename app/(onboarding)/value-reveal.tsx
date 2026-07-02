@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { setPendingIntent } from "@/lib/onboardingIntent";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -212,17 +213,15 @@ export default function ValueRevealScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const completed = await completeOnboarding();
     if (!completed) return;
+    if (vehicleId) setPendingIntent({ kind: "open-vehicle", id: vehicleId });
     router.replace("/(tabs)");
-    if (vehicleId) {
-      setTimeout(() => router.push({ pathname: "/vehicle/[id]", params: { id: vehicleId } }), 400);
-    }
   }
 
   async function handleAddHome() {
     const completed = await completeOnboarding();
     if (!completed) return;
+    setPendingIntent({ kind: "add-property" });
     router.replace("/(tabs)");
-    setTimeout(() => router.push("/add-property"), 400);
     Haptics.selectionAsync();
   }
 

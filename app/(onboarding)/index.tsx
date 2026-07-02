@@ -145,7 +145,7 @@ export default function OnboardingStartScreen() {
     transform: [{ translateY: interpolate(ctaProgress.value, [0, 1], [16, 0]) }],
   }));
 
-  async function completeAndGo(destination: string, thenPush?: string) {
+  async function completeAndGo(destination: string) {
     setSaveError(null);
     if (user) {
       const { error } = await supabase.from("profiles").upsert(
@@ -163,9 +163,6 @@ export default function OnboardingStartScreen() {
     }
     setOnboardingCompleted(true);
     router.replace(destination as any);
-    if (thenPush) {
-      setTimeout(() => router.push(thenPush as any), 400);
-    }
   }
 
   function handleSelect(id: VerticalId) {

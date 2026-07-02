@@ -1,16 +1,17 @@
 import { isLiquidGlassAvailable } from "expo-glass-effect";
-import { Tabs } from "expo-router";
+import { Tabs, router } from "expo-router";
 import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
 import { SymbolView } from "expo-symbols";
 import { Platform, Pressable, StyleSheet, useColorScheme, View } from "react-native";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/context/AuthContext";
 import { LogSheet } from "@/components/LogSheet";
+import { takePendingIntent } from "@/lib/onboardingIntent";
 
 function NativeTabLayout() {
   return (
@@ -140,6 +141,18 @@ export default function TabLayout() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const isNative = isLiquidGlassAvailable();
+
+  // One-shot navigation intent from onboarding completion. The tabs layout
+  // mounts once on group entry (independent of the active tab), so draining
+  // here guarantees the push originates from a mounted navigator — replacing
+  // the old setTimeout-after-replace race. Read-once.
+  useEffect(() => {
+    const intent = takePendingIntent();
+    if (!intent) return;
+    if (intent.kind === "add-vehicle") router.push("/add-vehicle");
+    else if (intent.kind === "add-property") router.push("/add-property");
+    else if (intent.kind === "open-vehicle") router.push({ pathname: "/vehicle/[id]", params: { id: intent.id } });
+  }, []);
 
   return (
     <View style={{ flex: 1 }}>
