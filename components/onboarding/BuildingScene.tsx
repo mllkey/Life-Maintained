@@ -377,9 +377,11 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
             {failed ? config.failedTitle : config.assetName}
           </Animated.Text>
         </View>
-        <Animated.Text style={[styles.subtitle, subtitleStyle]}>
-          {failed ? config.failedSubtitle : subtitleText}
-        </Animated.Text>
+        {failed && (
+          <Animated.Text style={[styles.subtitle, subtitleStyle]}>
+            {config.failedSubtitle}
+          </Animated.Text>
+        )}
       </View>
 
       {!failed && (
@@ -413,6 +415,10 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
             <VerticalIcon lib={config.docIcon.lib} icon={config.docIcon.icon} size={40} color={config.tint} />
           </Animated.View>
 
+          <Animated.Text style={[styles.statusCaption, subtitleStyle]} numberOfLines={2}>
+            {subtitleText}
+          </Animated.Text>
+
           <Animated.View style={[styles.readyBadge, readyStyle]}>
             <Ionicons name="checkmark-circle" size={16} color={Colors.good} />
             <Text style={styles.readyText}>Ready</Text>
@@ -443,6 +449,7 @@ const styles = StyleSheet.create({
   titleWrap: { position: "relative" },
   title: { fontSize: 21, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary, lineHeight: 27, textAlign: "center" },
   subtitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 27, minHeight: 27, textAlign: "center" },
+  statusCaption: { position: "absolute", top: "50%", marginTop: 118, left: 20, right: 20, fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 27, minHeight: 27, textAlign: "center" },
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20, justifyContent: "center" },
   chip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: Colors.card, borderRadius: 999, borderWidth: 1, borderColor: Colors.border },
   chipText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
