@@ -58,3 +58,5 @@ LifeMaintained-Pass-*-Audit*.docx
 
 # App Store Connect API private keys
 credentials/apple/*.p8
+
+feature_dossier.txt
