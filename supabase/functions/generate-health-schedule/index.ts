@@ -15,6 +15,8 @@ interface HealthTask {
   priority: "high" | "medium" | "low";
 }
 
+const AGE_TRIGGERED_SCREENINGS = /mammogram|colonoscop|colorectal|prostate|\bpsa\b|bone\s*densit|dexa|dxa|aneurysm|aortic|\baaa\b|lung\s*cancer|low.dose\s*ct|\bldct\b|zoster|shingles|pneumococc/i;
+
 // ── Template fallback ────────────────────────────────────────────────
 function getTemplateTasks(memberType: string, age: number | null, sexAtBirth: string, petType: string): HealthTask[] {
   if (memberType === "pet") {
@@ -241,6 +243,9 @@ Deno.serve(async (req: Request) => {
         if (memberType === "person") {
           const personDesc = age !== null ? `a ${age}-year-old person` : "an adult person (age unknown)";
           userPrompt = `Generate a preventive health schedule for ${personDesc}, sex at birth: ${sexAtBirth}. Include 7-12 preventive screenings and checkups. Each item must have: appointment_type (string), interval_months (number), priority ("high" | "medium" | "low").`;
+          if (age === null) {
+            userPrompt += " The person's age is unknown: do NOT include any age-dependent screenings (no mammogram, no colonoscopy or colorectal screening, no prostate or PSA screening, no bone density or DEXA testing).";
+          }
         } else {
           const breedPart = petBreed ? `, breed: ${petBreed}` : "";
           const petDesc = age !== null ? `a ${age}-year-old ${petType}` : `a ${petType} (age unknown)`;
@@ -318,6 +323,10 @@ Deno.serve(async (req: Request) => {
       const reclamped = normalizeAndValidate(finalTasks as unknown[], memberType);
       const withRequired = injectRequired(reclamped, memberType, petType);
       finalTasks = deduplicateTasks(withRequired);
+    }
+
+    if (memberType === "person" && age == null) {
+      finalTasks = finalTasks.filter(t => !AGE_TRIGGERED_SCREENINGS.test(t.appointment_type));
     }
 
     if (source !== "cache") {
