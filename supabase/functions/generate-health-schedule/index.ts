@@ -16,7 +16,7 @@ interface HealthTask {
 }
 
 // ── Template fallback ────────────────────────────────────────────────
-function getTemplateTasks(memberType: string, age: number, sexAtBirth: string, petType: string): HealthTask[] {
+function getTemplateTasks(memberType: string, age: number | null, sexAtBirth: string, petType: string): HealthTask[] {
   if (memberType === "pet") {
     const pt = petType.toLowerCase();
     if (pt === "dog") {
@@ -44,7 +44,7 @@ function getTemplateTasks(memberType: string, age: number, sexAtBirth: string, p
   }
 
   // Person
-  if (age < 18) {
+  if (age !== null && age < 18) {
     return [
       { appointment_type: "Annual Physical", interval_months: 12, priority: "high" },
       { appointment_type: "Dental Cleaning", interval_months: 6, priority: "medium" },
@@ -64,6 +64,7 @@ function getTemplateTasks(memberType: string, age: number, sexAtBirth: string, p
   const colonoscopy: HealthTask = { appointment_type: "Colonoscopy", interval_months: 120, priority: "high" };
   const prostate: HealthTask = { appointment_type: "Prostate Screening", interval_months: 12, priority: "medium" };
 
+  if (age === null) return isFemale ? [...base, obgyn] : [...base];
   if (age <= 39) return isFemale ? [...base, obgyn] : [...base];
   if (age <= 49) return isFemale ? [...base, obgyn, mammogram] : [...base];
   return isFemale
@@ -175,9 +176,12 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // ── Premium gate ────────────────────────────────────────────────
-    await requirePaidTier(adminClient, userId);
     // ── Rate limit (per user, per fn) ───────────────────────────────
+    // First-and-only generation per member is free by design (onboarding
+    // value reveal). Server-side abuse bounds: the per-user rate limiter,
+    // the small cache-key space (repeat shapes cache-hit with no AI spend),
+    // and insert dedupe against existing appointment types. Health has no
+    // regeneration path; if one is added, gate it there.
     await enforceAiRateLimit(adminClient, userId, "generate-health-schedule");
 
     // 1. Ownership check against verified user
@@ -192,20 +196,20 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "Forbidden: family member does not belong to this user" }, 403);
     }
 
-    if (!member.date_of_birth) {
-      return jsonResponse({ error: "date_of_birth is required to generate a health schedule" }, 400);
-    }
-
+    // date_of_birth is optional — the add flow does not require a birthday.
+    // Missing or invalid DOB falls back to adult/unknown-age defaults.
     const memberType: string = member.member_type === "pet" ? "pet" : "person";
-    const dob = new Date(member.date_of_birth);
-    const now = new Date();
-    const ageMs = now.getTime() - dob.getTime();
-    const age = Math.floor(ageMs / (365.25 * 24 * 60 * 60 * 1000));
+    let age: number | null = null;
+    if (member.date_of_birth) {
+      const dob = new Date(member.date_of_birth);
+      const computed = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+      if (isFinite(computed) && computed >= 0) age = computed;
+    }
     const sexAtBirth: string = member.sex_at_birth ?? "unknown";
     const petType: string = memberType === "pet" ? (member.pet_type ?? "unknown") : "unknown";
     const petBreed: string | null = member.pet_breed ?? null;
 
-    const cacheKey = `health|${memberType}|${age}|${sexAtBirth}|${petType}`.toLowerCase();
+    const cacheKey = `health|${memberType}|${age ?? "unknown"}|${sexAtBirth}|${petType}`.toLowerCase();
 
     const { data: cached } = await adminClient
       .from("ai_schedule_cache")
@@ -235,10 +239,12 @@ Deno.serve(async (req: Request) => {
         const claudeModel = Deno.env.get("CLAUDE_SONNET_MODEL") ?? "claude-sonnet-4-5";
         let userPrompt: string;
         if (memberType === "person") {
-          userPrompt = `Generate a preventive health schedule for a ${age}-year-old person, sex at birth: ${sexAtBirth}. Include 7-12 preventive screenings and checkups. Each item must have: appointment_type (string), interval_months (number), priority ("high" | "medium" | "low").`;
+          const personDesc = age !== null ? `a ${age}-year-old person` : "an adult person (age unknown)";
+          userPrompt = `Generate a preventive health schedule for ${personDesc}, sex at birth: ${sexAtBirth}. Include 7-12 preventive screenings and checkups. Each item must have: appointment_type (string), interval_months (number), priority ("high" | "medium" | "low").`;
         } else {
           const breedPart = petBreed ? `, breed: ${petBreed}` : "";
-          userPrompt = `Generate a preventive health schedule for a ${age}-year-old ${petType}${breedPart}. Include 5-8 veterinary appointments. Each item must have: appointment_type (string), interval_months (number), priority ("high" | "medium" | "low").`;
+          const petDesc = age !== null ? `a ${age}-year-old ${petType}` : `a ${petType} (age unknown)`;
+          userPrompt = `Generate a preventive health schedule for ${petDesc}${breedPart}. Include 5-8 veterinary appointments. Each item must have: appointment_type (string), interval_months (number), priority ("high" | "medium" | "low").`;
         }
 
         try {

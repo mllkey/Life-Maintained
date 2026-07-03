@@ -312,8 +312,10 @@ Deno.serve(async (req: Request) => {
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Premium gate
-    await requirePaidTier(adminClient, authUserId);
+    // First generation for a property is free by design (onboarding value
+    // reveal). The schedule-exists check below returns 409 before any AI
+    // spend on repeat calls, so every reachable user generation is the first
+    // one. If a property force-refresh path is ever added, gate it there.
     // Rate limit (per user, per fn)
     await enforceAiRateLimit(adminClient, authUserId, "generate-property-schedule");
 

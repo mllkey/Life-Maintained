@@ -264,8 +264,14 @@ Deno.serve(async (req: Request) => {
         return json({ error: "Forbidden: vehicle not found or does not belong to this user" }, 403);
       }
 
-      // Premium gate (skipped on service-role admin calls).
-      await requirePaidTier(adminClient, authUserId);
+      // Premium gate: first generation for a vehicle is free by design
+      // (onboarding value reveal). Only paid re-generation (force refresh)
+      // is gated. Non-refresh calls with an existing schedule short-circuit
+      // on the existing-count check before any AI spend. Service-role admin
+      // calls never reach this branch.
+      if (isForceRefresh) {
+        await requirePaidTier(adminClient, authUserId);
+      }
       // Rate limit on user calls only. Internal admin calls skip.
       await enforceAiRateLimit(adminClient, authUserId, "generate-maintenance-schedule");
     }
