@@ -20,6 +20,7 @@ import Animated, {
   Easing,
   interpolate,
   runOnJS,
+  cancelAnimation,
   type SharedValue,
 } from "react-native-reanimated";
 
@@ -177,11 +178,27 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
     });
   }, [subtitleOpacity]);
 
+  const stopScene = useCallback(() => {
+    [
+      haloPulse, orbitSpin, titleOpacity, titleY, subtitleOpacity,
+      chip1Opacity, chip1Y, chip2Opacity, chip2Y, chip3Opacity, chip3Y,
+      chipIcon0, chipIcon1, chipIcon2, docScale, docOpacity, docGlow, readyOpacity,
+      particle0, particle1, particle2, particle3, particle4, particle5,
+      particle6, particle7, particle8, particle9, particle10, particle11,
+    ].forEach((sv) => cancelAnimation(sv));
+    sceneTimers.current.forEach(clearTimeout);
+    if (finalizeTimer.current) clearTimeout(finalizeTimer.current);
+    if (maxWaitTimer.current) clearTimeout(maxWaitTimer.current);
+    if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const markFailed = useCallback(() => {
     failedRef.current = true;
+    stopScene();
     subtitleOpacity.value = 1;
     setFailed(true);
-  }, [subtitleOpacity]);
+  }, [stopScene, subtitleOpacity]);
 
   const handleViewPlan = useCallback(() => {
     setContinueError(null);
@@ -268,10 +285,7 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
       if (!scheduleDone.current && !failedRef.current) finalizeReveal();
     }, MAX_WAIT_MS);
     return () => {
-      if (maxWaitTimer.current) clearTimeout(maxWaitTimer.current);
-      if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
-      if (finalizeTimer.current) clearTimeout(finalizeTimer.current);
-      sceneTimers.current.forEach(clearTimeout);
+      stopScene();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
