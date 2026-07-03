@@ -135,7 +135,6 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
 
   const titleOpacity = useSharedValue(0);
   const titleY = useSharedValue(10);
-  const titleGlow = useSharedValue(0);
   const subtitleOpacity = useSharedValue(1);
   const chip1Opacity = useSharedValue(0);
   const chip1Y = useSharedValue(12);
@@ -230,10 +229,6 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
     const timers: ReturnType<typeof setTimeout>[] = [];
     titleOpacity.value = withTiming(1, { duration: 480, easing: Easing.out(Easing.cubic) });
     titleY.value = withSpring(0, { damping: 17, stiffness: 150 });
-    titleGlow.value = withDelay(480, withSequence(
-      withTiming(1, { duration: 280, easing: Easing.out(Easing.ease) }),
-      withTiming(0.3, { duration: 400 }),
-    ));
     haloPulse.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.inOut(Easing.ease) }), -1, true);
     orbitSpin.value = withRepeat(withTiming(1, { duration: 9000, easing: Easing.linear }), -1);
 
@@ -298,7 +293,6 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
 
     titleOpacity.value = 0; titleY.value = 10;
     subtitleOpacity.value = 1;
-    titleGlow.value = 0;
     chip1Opacity.value = 0; chip1Y.value = 12;
     chip2Opacity.value = 0; chip2Y.value = 12;
     chip3Opacity.value = 0; chip3Y.value = 12;
@@ -338,7 +332,6 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
   }
 
   const titleStyle = useAnimatedStyle(() => ({ opacity: titleOpacity.value, transform: [{ translateY: titleY.value }] }));
-  const titleGlowStyle = useAnimatedStyle(() => ({ opacity: titleGlow.value, transform: [{ scale: interpolate(titleGlow.value, [0, 1], [0.95, 1]) }] }));
   const subtitleStyle = useAnimatedStyle(() => ({ opacity: subtitleOpacity.value }));
   const chip1Style = useAnimatedStyle(() => ({ opacity: chip1Opacity.value, transform: [{ translateY: chip1Y.value }] }));
   const chip2Style = useAnimatedStyle(() => ({ opacity: chip2Opacity.value, transform: [{ translateY: chip2Y.value }] }));
@@ -366,7 +359,6 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
 
       <View style={styles.headerSection}>
         <View style={styles.titleWrap}>
-          <Animated.View style={[styles.titleGlow, { backgroundColor: config.tint }, titleGlowStyle]} />
           <Animated.Text style={[styles.title, titleStyle]} numberOfLines={2}>
             {failed ? config.failedTitle : config.assetName}
           </Animated.Text>
@@ -433,12 +425,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background, gap: 28 },
   progressBar: { height: 3, borderRadius: 2, backgroundColor: Colors.border, overflow: "hidden" },
   progressFill: { height: 3, borderRadius: 2 },
-  headerSection: { paddingHorizontal: 20, gap: 12 },
+  headerSection: { paddingHorizontal: 20, gap: 14, alignItems: "center" },
   titleWrap: { position: "relative" },
-  titleGlow: { position: "absolute", left: -12, right: -12, top: -8, bottom: -8, borderRadius: 20, opacity: 0 },
-  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 34 },
-  subtitle: { fontSize: 16, fontFamily: "Inter_500Medium", color: Colors.textSecondary, lineHeight: 22, minHeight: 22 },
-  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20 },
+  title: { fontSize: 21, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary, lineHeight: 27, textAlign: "center" },
+  subtitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 27, minHeight: 27, textAlign: "center" },
+  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20, justifyContent: "center" },
   chip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: Colors.card, borderRadius: 999, borderWidth: 1, borderColor: Colors.border },
   chipText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
   stage: { flex: 1, alignItems: "center", justifyContent: "center", position: "relative" },
