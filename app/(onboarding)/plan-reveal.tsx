@@ -157,7 +157,7 @@ export default function PlanRevealScreen() {
 
   const { setOnboardingCompleted, user } = useAuth();
   const pollCount = useRef(0);
-  const [pollTimedOut, setPollTimedOut] = useState(false);
+  const [pollTimedOut, setPollTimedOut] = useState(!assetId);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const skeletonAnim = usePulse();
   const revealHapticsFired = useRef(false);

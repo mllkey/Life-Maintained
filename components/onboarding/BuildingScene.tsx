@@ -209,21 +209,23 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
     });
   }, [config.revealVertical, config.assetId, config.assetName]);
 
-  const finalizeReveal = useCallback(() => {
+  const finalizeReveal = useCallback((confirmed: boolean) => {
     if (failedRef.current || hasFinalized.current) return;
     hasFinalized.current = true;
-    swapSubtitle(config.copy.ready);
-    docScale.value = withSpring(1.15, { damping: 10, stiffness: 140 }, () => {
-      docScale.value = withSpring(1, { damping: 14, stiffness: 180 });
-    });
-    docGlow.value = withTiming(1, { duration: 400 });
-    readyOpacity.value = withTiming(1, { duration: 300 });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (confirmed) {
+      swapSubtitle(config.copy.ready);
+      docScale.value = withSpring(1.15, { damping: 10, stiffness: 140 }, () => {
+        docScale.value = withSpring(1, { damping: 14, stiffness: 180 });
+      });
+      docGlow.value = withTiming(1, { duration: 400 });
+      readyOpacity.value = withTiming(1, { duration: 300 });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
     autoAdvanceTimer.current = setTimeout(() => {
       autoAdvanceTimer.current = null;
       if (failedRef.current) return;
       handleViewPlan();
-    }, 1100);
+    }, confirmed ? 1100 : 300);
   }, [config.copy.ready, swapSubtitle, docScale, docGlow, readyOpacity, handleViewPlan]);
 
   const generateSchedule = useCallback(async () => {
@@ -235,7 +237,7 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
       config.onGenerated();
       const elapsed = Date.now() - sceneStart.current;
       const remaining = Math.max(MIN_SCENE_MS - elapsed, 0);
-      finalizeTimer.current = setTimeout(finalizeReveal, remaining);
+      finalizeTimer.current = setTimeout(() => finalizeReveal(true), remaining);
     } catch (e) {
       if (__DEV__) console.error("[onboarding] generation failed:", e);
       markFailed();
@@ -282,7 +284,7 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
     sceneTimers.current = armScene();
     void generateSchedule();
     maxWaitTimer.current = setTimeout(() => {
-      if (!scheduleDone.current && !failedRef.current) finalizeReveal();
+      if (!scheduleDone.current && !failedRef.current) finalizeReveal(false);
     }, MAX_WAIT_MS);
     return () => {
       stopScene();
@@ -318,7 +320,7 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
 
     sceneTimers.current = armScene();
     maxWaitTimer.current = setTimeout(() => {
-      if (!scheduleDone.current && !failedRef.current) finalizeReveal();
+      if (!scheduleDone.current && !failedRef.current) finalizeReveal(false);
     }, MAX_WAIT_MS);
     try {
       await generateSchedule();
