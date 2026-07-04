@@ -268,12 +268,13 @@ export default function DashboardScreen() {
         const mode = resolveTrackingMode(v);
         const usageStatus = calcVehicleTaskStatus(t, v, mode);
         if (usageStatus !== "overdue" && usageStatus !== "due_soon") continue;
+        const status: DashboardItem["status"] = usageStatus;
         items.push({
           id: t.id,
           title: t.name,
           subtitle: v.nickname ?? `${v.make} ${v.model}`,
           dueDate: t.next_due_date,
-          status: usageStatus,
+          status,
           category: "vehicles",
           entityId: t.vehicle_id,
         });
