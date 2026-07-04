@@ -31,7 +31,8 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SaveToast } from "@/components/SaveToast";
-import { matchAndUpdateVehicleTask, matchAndUpdatePropertyTask } from "@/lib/maintenanceMatcher";
+import { matchAndUpdateVehicleTask, matchAndUpdatePropertyTask, type MatchResult } from "@/lib/maintenanceMatcher";
+import { completeVehicleTask, reverseVehicleTaskCompletion } from "@/lib/rpc";
 import { isHoursTracked, resolveTrackingMode } from "@/lib/usageHelpers";
 import { updateVehicleUsage } from "@/lib/vehicleUsageHelper";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
@@ -252,13 +253,24 @@ function FieldRow({
 
 // ─── Confirm Card ────────────────────────────────────────────────────────────
 
+type CardItem = ExtractedItem & { _key: string };
+
+type CardPhase = "editing" | "saving" | "matched" | "picker";
+
+function formatNextDue(m: MatchResult): string {
+  if (m.nextDueMiles != null) return `Next due ${m.nextDueMiles.toLocaleString()} mi`;
+  if (m.nextDueHours != null) return `Next due ${m.nextDueHours.toLocaleString()} hrs`;
+  if (m.nextDueDate) return `Next due ${new Date(m.nextDueDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  return "Logged";
+}
+
 function ConfirmCard({
-  item, userId, onDone, onSuccess,
+  item, userId, onRemove, onToast,
 }: {
   item: ExtractedItem;
   userId: string;
-  onDone: () => void;
-  onSuccess?: (title: string, subtitle?: string) => void;
+  onRemove: () => void;
+  onToast?: (title: string, subtitle?: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [serviceName, setServiceName] = useState(item.service_name);
@@ -268,8 +280,14 @@ function ConfirmCard({
   const [hoursReading, setHoursReading] = useState("");
   const [provider, setProvider] = useState(item.provider_name ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
-  const [saving, setSaving] = useState(false);
+  const [phase, setPhase] = useState<CardPhase>("editing");
   const [cardError, setCardError] = useState("");
+  const [match, setMatch] = useState<MatchResult | null>(null);
+  const [rejectedTaskId, setRejectedTaskId] = useState<string | null>(null);
+  const [reversing, setReversing] = useState(false);
+  const [pickingId, setPickingId] = useState<string | null>(null);
+  const savingRef = useRef(false);
+  const meterRef = useRef<{ miles: number | null; hours: number | null }>({ miles: null, hours: null });
 
   const isVehicle = item.category === "vehicle";
 
@@ -286,30 +304,55 @@ function ConfirmCard({
   const tracksHours = usageMode === "hours";
   const tracksBoth = usageMode === "both";
   const tracksMileage = usageMode === "mileage";
+  const vehicleReady = !isVehicle || !!vehicleData;
+
+  const { data: pickerTasks, isError: pickerError, refetch: refetchPicker } = useQuery({
+    queryKey: ["confirm_picker_tasks", item.asset_id],
+    queryFn: async () => {
+      const vid = item.asset_id;
+      if (!vid) return [];
+      const { data, error } = await supabase
+        .from("user_vehicle_maintenance_tasks")
+        .select("id,name")
+        .eq("vehicle_id", vid)
+        .order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: isVehicle && !!item.asset_id && phase === "picker",
+    staleTime: 1000 * 60,
+  });
+
   const catIcon = item.category === "vehicle" ? "car-outline" : item.category === "property" ? "home-outline" : "heart-outline";
   const catColor = item.category === "vehicle" ? Colors.blue : item.category === "property" ? Colors.good : Colors.health;
 
   async function handleSave() {
+    if (savingRef.current) return;
     if (item.category === "health") {
       setCardError("Health logging from voice is coming soon. Use the Health tab for now.");
       return;
     }
     if (!serviceName.trim()) { setCardError("Service name is required"); return; }
-    setSaving(true);
+    if (!vehicleReady) return;
+    savingRef.current = true;
+    setPhase("saving");
     setCardError("");
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const now = new Date().toISOString();
       let milesVal: number | null = null;
       let hoursVal: number | null = null;
+      const asInt = (v: string) => { const n = parseInt(v.replace(/,/g, ""), 10); return Number.isFinite(n) ? n : null; };
+      const asFloat = (v: string) => { const n = parseFloat(v.replace(/,/g, "")); return Number.isFinite(n) ? n : null; };
       if (tracksBoth) {
-        if (mileage.trim()) milesVal = parseInt(mileage.replace(/,/g, ""), 10);
-        if (hoursReading.trim()) hoursVal = parseFloat(hoursReading.replace(/,/g, ""));
+        if (mileage.trim()) milesVal = asInt(mileage);
+        if (hoursReading.trim()) hoursVal = asFloat(hoursReading);
       } else if (tracksHours) {
-        if (mileage.trim()) hoursVal = parseFloat(mileage.replace(/,/g, ""));
+        if (mileage.trim()) hoursVal = asFloat(mileage);
       } else {
-        if (mileage.trim()) milesVal = parseInt(mileage.replace(/,/g, ""), 10);
+        if (mileage.trim()) milesVal = asInt(mileage);
       }
+      meterRef.current = { miles: milesVal, hours: hoursVal };
       const logMeter = milesVal ?? hoursVal ?? null;
 
       const { error: insertErr } = await supabase.from("maintenance_logs").insert({
@@ -319,7 +362,7 @@ function ConfirmCard({
         service_name: serviceName.trim(),
         service_date: date || now.split("T")[0],
         mileage: logMeter,
-        cost: cost ? parseFloat(cost) : null,
+        cost: asFloat(cost),
         provider_name: provider.trim() || null,
         notes: notes.trim() || null,
         receipt_url: null,
@@ -328,49 +371,23 @@ function ConfirmCard({
       });
       if (insertErr) throw insertErr;
 
-      // 2. Update vehicle usage reading and history (non-blocking: a usage-update
-      // failure must not make a successfully-saved log look failed).
       if (isVehicle && item.asset_id && (milesVal != null || hoursVal != null)) {
         try {
-          await updateVehicleUsage(
-            item.asset_id,
-            milesVal,
-            hoursVal,
-            date || now,
-            vehicleData?.mileage ?? null,
-            vehicleData?.hours ?? null,
-          );
-        } catch (usageErr) {
-          console.error("updateVehicleUsage failed (non-blocking):", usageErr);
-        }
+          await updateVehicleUsage(item.asset_id, milesVal, hoursVal, date || now, vehicleData?.mileage ?? null, vehicleData?.hours ?? null);
+        } catch (usageErr) { console.error("updateVehicleUsage failed (non-blocking):", usageErr); }
       }
 
-      // 3. Match and update maintenance tasks
+      let matchResult: MatchResult | null = null;
       if (isVehicle && item.asset_id) {
         try {
-          await matchAndUpdateVehicleTask(
-            item.asset_id,
-            serviceName.trim(),
-            date || now.split("T")[0],
-            milesVal,
-            hoursVal,
-          );
-        } catch (matchErr) {
-          console.error("matchAndUpdateVehicleTask failed (non-blocking):", matchErr);
-        }
+          matchResult = await matchAndUpdateVehicleTask(item.asset_id, serviceName.trim(), date || now.split("T")[0], milesVal, hoursVal);
+        } catch (matchErr) { console.error("vehicle match failed (non-blocking):", matchErr); }
       } else if (item.category === "property" && item.asset_id) {
         try {
-          await matchAndUpdatePropertyTask(
-            item.asset_id,
-            serviceName.trim(),
-            date || now.split("T")[0],
-          );
-        } catch (matchErr) {
-          console.error("matchAndUpdatePropertyTask failed (non-blocking):", matchErr);
-        }
+          await matchAndUpdatePropertyTask(item.asset_id, serviceName.trim(), date || now.split("T")[0]);
+        } catch (matchErr) { console.error("property match failed (non-blocking):", matchErr); }
       }
 
-      // 4. Invalidate queries
       queryClient.invalidateQueries({ queryKey: ["maintenance_logs"] });
       queryClient.invalidateQueries({ queryKey: ["maintenance_logs", item.asset_id] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -385,24 +402,151 @@ function ConfirmCard({
         queryClient.invalidateQueries({ queryKey: ["property_logs", item.asset_id] });
       }
 
-      // 5. Schedule notifications (after queries invalidated, non-blocking)
-      try {
-        await scheduleMaintenanceNotifications(userId);
-      } catch (notifErr) {
-        console.error("scheduleMaintenanceNotifications failed (non-blocking):", notifErr);
-      }
+      try { await scheduleMaintenanceNotifications(userId); }
+      catch (notifErr) { console.error("scheduleMaintenanceNotifications failed (non-blocking):", notifErr); }
 
-      // Haptic fires via onSuccess (synced with toast visibility in parent)
-      onSuccess?.(`${serviceName.trim()} logged`);
-      onDone();
+      if (isVehicle) {
+        if (matchResult) { setMatch(matchResult); setPhase("matched"); }
+        else { setPhase("picker"); }
+      } else {
+        onToast?.(`${serviceName.trim()} logged`);
+        onRemove();
+      }
     } catch (err) {
       console.error("ConfirmCard save error:", err);
       setCardError("Save failed. Try again.");
+      setPhase("editing");
     } finally {
-      setSaving(false);
+      savingRef.current = false;
     }
   }
 
+  async function handleWrongTask() {
+    const prior = match?.prior;
+    if (!match || !prior) { setPhase("picker"); return; }
+    if (reversing) return;
+    setReversing(true);
+    setCardError("");
+    try {
+      const { data, error } = await reverseVehicleTaskCompletion({
+        p_task_id: match.taskId,
+        p_prior_status: prior.status,
+        p_prior_last_completed_date: prior.last_completed_date ?? undefined,
+        p_prior_last_completed_miles: prior.last_completed_miles ?? undefined,
+        p_prior_last_completed_hours: prior.last_completed_hours ?? undefined,
+        p_prior_next_due_date: prior.next_due_date ?? undefined,
+        p_prior_next_due_miles: prior.next_due_miles ?? undefined,
+        p_prior_next_due_hours: prior.next_due_hours ?? undefined,
+        p_expected_next_due_date_str: match.expected?.next_due_date_str ?? undefined,
+        p_expected_next_due_miles: match.expected?.next_due_miles ?? undefined,
+        p_expected_next_due_hours: match.expected?.next_due_hours ?? undefined,
+      });
+      if (error) throw error;
+      if (!data?.applied) {
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", item.asset_id] });
+        setCardError("This task already changed — refresh to see the latest.");
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", item.asset_id] });
+      Haptics.selectionAsync().catch(() => {});
+      setRejectedTaskId(match.taskId);
+      setPhase("picker");
+    } catch (e) {
+      console.error("reverse RPC failed:", e);
+      setCardError("Couldn't undo — try again.");
+    } finally {
+      setReversing(false);
+    }
+  }
+
+  async function handlePickTask(taskId: string) {
+    if (pickingId) return;
+    setPickingId(taskId);
+    setCardError("");
+    try {
+      const { error } = await completeVehicleTask({
+        p_task_id: taskId,
+        p_completed_date: date || new Date().toISOString().split("T")[0],
+        p_mileage: meterRef.current.miles ?? undefined,
+        p_hours: meterRef.current.hours ?? undefined,
+        p_skip_log: true,
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", item.asset_id] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      onToast?.("Task updated");
+      onRemove();
+    } catch (e) {
+      console.error("picker complete failed:", e);
+      setCardError("Couldn't update the task — try again.");
+      setPickingId(null);
+    }
+  }
+
+  function handleJustLog() {
+    onToast?.(`${serviceName.trim()} logged`);
+    onRemove();
+  }
+
+  if (phase === "matched" && match) {
+    return (
+      <View style={styles.confirmCard}>
+        <View style={styles.confirmMatchedRow}>
+          <Ionicons name="checkmark-circle" size={20} color={Colors.good} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.confirmMatchedText} numberOfLines={1}>{match.taskName}</Text>
+            <Text style={styles.confirmMatchedSub} numberOfLines={1}>{formatNextDue(match)}</Text>
+          </View>
+          <Pressable onPress={handleWrongTask} hitSlop={8} style={styles.confirmWrongTaskBtn} disabled={reversing}>
+            {reversing ? <ActivityIndicator size="small" color={Colors.textSecondary} /> : <Text style={styles.confirmWrongTaskText}>Wrong task?</Text>}
+          </Pressable>
+        </View>
+        {!!cardError && <Text style={styles.confirmCardError}>{cardError}</Text>}
+      </View>
+    );
+  }
+
+  if (phase === "picker") {
+    const tasks = (pickerTasks ?? []).filter(t => t.id !== rejectedTaskId);
+    const header = rejectedTaskId
+      ? `Not ${match?.taskName ?? "that task"} — which one?`
+      : "Logged — which task did this complete?";
+    return (
+      <View style={styles.confirmCard}>
+        <Text style={styles.confirmPickerTitle}>{header}</Text>
+        {pickerError ? (
+          <View style={styles.confirmPickerLoading}>
+            <Text style={styles.confirmPickerErrorText}>Couldn{"'"}t load tasks.</Text>
+            <Pressable onPress={() => refetchPicker()} style={styles.confirmPickerRetry}>
+              <Text style={styles.confirmPickerRetryText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : pickerTasks === undefined ? (
+          <View style={styles.confirmPickerLoading}><ActivityIndicator size="small" color={Colors.accent} /></View>
+        ) : (
+          <View style={styles.confirmPickerList}>
+            {tasks.map(t => (
+              <Pressable key={t.id} style={styles.confirmPickerRow} onPress={() => handlePickTask(t.id)} disabled={!!pickingId}>
+                <Text style={styles.confirmPickerRowText} numberOfLines={1}>{t.name}</Text>
+                {pickingId === t.id
+                  ? <ActivityIndicator size="small" color={Colors.textTertiary} />
+                  : <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />}
+              </Pressable>
+            ))}
+          </View>
+        )}
+        {!!cardError && <Text style={styles.confirmCardError}>{cardError}</Text>}
+        <Pressable style={styles.confirmJustLogBtn} onPress={handleJustLog} disabled={!!pickingId}>
+          <Text style={styles.confirmJustLogText}>Just log it — no task</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const saving = phase === "saving";
   return (
     <View style={styles.confirmCard}>
       <View style={styles.confirmCardHeader}>
@@ -421,11 +565,7 @@ function ConfirmCard({
       <View style={styles.confirmFields}>
         <FieldRow label="Service" value={serviceName} onChange={setServiceName} placeholder="e.g. Oil Change" />
         <View style={styles.fieldRow}>
-          <DatePicker
-            value={date}
-            onChange={setDate}
-            maximumDate={new Date()}
-          />
+          <DatePicker value={date} onChange={setDate} maximumDate={new Date()} />
         </View>
         <FieldRow label="Cost" value={cost} onChange={setCost} placeholder="0.00" keyboard="decimal-pad" prefix="$" />
         {isVehicle && tracksBoth && (
@@ -447,17 +587,15 @@ function ConfirmCard({
       {!!cardError && <Text style={styles.confirmCardError}>{cardError}</Text>}
 
       <View style={styles.confirmActions}>
-        <Pressable style={styles.confirmDiscardBtn} onPress={onDone} disabled={saving}>
+        <Pressable style={styles.confirmDiscardBtn} onPress={onRemove} disabled={saving}>
           <Text style={styles.confirmDiscardText}>Discard</Text>
         </Pressable>
         <Pressable
-          style={[styles.confirmSaveBtn, saving && { opacity: 0.6 }]}
+          style={[styles.confirmSaveBtn, (saving || !vehicleReady) && { opacity: 0.6 }]}
           onPress={handleSave}
-          disabled={saving}
+          disabled={saving || !vehicleReady}
         >
-          {saving
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Text style={styles.confirmSaveBtnText}>Save</Text>}
+          {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.confirmSaveBtnText}>Save</Text>}
         </Pressable>
       </View>
     </View>
@@ -477,8 +615,7 @@ export function LogSheet({
   const { profile } = useAuth();
   const [phase, setPhase] = useState<RecordPhase>("idle");
   const [text, setText] = useState("");
-  const [items, setItems] = useState<ExtractedItem[]>([]);
-  const [doneCount, setDoneCount] = useState(0);
+  const [items, setItems] = useState<CardItem[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
   const [voiceCapHit, setVoiceCapHit] = useState(false);
   const [firstOpenProminence, setFirstOpenProminence] = useState(false);
@@ -504,7 +641,6 @@ export function LogSheet({
       setPhase("idle");
       setText("");
       setItems([]);
-      setDoneCount(0);
       setErrorMsg("");
       setVoiceCapHit(false);
       amplitudeRef.current = 0;
@@ -671,7 +807,6 @@ export function LogSheet({
     setText("");
     setPhase("idle");
     setItems([]);
-    setDoneCount(0);
     setErrorMsg("");
     onClose();
   }
@@ -715,8 +850,7 @@ export function LogSheet({
         setPhase("error");
         return;
       }
-      setItems(extracted);
-      setDoneCount(0);
+      setItems(extracted.map((it, i) => ({ ...it, _key: `${Date.now()}-${i}` })));
       setPhase("results");
       dismissFirstOpenProminence();
     } catch (err) {
@@ -726,18 +860,22 @@ export function LogSheet({
     }
   }
 
-  function markDone() {
-    const next = doneCount + 1;
-    setDoneCount(next);
-    if (next >= items.length) {
-      setTimeout(handleClose, 500);
-    }
+  function removeCard(key: string) {
+    setItems(prev => prev.filter(x => x._key !== key));
   }
+
+  useEffect(() => {
+    if (phase === "results" && items.length === 0) {
+      const t = setTimeout(handleClose, 400);
+      return () => clearTimeout(t);
+    }
+  }, [phase, items.length]);
 
   const isRecordingPhase = phase === "idle" || phase === "recording" || phase === "transcribing";
   const isTextPhase = phase === "type" || phase === "error";
 
   return (
+    <>
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <View style={{ flex: 1 }}>
 
@@ -927,8 +1065,8 @@ export function LogSheet({
 
                 {phase === "results" && (
                   <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }}>
-                    {items.map((item, idx) => (
-                      <ConfirmCard key={idx} item={item} userId={userId} onDone={markDone} onSuccess={fireLogSuccessToast} />
+                    {items.map(it => (
+                      <ConfirmCard key={it._key} item={it} userId={userId} onRemove={() => removeCard(it._key)} onToast={fireLogSuccessToast} />
                     ))}
                   </ScrollView>
                 )}
@@ -939,6 +1077,8 @@ export function LogSheet({
         <SaveToast visible={logToastVisible} message={logToastTitle} subtitle={logToastSubtitle} />
       </View>
     </Modal>
+    <SaveToast visible={logToastVisible} message={logToastTitle} subtitle={logToastSubtitle} />
+    </>
   );
 }
 
@@ -1213,6 +1353,21 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: "#fff",
   },
+  confirmMatchedRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 },
+  confirmMatchedText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  confirmMatchedSub: { fontSize: 12.5, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 1 },
+  confirmWrongTaskBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, minWidth: 76, alignItems: "center" },
+  confirmWrongTaskText: { fontSize: 12.5, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  confirmPickerTitle: { fontSize: 13.5, fontFamily: "Inter_600SemiBold", color: Colors.text, marginBottom: 10 },
+  confirmPickerLoading: { paddingVertical: 20, alignItems: "center", gap: 10 },
+  confirmPickerErrorText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  confirmPickerRetry: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
+  confirmPickerRetryText: { fontSize: 12.5, fontFamily: "Inter_500Medium", color: Colors.text },
+  confirmPickerList: { gap: 6 },
+  confirmPickerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background },
+  confirmPickerRowText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text, flex: 1 },
+  confirmJustLogBtn: { marginTop: 10, paddingVertical: 11, borderRadius: 10, alignItems: "center" },
+  confirmJustLogText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
   confirmCardError: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
