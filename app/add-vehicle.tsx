@@ -653,6 +653,7 @@ export default function AddVehicleScreen() {
   const [vinSuccess, setVinSuccess] = useState<string | null>(null);
   const [engineSize, setEngineSize] = useState<string | null>(null);
   const [engineCylinders, setEngineCylinders] = useState<number | null>(null);
+  const vinLookupSeq = useRef(0);
 
   const [yearPickerVisible, setYearPickerVisible] = useState(false);
   const [makePickerVisible, setMakePickerVisible] = useState(false);
@@ -893,6 +894,7 @@ export default function AddVehicleScreen() {
       setVinSuccess(null);
       return;
     }
+    const seq = ++vinLookupSeq.current;
     setIsVinLoading(true);
     setVinError(null);
     setVinSuccess(null);
@@ -901,6 +903,7 @@ export default function AddVehicleScreen() {
         `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${cleanVin}?format=json`
       );
       const json = await res.json();
+      if (seq !== vinLookupSeq.current) return;
       const result = json.Results?.[0];
       if (!result || !String(result.ErrorCode ?? "").startsWith("0") || !result.Make) {
         setVinError("Invalid VIN. Please check and try again.");
@@ -927,10 +930,11 @@ export default function AddVehicleScreen() {
       setVinSuccess("Vehicle details filled from VIN");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
+      if (seq !== vinLookupSeq.current) return;
       setVinError("Could not reach lookup service. Check your connection.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
-      setIsVinLoading(false);
+      if (seq === vinLookupSeq.current) setIsVinLoading(false);
     }
   }
 
@@ -985,39 +989,57 @@ export default function AddVehicleScreen() {
   }
 
   async function handleSave() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isLoading) return;
     setSubmitted(true);
     if (!user) {
-      setError("Session unavailable. Please close and reopen this screen.");
+      setError("Your session expired. Please sign in again to continue.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       return;
     }
 
-    // 1. Validate — all existing checks unchanged
+    // 1. Validate
     if (!year || !make || !model) {
       setError("Year, make, and model are required");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       return;
     }
     const yearNum = parseInt(year);
     if (isNaN(yearNum) || yearNum < 1980 || yearNum > CURRENT_YEAR + 2) {
       setError("Please select a valid year");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       return;
     }
-    if ((MILEAGE_TRACKED_TYPES.has(vehicleType) || HOURS_TRACKED_TYPES.has(vehicleType)) && !avgMilesPerMonth.trim()) {
-      setError(
-        HOURS_TRACKED_TYPES.has(vehicleType)
-          ? "Estimated monthly hours is required for this vehicle type"
-          : "Estimated monthly miles is required for this vehicle type"
-      );
-      return;
+    if (MILEAGE_TRACKED_TYPES.has(vehicleType)) {
+      const miles = parseInt(mileage.replace(/,/g, ""), 10);
+      if (!mileage.trim() || /[eE]/.test(mileage) || !Number.isFinite(miles) || miles < 0 || miles > 999999) {
+        setError("Current mileage is required for this vehicle type");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        return;
+      }
+    }
+    if (MILEAGE_TRACKED_TYPES.has(vehicleType) || HOURS_TRACKED_TYPES.has(vehicleType)) {
+      const rateLabel = HOURS_TRACKED_TYPES.has(vehicleType) ? "hours" : "miles";
+      if (!avgMilesPerMonth.trim()) {
+        setError(`Estimated monthly ${rateLabel} is required for this vehicle type`);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        return;
+      }
+      const rate = parseInt(avgMilesPerMonth, 10);
+      if (/[eE]/.test(avgMilesPerMonth) || !Number.isInteger(rate) || rate < 1 || rate > 10000) {
+        setError(`Estimated monthly ${rateLabel} must be between 1 and 10000`);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        return;
+      }
     }
     if (isOnboarding && HOURS_TRACKED_TYPES.has(vehicleType)) {
       const h = parseFloat(engineHours.replace(/,/g, ""));
       if (!engineHours.trim() || /[eE]/.test(engineHours) || !Number.isFinite(h) || h < 0 || h > 999999) {
         setError("Current engine hours is required for this vehicle type");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
         return;
       }
     }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
     // 2. Paywall check (must await before dismissing — can't dismiss if paywall needs to show)
     try {
@@ -1052,7 +1074,7 @@ export default function AddVehicleScreen() {
           tracking_mode: (MILEAGE_TRACKED_TYPES.has(vehicleType) ? 'mileage' : HOURS_TRACKED_TYPES.has(vehicleType) ? 'hours' : 'time'),
           mileage: HOURS_TRACKED_TYPES.has(vehicleType) ? null : (mileage ? parseInt(mileage.replace(/,/g, ""), 10) : null),
           hours: HOURS_TRACKED_TYPES.has(vehicleType) ? parsedEngineHours : null,
-          average_miles_per_month: (MILEAGE_TRACKED_TYPES.has(vehicleType) || HOURS_TRACKED_TYPES.has(vehicleType)) ? Number(avgMilesPerMonth) : null,
+          average_miles_per_month: (MILEAGE_TRACKED_TYPES.has(vehicleType) || HOURS_TRACKED_TYPES.has(vehicleType)) ? parseInt(avgMilesPerMonth, 10) : null,
           last_mileage_update: new Date().toISOString(),
           last_hours_update: new Date().toISOString(),
           is_seasonal: false,
@@ -1060,7 +1082,7 @@ export default function AddVehicleScreen() {
           season_end_month: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          vin: vin.trim().toUpperCase() || null,
+          vin: vin.trim().length === 17 ? vin.trim().toUpperCase() : null,
           engine_size: engineSize,
           engine_cylinders: engineCylinders,
         }
@@ -1089,7 +1111,7 @@ export default function AddVehicleScreen() {
           season_end_month: isSeasonal ? seasonEndMonth : null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          vin: vin.trim().toUpperCase() || null,
+          vin: vin.trim().length === 17 ? vin.trim().toUpperCase() : null,
           engine_size: engineSize,
           engine_cylinders: engineCylinders,
         };
@@ -1534,10 +1556,20 @@ export default function AddVehicleScreen() {
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: isSelected }}
                                 onPress={() => {
+                                  vinLookupSeq.current++;
+                                  setIsVinLoading(false);
                                   setVehicleType(t.value);
                                   setMake("");
                                   setModel("");
                                   setAvgMilesPerMonth("");
+                                  setVin("");
+                                  setVinError(null);
+                                  setVinSuccess(null);
+                                  setTrim("");
+                                  setFuelType("gas");
+                                  setIsAwd(false);
+                                  setEngineSize(null);
+                                  setEngineCylinders(null);
                                   setOnboardingTypeSheetVisible(false);
                                   Haptics.selectionAsync().catch(() => {});
                                 }}
