@@ -10,6 +10,20 @@ export type MatchResult = {
   nextDueDate: string | null;
   nextDueMiles: number | null;
   nextDueHours: number | null;
+  prior?: {
+    last_completed_date: string | null;
+    last_completed_miles: number | null;
+    last_completed_hours: number | null;
+    next_due_date: string | null;
+    next_due_miles: number | null;
+    next_due_hours: number | null;
+    status: string;
+  };
+  expected?: {
+    next_due_date_str: string | null;
+    next_due_miles: number | null;
+    next_due_hours: number | null;
+  };
 };
 
 export const CATEGORY_GROUPS: string[][] = [
@@ -299,6 +313,20 @@ export async function matchAndUpdateVehicleTask(
       nextDueDate: rpcData?.next_due_date ? new Date(rpcData.next_due_date + "T12:00:00").toISOString() : null,
       nextDueMiles: rpcData?.next_due_miles ?? null,
       nextDueHours: rpcData?.next_due_hours ?? null,
+      prior: {
+        last_completed_date: matched.last_completed_date ?? null,
+        last_completed_miles: matched.last_completed_miles ?? null,
+        last_completed_hours: matched.last_completed_hours ?? null,
+        next_due_date: matched.next_due_date ?? null,
+        next_due_miles: matched.next_due_miles ?? null,
+        next_due_hours: matched.next_due_hours ?? null,
+        status: matched.status,
+      },
+      expected: {
+        next_due_date_str: rpcData?.next_due_date ?? null,
+        next_due_miles: rpcData?.next_due_miles ?? null,
+        next_due_hours: rpcData?.next_due_hours ?? null,
+      },
     };
   } catch {
     return null;

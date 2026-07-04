@@ -158,3 +158,16 @@ export async function deleteVehicleCascade(args: DeleteVehicleCascadeArgs): Prom
   const { data, error } = await supabase.rpc("delete_vehicle_cascade", args);
   return { data: (data as DeleteVehicleCascadeResult | null), error };
 }
+
+export type ReverseVehicleTaskCompletionArgs = Functions["reverse_vehicle_task_completion"]["Args"];
+export type ReverseVehicleTaskCompletionResult = {
+  applied: boolean;
+};
+
+export async function reverseVehicleTaskCompletion(args: ReverseVehicleTaskCompletionArgs): Promise<{
+  data: ReverseVehicleTaskCompletionResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("reverse_vehicle_task_completion", args);
+  return { data: (data as ReverseVehicleTaskCompletionResult | null), error };
+}

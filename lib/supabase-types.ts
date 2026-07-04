@@ -2296,6 +2296,22 @@ export type Database = {
         }
         Returns: Json
       }
+      reverse_vehicle_task_completion: {
+        Args: {
+          p_expected_next_due_date_str?: string
+          p_expected_next_due_hours?: number
+          p_expected_next_due_miles?: number
+          p_prior_last_completed_date?: string
+          p_prior_last_completed_hours?: number
+          p_prior_last_completed_miles?: number
+          p_prior_next_due_date?: string
+          p_prior_next_due_hours?: number
+          p_prior_next_due_miles?: number
+          p_prior_status: string
+          p_task_id: string
+        }
+        Returns: Json
+      }
       timeout_stale_scans: { Args: never; Returns: number }
       undo_last_medication_dose: {
         Args: { p_medication_id: string; p_today?: string }
