@@ -210,6 +210,45 @@ export function taskNextDueUsage(task: TaskRow, vehicle: VehicleRow | null | und
 }
 
 /**
+ * Days until a task is due, usage-aware. Vehicle usage tasks project remaining
+ * usage-distance into days via the monthly rate; date tasks use next_due_date.
+ * When both compute, returns the SOONER (min). Null when neither computes.
+ * Sign: negative = overdue, 0 = today, positive = future. Today is anchored to the
+ * LOCAL calendar day; the due date is parsed at UTC midnight from the date-only
+ * string, so the day-count never drifts by timezone.
+ */
+export function taskDaysUntilDue(
+  task: { next_due_date?: string | null; next_due_miles?: number | null; next_due_hours?: number | null; interval_miles?: number | null; interval_hours?: number | null },
+  vehicle: VehicleRow | null | undefined,
+): number | null {
+  let usageDays: number | null = null;
+  let dateDays: number | null = null;
+
+  const nextDueUsage = taskNextDueUsage(task as TaskRow, vehicle);
+  const currentUsage = currentUsageValue(vehicle);
+  const avgPerMonth = vehicle?.average_miles_per_month ?? null;
+  if (nextDueUsage != null && currentUsage != null && avgPerMonth != null && avgPerMonth > 0) {
+    usageDays = Math.round((nextDueUsage - currentUsage) / (avgPerMonth / 30.44));
+  }
+
+  if (task.next_due_date) {
+    const parts = task.next_due_date.slice(0, 10).split("-");
+    if (parts.length === 3) {
+      const y = Number(parts[0]), m = Number(parts[1]), d = Number(parts[2]);
+      if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
+        const now = new Date();
+        const d0 = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+        const d1 = Date.UTC(y, m - 1, d);
+        dateDays = Math.round((d1 - d0) / 86400000);
+      }
+    }
+  }
+
+  if (usageDays != null && dateDays != null) return Math.min(usageDays, dateDays);
+  return usageDays ?? dateDays;
+}
+
+/**
  * Returns the last-completed usage value for a task.
  */
 export function taskLastCompletedUsage(task: TaskRow, vehicle: VehicleRow | null | undefined): number | null {

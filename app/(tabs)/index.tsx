@@ -32,7 +32,7 @@ import * as Haptics from "expo-haptics";
 import { primeHaptics } from "@/lib/haptics";
 import { useBudgetAlert } from "@/context/BudgetAlertContext";
 import TrialBanner from "@/components/TrialBanner";
-import { resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode, isHoursTracked, isTimeOnly } from "@/lib/usageHelpers";
+import { resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode, isHoursTracked, isTimeOnly, taskDaysUntilDue } from "@/lib/usageHelpers";
 import * as Linking from "expo-linking";
 import { LogSheet } from "@/components/LogSheet";
 import { SaveToast } from "@/components/SaveToast";
@@ -104,15 +104,6 @@ function formatDueDate(dueDate: string | null): string {
 
 type MonthAheadItem = DashboardItem & { daysUntil: number };
 
-function getMonthAheadItems(items: DashboardItem[] | undefined): MonthAheadItem[] {
-  const today = new Date();
-  return (items ?? [])
-    .filter(item => item.dueDate)
-    .map(item => ({ ...item, daysUntil: differenceInDays(parseISO(item.dueDate!), today) }))
-    .filter(item => item.daysUntil <= 30)
-    .sort((a, b) => a.daysUntil - b.daysUntil || a.title.localeCompare(b.title));
-}
-
 function verticalCount(items: DashboardItem[]): number {
   return new Set(items.map(item => item.category)).size;
 }
@@ -120,6 +111,31 @@ function verticalCount(items: DashboardItem[]): number {
 function possessiveName(label: string): string {
   const clean = label.trim() || "item";
   return clean.endsWith("s") ? `${clean}'` : `${clean}'s`;
+}
+
+interface JoinedVehicle {
+  make: string | null;
+  model: string | null;
+  nickname: string | null;
+  mileage: number | null;
+  hours: number | null;
+  tracking_mode: string | null;
+  vehicle_type: string | null;
+  average_miles_per_month: number | null;
+  last_mileage_update: string | null;
+  last_hours_update: string | null;
+}
+
+interface JoinedProperty {
+  address: string | null;
+  nickname: string | null;
+}
+
+function formatDaysUntil(d: number): string {
+  if (d < 0) return `${Math.abs(d)}d overdue`;
+  if (d === 0) return "Today";
+  if (d === 1) return "Tomorrow";
+  return `${d}d`;
 }
 
 function monthAheadPhrase(item: MonthAheadItem): string {
@@ -301,6 +317,54 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
+  const { data: monthAheadItems, isLoading: monthLoading, isError: isMonthError, isFetching: isMonthFetching, refetch: refetchMonthAhead } = useQuery({
+    queryKey: ["dashboard", user?.id, "month_ahead"],
+    queryFn: async (): Promise<MonthAheadItem[]> => {
+      if (!user) return [];
+      const out: MonthAheadItem[] = [];
+      const [vehicleTasks, propertyTasks, healthAppts] = await Promise.all([
+        supabase.from("user_vehicle_maintenance_tasks").select("*, vehicles(make, model, nickname, mileage, hours, tracking_mode, vehicle_type, average_miles_per_month, last_mileage_update, last_hours_update)").eq("user_id", user.id),
+        supabase.from("property_maintenance_tasks").select("*, properties!inner(address, nickname)").eq("properties.user_id", user.id),
+        supabase.from("health_appointments").select("*").eq("user_id", user.id),
+      ]);
+      if (vehicleTasks.error) throw vehicleTasks.error;
+      if (propertyTasks.error) throw propertyTasks.error;
+      if (healthAppts.error) throw healthAppts.error;
+
+      const push = (
+        id: string, title: string, subtitle: string, dueDate: string | null,
+        daysUntil: number | null, category: DashboardItem["category"], entityId: string,
+      ) => {
+        if (daysUntil == null || daysUntil > 30) return;
+        const status: DashboardItem["status"] = daysUntil < 0 ? "overdue" : "due_soon";
+        out.push({ id, title, subtitle, dueDate, status, category, entityId, daysUntil });
+      };
+
+      for (const t of vehicleTasks.data ?? []) {
+        if (t.status === "completed") continue;
+        const v = (t as { vehicles: JoinedVehicle | null }).vehicles;
+        if (!v) continue;
+        const days = taskDaysUntilDue(t, v);
+        push(t.id, t.name, v.nickname ?? `${v.make} ${v.model}`, t.next_due_date, days, "vehicles", t.vehicle_id);
+      }
+      for (const t of propertyTasks.data ?? []) {
+        if (t.is_completed) continue;
+        const p = (t as { properties: JoinedProperty | null }).properties;
+        if (!p) continue;
+        const days = taskDaysUntilDue(t, null);
+        push(t.id, t.task, p.nickname ?? p.address ?? "Property", t.next_due_date, days, "properties", t.property_id);
+      }
+      for (const a of healthAppts.data ?? []) {
+        if (a.is_completed) continue;
+        const days = taskDaysUntilDue(a, null);
+        push(a.id, a.appointment_type, a.provider_name ?? "Health", a.next_due_date, days, "health", a.id);
+      }
+
+      return out.sort((x, y) => x.daysUntil - y.daysUntil || x.title.localeCompare(y.title));
+    },
+    enabled: !!user,
+  });
+
   const { data: spending, isError: isSpendingError, isFetching: isSpendingFetching, refetch: refetchSpending } = useQuery({
     queryKey: ["dashboard_spending", user?.id],
     queryFn: async () => {
@@ -409,6 +473,7 @@ export default function DashboardScreen() {
   function refetch() {
     refetchCounts();
     refetchDash();
+    refetchMonthAhead();
     refetchSpending();
     refetchMileage();
     refetchHealthProfile();
@@ -416,11 +481,12 @@ export default function DashboardScreen() {
     refetchTotalTasks();
   }
 
-  const isLoading = countsLoading || dashLoading;
+  const isLoading = countsLoading || dashLoading || monthLoading;
 
   const hasDashboardError =
     !isLoading &&
-    (isCountsError ||
+    (isMonthError ||
+      isCountsError ||
       isDashError ||
       isSpendingError ||
       isMileageError ||
@@ -431,6 +497,7 @@ export default function DashboardScreen() {
   const isRetrying =
     isCountsFetching ||
     isDashFetching ||
+    isMonthFetching ||
     isSpendingFetching ||
     isMileageFetching ||
     isHealthProfileFetching ||
@@ -439,7 +506,6 @@ export default function DashboardScreen() {
 
   const isNewUser = !isLoading && !hasDashboardError && counts != null && counts.vehicles === 0 && counts.properties === 0 && counts.health === 0;
   const screenings = healthProfile ? getAgeScreenings(healthProfile.date_of_birth, healthProfile.sex_at_birth) : [];
-  const monthAheadItems = getMonthAheadItems(dashboardItems);
   const upcomingItems = dashboardItems?.slice(0, 6) ?? [];
 
   const overdueCnt = dashboardItems?.filter(i => i.status === "overdue").length ?? 0;
@@ -549,8 +615,9 @@ export default function DashboardScreen() {
                 <Ionicons name="close" size={14} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
               </Pressable>
             )}
+            {/* type bridge: this is only undefined pre-load, which the loading skeleton gates; on fetch error the dashboard renders its error card instead of this one, so an empty list never shows on error */}
             <YourMonthAheadCard
-              items={monthAheadItems}
+              items={monthAheadItems ?? []}
               counts={counts ?? { vehicles: 0, properties: 0, health: 0 }}
               primaryAssetName={primaryAssetName ?? null}
             />
@@ -1020,12 +1087,13 @@ function YourMonthAheadCard({
   const detailItems = items.slice(0, 6);
   const categories = verticalCount(items);
 
-  const isMultiVertical = categories >= 2 && heroItems.length >= 2;
   const hasAnyTracked = counts.vehicles > 0 || counts.properties > 0 || counts.health > 0;
   const hasMultipleVerticalsTracked =
     (counts.vehicles > 0 ? 1 : 0) +
       (counts.properties > 0 ? 1 : 0) +
       (counts.health > 0 ? 1 : 0) >= 2;
+
+  const isMultiVertical = hasMultipleVerticalsTracked && items.length >= 1;
 
   // Hero is always present once the user has tracked anything. Three render branches below:
   // (1) multi-vertical with due items → narrative summary
@@ -1069,8 +1137,8 @@ function YourMonthAheadCard({
             <View style={[styles.monthAheadIcon, { backgroundColor: CAT.properties.muted, marginRight: -8 }]}>
               <Ionicons name={CAT.properties.icon} size={15} color={CAT.properties.color} />
             </View>
-            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.healthMuted }]}>
-              <Ionicons name="heart" size={15} color={Colors.health} />
+            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.health.muted }]}>
+              <Ionicons name={CAT.health.icon} size={15} color={CAT.health.color} />
             </View>
           </View>
           <Text style={styles.monthAheadEyebrow}>YOUR MONTH AHEAD</Text>
@@ -1103,7 +1171,7 @@ function YourMonthAheadCard({
                     <Text style={styles.monthAheadDetailTitle} numberOfLines={1}>{item.title}</Text>
                     <Text style={styles.monthAheadDetailSub} numberOfLines={1}>{item.subtitle} · {categoryLabel(item.category)}</Text>
                   </View>
-                  <Text style={[styles.monthAheadDue, { color: item.status === "overdue" ? Colors.overdue : Colors.dueSoon }]}>{formatDueDate(item.dueDate)}</Text>
+                  <Text style={[styles.monthAheadDue, { color: item.status === "overdue" ? Colors.overdue : Colors.dueSoon }]}>{formatDaysUntil(item.daysUntil)}</Text>
                 </Pressable>
               );
             })}
@@ -1230,7 +1298,7 @@ function YourMonthAheadCard({
                     <Text style={styles.monthAheadDetailTitle} numberOfLines={1}>{item.title}</Text>
                     <Text style={styles.monthAheadDetailSub} numberOfLines={1}>{item.subtitle} · {categoryLabel(item.category)}</Text>
                   </View>
-                  <Text style={[styles.monthAheadDue, { color: item.status === "overdue" ? Colors.overdue : Colors.dueSoon }]}>{formatDueDate(item.dueDate)}</Text>
+                  <Text style={[styles.monthAheadDue, { color: item.status === "overdue" ? Colors.overdue : Colors.dueSoon }]}>{formatDaysUntil(item.daysUntil)}</Text>
                 </Pressable>
               );
             })}
