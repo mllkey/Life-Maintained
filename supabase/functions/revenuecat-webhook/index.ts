@@ -11,6 +11,12 @@ const DOWNGRADE_EVENTS = new Set(["EXPIRATION"]);
 const EXTEND_EVENTS = new Set(["SUBSCRIPTION_EXTENDED"]);
 const PASSIVE_EVENTS = new Set(["CANCELLATION", "BILLING_ISSUE", "PRODUCT_CHANGE"]);
 
+// Consumable Scan Packs: store product id -> credit source + fixed grant size.
+const SCAN_PACKS: Record<string, { source: string; scans: number }> = {
+  scan_pack_10: { source: "pack_10", scans: 10 },
+  scan_pack_25: { source: "pack_25", scans: 25 },
+};
+
 const MAX_EVENT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const corsHeaders = {
@@ -171,10 +177,21 @@ async function processWebhook(rawBody: string): Promise<void> {
 
   if (auditErr) {
     if (auditErr.code === "23505") {
-      console.log(`[WEBHOOK] Duplicate ${eventId} (${eventType})`);
-      return;
+      // Event id already seen. Only ack if the prior attempt actually resolved; a
+      // 'received' (in-flight/crashed) or 'failed' row must RE-PROCESS so RevenueCat's
+      // retry can complete the grant. Re-processing is idempotent (scan_credits
+      // .transaction_id UNIQUE; tier writes are same-value updates).
+      const { data: prior } = await supabase
+        .from("webhook_events").select("status")
+        .eq("source", "revenuecat").eq("event_id", eventId).maybeSingle();
+      if (prior?.status === "processed" || prior?.status === "skipped") {
+        console.log(`[WEBHOOK] Duplicate ${eventId} already ${prior.status}`);
+        return;
+      }
+      console.log(`[WEBHOOK] Duplicate ${eventId} (prior=${prior?.status ?? "unknown"}) — re-processing`);
+    } else {
+      console.error("[WEBHOOK] Audit insert failed:", auditErr);
     }
-    console.error("[WEBHOOK] Audit insert failed:", auditErr);
   }
 
   const eventTs = Number(event.event_timestamp_ms ?? 0);
@@ -207,11 +224,14 @@ async function markEvent(
   status: "processed" | "skipped" | "failed",
   error: string | null
 ): Promise<void> {
-  const { error: updateErr } = await supabase
+  let q = supabase
     .from("webhook_events")
     .update({ status, error, processed_at: new Date().toISOString() })
     .eq("source", "revenuecat")
     .eq("event_id", eventId);
+  // Never walk a resolved event back to 'failed' (concurrent-duplicate race).
+  if (status === "failed") q = q.neq("status", "processed").neq("status", "skipped");
+  const { error: updateErr } = await q;
   if (updateErr) console.error(`[WEBHOOK] markEvent failed for ${eventId}:`, updateErr);
 }
 
@@ -331,6 +351,32 @@ async function handleEvent(
   const candidates = [appUserId, event.original_app_user_id, ...aliases].filter(Boolean);
 
   const profileMatch = await findProfile(supabase, candidates);
+
+  // Consumable Scan Pack purchase (durable server-side grant; NEW-1). Handled BEFORE the
+  // generic none->skipped so a missing profile is a retryable delivery failure, not a
+  // silent drop of a paid purchase.
+  const pack = eventType === "NON_RENEWING_PURCHASE"
+    ? SCAN_PACKS[(event as any).product_id as string]
+    : undefined;
+  if (pack) {
+    if (profileMatch.kind === "ambiguous") return { status: "failed", error: profileMatch.reason };
+    if (profileMatch.kind === "none") {
+      return { status: "failed", error: `pack purchase, no profile yet for: ${candidates.join(", ")}` };
+    }
+    const txId = typeof (event as any).transaction_id === "string" ? (event as any).transaction_id : null;
+    if (!txId) return { status: "skipped", reason: "pack purchase missing transaction_id" };
+    const { data: grantData, error: grantErr } = await supabase.rpc("grant_scan_pack_credits_admin", {
+      p_user_id: profileMatch.profile.user_id,
+      p_source: pack.source,
+      p_transaction_id: txId,
+      p_scans_granted: pack.scans,
+    });
+    if (grantErr) return { status: "failed", error: `pack grant transient: ${grantErr.message}` };
+    const gr = (grantData ?? {}) as { error?: string; idempotent?: boolean };
+    if (gr.error) return { status: "skipped", reason: `pack grant permanent: ${gr.error}` };
+    return { status: "processed", note: `Granted ${pack.scans} scans (${gr.idempotent ? "idempotent" : "new"})` };
+  }
+
   if (profileMatch.kind === "ambiguous") {
     return { status: "failed", error: profileMatch.reason };
   }
