@@ -165,6 +165,7 @@ export async function getLiveScanQuota(): Promise<{
   scans_used: number;
   scans_limit: number;
   scans_remaining: number;
+  credit_balance: number;
 } | null> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -181,6 +182,7 @@ export async function getLiveScanQuota(): Promise<{
       scans_used: Number(data.scans_used ?? 0),
       scans_limit: Number(data.scans_limit ?? 0),
       scans_remaining: Number(data.scans_remaining ?? 0),
+      credit_balance: Number(data.credit_balance ?? 0),
     };
   } catch {
     return null;

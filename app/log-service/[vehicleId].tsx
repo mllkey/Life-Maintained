@@ -23,7 +23,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import ReceiptScanButton from "@/components/ReceiptScanButton";
 import Paywall from "@/components/Paywall";
 import ScanPackModal, { type ScanPackModalHandle } from "@/components/ScanPackModal";
-import { isFreeTier, scansRemaining} from "@/lib/subscription";
+import { isFreeTier } from "@/lib/subscription";
 import { ReceiptScanResult } from "@/lib/receiptScanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import DatePicker from "@/components/DatePicker";
@@ -207,6 +207,9 @@ export default function LogServiceScreen() {
     if (!result.error) {
       setOcrApplied(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // A successful scan debits at complete on the server; refresh the credit-aware
+      // quota so the Settings balance reflects it immediately (prefix-match invalidate).
+      queryClient.invalidateQueries({ queryKey: ["scan-quota"] });
     }
     if (result.date) {
       const scannedMs = parseISO(result.date).getTime();
@@ -481,7 +484,6 @@ export default function LogServiceScreen() {
                     setTimeout(() => setScanPackOpenErrorVisible(false), 2800);
                   }
                 }}
-                scansRemaining={scansRemaining(profile)}
               />
             )}
           </View>

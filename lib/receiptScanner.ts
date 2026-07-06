@@ -17,6 +17,7 @@ export interface ReceiptScanResult {
   request_id?: string;
   scans_used?: number;
   scans_limit?: number;
+  error_code?: string;
 }
 
 function errorResult(message: string, requestId?: string): ReceiptScanResult {
@@ -87,6 +88,7 @@ export async function scanReceipt(
             ...errorResult(msg, requestId),
             scans_used: typeof errBody?.scans_used === "number" ? errBody.scans_used : undefined,
             scans_limit: typeof errBody?.scans_limit === "number" ? errBody.scans_limit : undefined,
+            error_code: typeof errBody?.error_code === "string" ? errBody.error_code : undefined,
           };
         } catch {
           // fall through to raw text attempt
@@ -125,6 +127,7 @@ export async function scanReceipt(
       request_id: data.request_id || requestId,
       scans_used: typeof data.scans_used === "number" ? data.scans_used : undefined,
       scans_limit: typeof data.scans_limit === "number" ? data.scans_limit : undefined,
+      error_code: typeof data.error_code === "string" ? data.error_code : undefined,
     };
   } catch (err) {
     console.error("Receipt scan failed:", err);

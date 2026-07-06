@@ -156,14 +156,17 @@ export default function SettingsScreen() {
   const scanPackModalRef = useRef<ScanPackModalHandle>(null);
   const isPaidNonTrialUser =
     hasPersonalOrAbove(profile) && profile?.subscription_tier !== "trial";
-  const { data: scanQuota } = useQuery({
+  const { data: scanQuota, isError: scanQuotaError } = useQuery({
     queryKey: ["scan-quota", user?.id, profile?.subscription_tier],
     queryFn: getLiveScanQuota,
     enabled: !!user?.id && isPaidNonTrialUser,
     staleTime: 30_000,
   });
   const scanQuotaLimit = scanQuota?.scans_limit ?? scanLimit(profile);
-  const scanQuotaRemaining = scanQuota?.scans_remaining ?? 0;
+  const scanMonthlyRemaining = scanQuota
+    ? Math.max(0, scanQuota.scans_limit - scanQuota.scans_used)
+    : 0;
+  const scanCreditBalance = scanQuota?.credit_balance ?? 0;
 
   const { data: budgetPref } = useQuery({
     queryKey: ["budget_threshold", user?.id],
@@ -618,9 +621,22 @@ export default function SettingsScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.scansLabel}>Receipt scans</Text>
-                    <Text style={styles.scansSub}>
-                      {scanQuotaRemaining} of {scanQuotaLimit} remaining this month
-                    </Text>
+                    {scanQuota ? (
+                      <>
+                        <Text style={styles.scansSub}>
+                          {scanMonthlyRemaining} of {scanQuotaLimit} remaining this month
+                        </Text>
+                        {scanCreditBalance > 0 && (
+                          <Text style={styles.scansSub}>
+                            + {scanCreditBalance} pack {scanCreditBalance === 1 ? "credit" : "credits"} (never expire)
+                          </Text>
+                        )}
+                      </>
+                    ) : (
+                      <Text style={styles.scansSub}>
+                        {scanQuotaError ? "Couldn't load your scans" : "Checking your scans…"}
+                      </Text>
+                    )}
                   </View>
                 </View>
                 <View style={styles.groupDivider} />

@@ -23,10 +23,9 @@ interface Props {
   onScanLimitReached?: () => void;
   /** Paid user hits cap — caller typically opens ScanPackModal. */
   onPaidUserAtCap?: () => void;
-  scansRemaining: number;
 }
 
-export default function ReceiptScanButton({ assetType, assetId, onScanComplete, onScanLimitReached, onPaidUserAtCap, scansRemaining }: Props) {
+export default function ReceiptScanButton({ assetType, assetId, onScanComplete, onScanLimitReached, onPaidUserAtCap }: Props) {
   const [scanning, setScanning] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -43,31 +42,29 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
 
   const handleScan = async (useCamera: boolean) => {
 
-    const fireCapHandler = async () => {
-      try {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      } catch {}
-      if (onPaidUserAtCap) {
-        onPaidUserAtCap();
-      } else if (onScanLimitReached) {
-        onScanLimitReached();
-      }
+    // Route a capped user to the correct CTA. toPackModal=true -> Scan Pack modal
+    // (active subscriber out of monthly + credits); false -> Paywall (no active sub).
+    // Mirrors the server's quota_exceeded vs subscription_required split so the local
+    // gate and the post-reserve error_code branch can never disagree.
+    const routeCap = async (toPackModal: boolean) => {
+      try { await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch {}
+      if (toPackModal && onPaidUserAtCap) { onPaidUserAtCap(); return; }
+      if (onScanLimitReached) { onScanLimitReached(); return; }
+      if (onPaidUserAtCap) { onPaidUserAtCap(); return; }
+      showToast(toPackModal ? "Out of scans" : "Upgrade required", "You can enter the receipt manually for now.");
     };
 
-    // Fast path: prop already shows no scans left -- gate instantly, no network.
-    if (scansRemaining <= 0) {
-      await fireCapHandler();
-      return;
-    }
-
-    // Authoritative pre-pick gate: receipt_scans rows are source of truth, not
-    // the legacy profile counter. Confirm live quota BEFORE the picker + AI
-    // roundtrip so a capped paid user is routed to top-up instantly. On a null
-    // result (network hiccup) we do NOT block -- the post-scan server branch
-    // remains the backstop, so a paying user is never falsely blocked.
+    // Authoritative pre-pick gate: get_scan_quota is the single credit-aware source of
+    // truth — scans_remaining already includes spendable pack credits, so a capped user
+    // WITH credits passes and reaches reserve. Only when nothing remains do we route:
+    // a TRIAL user at cap -> Paywall (convert them, never sell a consumable); an active
+    // paid subscriber (scans_limit > 0) out of monthly + credits -> Scan Packs; a user
+    // with no active subscription (scans_limit <= 0) -> Paywall. Mirrors the server split
+    // plus the trial-conversion override. Null result (network hiccup) does NOT block —
+    // the post-reserve error_code branch is the backstop.
     const live = await getLiveScanQuota();
     if (live && live.scans_remaining <= 0) {
-      await fireCapHandler();
+      await routeCap(live.tier !== "trial" && live.scans_limit > 0);
       return;
     }
     const source: ReceiptScanSource = useCamera ? "camera" : "photo_library";
@@ -106,20 +103,28 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
       const withUri = { ...result, localUri: manipulated.uri };
 
       if (result.error) {
-        const isScanLimit = result.scans_used != null && result.scans_limit != null && result.scans_used >= result.scans_limit;
-
-        if (isScanLimit) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-          const handler = onPaidUserAtCap ?? onScanLimitReached;
-          if (handler) {
-            handler();
-            return;
-          }
-          showToast("Scan limit reached", "You can enter the receipt manually for now.");
+        // Route strictly off the server's machine code via the same routeCap seam as
+        // the pre-pick gate — never off scans_used arithmetic. A trial user who hits the
+        // cap goes to Paywall (convert), not Scan Packs, using the tier from the cached
+        // pre-pick quota read.
+        if (result.error_code === "quota_exceeded") {
+          // If the pre-pick quota read was null (network hiccup), re-read tier so a
+          // trial user at cap still routes to Paywall, not Scan Packs.
+          const capTier = live?.tier ?? (await getLiveScanQuota())?.tier;
+          await routeCap(capTier !== "trial");
           return;
         }
-
-        showToast("Scan needs review", result.error || "We filled what we could. Review the fields below.");
+        if (result.error_code === "subscription_required") { await routeCap(false); return; }
+        // Non-cap error. Be honest: only claim we filled fields if we actually did.
+        const filledSomething =
+          result.date != null || result.cost != null || result.provider != null ||
+          result.mileage != null || result.serviceType != null || result.task != null;
+        showToast(
+          filledSomething ? "Scan needs review" : "Couldn't read that receipt",
+          filledSomething
+            ? "We filled what we could. Review the fields below."
+            : (result.error || "Enter the details manually for now."),
+        );
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       }
 

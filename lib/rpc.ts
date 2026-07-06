@@ -131,6 +131,7 @@ export type GetScanQuotaResult = {
   scans_used: number;
   scans_limit: number;
   scans_remaining: number;
+  credit_balance: number;
 };
 
 export async function getScanQuota(args: GetScanQuotaArgs): Promise<{

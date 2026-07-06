@@ -111,13 +111,14 @@ Deno.serve(async (req: Request) => {
       if (code === "quota_exceeded") {
         return jsonResponse({
           error: `You've used all ${scansLimit ?? 0} scans this month. Upgrade your plan or buy a Scan Pack.`,
+          error_code: "quota_exceeded",
           scans_used: scansUsed,
           scans_limit: scansLimit,
           request_id,
         }, 429);
       }
       if (code === "subscription_required") {
-        return jsonResponse({ error: "Receipt scanning requires a paid subscription.", request_id }, 403);
+        return jsonResponse({ error: "Receipt scanning requires a paid subscription.", error_code: "subscription_required", request_id }, 403);
       }
       if (code === "scan_in_progress") {
         return jsonResponse({ error: "Another scan is already in progress.", request_id }, 409);
