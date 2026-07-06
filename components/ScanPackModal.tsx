@@ -218,7 +218,6 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
       index={0}
       snapPoints={snapPoints}
       enableDynamicSizing={false}
-      animateOnMount={false}
       stackBehavior="replace"
       enablePanDownToClose={purchasingId === null}
       keyboardBehavior="interactive"
