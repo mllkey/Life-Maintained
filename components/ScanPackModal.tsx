@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
+import React, { useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import {
   View,
   Text,
@@ -6,13 +6,8 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
+  Modal,
 } from "react-native";
-import {
-  BottomSheetModal,
-  BottomSheetView,
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
-} from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -76,7 +71,7 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
   const { user, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
-  const sheetRef = useRef<BottomSheetModal>(null);
+  const [visible, setVisible] = useState(false);
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
@@ -93,20 +88,15 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
 
   useImperativeHandle(ref, () => ({
     present: () => {
-      const sheet = sheetRef.current;
-      if (!sheet) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-        return false;
-      }
       setPurchaseError(null);
       // Kick product load. If already loaded, refresh in background so
       // currency / price changes propagate the next time the sheet opens.
       loadProducts();
-      sheet.present();
+      setVisible(true);
       return true;
     },
     dismiss: () => {
-      sheetRef.current?.dismiss();
+      setVisible(false);
     },
   }), [loadProducts]);
 
@@ -117,41 +107,13 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
     onClose();
   }, [onClose]);
 
-  // Block tap-to-dismiss while a purchase is in flight (StoreKit dialog +
-  // RPC roundtrip ≈ 3-8s). Otherwise allow normal tap-outside-to-close.
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop
-        {...props}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        opacity={0.5}
-        pressBehavior={purchasingId === null ? "close" : "none"}
-      />
-    ),
-    [purchasingId]
-  );
-
-  const handleStyle = useMemo(
-    () => ({
-      backgroundColor: Colors.card,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-    }),
-    []
-  );
-
-  const handleIndicatorStyle = useMemo(
-    () => ({ backgroundColor: Colors.border, width: 36, height: 4 }),
-    []
-  );
-
-  const backgroundStyle = useMemo(
-    () => ({ backgroundColor: Colors.card }),
-    []
-  );
-
-  const snapPoints = useMemo(() => ["55%"], []);
+  // User-initiated close (backdrop tap, Cancel, Android back). Blocked while a
+  // purchase is in flight so a mid-purchase dismiss can't strand the StoreKit flow.
+  const close = useCallback(() => {
+    if (purchasingId !== null) return;
+    setVisible(false);
+    handleDismiss();
+  }, [purchasingId, handleDismiss]);
 
   async function handlePurchase(pack: ScanPackMeta, _product: LocalizedProduct) {
     setPurchaseError(null);
@@ -203,7 +165,7 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
       setToastVisible(true);
       setTimeout(() => {
         setToastVisible(false);
-        sheetRef.current?.dismiss();
+        setVisible(false);
         onSuccess();
       }, 1200);
     } catch (err: any) {
@@ -218,22 +180,23 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
   }
 
   return (
-    <BottomSheetModal
-      ref={sheetRef}
-      index={0}
-      snapPoints={snapPoints}
-      enableDynamicSizing={false}
-      stackBehavior="replace"
-      enablePanDownToClose={purchasingId === null}
-      keyboardBehavior="interactive"
-      keyboardBlurBehavior="restore"
-      backdropComponent={renderBackdrop}
-      backgroundStyle={backgroundStyle}
-      handleStyle={handleStyle}
-      handleIndicatorStyle={handleIndicatorStyle}
-      onDismiss={handleDismiss}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={close}
+      statusBarTranslucent
     >
-      <BottomSheetView style={[styles.content, { paddingBottom: 24 + insets.bottom }]}>
+      <View style={styles.modalRoot}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={close}
+          accessibilityRole="button"
+          accessibilityLabel="Close scan packs"
+        />
+        <View style={[styles.sheet, { paddingBottom: 24 + insets.bottom }]}>
+          <View style={styles.grabber} />
+          <View style={styles.content}>
         <View style={styles.titleRow}>
           <View style={styles.titleIconWrap}>
             <Ionicons name="scan-outline" size={22} color={Colors.accent} />
@@ -321,22 +284,37 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
         <PaidActionCTA
           label="Cancel"
           variant="secondary"
-          onPress={() => {
-            if (purchasingId !== null) return;
-            sheetRef.current?.dismiss();
-          }}
+          onPress={close}
           disabled={purchasingId !== null}
           accessibilityLabel="Cancel scan pack purchase"
           testID="scan-pack-cancel"
         />
 
         <SaveToast visible={toastVisible} message="Scans added to your account" />
-      </BottomSheetView>
-    </BottomSheetModal>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 });
 
 const styles = StyleSheet.create({
+  modalRoot: { flex: 1, justifyContent: "flex-end" },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.5)" },
+  sheet: {
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  grabber: {
+    alignSelf: "center",
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    marginTop: 8,
+    marginBottom: 4,
+  },
   content: {
     paddingHorizontal: 16,
     paddingTop: 4,
