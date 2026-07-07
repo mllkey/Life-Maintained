@@ -12,6 +12,7 @@ import {
   Modal,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -408,6 +409,7 @@ export default function LogServiceScreen() {
   const COMMON_TASKS = ["Oil Change", "Tire Rotation", "Brake Service", "Air Filter", "Fluid Top-off", "Inspection", "Transmission Service", "Battery Replacement"];
 
   return (
+    <BottomSheetModalProvider>
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
@@ -722,6 +724,7 @@ export default function LogServiceScreen() {
       <SaveToast visible={successToastVisible} message={successToastTitle} subtitle={successToastSubtitle} />
       <SaveToast visible={scanPackOpenErrorVisible} message="Couldn't open scan packs. Please try again." isError />
     </KeyboardAvoidingView>
+    </BottomSheetModalProvider>
   );
 }
 
