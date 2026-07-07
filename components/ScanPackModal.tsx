@@ -23,6 +23,7 @@ import { SaveToast } from "@/components/SaveToast";
 import { PaidActionCTA } from "@/components/PaidActionCTA";
 import { usePulse, S } from "@/components/Skeleton";
 import { loadConsumableProducts, type LocalizedProduct } from "@/lib/revenuecat";
+import { useQueryClient } from "@tanstack/react-query";
 
 // Pack metadata (id, title, scan count, popularity). Price is loaded from
 // StoreKit via loadConsumableProducts at modal-present time so users see
@@ -73,6 +74,7 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
   ref
 ) {
   const { user, refreshProfile } = useAuth();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
@@ -192,6 +194,9 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
       }
 
       await refreshProfile();
+      // Purchase changed the credit ledger; refresh every quota consumer
+      // (Settings balance, pre-scan gate) via prefix-match invalidate.
+      queryClient.invalidateQueries({ queryKey: ["scan-quota"] });
 
       setPurchaseError(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
