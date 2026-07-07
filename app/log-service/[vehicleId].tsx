@@ -395,8 +395,13 @@ export default function LogServiceScreen() {
         // Success — toast synced with haptic, then navigate back
         const receiptFailed = storedReceiptPath === null && !!receiptLocalUri;
         const subtitle = receiptFailed ? "Service saved, but receipt couldn't be uploaded." : dueSub;
-        fireSuccessToast(`${firstServiceName} logged`, subtitle);
-        setTimeout(() => router.back(), 1200);
+        const matchedName = firstMatch?.taskName?.trim();
+        fireSuccessToast(
+          matchedName ? `${matchedName} marked complete` : `${firstServiceName} logged`,
+          subtitle,
+        );
+        // Matched logs carry two lines of payoff — hold long enough to read it.
+        setTimeout(() => router.back(), matchedName ? 2200 : 1200);
       }
     } catch (err: any) {
       setError("Couldn't save that just now. Please try again.");
