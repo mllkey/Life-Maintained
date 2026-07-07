@@ -252,8 +252,8 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
     orbitSpin.value = withRepeat(withTiming(1, { duration: 9000, easing: Easing.linear }), -1);
 
     timers.push(setTimeout(() => swapSubtitle(config.copy.beat1), 1400));
-    timers.push(setTimeout(() => swapSubtitle(config.copy.beat2), 1900));
-    timers.push(setTimeout(() => swapSubtitle(config.copy.beat3), 3600));
+    timers.push(setTimeout(() => swapSubtitle(config.copy.beat2), 3100));
+    timers.push(setTimeout(() => swapSubtitle(config.copy.beat3), 4700));
     timers.push(setTimeout(() => { if (!scheduleDone.current && !hasFinalized.current) swapSubtitle(config.copy.slow); }, 8000));
 
     chip1Opacity.value = withDelay(1400, withTiming(1, { duration: 400 }));
@@ -268,10 +268,10 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
     armChip(chipIcon2, config.chips[2].anim, 2000);
 
     particleProgress.forEach((p, i) => {
-      p.value = withDelay(3600 + i * 100, withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic) }));
+      p.value = withDelay(4700 + i * 100, withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic) }));
     });
-    docOpacity.value = withDelay(4800, withTiming(0.6, { duration: 500 }));
-    docScale.value = withDelay(4800, withTiming(0.85, { duration: 500 }));
+    docOpacity.value = withDelay(5300, withTiming(0.6, { duration: 500 }));
+    docScale.value = withDelay(5300, withTiming(0.85, { duration: 500 }));
     return timers;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, swapSubtitle]);
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
   titleWrap: { position: "relative" },
   title: { fontSize: 21, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary, lineHeight: 27, textAlign: "center" },
   subtitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 27, minHeight: 27, textAlign: "center" },
-  statusCaption: { position: "absolute", top: "50%", marginTop: 118, left: 20, right: 20, fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 27, minHeight: 27, textAlign: "center" },
+  statusCaption: { position: "absolute", top: 0, left: 20, right: 20, fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 27, minHeight: 27, textAlign: "center" },
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20, justifyContent: "center" },
   chip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: Colors.card, borderRadius: 999, borderWidth: 1, borderColor: Colors.border },
   chipText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
