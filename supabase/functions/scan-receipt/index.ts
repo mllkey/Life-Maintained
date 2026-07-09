@@ -11,6 +11,7 @@ interface ReceiptData {
   serviceType: string | null;
   mileage: number | null;
   task: string | null;
+  vehicle: string | null;
   rawText: string;
   error?: string;
 }
@@ -188,6 +189,7 @@ Deno.serve(async (req: Request) => {
 3. provider — The business or service provider name (e.g. "Jiffy Lube", "AutoNation", "Dr. Smith's Clinic"). Return null if not found.
 4. serviceType — A short description of the service performed (e.g. "Oil Change", "Tire Rotation", "Brake Inspection"). Return null if not found.
 5. mileage — The vehicle mileage/odometer reading if shown on the receipt as a number. Return null if not found.
+6. vehicle — The vehicle the receipt is for, exactly as written on the receipt (year, make, and model, e.g. "2007 Ford E-450"). Return null if no vehicle is identified on the receipt.
 
 Respond ONLY with a valid JSON object in this exact format, no extra text:
 {
@@ -196,6 +198,7 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
   "provider": "string or null",
   "serviceType": "string or null",
   "mileage": number or null,
+  "vehicle": "string or null",
   "rawText": "a brief summary of what you can read on the receipt"
 }`;
 
@@ -269,13 +272,14 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
         serviceType,
         mileage: obj.mileage != null && obj.mileage !== "null" ? Number(obj.mileage) : null,
         task: serviceType,
+        vehicle: obj.vehicle && obj.vehicle !== "null" ? String(obj.vehicle) : null,
         rawText: typeof obj.rawText === "string" ? obj.rawText : rawContent.slice(0, 300),
       };
     } catch (parseErr) {
       console.error("[scan-receipt] parse failed:", parseErr);
       parseFailed = true;
       parsed = {
-        date: null, cost: null, provider: null, serviceType: null, mileage: null, task: null,
+        date: null, cost: null, provider: null, serviceType: null, mileage: null, task: null, vehicle: null,
         rawText: rawContent.slice(0, 300),
         error: "Could not parse receipt fields",
       };
@@ -310,6 +314,39 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
       }, 200);
     }
 
+    // Wrong-vehicle detection: compare the make named on the receipt against the
+    // target asset. Fail-soft by design — a lookup or regex problem must never
+    // fail a paid scan, so any error leaves the flag false and the scan proceeds.
+    let vehicleMismatch = false;
+    if (asset_type === "vehicle" && parsed.vehicle !== null) {
+      try {
+        const { data: veh } = await adminClient
+          .from("vehicles")
+          .select("make")
+          .eq("id", asset_id)
+          .maybeSingle();
+        const storedMake = String(veh?.make ?? "").trim().toLowerCase();
+        if (storedMake.length > 0) {
+          const desc = parsed.vehicle.toLowerCase();
+          const MAKE_ALIASES: Record<string, string[]> = {
+            chevrolet: ["chevy"],
+            volkswagen: ["vw"],
+            "mercedes-benz": ["mercedes", "benz"],
+            bmw: ["bimmer"],
+            "land rover": ["range rover"],
+          };
+          const candidates = [storedMake, ...(MAKE_ALIASES[storedMake] ?? [])];
+          const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const tokenHit = (needle: string) =>
+            new RegExp(`(^|[^a-z0-9])${escapeRe(needle)}([^a-z0-9]|$)`).test(desc);
+          vehicleMismatch = !candidates.some(tokenHit);
+        }
+      } catch (lookupErr) {
+        console.error("[scan-receipt] vehicle make lookup failed (fail-soft):", lookupErr);
+        vehicleMismatch = false;
+      }
+    }
+
     // Complete the scan (success path)
     const normalizedOutput = {
       date: parsed.date,
@@ -319,6 +356,8 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
       mileage: parsed.mileage,
       task: parsed.task,
       rawText: parsed.rawText,
+      vehicle: parsed.vehicle,
+      vehicle_mismatch: vehicleMismatch,
     };
 
     const { data: completeData, error: completeErr } = await userClient.rpc("complete_receipt_scan", {
@@ -359,6 +398,7 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
 
     return jsonResponse({
       ...parsed,
+      vehicle_mismatch: vehicleMismatch,
       request_id,
       scans_used: scansUsed + 1,
       scans_limit: scansLimit,

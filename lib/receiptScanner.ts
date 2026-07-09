@@ -10,6 +10,8 @@ export interface ReceiptScanResult {
   serviceType: string | null;
   mileage: number | null;
   task: string | null;
+  vehicle: string | null;
+  vehicle_mismatch: boolean;
   items: Array<{ name: string; cost: number | null; details: string | null }>;
   rawText: string;
   error?: string;
@@ -28,6 +30,8 @@ function errorResult(message: string, requestId?: string): ReceiptScanResult {
     serviceType: null,
     mileage: null,
     task: null,
+    vehicle: null,
+    vehicle_mismatch: false,
     items: [],
     rawText: "",
     error: message,
@@ -121,6 +125,8 @@ export async function scanReceipt(
       serviceType: data.serviceType || null,
       mileage: data.mileage != null ? Number(data.mileage) : null,
       task: data.task || null,
+      vehicle: typeof data.vehicle === "string" ? data.vehicle : null,
+      vehicle_mismatch: data.vehicle_mismatch === true,
       items: Array.isArray(data.items) ? data.items : [],
       rawText: data.rawText || "",
       error: data.error || undefined,

@@ -78,6 +78,8 @@ export default function LogServiceScreen() {
   const [successToastTitle, setSuccessToastTitle] = useState("");
   const [successToastSubtitle, setSuccessToastSubtitle] = useState<string | undefined>(undefined);
   const [scanPackOpenErrorVisible, setScanPackOpenErrorVisible] = useState(false);
+  const [mismatchInfo, setMismatchInfo] = useState<{ description: string; scan: ReceiptScanResult } | null>(null);
+  const [pendingMileageChip, setPendingMileageChip] = useState<number | null>(null);
 
   function fireSuccessToast(title: string, subtitle?: string) {
     setSuccessToastTitle(title);
@@ -91,7 +93,7 @@ export default function LogServiceScreen() {
     if (!vehicleId) return;
     supabase
       .from("vehicles")
-      .select("vehicle_type, tracking_mode, hours, mileage")
+      .select("vehicle_type, tracking_mode, hours, mileage, year, make, model, nickname")
       .eq("id", vehicleId)
       .maybeSingle()
       .then(({ data }) => {
@@ -185,12 +187,50 @@ export default function LogServiceScreen() {
   }, [task, user?.id, vehicleId]);
 
   function handleScanComplete(result: ReceiptScanResult) {
+    setMismatchInfo(null);
+    setPendingMileageChip(null);
+    // The server debits at complete regardless of what the user does with the
+    // result, so the credit-aware quota refresh happens here, before any branching.
+    if (!result.error) {
+      queryClient.invalidateQueries({ queryKey: ["scan-quota"] });
+    }
+    if (result.vehicle_mismatch && result.vehicle) {
+      if (result.localUri) setReceiptLocalUri(result.localUri);
+      setMismatchInfo({ description: result.vehicle, scan: result });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      return;
+    }
+    applyScanFields(result, false);
+  }
+
+  function handleMismatchUseAnyway() {
+    if (!mismatchInfo) return;
+    const scan = mismatchInfo.scan;
+    setMismatchInfo(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    applyScanFields(scan, true);
+  }
+
+  function handleMismatchDiscard() {
+    setMismatchInfo(null);
+    setReceiptLocalUri(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }
+
+  function applyScanFields(result: ReceiptScanResult, chipAllMileage: boolean) {
     if (__DEV__) {
       console.log("Scan result:", JSON.stringify(result));
       console.log("Scan result fields - task:", result.task, "serviceType:", result.serviceType, "cost:", result.cost, "provider:", result.provider, "mileage:", result.mileage, "date:", result.date);
     }
     if (result.date) setDate(result.date);
-    if (result.mileage != null) setMileage(String(result.mileage));
+    if (result.mileage != null && vehicleData && isMileageTracked(vehicleData)) {
+      const currentMiles = typeof vehicleData.mileage === "number" ? vehicleData.mileage : null;
+      if (!chipAllMileage && currentMiles != null && result.mileage <= currentMiles) {
+        setMileage(String(result.mileage));
+      } else {
+        setPendingMileageChip(result.mileage);
+      }
+    }
     if (result.provider) setProvider(result.provider);
     if (result.localUri) setReceiptLocalUri(result.localUri);
 
@@ -208,9 +248,6 @@ export default function LogServiceScreen() {
     if (!result.error) {
       setOcrApplied(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // A successful scan debits at complete on the server; refresh the credit-aware
-      // quota so the Settings balance reflects it immediately (prefix-match invalidate).
-      queryClient.invalidateQueries({ queryKey: ["scan-quota"] });
     }
     if (result.date) {
       const scannedMs = parseISO(result.date).getTime();
@@ -462,6 +499,25 @@ export default function LogServiceScreen() {
               </View>
             ) : null}
 
+            {mismatchInfo ? (
+              <View style={styles.mismatchCard}>
+                <Ionicons name="alert-circle" size={16} color={Colors.dueSoon} style={{ marginTop: 1 }} />
+                <View style={{ flex: 1, gap: 10 }}>
+                  <Text style={styles.mismatchText}>
+                    This receipt looks like it's for a {mismatchInfo.description} — not your {vehicleData ? (vehicleData.nickname ?? `${vehicleData.year} ${vehicleData.make} ${vehicleData.model}`) : "vehicle"}.
+                  </Text>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <Pressable style={({ pressed }) => [styles.mismatchBtn, { opacity: pressed ? 0.8 : 1 }]} onPress={handleMismatchUseAnyway}>
+                      <Text style={styles.mismatchBtnText}>Use anyway</Text>
+                    </Pressable>
+                    <Pressable style={({ pressed }) => [styles.mismatchBtnGhost, { opacity: pressed ? 0.8 : 1 }]} onPress={handleMismatchDiscard}>
+                      <Text style={styles.mismatchBtnGhostText}>Discard</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ) : null}
+
             {isFreeTier(profile) ? (
               <Pressable
                 style={styles.scanGateBtn}
@@ -664,6 +720,15 @@ export default function LogServiceScreen() {
                 </>
               )}
             </View>
+            {pendingMileageChip != null ? (
+              <Pressable
+                style={({ pressed }) => [styles.mileageChip, { opacity: pressed ? 0.8 : 1 }]}
+                onPress={() => { setMileage(String(pendingMileageChip)); setPendingMileageChip(null); Haptics.selectionAsync().catch(() => {}); }}
+              >
+                <Ionicons name="speedometer-outline" size={14} color={Colors.accent} />
+                <Text style={styles.mileageChipText}>Receipt shows {pendingMileageChip.toLocaleString()} mi — tap to use</Text>
+              </Pressable>
+            ) : null}
             <View style={styles.row}>
               <Field label={scannedItems.length > 0 ? "Total Cost" : "Cost ($)"} style={{ flex: 1 }}>
                 <TextInput
@@ -908,4 +973,32 @@ const styles = StyleSheet.create({
   },
   addItemText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
   itemHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  mismatchCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.dueSoon + "55",
+  },
+  mismatchText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.text, lineHeight: 18 },
+  mismatchBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
+  mismatchBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  mismatchBtnGhost: { backgroundColor: Colors.card, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: Colors.border },
+  mismatchBtnGhostText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  mileageChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    backgroundColor: Colors.accentLight,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: Colors.accent + "33",
+  },
+  mileageChipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
 });
