@@ -292,6 +292,24 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
       }, 200);
     }
 
+    // A structurally valid response with no receipt-identifying fields means the image
+    // was not a readable receipt. date/cost/provider/serviceType are receipt-ish;
+    // mileage ALONE is an odometer photo, not a receipt — it must not debit a credit.
+    // Failing routes to the earmark-release path (no debit, no monthly slot consumed).
+    const noReceiptFields =
+      parsed.date === null && parsed.cost === null && parsed.provider === null &&
+      parsed.serviceType === null;
+    if (noReceiptFields) {
+      await failScan("No receipt fields detected in image");
+      return jsonResponse({
+        ...parsed,
+        error: "We couldn't find a receipt in that photo. Try a clearer shot of the receipt.",
+        request_id,
+        scans_used: scansUsed,
+        scans_limit: scansLimit,
+      }, 200);
+    }
+
     // Complete the scan (success path)
     const normalizedOutput = {
       date: parsed.date,
