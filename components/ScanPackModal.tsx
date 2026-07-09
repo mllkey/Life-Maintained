@@ -1,4 +1,4 @@
-import React, { useState, useCallback, forwardRef, useImperativeHandle } from "react";
+import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
@@ -97,8 +98,10 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
     },
     dismiss: () => {
       setVisible(false);
+      setPurchaseError(null);
+      onClose();
     },
-  }), [loadProducts]);
+  }), [loadProducts, onClose]);
 
   // Called by the sheet when its dismiss animation completes (pan-down,
   // backdrop tap, or programmatic dismiss). Sync parent state.
@@ -114,6 +117,19 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
     setVisible(false);
     handleDismiss();
   }, [purchasingId, handleDismiss]);
+
+  // Sheet springs up on open; backdrop dims via the Modal's fade. Manual shared-value
+  // transform (not layout `entering`) so it renders reliably inside an RN <Modal> on
+  // the New Architecture. No else-branch: on close the sheet fades out IN PLACE with the
+  // backdrop (snapping sheetY to 600 here would teleport it offscreen mid-fade).
+  const sheetY = useSharedValue(600);
+  useEffect(() => {
+    if (visible) {
+      sheetY.value = 600;
+      sheetY.value = withSpring(0, { damping: 22, stiffness: 240, mass: 0.9 });
+    }
+  }, [visible, sheetY]);
+  const sheetAnimStyle = useAnimatedStyle(() => ({ transform: [{ translateY: sheetY.value }] }));
 
   async function handlePurchase(pack: ScanPackMeta, _product: LocalizedProduct) {
     setPurchaseError(null);
@@ -183,7 +199,7 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={close}
       statusBarTranslucent
     >
@@ -194,8 +210,7 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
           accessibilityRole="button"
           accessibilityLabel="Close scan packs"
         />
-        <View style={[styles.sheet, { paddingBottom: 24 + insets.bottom }]}>
-          <View style={styles.grabber} />
+        <Animated.View style={[styles.sheet, sheetAnimStyle, { paddingBottom: 24 + insets.bottom }]}>
           <View style={styles.content}>
         <View style={styles.titleRow}>
           <View style={styles.titleIconWrap}>
@@ -292,7 +307,7 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
 
         <SaveToast visible={toastVisible} message="Scans added to your account" />
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
