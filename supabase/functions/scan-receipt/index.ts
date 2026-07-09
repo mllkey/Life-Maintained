@@ -325,7 +325,7 @@ Respond ONLY with a valid JSON object in this exact format, no extra text:
           .select("make")
           .eq("id", asset_id)
           .maybeSingle();
-        const storedMake = String(veh?.make ?? "").trim().toLowerCase();
+        const storedMake = String(veh?.make ?? "").trim().toLowerCase().slice(0, 64);
         if (storedMake.length > 0) {
           const desc = parsed.vehicle.toLowerCase();
           const MAKE_ALIASES: Record<string, string[]> = {

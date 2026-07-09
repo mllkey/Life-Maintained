@@ -195,7 +195,6 @@ export default function LogServiceScreen() {
       queryClient.invalidateQueries({ queryKey: ["scan-quota"] });
     }
     if (result.vehicle_mismatch && result.vehicle) {
-      if (result.localUri) setReceiptLocalUri(result.localUri);
       setMismatchInfo({ description: result.vehicle, scan: result });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
       return;
@@ -213,7 +212,6 @@ export default function LogServiceScreen() {
 
   function handleMismatchDiscard() {
     setMismatchInfo(null);
-    setReceiptLocalUri(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }
 
@@ -223,11 +221,15 @@ export default function LogServiceScreen() {
       console.log("Scan result fields - task:", result.task, "serviceType:", result.serviceType, "cost:", result.cost, "provider:", result.provider, "mileage:", result.mileage, "date:", result.date);
     }
     if (result.date) setDate(result.date);
-    if (result.mileage != null && vehicleData && isMileageTracked(vehicleData)) {
-      const currentMiles = typeof vehicleData.mileage === "number" ? vehicleData.mileage : null;
-      if (!chipAllMileage && currentMiles != null && result.mileage <= currentMiles) {
-        setMileage(String(result.mileage));
-      } else {
+    if (result.mileage != null) {
+      if (vehicleData && isMileageTracked(vehicleData)) {
+        const currentMiles = typeof vehicleData.mileage === "number" ? vehicleData.mileage : null;
+        if (!chipAllMileage && currentMiles != null && result.mileage <= currentMiles) {
+          setMileage(String(result.mileage));
+        } else {
+          setPendingMileageChip(result.mileage);
+        }
+      } else if (!vehicleData) {
         setPendingMileageChip(result.mileage);
       }
     }
@@ -504,7 +506,7 @@ export default function LogServiceScreen() {
                 <Ionicons name="alert-circle" size={16} color={Colors.dueSoon} style={{ marginTop: 1 }} />
                 <View style={{ flex: 1, gap: 10 }}>
                   <Text style={styles.mismatchText}>
-                    This receipt looks like it's for a {mismatchInfo.description} — not your {vehicleData ? (vehicleData.nickname ?? `${vehicleData.year} ${vehicleData.make} ${vehicleData.model}`) : "vehicle"}.
+                    This receipt looks like it's for a {mismatchInfo.description} — not your {vehicleData?.nickname || [vehicleData?.year, vehicleData?.make, vehicleData?.model].filter(Boolean).join(" ") || "this vehicle"}.
                   </Text>
                   <View style={{ flexDirection: "row", gap: 8 }}>
                     <Pressable style={({ pressed }) => [styles.mismatchBtn, { opacity: pressed ? 0.8 : 1 }]} onPress={handleMismatchUseAnyway}>
