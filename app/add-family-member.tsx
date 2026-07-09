@@ -41,6 +41,7 @@ export default function AddFamilyMemberScreen() {
   const [memberType, setMemberType] = useState(typeParam === "pet" ? "pet" : "person");
   const [relationship, setRelationship] = useState("");
   const [petType, setPetType] = useState("");
+  const [petBreed, setPetBreed] = useState("");
   const [dob, setDob] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +94,7 @@ export default function AddFamilyMemberScreen() {
       member_type: memberType,
       relationship: memberType === "person" ? relationship || null : null,
       pet_type: memberType === "pet" ? petType || null : null,
+      pet_breed: memberType === "pet" && (petType === "Dog" || petType === "Cat") ? petBreed.trim().replace(/\s+/g, " ").slice(0, 40).trim() || null : null,
       date_of_birth: dateOfBirth,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -206,11 +208,19 @@ export default function AddFamilyMemberScreen() {
               <Text style={styles.sectionTitle}>Pet Type</Text>
               <View style={styles.grid}>
                 {PET_TYPES.map(p => (
-                  <Pressable key={p} style={[styles.chip, petType === p && styles.chipSelected]} onPress={() => { setPetType(p); Haptics.selectionAsync(); }}>
+                  <Pressable key={p} style={[styles.chip, petType === p && styles.chipSelected]} onPress={() => { if (p !== petType) { setPetType(p); setPetBreed(""); } Haptics.selectionAsync(); }}>
                     <Text style={[styles.chipText, petType === p && styles.chipTextSelected]}>{p}</Text>
                   </Pressable>
                 ))}
               </View>
+            </View>
+          )}
+
+          {memberType === "pet" && (petType === "Dog" || petType === "Cat") && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Breed</Text>
+              <TextInput style={styles.input} value={petBreed} onChangeText={setPetBreed} placeholder="German Shepherd, Maine Coon..." placeholderTextColor={Colors.textTertiary} autoCapitalize="words" returnKeyType="next" maxLength={40} />
+              <Text style={styles.fieldHelper}>Optional. Helps us recommend breed-specific screenings.</Text>
             </View>
           )}
 
