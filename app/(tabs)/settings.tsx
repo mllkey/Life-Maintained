@@ -72,7 +72,8 @@ function getDaysUntil(t: PredTask, v: PredVehicle | null): number | null {
     return differenceInDays(parseISO(t.next_due_date), new Date());
   }
   if (t.interval_miles != null && v?.mileage != null && v.average_miles_per_month) {
-    const milesLeft = t.interval_miles - (v.mileage - (t.last_completed_miles ?? 0));
+    const cur = projectedMileage(v) ?? v.mileage;
+    const milesLeft = t.interval_miles - (cur - (t.last_completed_miles ?? 0));
     return Math.round(milesLeft / (v.average_miles_per_month / 30.44));
   }
   return null;
