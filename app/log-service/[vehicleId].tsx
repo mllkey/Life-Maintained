@@ -270,10 +270,12 @@ export default function LogServiceScreen() {
       const timestamp = Date.now();
       const path = `${userId}/vehicle/${assetId}/${timestamp}.jpg`;
       const response = await fetch(localUri);
-      const blob = await response.blob();
+      if (!response.ok) throw new Error("Could not read receipt file");
+      const arrayBuffer = await response.arrayBuffer();
+      if (arrayBuffer.byteLength === 0) throw new Error("Empty receipt file");
       const { data, error: uploadErr } = await supabase.storage
         .from("receipts")
-        .upload(path, blob, { contentType: "image/jpeg", upsert: false });
+        .upload(path, arrayBuffer, { contentType: "image/jpeg", upsert: false });
       if (uploadErr) throw uploadErr;
       return data.path;
     } catch (err) {

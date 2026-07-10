@@ -981,7 +981,7 @@ export default function VehicleDetailScreen() {
       const cost = log.cost != null ? `$${log.cost.toFixed(2)}` : "";
       const provider = (log.provider_name ?? "").replace(/,/g, ";");
       const notes = (log.notes ?? "").replace(/,/g, ";").replace(/\n/g, " ");
-      const receipt = log.receipt_url ? `https://fqblqrrgjpwysrsiolcn.supabase.co/storage/v1/object/public/receipts/${log.receipt_url}` : "-";
+      const receipt = log.receipt_url ? "Receipt on file (view in app)" : "-";
       return `${date},${task},${usage},${cost},${provider},${notes},${receipt}`;
     });
     return [header, ...rows, "", "Usage data is self-reported by the owner and has not been independently verified."].join("\n");
@@ -990,9 +990,7 @@ export default function VehicleDetailScreen() {
   function buildHtml(logsData: any[], vehicleData: any) {
     const name = vehicleData?.nickname ?? `${vehicleData?.year} ${vehicleData?.make} ${vehicleData?.model}`;
     const rows = logsData.map(log => {
-      const receiptCell = log.receipt_url
-        ? `<a href="https://fqblqrrgjpwysrsiolcn.supabase.co/storage/v1/object/public/receipts/${log.receipt_url}" target="_blank">View Receipt</a>`
-        : "-";
+      const receiptCell = log.receipt_url ? "Receipt on file (view in app)" : "-";
       return `
       <tr>
         <td>${log.service_date ? format(parseISO(log.service_date), "MMM d, yyyy") : "-"}</td>

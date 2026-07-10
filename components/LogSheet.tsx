@@ -395,6 +395,7 @@ function ConfirmCard({
       queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
       if (isVehicle && item.asset_id) {
         queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+        queryClient.invalidateQueries({ queryKey: ["vehicle"] });
         queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", item.asset_id] });
       } else if (item.category === "property" && item.asset_id) {
         queryClient.invalidateQueries({ queryKey: ["properties"] });

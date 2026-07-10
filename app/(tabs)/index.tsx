@@ -32,12 +32,11 @@ import * as Haptics from "expo-haptics";
 import { primeHaptics } from "@/lib/haptics";
 import { useBudgetAlert } from "@/context/BudgetAlertContext";
 import TrialBanner from "@/components/TrialBanner";
-import { resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode, isHoursTracked, isTimeOnly, taskDaysUntilDue } from "@/lib/usageHelpers";
+import { currentUsageValue, resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode, isHoursTracked, isTimeOnly, taskDaysUntilDue } from "@/lib/usageHelpers";
 import * as Linking from "expo-linking";
 import { LogSheet } from "@/components/LogSheet";
 import { SaveToast } from "@/components/SaveToast";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
-import UpdateBanner from "@/components/UpdateBanner";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -234,7 +233,7 @@ export default function DashboardScreen() {
     Haptics.selectionAsync();
   }
 
-  const { data: counts, isLoading: countsLoading, isError: isCountsError, isFetching: isCountsFetching, refetch: refetchCounts } = useQuery({
+  const { data: counts, isLoading: countsLoading, isError: isCountsError, isFetching: isCountsFetching, fetchStatus: countsFetchStatus, refetch: refetchCounts } = useQuery({
     queryKey: ["dashboard_counts", user?.id],
     queryFn: async () => {
       if (!user) return { vehicles: 0, properties: 0, health: 0 };
@@ -265,7 +264,7 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
-  const { data: dashboardItems, isLoading: dashLoading, isError: isDashError, isFetching: isDashFetching, refetch: refetchDash } = useQuery({
+  const { data: dashboardItems, isLoading: dashLoading, isError: isDashError, isFetching: isDashFetching, fetchStatus: dashFetchStatus, refetch: refetchDash } = useQuery({
     queryKey: ["dashboard", user?.id],
     queryFn: async () => {
       if (!user) return [];
@@ -317,7 +316,7 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
-  const { data: monthAheadItems, isLoading: monthLoading, isError: isMonthError, isFetching: isMonthFetching, refetch: refetchMonthAhead } = useQuery({
+  const { data: monthAheadItems, isLoading: monthLoading, isError: isMonthError, isFetching: isMonthFetching, fetchStatus: monthFetchStatus, refetch: refetchMonthAhead } = useQuery({
     queryKey: ["dashboard", user?.id, "month_ahead"],
     queryFn: async (): Promise<MonthAheadItem[]> => {
       if (!user) return [];
@@ -481,7 +480,11 @@ export default function DashboardScreen() {
     refetchTotalTasks();
   }
 
-  const isLoading = countsLoading || dashLoading || monthLoading;
+  const isOfflineNoData =
+    (counts == null && countsFetchStatus === "paused") ||
+    (dashboardItems == null && dashFetchStatus === "paused") ||
+    (monthAheadItems == null && monthFetchStatus === "paused");
+  const isLoading = !isOfflineNoData && (countsLoading || dashLoading || monthLoading);
 
   const hasDashboardError =
     !isLoading &&
@@ -564,7 +567,7 @@ export default function DashboardScreen() {
       <View style={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0) }]}>
         {isLoading ? (
           <DashboardSkeleton />
-        ) : hasDashboardError ? (
+        ) : (hasDashboardError || isOfflineNoData) ? (
           <View style={styles.dashboardErrorCard}>
             <View style={styles.dashboardErrorIcon}>
               <Ionicons name="cloud-offline-outline" size={28} color={Colors.overdue} />
@@ -601,10 +604,6 @@ export default function DashboardScreen() {
               id={TOOLTIP_IDS.DASHBOARD_WELCOME}
               message="This is your command center. Everything that needs attention across vehicles, home, and health shows up here."
               icon="compass-outline"
-            />
-            <UpdateBanner
-              message="Your maintenance schedules just got smarter. Refresh any vehicle's schedule from its detail page."
-              onDismiss={() => {}}
             />
             <TrialBanner />
             {!budgetDismissed && !!budgetThreshold && budgetThreshold > 0 && monthlyCost > budgetThreshold && (
@@ -903,6 +902,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["vehicle"] });
       showUsageSavedToast();
       setTimeout(() => {
         setSaved(s => ({ ...s, [k]: false }));
@@ -927,13 +927,14 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
   if (vehicles.length === 1) {
     const v = vehicles[0];
     const vehicleName = v.nickname ?? [v.year, v.make, v.model].filter(Boolean).join(" ");
+    const estNow = !isHoursTracked(v) ? currentUsageValue(v) : null;
     return (
       <>
         <View style={styles.qmCard}>
           <View style={styles.qmCardHeaderStatic}>
             <View style={{ flex: 1 }}>
               <Text style={styles.qmCardTitle}>{vehicleName}</Text>
-              <Text style={styles.qmCardSub}>{isHoursTracked(v) ? "Update hours" : "Update mileage"}</Text>
+              <Text style={styles.qmCardSub}>{isHoursTracked(v) ? "Update hours" : "Update mileage"}{estNow != null ? ` · Est. now ${estNow.toLocaleString()} mi` : ""}</Text>
             </View>
           </View>
           <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
