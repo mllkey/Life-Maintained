@@ -430,8 +430,8 @@ export default function PropertyDetailScreen() {
       setUploadingPhoto(true);
       try {
         const response = await fetch(uri);
-        const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength === 0) throw new Error("Empty image file");
         const storagePath = `${user!.id}/${id}.jpg`;
         const { error: uploadError } = await supabase.storage
           .from("property-photos")

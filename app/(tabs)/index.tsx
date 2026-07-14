@@ -77,6 +77,7 @@ type MileageVehicle = {
   updated_at: string | null;
   average_miles_per_month: number | null;
   last_mileage_update: string | null;
+  last_hours_update: string | null;
 };
 
 
@@ -397,7 +398,7 @@ export default function DashboardScreen() {
       if (!user) return [];
       const { data, error } = await supabase
         .from("vehicles")
-        .select("id, year, make, model, nickname, mileage, hours, vehicle_type, tracking_mode, updated_at, average_miles_per_month, last_mileage_update")
+        .select("id, year, make, model, nickname, mileage, hours, vehicle_type, tracking_mode, updated_at, average_miles_per_month, last_mileage_update, last_hours_update")
         .eq("user_id", user.id);
       if (error) throw error;
       const rows = (data ?? []) as MileageVehicle[];
@@ -757,11 +758,12 @@ function UsageInputs({
   const vehicleName = v.nickname ?? [v.year, v.make, v.model].filter(Boolean).join(" ");
   const stale = isStale(v);
 
+  const estNow = mode === "both" ? null : currentUsageValue(v);
   const nameBlock = !hideName && (
     <View style={styles.qmVehicleInfo}>
       <Text style={styles.qmVehicleName} numberOfLines={1}>{vehicleName}</Text>
-      <Text style={[styles.qmVehicleAge, { color: stale ? Colors.dueSoon : Colors.good }]}>
-        {formatMileageAge(v.updated_at)}
+      <Text style={[styles.qmVehicleAge, { color: stale ? Colors.dueSoon : Colors.good }]} numberOfLines={1}>
+        {formatMileageAge(v.updated_at)}{estNow != null ? ` · Est. ${estNow.toLocaleString()} ${isHoursTracked(v) ? "hrs" : "mi"}` : ""}
       </Text>
     </View>
   );
@@ -927,14 +929,14 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
   if (vehicles.length === 1) {
     const v = vehicles[0];
     const vehicleName = v.nickname ?? [v.year, v.make, v.model].filter(Boolean).join(" ");
-    const estNow = !isHoursTracked(v) ? currentUsageValue(v) : null;
+    const estNow = resolveTrackingMode(v) === "both" ? null : currentUsageValue(v);
     return (
       <>
         <View style={styles.qmCard}>
           <View style={styles.qmCardHeaderStatic}>
             <View style={{ flex: 1 }}>
               <Text style={styles.qmCardTitle}>{vehicleName}</Text>
-              <Text style={styles.qmCardSub}>{isHoursTracked(v) ? "Update hours" : "Update mileage"}{estNow != null ? ` · Est. now ${estNow.toLocaleString()} mi` : ""}</Text>
+              <Text style={styles.qmCardSub}>{resolveTrackingMode(v) === "both" ? "Update mileage & hours" : isHoursTracked(v) ? "Update hours" : "Update mileage"}{estNow != null ? ` · Est. now ${estNow.toLocaleString()} ${isHoursTracked(v) ? "hrs" : "mi"}` : ""}</Text>
             </View>
           </View>
           <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>

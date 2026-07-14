@@ -933,8 +933,8 @@ export default function VehicleDetailScreen() {
       const uri = result.assets[0].uri;
       const storagePath = `${user!.id}/${id}/vehicle-photo.jpg`;
       const response = await fetch(uri);
-      const blob = await response.blob();
-      const arrayBuffer = await new Response(blob).arrayBuffer();
+      const arrayBuffer = await response.arrayBuffer();
+      if (arrayBuffer.byteLength === 0) throw new Error("Empty image file");
 
       const { error: uploadError } = await supabase.storage
         .from("wallet-documents")
@@ -2674,8 +2674,8 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
       const storagePath = `${userId}/${vehicleId}/${docType}.jpg`;
 
       const response = await fetch(uri);
-      const blob = await response.blob();
-      const arrayBuffer = await new Response(blob).arrayBuffer();
+      const arrayBuffer = await response.arrayBuffer();
+      if (arrayBuffer.byteLength === 0) throw new Error("Empty image file");
 
       const { error: uploadError } = await supabase.storage
         .from("wallet-documents")

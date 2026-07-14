@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -35,6 +35,10 @@ export default function PropertyTaskHistoryScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [receiptGeneratingId, setReceiptGeneratingId] = useState<string | null>(null);
+  const [receiptImgStatus, setReceiptImgStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [receiptImgKey, setReceiptImgKey] = useState(0);
+  const receiptPathRef = useRef<string | null>(null);
+  const receiptAttemptRef = useRef(0);
 
   const { data: logs, isLoading, isError, fetchStatus, refetch } = useQuery({
     queryKey: ["property_task_logs", propertyId, task],
@@ -89,18 +93,32 @@ export default function PropertyTaskHistoryScreen() {
 
   async function openReceipt(storagePath: string, logId: string) {
     setReceiptGeneratingId(logId);
+    receiptPathRef.current = storagePath;
+    const attempt = ++receiptAttemptRef.current;
+    setReceiptImgStatus("loading");
     Haptics.selectionAsync();
     try {
       const { data, error } = await supabase.storage
         .from("receipts")
         .createSignedUrl(storagePath, 3600);
       if (error || !data?.signedUrl) throw error ?? new Error("No signed URL");
+      if (attempt !== receiptAttemptRef.current) return;
       setReceiptUrl(data.signedUrl);
+      setReceiptImgKey(k => k + 1);
     } catch {
+      if (attempt !== receiptAttemptRef.current) return;
+      setReceiptImgStatus("error");
       fireSaveErrorToast("Could not load receipt", "Please try again.");
     } finally {
-      setReceiptGeneratingId(null);
+      if (attempt === receiptAttemptRef.current) {
+        setReceiptGeneratingId(null);
+      }
     }
+  }
+
+  function closeReceipt() {
+    receiptAttemptRef.current++;
+    setReceiptUrl(null);
   }
 
   const totalSpent = logs?.reduce((s, l) => s + (l.cost ?? 0), 0) ?? 0;
@@ -260,7 +278,7 @@ export default function PropertyTaskHistoryScreen() {
         visible={!!receiptUrl}
         transparent
         animationType="fade"
-        onRequestClose={() => setReceiptUrl(null)}
+        onRequestClose={closeReceipt}
         statusBarTranslucent
       >
         <View style={styles.receiptModal}>
@@ -275,15 +293,39 @@ export default function PropertyTaskHistoryScreen() {
           >
             {receiptUrl && (
               <Image
+                key={receiptImgKey}
                 source={{ uri: receiptUrl }}
-                style={{ width: SW, height: SH * 0.82 }}
+                style={{ width: SW, height: SH * 0.82, opacity: receiptImgStatus === "ready" ? 1 : 0 }}
                 resizeMode="contain"
+                onLoad={() => setReceiptImgStatus("ready")}
+                onError={() => setReceiptImgStatus("error")}
               />
             )}
           </ScrollView>
+          {receiptImgStatus === "loading" && (
+            <View style={styles.receiptStateOverlay} pointerEvents="none">
+              <ActivityIndicator size="large" color="#fff" />
+            </View>
+          )}
+          {receiptImgStatus === "error" && (
+            <View style={styles.receiptStateOverlay}>
+              <Ionicons name="cloud-offline-outline" size={34} color="#fff" />
+              <Text style={styles.receiptStateTitle}>Couldn't load this receipt</Text>
+              <Text style={styles.receiptStateBody}>Check your connection and try again.</Text>
+              <Pressable
+                style={({ pressed }) => [styles.receiptRetryBtn, { opacity: pressed ? 0.85 : 1 }]}
+                onPress={() => { const p = receiptPathRef.current; if (p) openReceipt(p, "retry"); }}
+                accessibilityRole="button"
+                accessibilityLabel="Try loading receipt again"
+              >
+                <Ionicons name="refresh" size={16} color="#fff" />
+                <Text style={styles.receiptRetryText}>Try again</Text>
+              </Pressable>
+            </View>
+          )}
           <Pressable
             style={[styles.receiptCloseBtn, { top: insets.top + 12 }]}
-            onPress={() => setReceiptUrl(null)}
+            onPress={closeReceipt}
             hitSlop={12}
           >
             <View style={styles.receiptCloseBtnInner}>
@@ -414,6 +456,11 @@ const styles = StyleSheet.create({
   deleteBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue },
 
   receiptModal: { flex: 1, backgroundColor: "rgba(0,0,0,0.96)" },
+  receiptStateOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 32 },
+  receiptStateTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: "#fff", textAlign: "center" },
+  receiptStateBody: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.7)", textAlign: "center" },
+  receiptRetryBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.16)", paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, marginTop: 4 },
+  receiptRetryText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#fff" },
   receiptScrollContent: { flex: 1, alignItems: "center", justifyContent: "center" },
   receiptCloseBtn: { position: "absolute", right: 16 },
   receiptCloseBtnInner: {
