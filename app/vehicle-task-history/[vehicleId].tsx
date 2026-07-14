@@ -115,9 +115,12 @@ export default function VehicleTaskHistoryScreen() {
     setReceiptImgStatus("loading");
     Haptics.selectionAsync();
     try {
-      const { data, error } = await supabase.storage
-        .from("receipts")
-        .createSignedUrl(storagePath, 3600);
+      const result = await Promise.race([
+        supabase.storage.from("receipts").createSignedUrl(storagePath, 3600),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 10000)),
+      ]);
+      if (result == null) throw new Error("Signed URL request timed out");
+      const { data, error } = result;
       if (error || !data?.signedUrl) throw error ?? new Error("No signed URL");
       if (attempt !== receiptAttemptRef.current) return;
       setReceiptUrl(data.signedUrl);

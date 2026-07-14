@@ -32,7 +32,7 @@ import * as Haptics from "expo-haptics";
 import { primeHaptics } from "@/lib/haptics";
 import { useBudgetAlert } from "@/context/BudgetAlertContext";
 import TrialBanner from "@/components/TrialBanner";
-import { currentUsageValue, resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode, isHoursTracked, isTimeOnly, taskDaysUntilDue } from "@/lib/usageHelpers";
+import { currentUsageValue, projectedMileage, projectedHours, resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode, isHoursTracked, isTimeOnly, taskDaysUntilDue } from "@/lib/usageHelpers";
 import * as Linking from "expo-linking";
 import { LogSheet } from "@/components/LogSheet";
 import { SaveToast } from "@/components/SaveToast";
@@ -759,6 +759,8 @@ function UsageInputs({
   const stale = isStale(v);
 
   const estNow = mode === "both" ? null : currentUsageValue(v);
+  const mileagePh = (projectedMileage(v) ?? v.mileage)?.toLocaleString() ?? "miles";
+  const hoursPh = (projectedHours(v) ?? v.hours)?.toLocaleString() ?? "hours";
   const nameBlock = !hideName && (
     <View style={styles.qmVehicleInfo}>
       <Text style={styles.qmVehicleName} numberOfLines={1}>{vehicleName}</Text>
@@ -777,7 +779,7 @@ function UsageInputs({
     return (
       <View style={styles.qmVehicleRow}>
         {nameBlock}
-        <UsageInputRow {...rowProps} field="hours" label="Hours" placeholder="hours" keyboard="decimal-pad" />
+        <UsageInputRow {...rowProps} field="hours" label="Hours" placeholder={hoursPh} keyboard="decimal-pad" />
       </View>
     );
   }
@@ -785,15 +787,15 @@ function UsageInputs({
     return (
       <View style={styles.qmVehicleRow}>
         {nameBlock}
-        <UsageInputRow {...rowProps} field="mileage" label="Mileage" placeholder="miles" keyboard="number-pad" />
+        <UsageInputRow {...rowProps} field="mileage" label="Mileage" placeholder={mileagePh} keyboard="number-pad" />
       </View>
     );
   }
   return (
     <View style={[styles.qmVehicleRow, { flexDirection: "column", alignItems: "stretch" }]}>
       {nameBlock}
-      <UsageInputRow {...rowProps} field="mileage" label="Mileage" placeholder="miles" keyboard="number-pad" />
-      <UsageInputRow {...rowProps} field="hours" label="Hours" placeholder="hours" keyboard="decimal-pad" />
+      <UsageInputRow {...rowProps} field="mileage" label="Mileage" placeholder={mileagePh} keyboard="number-pad" />
+      <UsageInputRow {...rowProps} field="hours" label="Hours" placeholder={hoursPh} keyboard="decimal-pad" />
     </View>
   );
 }
@@ -836,14 +838,8 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
   }
 
   function getInput(v: MileageVehicle, field: "mileage" | "hours"): string {
-    const mode = resolveTrackingMode(v);
-    if (mode !== "both") {
-      const currentVal = isHoursTracked(v) ? v.hours : v.mileage;
-      return inputs[v.id] ?? (currentVal != null ? String(currentVal) : "");
-    }
     const k = fieldKey(v, field);
-    if (field === "hours") return inputs[k] ?? (v.hours != null ? String(v.hours) : "");
-    return inputs[k] ?? (v.mileage != null ? String(v.mileage) : "");
+    return inputs[k] ?? "";
   }
 
   function showUsageSavedToast() {
@@ -901,6 +897,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
         if (histErr) throw histErr;
       }
       setSaved(s => ({ ...s, [k]: true }));
+      setInputs(i => ({ ...i, [k]: "" }));
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
