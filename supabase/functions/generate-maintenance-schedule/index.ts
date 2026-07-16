@@ -322,18 +322,10 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── 4. Check for existing tasks (prevent duplicate schedules) ──────────
-    if (isForceRefresh) {
-      const { error: deleteErr } = await adminClient
-        .from("user_vehicle_maintenance_tasks")
-        .delete()
-        .eq("vehicle_id", vehicle_id)
-        .neq("is_custom", true);
-      if (deleteErr) {
-        console.error("[REFRESH] Delete existing tasks error:", deleteErr.message);
-        return json({ error: "Failed to clear existing schedule", detail: deleteErr.message }, 500);
-      }
-      console.log(`[REFRESH] Cleared non-custom tasks for vehicle ${vehicle_id}`);
-    } else {
+    // Force-refresh no longer deletes the old schedule up front. The swap is
+    // performed atomically inside the replacement RPC at insert time, so
+    // a failed or empty generation can never destroy an existing schedule.
+    if (!isForceRefresh) {
       const { count: existingCount, error: countError } = await adminClient
         .from("user_vehicle_maintenance_tasks")
         .select("id", { count: "exact", head: true })
@@ -1065,7 +1057,12 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
           next_due_date: t.interval_months !== null ? addMonths(today, t.interval_months).toISOString() : null,
           status: "upcoming", priority: t.priority, is_custom: false, source: "ai",
         }));
-        const { error: aiInsertErr } = await adminClient.from("user_vehicle_maintenance_tasks").insert(aiTasksToInsert);
+        const { error: aiInsertErr } = await adminClient.rpc("replace_vehicle_schedule", {
+          p_vehicle_id: vehicle_id,
+          p_user_id: authUserId,
+          p_clear_non_custom: isForceRefresh,
+          p_tasks: aiTasksToInsert,
+        });
         if (!aiInsertErr) {
           const edgeFnSecret = Deno.env.get("EDGE_FUNCTION_SECRET") ?? "";
           let estimatesCached = 0;
@@ -1125,14 +1122,19 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     // ── 5. Determine which vehicle_type values to query ────────────────────
     // Note: `maintenance_templates.vehicle_type` is used in this project for fuel-type-aware templates.
     // We add extra fuel-type template sets when a vehicle_type (category) requires them.
-    const typeSet = new Set<string>(["all", effectiveFuel]);
-    if (effectiveFuel === "hybrid") {
+    // Time-only asset classes (trailer / dump trailer / dumpster) have their own
+    // dedicated template sets and never inherit car/fuel/AWD templates (Packet B).
+    const isTimeOnlyAssetClass = TIME_ONLY_TYPES.has(vehicleCategory);
+    const typeSet = isTimeOnlyAssetClass
+      ? new Set<string>(vehicleCategory === "dump_trailer" ? ["trailer", "dump_trailer"] : [vehicleCategory])
+      : new Set<string>(["all", effectiveFuel]);
+    if (!isTimeOnlyAssetClass && effectiveFuel === "hybrid") {
       // Hybrid schedules should behave like gas schedules, with a few targeted additions.
       typeSet.add("gas");
     }
     const typeArray = Array.from(typeSet);
     // AWD driveline templates are mechanical AWD items; EVs must not inherit them.
-    if (resolvedIsAwd && effectiveFuel !== "ev") typeArray.push("awd_4wd");
+    if (!isTimeOnlyAssetClass && resolvedIsAwd && effectiveFuel !== "ev") typeArray.push("awd_4wd");
 
     // ── 6. Fetch matching templates ────────────────────────────────────────
     const { data: templates, error: templatesError } = await adminClient
@@ -1201,63 +1203,23 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
       { miles: null, months: 3, match: [/winch cable/i, /winch chain/i, /winch cable\/chain/i] },
     ];
 
-    const trailerRules: IntervalRule[] = [
-      { miles: null, months: 12, match: [/wheel bearing repack/i, /wheel bearing/i] },
-      { miles: null, months: 6, match: [/brake.*adjust/i] },
-      { miles: null, months: 1, match: [/grease.*zerk/i] },
-      { miles: null, months: 6, match: [/coupler/i] },
-      { miles: null, months: 6, match: [/safety chain/i] },
-      { miles: null, months: 6, match: [/electrical.*(connection|connections|light|lights)/i] },
-      { miles: null, months: 12, match: [/jack stand/i] },
-      { miles: null, months: 12, match: [/(floor|deck).*inspection/i] },
-      { miles: null, months: 12, match: [/suspension.*inspection/i] },
-      { miles: null, months: 3, match: [/tire inspection/i] },
-      { miles: null, months: 42, match: [/tire replacement/i] },
-      { miles: null, months: 6, match: [/breakaway/i] },
-      { miles: null, months: 3, match: [/lug nut/i] },
-    ];
+    // Trailer / dump-trailer / dumpster tasks now come from dedicated
+    // maintenance_templates rows (vehicle_type = category); the old rule
+    // whitelists were removed (Packet B).
 
-    const dumpTrailerRules: IntervalRule[] = [
-      { miles: null, months: 3, match: [/hydraulic fluid/i] },
-      { miles: null, months: 1, match: [/hydraulic cylinder.*grease/i, /hydraulic cylinder/i] },
-      { miles: null, months: 1, match: [/dump body.*(pivot|hinge)/i, /pivot hinge.*grease/i, /dump body.*hinge/i] },
-      { miles: null, months: 1, match: [/rear door.*hinge.*grease/i, /rear door.*hinge/i] },
-      { miles: null, months: 1, match: [/scissor/i] },
-      { miles: null, months: 6, match: [/tarp/i] },
-    ];
-
-    const dumpsterRules: IntervalRule[] = [
-      { miles: null, months: 1, match: [/door hinge lubrication/i, /door hinge/i] },
-      { miles: null, months: 6, match: [/door seal inspection/i, /door seal/i] },
-      { miles: null, months: 6, match: [/floor inspection/i, /rust/i, /holes/i] },
-      { miles: null, months: 12, match: [/exterior rust treatment/i] },
-      { miles: null, months: 12, match: [/paint touch/i] },
-      { miles: null, months: 6, match: [/wheel/i, /caster/i] },
-      { miles: null, months: 3, match: [/drain plug/i] },
-      { miles: null, months: 12, match: [/structural weld inspection/i, /weld inspection/i] },
-      { miles: null, months: 6, match: [/latch/i, /lock mechanism/i] },
-      { miles: null, months: 3, match: [/pressure wash/i, /\bclean\b/i] },
-    ];
-
-    const isTrailer = vehicleCategory === "trailer" || vehicleCategory === "dump_trailer";
-    const isDumpTrailer = vehicleCategory === "dump_trailer";
     const isDumpTruck = vehicleCategory === "dump_truck" || vehicleCategory === "standard_dump" || vehicleCategory === "roll_off" || vehicleCategory === "hook_lift";
     const isRollOff = vehicleCategory === "roll_off";
     const isHookLift = vehicleCategory === "hook_lift";
-    const isDumpster = vehicleCategory === "dumpster";
     const isDiesel = effectiveFuel === "diesel";
     const isEv = effectiveFuel === "ev";
     const isHybrid = effectiveFuel === "hybrid";
 
-    // EXCLUSIVE mode (whitelist): only asset classes whose task set IS the rule list.
-    const exclusiveRules: IntervalRule[] | null = isTrailer
-      ? (isDumpTrailer ? [...trailerRules, ...dumpTrailerRules] : trailerRules)
-      : isDumpster
-        ? dumpsterRules
-        : null;
-
     // OVERRIDE mode: rule match adjusts intervals; unmatched templates are KEPT.
-    const overrideRules: IntervalRule[] | null = isDumpTruck
+    // Time-only asset classes take their intervals from their dedicated template
+    // rows (Packet B); fuel-based overrides never apply to them.
+    const overrideRules: IntervalRule[] | null = isTimeOnlyAssetClass
+      ? null
+      : isDumpTruck
       ? [
           ...dieselRules,
           ...dumpTruckRules,
@@ -1277,7 +1239,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
       return null;
     }
 
-    const shouldDedupByTaskName = exclusiveRules !== null || overrideRules !== null || isHybrid;
+    const shouldDedupByTaskName = isTimeOnlyAssetClass || overrideRules !== null || isHybrid;
 
     // ── 7. Fetch all relevant overrides for this make in one query ─────────
     const templateIds = filteredTemplates.map((t: Record<string, unknown>) => t.id as string);
@@ -1367,12 +1329,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
         if (replacementName && survivingNames.has(replacementName)) continue;
       }
 
-      if (exclusiveRules) {
-        const rule = findRule(exclusiveRules, taskName);
-        if (!rule) continue;
-        resolvedMiles = rule.miles;
-        resolvedMonths = rule.months;
-      } else if (overrideRules) {
+      if (overrideRules) {
         const rule = findRule(overrideRules, taskName);
         if (rule) {
           resolvedMiles = rule.miles;
@@ -1458,7 +1415,12 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     }
 
     // ── 10. Batch insert all tasks ─────────────────────────────────────────
-    const { error: insertError } = await adminClient.from("user_vehicle_maintenance_tasks").insert(tasksToInsert);
+    const { error: insertError } = await adminClient.rpc("replace_vehicle_schedule", {
+      p_vehicle_id: vehicle_id,
+      p_user_id: authUserId,
+      p_clear_non_custom: isForceRefresh,
+      p_tasks: tasksToInsert,
+    });
     if (insertError) return json({ error: "Failed to generate schedule", detail: insertError.message }, 500);
     const tplEdgeFnSecret = Deno.env.get("EDGE_FUNCTION_SECRET") ?? "";
     let tplEstimatesCached = 0;
