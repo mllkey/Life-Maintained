@@ -484,6 +484,7 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
       description: t.description,
       category: t.category,
       interval: intervalToString(t.interval_months),
+      interval_months: t.interval_months,
       estimated_cost: Math.round((t.estimated_cost_low + t.estimated_cost_high) / 2),
       priority: t.priority,
       next_due_date: addMonths(today, t.interval_months).toISOString().split("T")[0],

@@ -360,7 +360,7 @@ export default function PropertyDetailScreen() {
         return parts.length ? parts.join("\n\n") : null;
       })();
 
-      const { error: rpcError } = await completePropertyTask({
+      const { data: rpcData, error: rpcError } = await completePropertyTask({
         p_task_id: task.id,
         p_completed_date: completedAt,
         p_notes: notesForLog ?? undefined,
@@ -370,6 +370,18 @@ export default function PropertyDetailScreen() {
       });
 
       if (rpcError) throw rpcError;
+
+      // The RPC returns the authoritative next_due_date (true interval_months
+      // preferred server-side). Correct the optimistic bucket-derived value.
+      const authoritativeNextDue = rpcData?.next_due_date ?? nextDate;
+      if (rpcData?.next_due_date && rpcData.next_due_date !== nextDate) {
+        queryClient.setQueryData(["property_tasks", id], (old: any[] | undefined) => {
+          if (!old) return old;
+          return old.map(t =>
+            t.id === task.id ? { ...t, next_due_date: rpcData.next_due_date } : t,
+          );
+        });
+      }
 
       if (typeof id === "string" && id.length > 0) {
         capture("property_task_completed", {
@@ -387,7 +399,7 @@ export default function PropertyDetailScreen() {
       showToast(
         `${task.task} marked complete`,
         false,
-        `Next due ${format(parseISO(nextDate), "MMM d, yyyy")}`,
+        `Next due ${format(parseISO(authoritativeNextDue), "MMM d, yyyy")}`,
       );
 
       // Reschedule notifications — fire-and-forget, never blocks UI
