@@ -132,6 +132,11 @@ Deno.serve(async (req: Request) => {
       : (typeof vehicle_type === "string" ? vehicle_type : "gas");
     const resolvedIsAwd = typeof is_awd === "boolean" ? is_awd : false;
 
+    // Packet A: dump-truck categories are diesel-maintenance regardless of submitted fuel.
+    // effectiveFuel is the single source of truth for ALL downstream fuel-dependent logic.
+    const DUMP_CATEGORIES = new Set(["dump_truck", "standard_dump", "roll_off", "hook_lift"]);
+    const effectiveFuel = DUMP_CATEGORIES.has(vehicleCategory) ? "diesel" : resolvedVehicleType;
+
     // Preload mode removed (closes PASS-B-004). Auth is mandatory below.
 
     // ── Category exclusion map ─────────────────────────────────────────────
@@ -184,7 +189,6 @@ Deno.serve(async (req: Request) => {
       ],
       snowmobile: [
         "Tire Rotation",
-        "Brake Fluid Flush",
         "Cabin Air Filter",
         "Wiper Blade Replacement",
         "Serpentine Belt Replacement",
@@ -356,7 +360,7 @@ Deno.serve(async (req: Request) => {
     const today = new Date();
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     const vehicleDesc = `${year} ${make} ${vehicleModel}`.trim();
-    const cacheKey = `${year}|${make}|${vehicleModel}|${vehicleCategory}|${resolvedVehicleType}|${trackingMode}`.toLowerCase().trim();
+    const cacheKey = `v2|${year}|${make}|${vehicleModel}|${vehicleCategory}|${effectiveFuel}|${trackingMode}`.toLowerCase().trim();
 
     interface ValidatedTask {
       task: string;
@@ -610,7 +614,7 @@ Deno.serve(async (req: Request) => {
     // drivetrain belts (final-drive belt on an electric motorcycle) are intentionally
     // NOT in ICE_ONLY — only engine accessory/serpentine/timing belts are.
     const ICE_ONLY: RegExp[] = [/oil.*change/i, /oil.*filter/i, /engine oil/i, /spark.*plug/i, /fuel.*filter/i, /fuel.*system/i, /fuel.*inject/i, /emission/i, /\bpcv\b/i, /catalytic/i, /muffler/i, /exhaust/i, /smog/i, /timing belt/i, /serpentine/i, /accessory belt/i];
-    const isEvFuel = resolvedVehicleType === "ev";
+    const isEvFuel = effectiveFuel === "ev";
     const isIceOnly = (name: string) => ICE_ONLY.some(re => re.test(name));
     function validateAndEnforce(tasks: ValidatedTask[], vCat: string): ValidatedTask[] {
       const clamps = getClampsForCategory(vCat);
@@ -646,7 +650,7 @@ Deno.serve(async (req: Request) => {
       if (!validatedTasks && anthropicKey) {
         const claudeModel = Deno.env.get("CLAUDE_SONNET_MODEL") ?? "claude-sonnet-4-5";
         const categoryHint = vehicleCategory !== "car" ? ` (category: ${vehicleCategory})` : "";
-        const fuelHint = resolvedVehicleType !== "gas" ? ` (fuel type: ${resolvedVehicleType})` : "";
+        const fuelHint = effectiveFuel !== "gas" ? ` (fuel type: ${effectiveFuel})` : "";
         const awdHint = resolvedIsAwd ? " (AWD/4WD)" : "";
 
         const isHoursAsset = isHoursOnlyMode;
@@ -874,11 +878,14 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               ];
 
               // Step 1: Map each task to a family
+              // EV: skip the battery family entirely so distinct traction/12V battery
+              // tasks are neither collapsed nor renamed to lead-acid canonicals.
+              const activeFamilies = isEvFuel ? families.filter(f => f.key !== "battery") : families;
               const matched = new Set<number>();
               const familyGroups = new Map<number, number[]>();
 
-              for (let fi = 0; fi < families.length; fi++) {
-                const fam = families[fi];
+              for (let fi = 0; fi < activeFamilies.length; fi++) {
+                const fam = activeFamilies[fi];
                 for (let ti = 0; ti < validatedTasks.length; ti++) {
                   if (matched.has(ti)) continue;
                   if (fam.patterns.some(p => p.test(validatedTasks![ti].task))) {
@@ -895,7 +902,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               const overrides = new Map<number, Partial<ValidatedTask>>();
 
               for (const [fi, taskIdxs] of familyGroups.entries()) {
-                const fam = families[fi];
+                const fam = activeFamilies[fi];
                 if (fam.remove) {
                   if (!fam.removeCondition || fam.removeCondition()) continue;
                 }
@@ -976,7 +983,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
                   let adjusted = 0;
                   for (const idx of sortedIdxs) {
                     if (adjusted >= idxs.length - 2) break;
-                    if (PROTECTED_NAMES.includes(validatedTasks[idx].task)) continue;
+                    if (PROTECTED_NAMES.includes(validatedTasks[idx].task) || /brake/i.test(validatedTasks[idx].task) || /timing.*belt/i.test(validatedTasks[idx].task)) continue;
                     validatedTasks[idx] = { ...validatedTasks[idx], interval_miles: Math.round(miles * 1.2) };
                     adjusted++;
                   }
@@ -1041,7 +1048,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
             }
 
             if (validatedTasks.length >= 5) {
-              await adminClient.from("ai_schedule_cache").upsert({ cache_key: cacheKey, vehicle_desc: vehicleDesc, vehicle_category: vehicleCategory, fuel_type: resolvedVehicleType, tasks_json: JSON.stringify(validatedTasks), task_count: validatedTasks.length }, { onConflict: "cache_key" });
+              await adminClient.from("ai_schedule_cache").upsert({ cache_key: cacheKey, vehicle_desc: vehicleDesc, vehicle_category: vehicleCategory, fuel_type: effectiveFuel, tasks_json: JSON.stringify(validatedTasks), task_count: validatedTasks.length }, { onConflict: "cache_key" });
             }
           }
         }
@@ -1077,7 +1084,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
                 fetch(estimateUrl, {
                   method: "POST",
                   headers: estimateHeaders,
-                  body: JSON.stringify({ year, make, model: vehicleModel, service_name: svc, vehicle_type: resolvedVehicleType }),
+                  body: JSON.stringify({ year, make, model: vehicleModel, service_name: svc, vehicle_type: effectiveFuel }),
                 }).then(r => {
                   if (r.ok) { estimatesCached++; }
                   else { console.warn(`[ESTIMATES] Failed for ${svc}: ${r.status}`); }
@@ -1118,17 +1125,14 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     // ── 5. Determine which vehicle_type values to query ────────────────────
     // Note: `maintenance_templates.vehicle_type` is used in this project for fuel-type-aware templates.
     // We add extra fuel-type template sets when a vehicle_type (category) requires them.
-    const typeSet = new Set<string>(["all", resolvedVehicleType]);
-    if (resolvedVehicleType === "hybrid") {
+    const typeSet = new Set<string>(["all", effectiveFuel]);
+    if (effectiveFuel === "hybrid") {
       // Hybrid schedules should behave like gas schedules, with a few targeted additions.
       typeSet.add("gas");
     }
-    if (vehicleCategory === "dump_truck" || vehicleCategory === "standard_dump" || vehicleCategory === "roll_off" || vehicleCategory === "hook_lift") {
-      // Dump trucks are diesel maintenance regardless of the selected fuel type.
-      typeSet.add("diesel");
-    }
     const typeArray = Array.from(typeSet);
-    if (resolvedIsAwd) typeArray.push("awd_4wd");
+    // AWD driveline templates are mechanical AWD items; EVs must not inherit them.
+    if (resolvedIsAwd && effectiveFuel !== "ev") typeArray.push("awd_4wd");
 
     // ── 6. Fetch matching templates ────────────────────────────────────────
     const { data: templates, error: templatesError } = await adminClient
@@ -1142,6 +1146,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
       return json({ error: "Failed to load maintenance templates", detail: templatesError.message }, 500);
     }
     if (!templates || templates.length === 0) {
+      console.error("[FALLBACK-EMPTY] no templates fetched", { vehicle_id, vehicleCategory, effectiveFuel, trackingMode, resolvedIsAwd, isForceRefresh });
       return json({ success: true, tasks_created: 0, vehicle_id }, 200);
     }
 
@@ -1158,27 +1163,22 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     };
 
     const dieselRules: IntervalRule[] = [
-      { miles: 10000, months: 12, match: [/oil change/i] },
-      { miles: 10000, months: 12, match: [/oil filter/i] },
-      { miles: 15000, months: 12, match: [/fuel filter/i, /water separator/i] },
-      { miles: 30000, months: 24, match: [/air filter/i] },
+      // OVERRIDE semantics: a match adjusts intervals; unmatched templates are KEPT as-is.
+      { miles: 10000, months: 12, match: [/engine oil/i] },
+      { miles: 15000, months: 12, match: [/fuel filter/i] },
       { miles: 5000, months: 6, match: [/\bdef\b/i, /diesel exhaust fluid/i] },
-      { miles: 100000, months: null, match: [/dpf/i] },
+      { miles: 100000, months: null, match: [/diesel particulate filter/i, /\bdpf\b/i] },
       { miles: 60000, months: null, match: [/glow plug/i] },
-      { miles: 60000, months: null, match: [/turbocharger/i] },
       { miles: 60000, months: 48, match: [/coolant flush/i] },
-      { miles: 30000, months: 36, match: [/transmission fluid/i] },
-      { miles: 15000, months: 12, match: [/brake.*inspection/i] },
       { miles: 10000, months: 12, match: [/tire rotation/i] },
+      { miles: 30000, months: 36, match: [/transmission fluid/i] },
     ];
 
     const evRules: IntervalRule[] = [
-      { miles: 7500, months: 6, match: [/tire rotation/i] },
+      // OVERRIDE semantics: only rules that CHANGE template values; everything else
+      // keeps template / make-override values.
       { miles: 25000, months: 24, match: [/brake fluid/i] },
       { miles: 15000, months: 12, match: [/cabin air filter/i] },
-      { miles: 50000, months: 48, match: [/battery thermal/i, /battery.*coolant/i, /coolant.*battery/i] },
-      { miles: null, months: 12, match: [/battery health check/i, /battery.*health/i] },
-      { miles: null, months: 12, match: [/wiper.*blade/i] },
     ];
 
     const dumpTruckRules: IntervalRule[] = [
@@ -1245,38 +1245,39 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     const isRollOff = vehicleCategory === "roll_off";
     const isHookLift = vehicleCategory === "hook_lift";
     const isDumpster = vehicleCategory === "dumpster";
-    const isDiesel = resolvedVehicleType === "diesel";
-    const isEv = resolvedVehicleType === "ev";
-    const isHybrid = resolvedVehicleType === "hybrid";
+    const isDiesel = effectiveFuel === "diesel";
+    const isEv = effectiveFuel === "ev";
+    const isHybrid = effectiveFuel === "hybrid";
 
+    // EXCLUSIVE mode (whitelist): only asset classes whose task set IS the rule list.
     const exclusiveRules: IntervalRule[] | null = isTrailer
       ? (isDumpTrailer ? [...trailerRules, ...dumpTrailerRules] : trailerRules)
       : isDumpster
         ? dumpsterRules
-      : isDumpTruck
-        ? [
-            ...dieselRules,
-            ...dumpTruckRules,
-            ...(isRollOff || isHookLift ? rollOffHookLiftRules : []),
-            ...(isRollOff ? rollOffOnlyRules : []),
-          ]
-        : isDiesel
-          ? dieselRules
-          : isEv
-            ? evRules
-            : null;
+        : null;
 
-    const useExclusiveRules = exclusiveRules !== null;
+    // OVERRIDE mode: rule match adjusts intervals; unmatched templates are KEPT.
+    const overrideRules: IntervalRule[] | null = isDumpTruck
+      ? [
+          ...dieselRules,
+          ...dumpTruckRules,
+          ...(isRollOff || isHookLift ? rollOffHookLiftRules : []),
+          ...(isRollOff ? rollOffOnlyRules : []),
+        ]
+      : isDiesel
+        ? dieselRules
+        : isEv
+          ? evRules
+          : null;
 
-    function findExclusiveRule(taskName: string): IntervalRule | null {
-      if (!exclusiveRules) return null;
-      for (const rule of exclusiveRules) {
+    function findRule(rules: IntervalRule[], taskName: string): IntervalRule | null {
+      for (const rule of rules) {
         if (rule.match.some(re => re.test(taskName))) return rule;
       }
       return null;
     }
 
-    const shouldDedupByTaskName = useExclusiveRules || isHybrid;
+    const shouldDedupByTaskName = exclusiveRules !== null || overrideRules !== null || isHybrid;
 
     // ── 7. Fetch all relevant overrides for this make in one query ─────────
     const templateIds = filteredTemplates.map((t: Record<string, unknown>) => t.id as string);
@@ -1301,6 +1302,28 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
         overrideMap.set(o.template_id as string, o);
       }
     }
+
+    // Two-pass: templates SURVIVING make-exclusions, known before the insertion loop,
+    // so hybrid superseded-pair suppression cannot orphan a service.
+    const survivingNames = new Set<string>();
+    for (const template of filteredTemplates) {
+      const t0 = template as Record<string, unknown>;
+      const o0 = overrideMap.get(t0.id as string);
+      if (o0 && (o0.is_excluded as boolean) === true) continue;
+      survivingNames.add(t0.task as string);
+    }
+    const HYBRID_SUPERSEDED = new Map<string, string>([
+      ["Spark Plug Replacement", "Spark Plug Replacement (Hybrid)"],
+      ["Transmission Fluid (Automatic)", "Transmission Fluid (Hybrid/CVT)"],
+    ]);
+
+    // Category safety clamps are FINAL for explicitly routed non-car categories.
+    // Never applied to the car/truck default (gas-car fallback stays byte-identical).
+    const clampFallbackCategory =
+      vehicleCategory === "motorcycle" || vehicleCategory === "atv" || vehicleCategory === "utv" ||
+      vehicleCategory === "snowmobile" || vehicleCategory === "boat" || vehicleCategory === "pwc" ||
+      SMALL_EQUIPMENT_CATS.has(vehicleCategory) || HEAVY_EQUIPMENT_CATS.has(vehicleCategory);
+    const fallbackClamps = getClampsForCategory(vehicleCategory);
 
     // ── 8 & 9. Resolve values and calculate due dates ──────────────────────
     const tasksToInsert: Record<string, unknown>[] = [];
@@ -1335,11 +1358,26 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
 
       const taskName = t.task as string;
 
-      if (useExclusiveRules) {
-        const rule = findExclusiveRule(taskName);
+      // EV: strip ICE-only tasks that would otherwise survive override mode.
+      if (isEv && (isIceOnly(taskName) || taskName === "Engine Air Filter" || taskName === "Coolant Flush")) continue;
+
+      // Hybrid: gas rows superseded by a SURVIVING hybrid variant are suppressed.
+      if (isHybrid) {
+        const replacementName = HYBRID_SUPERSEDED.get(taskName);
+        if (replacementName && survivingNames.has(replacementName)) continue;
+      }
+
+      if (exclusiveRules) {
+        const rule = findRule(exclusiveRules, taskName);
         if (!rule) continue;
         resolvedMiles = rule.miles;
         resolvedMonths = rule.months;
+      } else if (overrideRules) {
+        const rule = findRule(overrideRules, taskName);
+        if (rule) {
+          resolvedMiles = rule.miles;
+          resolvedMonths = rule.months;
+        }
       } else if (isHybrid) {
         // Hybrid: extend brake pad intervals and add battery health checks.
         if (/brake.*pad/i.test(taskName)) {
@@ -1350,6 +1388,31 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
           resolvedMonths = 12;
         }
       }
+
+      // Category clamps applied AFTER all interval resolution - clamps are final authority.
+      if (clampFallbackCategory) {
+        const clamped = clampTask(
+          {
+            task: taskName,
+            description: "",
+            category: "",
+            interval_miles: isHoursOnlyMode ? null : resolvedMiles,
+            interval_hours: null,
+            interval_months: resolvedMonths,
+            priority: "",
+          },
+          fallbackClamps,
+        );
+        resolvedMiles = clamped.interval_miles;
+        resolvedMonths = clamped.interval_months;
+      }
+
+      // Universal guard: never insert a task with no schedulable dimension.
+      // (Fallback never emits hours; hours-only mode nulls miles at insert.)
+      const finalGuardMiles = isHoursOnlyMode ? null : resolvedMiles;
+      const hasMilesDim = finalGuardMiles !== null && finalGuardMiles > 0;
+      const hasMonthsDim = resolvedMonths !== null && resolvedMonths > 0;
+      if (!hasMilesDim && !hasMonthsDim) continue;
 
       if (shouldDedupByTaskName) {
         if (insertedTaskNames.has(taskName)) continue;
@@ -1390,6 +1453,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     }
 
     if (tasksToInsert.length === 0) {
+      console.error("[FALLBACK-EMPTY] zero tasks after filtering", { vehicle_id, vehicleCategory, effectiveFuel, trackingMode, resolvedIsAwd, isForceRefresh });
       return json({ success: true, tasks_created: 0, vehicle_id }, 200);
     }
 
@@ -1413,7 +1477,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
           fetch(tplEstimateUrl, {
             method: "POST",
             headers: tplEstimateHeaders,
-            body: JSON.stringify({ year, make, model: vehicleModel, service_name: svc, vehicle_type: resolvedVehicleType }),
+            body: JSON.stringify({ year, make, model: vehicleModel, service_name: svc, vehicle_type: effectiveFuel }),
           }).then(r => {
             if (r.ok) { tplEstimatesCached++; }
             else { console.warn(`[ESTIMATES] Failed for ${svc}: ${r.status}`); }
