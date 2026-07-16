@@ -384,6 +384,12 @@ function RootLayoutNav() {
         router.push({ pathname: "/family-member/[id]", params: { id: assetId, medicationId: taskId } });
         addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
         scheduleNotifRouteVerification(source, reqId, route, `/family-member/${assetId}`, () => router.replace({ pathname: "/family-member/[id]", params: { id: assetId, medicationId: taskId } }));
+      } else if (assetKind === "health" && taskKind === "health_appointment") {
+        route = "health_tab";
+        addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route, assetId, taskId, paramKeys: "" });
+        router.push("/(tabs)/health");
+        addNotifDeepLinkBreadcrumb("router_push_returned", { source, reqId, route });
+        scheduleNotifRouteVerification(source, reqId, route, "/health", () => router.replace("/(tabs)/health"));
       } else {
         addNotifDeepLinkBreadcrumb("payload_no_matching_route", { source, reqId, assetKind, taskKind });
         return;

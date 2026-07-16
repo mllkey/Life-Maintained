@@ -16,6 +16,33 @@ function parseNotifTime(timeStr: string): { hour: number; minute: number } {
   };
 }
 
+function parseQuietHoursTime(
+  value: string | null | undefined,
+): { hour: number; minute: number; totalMinutes: number } | null {
+  const match = String(value ?? "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null;
+  }
+
+  return {
+    hour,
+    minute,
+    totalMinutes: hour * 60 + minute,
+  };
+}
+
 function parseDueDateAnchor(dueDateInput: string | null | undefined): Date | null {
   if (!dueDateInput) return null;
   const raw = String(dueDateInput).trim();
@@ -133,7 +160,7 @@ export async function upsertPushToken(userId: string): Promise<UpsertPushTokenRe
   return { ok: true, token, reason: null };
 }
 
-export type NotifAssetKind = "vehicle" | "property" | "family_member";
+export type NotifAssetKind = "vehicle" | "property" | "family_member" | "health";
 export type NotifTaskKind = "vehicle_task" | "property_task" | "health_appointment" | "medication";
 
 type Candidate = {
@@ -283,6 +310,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         { days: 7, label: "is 7 days overdue" },
       ];
 
+      let pushedAny = false;
       for (const { days, label } of OFFSETS) {
         const triggerDate = new Date(dueDate.getTime());
         triggerDate.setDate(triggerDate.getDate() + days);
@@ -312,6 +340,26 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
           taskId,
           taskKind,
         });
+        pushedAny = true;
+      }
+
+      // Guarantee: a date-overdue task whose entire offset ladder is in the
+      // past still gets one refreshed reminder per scheduling run.
+      if (!pushedAny && daysUntilDue < 0) {
+        const overdueTrigger = new Date();
+        overdueTrigger.setDate(overdueTrigger.getDate() + 1);
+        overdueTrigger.setHours(hour, minute, 0, 0);
+        if (overdueTrigger > now) {
+          candidates.push({
+            body: `\u{1F527} ${taskName} on ${assetName} is ${Math.abs(daysUntilDue)} days overdue`,
+            triggerDate: overdueTrigger,
+            priority: 0,
+            assetId,
+            assetKind,
+            taskId,
+            taskKind,
+          });
+        }
       }
     }
 
@@ -375,6 +423,8 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       // OR if the task has no date at all
       const hasDateNotif = task.next_due_date != null;
       const dateAnchor = hasDateNotif ? parseDueDateAnchor(task.next_due_date) : null;
+      const daysToDateDue = dateAnchor ? Math.floor((dateAnchor.getTime() - now.getTime()) / msPerDay) : null;
+      const dateCoverageDays = prefs.advanceDays ?? 14;
       const dateOverdue = !!dateAnchor && dateAnchor.getTime() < now.getTime();
       const usageOverdue = usageRemaining <= 0;
       const usageDueSoon = usageUnit === "hours" ? usageRemaining <= 25 : usageRemaining <= 500;
@@ -398,8 +448,9 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
           taskId: task.id,
           taskKind: "vehicle_task",
         });
-      } else if (usageDueSoon && !hasDateNotif) {
-        // Only add due-soon usage notification if there's no date-based notification for this task
+      } else if (usageDueSoon && (daysToDateDue === null || daysToDateDue >= dateCoverageDays)) {
+        // Usage due-soon fires unless the date ladder already covers this task
+        // within the user's selected advance-warning window.
         candidates.push({
           body: `\u{1F527} ${task.name} on ${assetName} is due in ${Math.round(usageRemaining).toLocaleString()} ${usageUnit}`,
           triggerDate,
@@ -447,6 +498,17 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
             appt.id,
             "health_appointment",
           );
+        } else {
+          enqueue(
+            appt.appointment_type,
+            "your health schedule",
+            appt.next_due_date,
+            false,
+            appt.id,
+            "health",
+            appt.id,
+            "health_appointment",
+          );
         }
       }
     } catch (e) {
@@ -460,20 +522,28 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     );
 
     // ── Quiet hours filter ──────────────────────────────────────────────
-    const qStart = prefs.quietHoursStart ?? "22:00";
-    const qEnd = prefs.quietHoursEnd ?? "08:00";
-    const [qsH, qsM] = qStart.split(":").map(Number);
-    const [qeH, qeM] = qEnd.split(":").map(Number);
-    const qsMin = qsH * 60 + (qsM || 0);
-    const qeMin = qeH * 60 + (qeM || 0);
+    // Rules: a shifted notification is never EARLIER than its original
+    // trigger; the end boundary is exclusive; start === end disables quiet
+    // hours; malformed or out-of-range values disable shifting explicitly.
+    const quietStart = parseQuietHoursTime(prefs.quietHoursStart ?? "22:00");
+    const quietEnd = parseQuietHoursTime(prefs.quietHoursEnd ?? "08:00");
+    const quietDisabled =
+      quietStart === null ||
+      quietEnd === null ||
+      quietStart.totalMinutes === quietEnd.totalMinutes;
 
     for (const c of candidates) {
+      if (quietDisabled) break;
       const trigMin = c.triggerDate.getHours() * 60 + c.triggerDate.getMinutes();
-      const inQuiet = qsMin < qeMin
-        ? (trigMin >= qsMin && trigMin < qeMin)   // e.g., 01:00–06:00
-        : (trigMin >= qsMin || trigMin < qeMin);   // e.g., 22:00–08:00 (wraps midnight)
+      const inQuiet = quietStart.totalMinutes < quietEnd.totalMinutes
+        ? (trigMin >= quietStart.totalMinutes && trigMin < quietEnd.totalMinutes)
+        : (trigMin >= quietStart.totalMinutes || trigMin < quietEnd.totalMinutes);
       if (inQuiet) {
-        c.triggerDate.setHours(qeH, qeM || 0, 0, 0);
+        const original = c.triggerDate.getTime();
+        c.triggerDate.setHours(quietEnd.hour, quietEnd.minute, 0, 0);
+        if (c.triggerDate.getTime() < original) {
+          c.triggerDate.setDate(c.triggerDate.getDate() + 1);
+        }
         if (c.triggerDate <= now) {
           c.triggerDate.setDate(c.triggerDate.getDate() + 1);
         }
@@ -534,17 +604,11 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         continue;
       }
 
-      // Quiet hours filter for medications.
-      let medHour = parsed.hour;
-      let medMinute = parsed.minute;
-      const medTrigMin = medHour * 60 + medMinute;
-      const inQuiet = qsMin < qeMin
-        ? (medTrigMin >= qsMin && medTrigMin < qeMin)
-        : (medTrigMin >= qsMin || medTrigMin < qeMin);
-      if (inQuiet) {
-        medHour = qeH;
-        medMinute = qeM || 0;
-      }
+      // Medications schedule at exactly the user's chosen dose time. Quiet
+      // hours never shift a dose reminder - the user picked this time
+      // deliberately and missing a dose has real health consequences.
+      const medHour = parsed.hour;
+      const medMinute = parsed.minute;
 
       const memberName = (med as any).family_members?.name;
       const subjectPrefix = memberName ? `${memberName}: ` : "";

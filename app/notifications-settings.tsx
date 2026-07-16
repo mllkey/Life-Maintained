@@ -249,7 +249,7 @@ export default function NotificationsSettingsScreen() {
       >
         <Tooltip
           id={TOOLTIP_IDS.NOTIF_SETTINGS_TIP}
-          message="Choose how far in advance you want reminders. Set quiet hours so you're never woken up."
+          message="Choose how far in advance you want maintenance reminders. Quiet hours delay maintenance reminders; medication reminders stay at the time you set."
           icon="notifications-outline"
         />
 
@@ -281,7 +281,7 @@ export default function NotificationsSettingsScreen() {
         </Section>
 
         <Section title="Quiet Hours">
-          <Text style={styles.sectionHint}>No notifications will be sent during this period</Text>
+          <Text style={styles.sectionHint}>Maintenance reminders wait until quiet hours end. Medication reminders stay at the time you set.</Text>
           <View style={styles.quietRow}>
             <View style={styles.quietField}>
               <Text style={styles.quietLabel}>Start</Text>
