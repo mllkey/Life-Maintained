@@ -21,6 +21,11 @@ const PET_SENIOR_SCREENINGS = /senior|geriatric|elderly|\baging\b|semi[-\s]?annu
 
 const WELLNESS_VISIT = /^(?:annual\s+|semi[-\s]?annual\s+)?(?:vet visit|wellness exam|wellness checkup|wellness visit|veterinary exam)$/i;
 const VACCINATION_TASK = /vaccin/i;
+// Matches generic vaccine rows plus exact Vaccine Series variants, so an
+// adult/senior AI mistake cannot survive at a puppy/kitten cadence. Never
+// matches disease-qualified vaccines like "Rabies Vaccination" or
+// "Bordetella Vaccine", which keep their own cadence.
+const GENERIC_VACCINATION_TASK = /^\s*(?:annual\s+|yearly\s+|core\s+)*(?:vaccin(?:e|es|ation|ations)(?:\s+(?:boosters?|shots?))?|vaccin(?:e|ation)\s+series)\s*$/i;
 const BLOODWORK_TASK = /bloodwork|blood work|blood panel/i;
 
 type PetBracket = "puppy" | "kitten" | "adult" | "senior" | "unknown";
@@ -157,7 +162,7 @@ function clampInterval(appointmentType: string, intervalMonths: number, memberTy
     if (appointmentType === "Eye Exam") return Math.max(12, Math.min(24, mo));
     if (appointmentType === "Colonoscopy") return Math.max(12, Math.min(120, mo));
     if (appointmentType === "Mammogram") return Math.max(12, Math.min(24, mo));
-    return Math.max(3, Math.min(120, mo));
+    return Math.max(1, Math.min(120, mo));
   }
   if (appointmentType === "Annual Vet Visit") return Math.max(6, Math.min(12, mo));
   if (appointmentType === "Semi-Annual Vet Visit") return 6;
@@ -230,10 +235,14 @@ function injectRequired(tasks: HealthTask[], memberType: string, petType: string
     replaceMatchingWithCanonical(result, WELLNESS_VISIT, requiredWellnessTask(bracket));
 
     if (pt === "dog" || pt === "cat") {
-      // Canonicalize vaccines by bracket. Puppy/kitten schedules must use
-      // first-year Vaccine Series cadence; adult/senior schedules use the
-      // standard Vaccinations row.
-      replaceMatchingWithCanonical(result, VACCINATION_TASK, requiredVaccinationTask(bracket));
+      // Canonicalize vaccines by bracket. Puppy/kitten schedules collapse ALL
+      // vaccine rows into the first-year Vaccine Series (the series IS the
+      // core vaccines). Adult/senior schedules collapse only GENERIC vaccine
+      // rows into the standard Vaccinations row; named-disease vaccines the
+      // AI emits (Rabies, Bordetella, Leptospirosis, ...) survive as distinct
+      // appointments with their own cadence.
+      const vaccineMatcher = (bracket === "puppy" || bracket === "kitten") ? VACCINATION_TASK : GENERIC_VACCINATION_TASK;
+      replaceMatchingWithCanonical(result, vaccineMatcher, requiredVaccinationTask(bracket));
 
       if (bracket === "senior") {
         replaceMatchingWithCanonical(result, BLOODWORK_TASK, { appointment_type: "Senior Bloodwork", interval_months: 6, priority: "high" });
