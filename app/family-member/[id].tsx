@@ -119,6 +119,7 @@ export default function FamilyMemberDetailScreen() {
         .from("health_appointments")
         .select("*")
         .eq("family_member_id", id!)
+        .is("retired_at", null)
         .order("next_due_date", { ascending: true });
       if (error) throw error;
       return data ?? [];

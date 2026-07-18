@@ -241,7 +241,7 @@ export default function DashboardScreen() {
       const [veh, prop, health] = await Promise.all([
         supabase.from("vehicles").select("id", { count: "exact", head: true }).eq("user_id", user.id),
         supabase.from("properties").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-        supabase.from("health_appointments").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+        supabase.from("health_appointments").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("retired_at", null),
       ]);
       if (veh.error) throw veh.error;
       if (prop.error) throw prop.error;
@@ -273,7 +273,7 @@ export default function DashboardScreen() {
       const [vehicleTasks, propertyTasks, healthAppts] = await Promise.all([
         supabase.from("user_vehicle_maintenance_tasks").select("*, vehicles(make, model, nickname, mileage, hours, tracking_mode, vehicle_type)").eq("user_id", user.id),
         supabase.from("property_maintenance_tasks").select("*, properties!inner(address, nickname)").eq("properties.user_id", user.id),
-        supabase.from("health_appointments").select("*").eq("user_id", user.id),
+        supabase.from("health_appointments").select("*").eq("user_id", user.id).is("retired_at", null),
       ]);
       if (vehicleTasks.error) throw vehicleTasks.error;
       if (propertyTasks.error) throw propertyTasks.error;
@@ -325,7 +325,7 @@ export default function DashboardScreen() {
       const [vehicleTasks, propertyTasks, healthAppts] = await Promise.all([
         supabase.from("user_vehicle_maintenance_tasks").select("*, vehicles(make, model, nickname, mileage, hours, tracking_mode, vehicle_type, average_miles_per_month, last_mileage_update, last_hours_update)").eq("user_id", user.id),
         supabase.from("property_maintenance_tasks").select("*, properties!inner(address, nickname)").eq("properties.user_id", user.id),
-        supabase.from("health_appointments").select("*").eq("user_id", user.id),
+        supabase.from("health_appointments").select("*").eq("user_id", user.id).is("retired_at", null),
       ]);
       if (vehicleTasks.error) throw vehicleTasks.error;
       if (propertyTasks.error) throw propertyTasks.error;
@@ -436,7 +436,7 @@ export default function DashboardScreen() {
       const [veh, prop, health] = await Promise.all([
         supabase.from("user_vehicle_maintenance_tasks").select("vehicles!inner(user_id)", { count: "exact", head: true }).eq("vehicles.user_id", user.id),
         supabase.from("property_maintenance_tasks").select("properties!inner(user_id)", { count: "exact", head: true }).eq("properties.user_id", user.id),
-        supabase.from("health_appointments").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+        supabase.from("health_appointments").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("retired_at", null),
       ]);
       if (veh.error) throw veh.error;
       if (prop.error) throw prop.error;

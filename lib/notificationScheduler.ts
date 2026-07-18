@@ -173,8 +173,8 @@ type Candidate = {
   taskKind: NotifTaskKind;
 };
 
-export async function scheduleMaintenanceNotifications(userId: string): Promise<void> {
-  if (Platform.OS === "web") return;
+export async function scheduleMaintenanceNotifications(userId: string): Promise<boolean> {
+  if (Platform.OS === "web") return false;
 
   try {
     const warmupStart = Date.now();
@@ -190,11 +190,11 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     }
     if (!warmedUp) {
       console.warn("[NotifScheduler] aborting scheduling run: native module warmup failed after 2s");
-      return;
+      return false;
     }
 
     const { status } = await Notifications.getPermissionsAsync();
-    if (status !== "granted") return;
+    if (status !== "granted") return false;
 
     // Register/refresh the push token whenever OS permission is granted,
     // regardless of the in-app pushEnabled toggle.
@@ -211,7 +211,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       }
       await Notifications.cancelAllScheduledNotificationsAsync();
       await Notifications.setBadgeCountAsync(0);
-      return;
+      return false;
     }
 
     const [vehiclesRes, propertiesRes, medicationsRes] = await Promise.all([
@@ -479,6 +479,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         .from("health_appointments")
         .select("id, appointment_type, next_due_date, family_member_id, family_members(name)")
         .eq("user_id", userId)
+        .is("retired_at", null)
         .not("next_due_date", "is", null);
 
       healthApptsData = healthAppts ?? [];
@@ -809,8 +810,10 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     }).length;
 
     await Notifications.setBadgeCountAsync(overdueVehicle + overdueProperty + overdueHealth);
+    return true;
 
   } catch (err) {
     console.error("Notification scheduling failed:", err);
+    return false;
   }
 }

@@ -256,12 +256,14 @@ export default function PlanRevealScreen() {
           .from("health_appointments")
           .select("appointment_type, next_due_date, estimated_cost, interval_months")
           .eq("family_member_id", assetId)
+          .is("retired_at", null)
           .order("next_due_date", { ascending: true, nullsFirst: false })
           .limit(5),
         supabase
           .from("health_appointments")
           .select("id", { count: "exact", head: true })
-          .eq("family_member_id", assetId),
+          .eq("family_member_id", assetId)
+          .is("retired_at", null),
       ]);
       const items = (rowsRes.data ?? [])
         .filter((r) => typeof r.appointment_type === "string" && r.appointment_type.length > 0)

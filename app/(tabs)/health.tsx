@@ -101,6 +101,7 @@ export default function HealthScreen() {
         .from("health_appointments")
         .select("*, family_members(name, relationship, member_type)")
         .eq("user_id", user.id)
+        .is("retired_at", null)
         .order("next_due_date", { ascending: true });
       if (error) throw error;
       return data ?? [];

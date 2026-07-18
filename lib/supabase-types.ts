@@ -164,6 +164,7 @@ export type Database = {
           pet_type: string | null
           photo_url: string | null
           relationship: string | null
+          schedule_age_key: string | null
           sex_at_birth: string | null
           updated_at: string
           user_id: string
@@ -179,6 +180,7 @@ export type Database = {
           pet_type?: string | null
           photo_url?: string | null
           relationship?: string | null
+          schedule_age_key?: string | null
           sex_at_birth?: string | null
           updated_at?: string
           user_id: string
@@ -194,6 +196,7 @@ export type Database = {
           pet_type?: string | null
           photo_url?: string | null
           relationship?: string | null
+          schedule_age_key?: string | null
           sex_at_birth?: string | null
           updated_at?: string
           user_id?: string
@@ -275,6 +278,7 @@ export type Database = {
           next_due_date: string | null
           notes: string | null
           provider_name: string | null
+          retired_at: string | null
           updated_at: string
           user_id: string
         }
@@ -292,6 +296,7 @@ export type Database = {
           next_due_date?: string | null
           notes?: string | null
           provider_name?: string | null
+          retired_at?: string | null
           updated_at?: string
           user_id: string
         }
@@ -309,6 +314,7 @@ export type Database = {
           next_due_date?: string | null
           notes?: string | null
           provider_name?: string | null
+          retired_at?: string | null
           updated_at?: string
           user_id?: string
         }

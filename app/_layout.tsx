@@ -30,6 +30,48 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import { Colors } from "@/constants/colors";
 import NotifPermissionBanner from "@/components/NotifPermissionBanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
+import { checkAgingTransitions } from "@/lib/agingTransitions";
+
+// Covers the entire sweep -> central rebuild -> crossing-banner pipeline.
+// Cold-start and foreground triggers share one run, so a later cancel-all
+// cannot erase a banner scheduled by an overlapping earlier run.
+let agingAwareSchedulingInFlight: Promise<void> | null = null;
+
+function runAgingAwareScheduling(userId: string): Promise<void> {
+  if (agingAwareSchedulingInFlight) return agingAwareSchedulingInFlight;
+
+  const run = (async () => {
+    let sweep: Awaited<ReturnType<typeof checkAgingTransitions>> | null = null;
+    try {
+      sweep = await checkAgingTransitions(userId, queryClient);
+    } catch {}
+
+    let schedulerReady = false;
+    try {
+      schedulerReady = await scheduleMaintenanceNotifications(userId);
+    } catch {}
+
+    // False means web, permission denied, native warmup failure, the user's
+    // push toggle is off, or the central rebuild failed. Never bypass those
+    // states by independently scheduling an aging banner.
+    if (!schedulerReady || !sweep) return;
+
+    for (const b of sweep.banners) {
+      try {
+        await Notifications.scheduleNotificationAsync({
+          content: { title: b.title, body: b.body, sound: "default" },
+          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 2, repeats: false },
+        });
+      } catch {}
+    }
+  })();
+
+  agingAwareSchedulingInFlight = run;
+  run.finally(() => {
+    if (agingAwareSchedulingInFlight === run) agingAwareSchedulingInFlight = null;
+  }).catch(() => {});
+  return run;
+}
 import { BudgetAlertProvider } from "@/context/BudgetAlertContext";
 import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
@@ -94,7 +136,7 @@ function RootLayoutNav() {
     Notifications.setBadgeCountAsync(0).catch(() => {});
     capture("app_opened", {});
     const initialScheduleTimer = setTimeout(() => {
-      scheduleMaintenanceNotifications(userId);
+      runAgingAwareScheduling(userId).catch(() => {});
     }, 800);
 
     const sub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
@@ -102,7 +144,7 @@ function RootLayoutNav() {
       appStateRef.current = nextState;
       if (nextState === "active" && prev !== "active") {
         Notifications.setBadgeCountAsync(0).catch(() => {});
-        scheduleMaintenanceNotifications(userId);
+        runAgingAwareScheduling(userId).catch(() => {});
         capture("app_foregrounded", {});
         // Debounced last_active_at upsert. Non-blocking; rolls back the
         // ref on error so the next foreground can retry.
