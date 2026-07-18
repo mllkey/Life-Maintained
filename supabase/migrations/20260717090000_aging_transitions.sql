@@ -1,8 +1,12 @@
 -- Aging transitions, part 1 of 3 (inert until the edge function and client ship).
 --
 -- schedule_age_key: the age band the member's schedule was last generated for.
---   Persons: u18 | 18-39 | 40-49 | 50-64 | 65plus | unknown
---   Pets:    puppy | kitten | adult | senior | unknown
+--   Persons: u18 | 18-39 | 40-44 | 45-49 | 50-64 | 65-74 | 75plus | unknown
+--            (bands per USPSTF/ACIP 2021-2026: colorectal at 45, pneumococcal/
+--            shingles at 50, DEXA/RSV-era 65-74, screening stop-ages at 75)
+--   Pets:    puppy | kitten | adult | mature | senior | unknown
+--            (feline mature 7-10 per AAHA/AAFP 2021; canine senior is
+--            size-banded per AAHA 2019, resolved by the generator)
 --   Written ONLY by generate-health-schedule after a successful run. NULL means
 --   the member predates this feature (first check regenerates quietly).
 --
@@ -33,8 +37,8 @@ ALTER TABLE public.family_members
 ALTER TABLE public.family_members
   ADD CONSTRAINT family_members_schedule_age_key_check CHECK (
     schedule_age_key IS NULL OR schedule_age_key IN (
-      'u18', '18-39', '40-49', '50-64', '65plus',
-      'puppy', 'kitten', 'adult', 'senior', 'unknown'
+      'u18', '18-39', '40-44', '45-49', '50-64', '65-74', '75plus',
+      'puppy', 'kitten', 'adult', 'mature', 'senior', 'unknown'
     )
   );
 
