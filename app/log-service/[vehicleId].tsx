@@ -301,6 +301,24 @@ export default function LogServiceScreen() {
     setEditingField({ index: newIndex, field: "name" });
   }
 
+  function startMultiService() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const parsed = cost.trim() ? parseFloat(cost.replace(/,/g, "")) : NaN;
+    const seed: ScannedItem = {
+      name: task.trim(),
+      cost: Number.isFinite(parsed) ? parsed : null,
+      details: notes.trim() || null,
+    };
+    const hasSeed = seed.name.length > 0 || seed.cost != null || (seed.details?.length ?? 0) > 0;
+    if (hasSeed) {
+      setScannedItems([seed, { name: "", cost: null, details: null }]);
+      setEditingField({ index: 1, field: "name" });
+    } else {
+      setScannedItems([{ name: "", cost: null, details: null }]);
+      setEditingField({ index: 0, field: "name" });
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
 
   async function handleSave() {
@@ -332,8 +350,8 @@ export default function LogServiceScreen() {
       }
       const logMeter = milesVal ?? hoursVal ?? null;
 
+      const validItems = scannedItems.filter(item => item.name.trim().length > 0);
       if (scannedItems.length > 0) {
-        const validItems = scannedItems.filter(item => item.name.trim().length > 0);
         if (validItems.length === 0) {
           setError("Please add a name for at least one service");
           setIsLoading(false);
@@ -393,7 +411,7 @@ export default function LogServiceScreen() {
 
       // 3. Auto-match and update maintenance tasks
       const serviceNames = scannedItems.length > 0
-        ? scannedItems.map(i => i.name).filter(Boolean)
+        ? validItems.map(i => i.name.trim())
         : [task.trim()].filter(Boolean);
       const updatedTasks: MatchResult[] = [];
       for (const name of serviceNames) {
@@ -414,7 +432,7 @@ export default function LogServiceScreen() {
         scheduleMaintenanceNotifications(user.id);
       }
 
-      const firstServiceName = (scannedItems.length > 0 ? scannedItems[0]?.name?.trim() : "") || task.trim();
+      const firstServiceName = (scannedItems.length > 0 ? validItems[0]?.name?.trim() : "") || task.trim();
       const firstMatch = updatedTasks[0] ?? null;
       const nextDueMiles = firstMatch?.nextDueMiles ?? null;
       const nextDueHours = firstMatch?.nextDueHours ?? null;
@@ -557,7 +575,7 @@ export default function LogServiceScreen() {
 
           {scannedItems.length > 0 && (
             <View style={styles.fieldGroup}>
-              <Text style={styles.groupLabel}>Services Found ({scannedItems.length})</Text>
+              <Text style={styles.groupLabel}>Services ({scannedItems.length})</Text>
 
               {scannedItems.map((item, index) => (
                 <View key={index} style={styles.itemRow}>
@@ -653,6 +671,13 @@ export default function LogServiceScreen() {
                 placeholderTextColor={Colors.textTertiary}
                 returnKeyType="done"
               />
+              <Pressable
+                style={({ pressed }) => [styles.addItemBtn, { opacity: pressed ? 0.7 : 1 }]}
+                onPress={startMultiService}
+              >
+                <Ionicons name="add-circle-outline" size={16} color={Colors.accent} />
+                <Text style={styles.addItemText}>Add another service</Text>
+              </Pressable>
             </View>
           )}
 
