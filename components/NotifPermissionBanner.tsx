@@ -243,7 +243,7 @@ export default function NotifPermissionBanner({ userId, onDismiss }: Props) {
             <Text style={styles.title}>Never miss what matters</Text>
             <Text style={styles.body}>
               {undetermined
-                ? "Oil changes, HVAC filters, vet visits, medication refills - LifeMaintained tracks every deadline and reminds you at the right moment."
+                ? "LifeMaintained tracks deadlines and reminds you at the right moment."
                 : "Notifications are off for LifeMaintained. Turn them on in Settings so reminders can reach you when something is due."}
             </Text>
 
