@@ -18,6 +18,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
 import DeveloperTestNotifications from "@/components/DeveloperTestNotifications";
+import DeveloperTestUndoToast from "@/components/DeveloperTestUndoToast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -909,6 +910,7 @@ export default function SettingsScreen() {
 
         </View>
                 {__DEV__ && <DeveloperTestNotifications />}
+                {__DEV__ && <DeveloperTestUndoToast />}
         </ScrollView>
 
       {hasChanges && (
