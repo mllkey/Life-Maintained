@@ -29,6 +29,7 @@ import { supabase } from "@/lib/supabase";
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
 import { Colors } from "@/constants/colors";
 import NotifPermissionBanner from "@/components/NotifPermissionBanner";
+import { UndoToastHost } from "@/components/UndoToast";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { checkAgingTransitions } from "@/lib/agingTransitions";
 
@@ -627,6 +628,7 @@ function RootLayoutNav() {
           <Stack.Screen name="reset-password" options={{ headerShown: false, presentation: "fullScreenModal", gestureEnabled: false }} />
         </Stack>
         {showBanner && <NotifPermissionBanner userId={session?.user?.id} />}
+        <UndoToastHost />
       </View>
     </BudgetAlertProvider>
   );
