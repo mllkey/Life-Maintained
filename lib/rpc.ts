@@ -8,6 +8,7 @@
  *   - supabase/migrations/20260417000000_complete_vehicle_task_v4.sql
  *   - supabase/migrations/20260411000000_complete_property_task.sql
  *   - supabase/migrations/20260422034337_revoke_public_exec_and_gate_receipt_scan_rpcs.sql
+ *   - supabase/migrations/20260723090000_completion_events_atomic_undo.sql
  *
  * Args types are sourced from the generated Database type so that any
  * future migration that changes a function's parameter list is caught at
@@ -171,4 +172,67 @@ export async function reverseVehicleTaskCompletion(args: ReverseVehicleTaskCompl
 }> {
   const { data, error } = await supabase.rpc("reverse_vehicle_task_completion", args);
   return { data: (data as ReverseVehicleTaskCompletionResult | null), error };
+}
+
+export type TaskCompletionSnapshot = {
+  last_completed_date: string | null;
+  last_completed_miles: number | null;
+  last_completed_hours: number | null;
+  next_due_miles: number | null;
+  next_due_hours: number | null;
+  next_due_date: string | null;
+  status: string;
+  updated_at: string | null;
+};
+
+export type CompleteVehicleTaskIdempotentArgs = {
+  p_task_id: string;
+  p_operation_id: string;
+  /**
+   * REQUIRED on the idempotent path. The SQL default is now(); an omitted
+   * date would differ between retries and surface as idempotency_mismatch.
+   * The type makes the mistake impossible at compile time.
+   */
+  p_completed_date: string;
+  p_mileage?: number;
+  p_hours?: number;
+  p_notes?: string;
+  p_cost?: number;
+  p_skip_log?: boolean;
+  p_provider_name?: string;
+  p_did_it_myself?: boolean;
+};
+
+export type CompleteVehicleTaskIdempotentResult =
+  | { error: "idempotency_mismatch"; task_id: string; completion_event_id: string }
+  | { error: "explicit_date_required" }
+  | {
+      task_id: string;
+      completion_event_id: string;
+      replayed: boolean;
+      /** "undone" on replay means the operation is consumed but the task is NOT completed. */
+      event_status: "applied" | "undone";
+      prior: TaskCompletionSnapshot;
+      applied: TaskCompletionSnapshot;
+    };
+
+export async function completeVehicleTaskIdempotent(args: CompleteVehicleTaskIdempotentArgs): Promise<{
+  data: CompleteVehicleTaskIdempotentResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("complete_vehicle_task", args);
+  return { data: (data as CompleteVehicleTaskIdempotentResult | null), error };
+}
+
+export type UndoVehicleCompletionsResult =
+  | { ok: true; replayed: boolean; restored_task_ids: string[]; already_undone_task_ids: string[] }
+  | { ok: false; error: "invalid_input" | "not_found" }
+  | { ok: false; error: "conflict"; conflict_task_id: string };
+
+export async function undoVehicleCompletions(eventIds: string[]): Promise<{
+  data: UndoVehicleCompletionsResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("undo_vehicle_completions", { p_event_ids: eventIds });
+  return { data: (data as UndoVehicleCompletionsResult | null), error };
 }

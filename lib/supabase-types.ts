@@ -1755,6 +1755,59 @@ export type Database = {
         }
         Relationships: []
       }
+      task_completion_events: {
+        Row: {
+          applied: Json
+          applied_version: number
+          created_at: string
+          id: string
+          operation_id: string
+          prior: Json
+          prior_version: number
+          request_hash: string
+          status: string
+          task_id: string
+          undone_at: string | null
+          user_id: string
+        }
+        Insert: {
+          applied: Json
+          applied_version: number
+          created_at?: string
+          id?: string
+          operation_id: string
+          prior: Json
+          prior_version: number
+          request_hash: string
+          status?: string
+          task_id: string
+          undone_at?: string | null
+          user_id: string
+        }
+        Update: {
+          applied?: Json
+          applied_version?: number
+          created_at?: string
+          id?: string
+          operation_id?: string
+          prior?: Json
+          prior_version?: number
+          request_hash?: string
+          status?: string
+          task_id?: string
+          undone_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_completion_events_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "user_vehicle_maintenance_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_vehicle_maintenance_tasks: {
         Row: {
           category: string
@@ -1773,6 +1826,7 @@ export type Database = {
           next_due_hours: number | null
           next_due_miles: number | null
           priority: string
+          row_version: number
           source: string
           status: string
           template_id: string | null
@@ -1797,6 +1851,7 @@ export type Database = {
           next_due_hours?: number | null
           next_due_miles?: number | null
           priority?: string
+          row_version?: number
           source?: string
           status?: string
           template_id?: string | null
@@ -1821,6 +1876,7 @@ export type Database = {
           next_due_hours?: number | null
           next_due_miles?: number | null
           priority?: string
+          row_version?: number
           source?: string
           status?: string
           template_id?: string | null
@@ -2242,6 +2298,7 @@ export type Database = {
           p_hours?: number
           p_mileage?: number
           p_notes?: string
+          p_operation_id?: string
           p_provider_name?: string
           p_skip_log?: boolean
           p_task_id: string
@@ -2321,6 +2378,10 @@ export type Database = {
       timeout_stale_scans: { Args: never; Returns: number }
       undo_last_medication_dose: {
         Args: { p_medication_id: string; p_today?: string }
+        Returns: Json
+      }
+      undo_vehicle_completions: {
+        Args: { p_event_ids: string[] }
         Returns: Json
       }
     }
