@@ -43,6 +43,10 @@ export function UndoToastHost() {
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const phaseRef = useRef<Phase>("hidden");
+  const queueRef = useRef<UndoToastRequest[]>([]);
+  // Latest-ref indirection: runExit is declared before present and must not
+  // close over it directly (callback cycle); the effect below keeps it fresh.
+  const presentRef = useRef<(next: UndoToastRequest) => void>(() => {});
 
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(64);
@@ -62,6 +66,8 @@ export function UndoToastHost() {
       setPhase("hidden");
       setReq(null);
       setResultMessage("");
+      const next = queueRef.current.shift();
+      if (next) presentRef.current(next);
     }, EXIT_MS);
   }, [opacity, translateY]);
 
@@ -81,14 +87,23 @@ export function UndoToastHost() {
   }, [clearTimers, opacity, translateY, runExit]);
 
   useEffect(() => {
+    presentRef.current = present;
+  }, [present]);
+
+  useEffect(() => {
     emitter = (next) => {
-      if (next) { present(next); return; }
+      if (next) {
+        if (phaseRef.current === "hidden" && queueRef.current.length === 0) { present(next); } else { queueRef.current.push(next); }
+        return;
+      }
+      queueRef.current = [];
       // Only tear down when not already exiting. Clearing timers while phaseRef is
       // already "hidden" would kill the pending exitTimer and strand the mounted view.
       if (phaseRef.current !== "hidden") { clearTimers(); runExit(); }
     };
     return () => {
       emitter = null;
+      queueRef.current = [];
       clearTimers();
       // An onUndo still in flight must fail its post-await guard rather than write
       // state or arm timers on an unmounted host.
