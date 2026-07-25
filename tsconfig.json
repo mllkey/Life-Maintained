@@ -12,7 +12,11 @@
   "exclude": [
     "scripts/serviceMatcher.v17.ts",
     "scripts/battery.v17.ts",
-    "scripts/sweep.v17.ts"
+    "scripts/sweep.v17.ts",
+    "scripts/saveflow.battery.ts",
+    "scripts/operationId.ts",
+    "scripts/saveOutcome.ts",
+    "scripts/pendingSave.ts"
   ],
   "include": [
     "**/*.ts",
