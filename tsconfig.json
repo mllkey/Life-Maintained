@@ -9,6 +9,11 @@
       ]
     }
   },
+  "exclude": [
+    "scripts/serviceMatcher.v17.ts",
+    "scripts/battery.v17.ts",
+    "scripts/sweep.v17.ts"
+  ],
   "include": [
     "**/*.ts",
     "**/*.tsx",
