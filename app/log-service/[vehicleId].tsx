@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
-  Alert,
   Modal,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -20,7 +19,7 @@ import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import ReceiptScanButton from "@/components/ReceiptScanButton";
 import Paywall from "@/components/Paywall";
 import ScanPackModal, { type ScanPackModalHandle } from "@/components/ScanPackModal";
@@ -30,10 +29,24 @@ import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import DatePicker from "@/components/DatePicker";
 import { parseISO, format } from "date-fns";
 import { SaveToast } from "@/components/SaveToast";
-import { matchAndUpdateVehicleTask, CATEGORY_GROUPS, type MatchResult } from "@/lib/maintenanceMatcher";
+import { CATEGORY_GROUPS } from "@/lib/maintenanceMatcher";
 import { resolveTrackingMode, isHoursTracked, isMileageTracked } from "@/lib/usageHelpers";
 import { updateVehicleUsage } from "@/lib/vehicleUsageHelper";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
+import * as Sentry from "@sentry/react-native";
+import { matchServiceToTask, type MatchCandidate } from "@/lib/serviceMatcher";
+import {
+  completeVehicleTaskIdempotent,
+  undoVehicleCompletions,
+  type CompleteVehicleTaskIdempotentArgs,
+  type TaskCompletionSnapshot,
+} from "@/lib/rpc";
+import { newOperationId } from "@/lib/operationId";
+import { resumeMode, resumePrompt, type PendingSaveItem, type PendingSaveRecord } from "@/lib/pendingSave";
+import { writePendingSave, readPendingSave, clearPendingSave } from "@/lib/pendingSaveStore";
+import { planToast, type CompletionOutcome } from "@/lib/saveOutcome";
+import { showUndoToast } from "@/components/UndoToast";
+import TaskMatchPicker, { type TaskMatchPickerHandle } from "@/components/TaskMatchPicker";
 
 type PricingInsight = {
   cost: number | null;
@@ -43,6 +56,55 @@ type PricingInsight = {
 };
 
 type ScannedItem = { name: string; cost: number | null; details: string | null };
+
+/**
+ * Save-flow phases.
+ *
+ *   checking - the durable recovery record is being read. The form paints
+ *              LOCKED, so a resume can never race a fresh edit.
+ *   editing  - the only actionable phase.
+ *   asking   - an out-of-window recovery record needs a decision.
+ *   saving   - from the save tap through the toast. This screen is registered
+ *              presentation "fullScreenModal" with headerShown false, so the
+ *              close control is the only dismissal affordance and it is
+ *              disabled here. Once the log insert resolves the phase is
+ *              terminal: the screen never returns to "editing".
+ */
+type SavePhase = "checking" | "editing" | "asking" | "saving";
+
+type PickerAnswer =
+  | { kind: "select"; taskId: string; taskName: string }
+  | { kind: "skip" };
+
+type TaskChip = { id: string; name: string };
+
+/** Chips are ordered by due date, so the soonest are the ones worth surfacing. */
+const MAX_TASK_CHIPS = 10;
+/** Sequential confirmations per save. Past this, REVIEW entries are disclosed as a count. */
+const MAX_PICKERS_PER_SAVE = 2;
+/** One automatic same-id retry. The id is stable, so a replay is idempotent server-side. */
+const AUTO_RETRY_DELAY_MS = 400;
+/** The undo toast is root-hosted and survives navigation, so the screen can leave promptly. */
+const BACK_NAV_UNDO_MS = 1200;
+/** A screen-local toast dies with the screen; a disclosed loss must stay readable. */
+const BACK_NAV_SAVE_MS = 2400;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function formatNextDue(applied: TaskCompletionSnapshot): string | null {
+  if (applied.next_due_miles != null) {
+    return `Next due at ${Number(applied.next_due_miles).toLocaleString()} mi`;
+  }
+  if (applied.next_due_hours != null) {
+    return `Next due at ${Number(applied.next_due_hours).toLocaleString()} hrs`;
+  }
+  if (applied.next_due_date) {
+    return `Next due ${new Date(applied.next_due_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  }
+  return null;
+}
 
 export default function LogServiceScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
@@ -62,7 +124,6 @@ export default function LogServiceScreen() {
   const [notes, setNotes] = useState("");
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
   const [editingField, setEditingField] = useState<{ index: number; field: "name" | "cost" } | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [ocrApplied, setOcrApplied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [receiptLocalUri, setReceiptLocalUri] = useState<string | null>(null);
@@ -80,11 +141,64 @@ export default function LogServiceScreen() {
   const [scanPackOpenErrorVisible, setScanPackOpenErrorVisible] = useState(false);
   const [mismatchInfo, setMismatchInfo] = useState<{ description: string; scan: ReceiptScanResult } | null>(null);
   const [pendingMileageChip, setPendingMileageChip] = useState<number | null>(null);
+  const [phase, setPhase] = useState<SavePhase>("checking");
+  const [resumeAsk, setResumeAsk] = useState<{ rec: PendingSaveRecord; title: string; detail: string } | null>(null);
+  const [directTask, setDirectTask] = useState<TaskChip | null>(null);
+  const [pickerService, setPickerService] = useState("");
+  const [pickerCandidates, setPickerCandidates] = useState<MatchCandidate[]>([]);
+  const [pickerBusy, setPickerBusy] = useState(false);
+  const [pickerWorkingTaskId, setPickerWorkingTaskId] = useState<string | null>(null);
+  const [pickerError, setPickerError] = useState<string | null>(null);
+  const pickerRef = useRef<TaskMatchPickerHandle>(null);
+  const pickerResolveRef = useRef<((answer: PickerAnswer) => void) | null>(null);
+  // True while a sheet is believed to be on screen. Cleared by whichever side
+  // closes it, so every dismissal event is attributable to exactly one item.
+  const pickerOpenRef = useRef(false);
+  // Resolver for a close WE asked for. Its presence is what distinguishes a
+  // programmatic dismissal from the user closing the sheet, so a late callback
+  // can never be mistaken for an answer.
+  const pickerDismissAckRef = useRef<(() => void) | null>(null);
+  const [pickerLockedTaskId, setPickerLockedTaskId] = useState<string | null>(null);
+  const lastPickRef = useRef<{ taskId: string; taskName: string } | null>(null);
+  // Synchronous re-entry guard. `locked` is closure state and is still false on
+  // a second tap in the same frame, which would commit the log twice.
+  const savingRef = useRef(false);
 
-  function fireSuccessToast(title: string, subtitle?: string) {
+  // A counter, not a boolean: presenting is a request we make once per item,
+  // while dismissing is imperative and always awaited. A boolean would make
+  // "close" a render-driven side effect we cannot attribute.
+  const [pickerRequest, setPickerRequest] = useState(0);
+
+  /** The form starts locked and is unlocked only once the recovery check clears. */
+  const locked = phase !== "editing";
+
+  // Presentation runs from an effect so the sheet always commits with the
+  // current service name and candidate list. Dismissal is never driven from
+  // here - see runPicker, where every close is awaited.
+  useEffect(() => {
+    if (pickerRequest > 0) pickerRef.current?.present();
+  }, [pickerRequest]);
+
+  // An awaited confirmation must never outlive the screen. Settling it as a skip
+  // lets the flow finish its own teardown instead of hanging on a dead promise.
+  useEffect(() => {
+    return () => {
+      pickerOpenRef.current = false;
+      const ack = pickerDismissAckRef.current;
+      pickerDismissAckRef.current = null;
+      if (ack) ack();
+      const resolve = pickerResolveRef.current;
+      pickerResolveRef.current = null;
+      if (resolve) resolve({ kind: "skip" });
+    };
+  }, []);
+
+  function fireSuccessToast(title: string, subtitle?: string, warn?: boolean) {
     setSuccessToastTitle(title);
     setSuccessToastSubtitle(subtitle);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Haptics.notificationAsync(
+      warn ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success,
+    ).catch(() => {});
     setSuccessToastVisible(true);
     setTimeout(() => setSuccessToastVisible(false), 2800);
   }
@@ -110,6 +224,65 @@ export default function LogServiceScreen() {
   const itemsTotal = scannedItems.length > 0
     ? scannedItems.reduce((sum, item) => sum + (item.cost ?? 0), 0)
     : null;
+
+  // Chips are this vehicle's REAL tasks, so a tap binds identity rather than
+  // text. Key, select and ordering mirror the canonical query in
+  // app/vehicle/[id].tsx, which means this screen shares that cache instead of
+  // shadowing it with a narrower row shape.
+  const { data: chipRows } = useQuery({
+    queryKey: ["user_vehicle_maintenance_tasks", vehicleId],
+    queryFn: async () => {
+      const uid = user?.id;
+      if (!uid) return [];
+      const { data, error: chipErr } = await supabase
+        .from("user_vehicle_maintenance_tasks")
+        .select("*")
+        .eq("vehicle_id", vehicleId)
+        .eq("user_id", uid)
+        .order("next_due_date", { ascending: true, nullsFirst: false });
+      if (chipErr) throw chipErr;
+      return data ?? [];
+    },
+    enabled: !!user && !!vehicleId,
+  });
+
+  const taskChips: TaskChip[] = useMemo(() => {
+    const out: TaskChip[] = [];
+    for (const row of chipRows ?? []) {
+      if (out.length >= MAX_TASK_CHIPS) break;
+      if (typeof row.name === "string" && row.name.trim().length > 0) {
+        out.push({ id: row.id, name: row.name.trim() });
+      }
+    }
+    return out;
+  }, [chipRows]);
+
+  // A recovery record means a log committed whose task updates never ran. The
+  // lock is already held (phase starts "checking"), so nothing is actionable
+  // while this resolves.
+  useEffect(() => {
+    if (!user || !vehicleId) return;
+    let cancelled = false;
+    (async () => {
+      const rec = await readPendingSave(user.id, vehicleId);
+      if (cancelled) return;
+      if (!rec) {
+        setPhase("editing");
+        return;
+      }
+      if (resumeMode(rec, Date.now()) === "silent") {
+        savingRef.current = true;
+        setPhase("saving");
+        void runSaveFlow(rec, false);
+      } else {
+        const prompt = resumePrompt(rec);
+        setResumeAsk({ rec, title: prompt.title, detail: prompt.detail });
+        setPhase("asking");
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, vehicleId]);
 
   useEffect(() => {
     if (insightTimerRef.current) clearTimeout(insightTimerRef.current);
@@ -319,49 +492,435 @@ export default function LogServiceScreen() {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
+  // P1 commit -> P2 resolve + complete -> P3 side effects -> P4 toast -> P5 exit
+  // ---------------------------------------------------------------------------
+
+  function answerPicker(answer: PickerAnswer) {
+    const resolve = pickerResolveRef.current;
+    pickerResolveRef.current = null;
+    if (resolve) resolve(answer);
+  }
+
+  function waitForPickerAnswer(): Promise<PickerAnswer> {
+    return new Promise<PickerAnswer>(resolve => {
+      pickerResolveRef.current = resolve;
+    });
+  }
+
+  /**
+   * The sheet reports every dismissal, including the one the flow triggers when
+   * it moves to the next item. Only a dismissal while we still believe the sheet
+   * is open is the user's, and only that one answers.
+   */
+  function handleSheetDismiss() {
+    const ack = pickerDismissAckRef.current;
+    if (ack) {
+      // We asked for this close. Release the handoff and answer for no one.
+      pickerDismissAckRef.current = null;
+      pickerOpenRef.current = false;
+      ack();
+      return;
+    }
+    if (!pickerOpenRef.current) return;
+    // Nobody asked, so the user closed a sheet that was on screen. That is a
+    // skip for the item currently showing, and only for that item.
+    pickerOpenRef.current = false;
+    answerPicker({ kind: "skip" });
+  }
+
+  /**
+   * P3. The six invalidations and the reschedule run CONCURRENTLY, each with its
+   * own tagged catch. Nothing downstream awaits this: a stalled invalidation
+   * must never delay the toast, the exit, or an undo result.
+   *
+   * Detached by construction - this is also the undo path's rerun, where the
+   * screen may already be unmounted - so it touches only the query client, the
+   * scheduler and Sentry. No state setters, no mounted refs.
+   */
+  function fireSideEffects(userId: string, vid: string) {
+    const steps: { tag: string; run: () => Promise<unknown> }[] = [
+      { tag: "maintenance_logs", run: () => queryClient.invalidateQueries({ queryKey: ["maintenance_logs", vid] }) },
+      { tag: "vehicle", run: () => queryClient.invalidateQueries({ queryKey: ["vehicle", vid] }) },
+      { tag: "user_vehicle_maintenance_tasks", run: () => queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", vid] }) },
+      { tag: "vehicles", run: () => queryClient.invalidateQueries({ queryKey: ["vehicles"] }) },
+      { tag: "mileage_vehicles", run: () => queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] }) },
+      { tag: "dashboard", run: () => queryClient.invalidateQueries({ queryKey: ["dashboard"] }) },
+      { tag: "reschedule", run: () => scheduleMaintenanceNotifications(userId) },
+    ];
+    for (const step of steps) {
+      try {
+        Promise.resolve(step.run()).catch(stepErr => {
+          Sentry.captureException(stepErr, { tags: { area: "log_service_p3" }, extra: { step: step.tag, vehicleId: vid } });
+        });
+      } catch (stepErr) {
+        Sentry.captureException(stepErr, { tags: { area: "log_service_p3" }, extra: { step: step.tag, vehicleId: vid } });
+      }
+    }
+  }
+
+  /**
+   * One completion against complete_vehicle_task v6.
+   *
+   * A thrown or transport-level result is UNKNOWN, never "failed" - the write
+   * may well have landed, and claiming otherwise would invite a duplicate. One
+   * automatic same-id retry runs first; the operation id is stable per item, so
+   * a replay is idempotent rather than a second advance. idempotency_mismatch
+   * and explicit_date_required are hard failures: the request itself was wrong,
+   * so retrying would only repeat it.
+   */
+  async function completeOne(
+    item: PendingSaveItem,
+    taskId: string,
+    taskName: string,
+    explicit: boolean,
+    rec: PendingSaveRecord,
+  ): Promise<CompletionOutcome> {
+    const args: CompleteVehicleTaskIdempotentArgs = {
+      p_task_id: taskId,
+      p_operation_id: item.opId,
+      p_completed_date: rec.completedDate,
+      p_skip_log: true,
+    };
+    if (rec.milesVal != null && Number.isFinite(rec.milesVal)) args.p_mileage = rec.milesVal;
+    if (rec.hoursVal != null && Number.isFinite(rec.hoursVal)) args.p_hours = rec.hoursVal;
+
+    async function attempt() {
+      try {
+        const { data, error: rpcErr } = await completeVehicleTaskIdempotent(args);
+        if (rpcErr || !data) return null;
+        return data;
+      } catch {
+        return null;
+      }
+    }
+
+    let result = await attempt();
+    if (!result) {
+      await sleep(AUTO_RETRY_DELAY_MS);
+      result = await attempt();
+    }
+    if (!result) return { kind: "unknown", taskId, taskName, explicit };
+
+    if (typeof result !== "object" || Array.isArray(result)) {
+      // Not an object. Nothing can be read off it, including with `in`.
+      Sentry.captureException(new Error("complete_vehicle_task non-object payload"), {
+        tags: { area: "log_service_completion", arm: "non_object" },
+        extra: { taskId, operationId: item.opId, serviceName: item.serviceName },
+      });
+      return { kind: "unknown", taskId, taskName, explicit };
+    }
+
+    if ("error" in result) {
+      // Only these two arms are definitive rejections. Any other error value is
+      // a shape we do not understand, and an unrecognised response is not proof
+      // the write failed - calling it "failed" would deny a write that may have
+      // landed.
+      const hard = result.error === "idempotency_mismatch" || result.error === "explicit_date_required";
+      Sentry.captureException(new Error(`complete_vehicle_task ${String(result.error)}`), {
+        tags: { area: "log_service_completion", arm: hard ? String(result.error) : "unrecognised_error" },
+        extra: { taskId, operationId: item.opId, serviceName: item.serviceName },
+      });
+      if (hard) return { kind: "failed", taskId, taskName, explicit };
+      return { kind: "unknown", taskId, taskName, explicit };
+    }
+    if (
+      typeof result.completion_event_id !== "string" ||
+      result.completion_event_id.length === 0 ||
+      (result.event_status !== "applied" && result.event_status !== "undone") ||
+      !result.applied ||
+      typeof result.applied !== "object"
+    ) {
+      // Shape we cannot trust. Claiming a completion here would put an
+      // unusable id into the undo batch; claiming a failure would deny a write
+      // that may have landed. Unknown is the only honest answer.
+      Sentry.captureException(new Error("complete_vehicle_task malformed payload"), {
+        tags: { area: "log_service_completion", arm: "malformed" },
+        extra: { taskId, operationId: item.opId, serviceName: item.serviceName },
+      });
+      return { kind: "unknown", taskId, taskName, explicit };
+    }
+    if (result.event_status === "undone") {
+      return { kind: "consumed_undone", taskId, taskName };
+    }
+    return {
+      kind: "completed",
+      taskId,
+      taskName,
+      eventId: result.completion_event_id,
+      nextDue: formatNextDue(result.applied),
+    };
+  }
+
+  /**
+   * One REVIEW confirmation. Retry reuses the same task and the same operation
+   * id. Continuing AFTER an attempt keeps that attempt's outcome - the user was
+   * told something was tried - while continuing without attempting returns null
+   * and is disclosed as a review count instead.
+   */
+  async function runPicker(
+    item: PendingSaveItem,
+    candidates: MatchCandidate[],
+    rec: PendingSaveRecord,
+  ): Promise<CompletionOutcome | null> {
+    setPickerService(item.serviceName);
+    setPickerCandidates(candidates);
+    setPickerError(null);
+    setPickerBusy(false);
+    setPickerWorkingTaskId(null);
+    lastPickRef.current = null;
+    setPickerLockedTaskId(null);
+    pickerOpenRef.current = true;
+    pickerDismissAckRef.current = null;
+    setPickerRequest(n => n + 1);
+
+    let settled: CompletionOutcome | null = null;
+    let lastAttempt: CompletionOutcome | null = null;
+
+    for (;;) {
+      const answer = await waitForPickerAnswer();
+      if (answer.kind === "skip") break;
+
+      lastPickRef.current = { taskId: answer.taskId, taskName: answer.taskName };
+      setPickerBusy(true);
+      setPickerWorkingTaskId(answer.taskId);
+      setPickerError(null);
+
+      const outcome = await completeOne(item, answer.taskId, answer.taskName, true, rec);
+
+      setPickerBusy(false);
+      setPickerWorkingTaskId(null);
+
+      if (outcome.kind === "failed") {
+        // Hard rejection - the identical request would be rejected identically.
+        // It goes straight to the outcome list; the toast names it.
+        lastAttempt = outcome;
+        break;
+      }
+      if (outcome.kind === "unknown") {
+        // The write may have landed. Retrying the SAME task replays one
+        // idempotency key; choosing another task would mint a second one and
+        // could complete two tasks from one item, with the first invisible to
+        // both the outcome list and undo.
+        lastAttempt = outcome;
+        setPickerLockedTaskId(answer.taskId);
+        setPickerError("We couldn't confirm that update. Try again, or continue and check Tasks.");
+        continue;
+      }
+      settled = outcome;
+      break;
+    }
+
+    // Only close a sheet that is still open, and only while awaiting that exact
+    // close. If the user already dismissed it there is nothing to ask for -
+    // asking anyway is what let a straggling event answer for the next item.
+    if (pickerOpenRef.current) {
+      pickerOpenRef.current = false;
+      await new Promise<void>(resolve => {
+        pickerDismissAckRef.current = resolve;
+        pickerRef.current?.dismiss();
+      });
+    }
+    return settled ?? lastAttempt;
+  }
+
+  /**
+   * P2 through P5 for a record that has already committed. A fresh save and a
+   * resume both land here, so the two paths are identical by construction
+   * rather than by discipline.
+   */
+  async function runSaveFlow(rec: PendingSaveRecord, receiptFailed: boolean) {
+    if (!user || !vehicleId) return;
+    const userId = user.id;
+    const vid = vehicleId;
+
+    const outcomes: CompletionOutcome[] = [];
+    let droppedReviewCount = 0;
+    let matchingUnavailable = false;
+
+    // Direct bindings resolve BEFORE the task fetch. A chip tap already carries
+    // the task identity, so a matcher or fetch outage cannot cost the user a
+    // completion they explicitly chose.
+    const unbound: PendingSaveItem[] = [];
+    for (const item of rec.items) {
+      if (item.directTaskId && item.directTaskName) {
+        outcomes.push(await completeOne(item, item.directTaskId, item.directTaskName, true, rec));
+      } else {
+        unbound.push(item);
+      }
+    }
+
+    let tasks: TaskChip[] | null = null;
+    if (unbound.length > 0) {
+      try {
+        const { data, error: taskErr } = await supabase
+          .from("user_vehicle_maintenance_tasks")
+          .select("id, name")
+          .eq("vehicle_id", vid)
+          .eq("user_id", userId)
+          .order("name");
+        if (taskErr) throw taskErr;
+        tasks = (data ?? [])
+          .filter(row => typeof row.name === "string" && row.name.trim().length > 0)
+          .map(row => ({ id: row.id, name: row.name.trim() }));
+      } catch (taskErr) {
+        // Caught on its own: this costs matching and confirmation only. P3, P4
+        // and P5 still run, and the loss is disclosed rather than swallowed.
+        matchingUnavailable = true;
+        tasks = null;
+        Sentry.captureException(taskErr, { tags: { area: "log_service_task_fetch" }, extra: { vehicleId: vid } });
+      }
+    }
+
+    // A resume can run before the vehicle read lands, and vehicle_type is the
+    // matcher's only hint. Resolve it on demand rather than match without it.
+    let ownerType = vehicleType;
+    if (tasks && ownerType == null) {
+      try {
+        const { data } = await supabase
+          .from("vehicles")
+          .select("vehicle_type")
+          .eq("id", vid)
+          .maybeSingle();
+        if (data && typeof data.vehicle_type === "string") ownerType = data.vehicle_type;
+      } catch {
+        // Hint only. Matching proceeds without it.
+      }
+    }
+
+    if (tasks) {
+      const reviews: { item: PendingSaveItem; candidates: MatchCandidate[] }[] = [];
+      for (const item of unbound) {
+        const match = matchServiceToTask(item.serviceName, tasks, ownerType);
+        if (match.decision === "AUTO" && match.task) {
+          outcomes.push(await completeOne(item, match.task.taskId, match.task.taskName, false, rec));
+        } else if (match.decision === "REVIEW") {
+          // A REVIEW with nothing to choose from is not a question worth asking.
+          if (match.candidates.length === 0) droppedReviewCount++;
+          else reviews.push({ item, candidates: match.candidates });
+        }
+        // NONE is not a loss: the service genuinely maps to no tracked task.
+      }
+      for (let i = 0; i < reviews.length; i++) {
+        if (i >= MAX_PICKERS_PER_SAVE) {
+          droppedReviewCount++;
+          continue;
+        }
+        const outcome = await runPicker(reviews[i].item, reviews[i].candidates, rec);
+        if (outcome) outcomes.push(outcome);
+        else droppedReviewCount++;
+      }
+    }
+
+    // The record is now fully consumed. Clearing earlier would forfeit the
+    // replay guarantee mid-flight; clearing later would resume finished work.
+    await clearPendingSave(userId, vid);
+
+    fireSideEffects(userId, vid);
+
+    const plan = planToast({
+      outcomes,
+      receiptFailed,
+      droppedReviewCount,
+      matchingUnavailable,
+      firstServiceName: rec.items[0]?.serviceName ?? "Service",
+    });
+
+    if (plan.kind === "undo") {
+      const eventIds = plan.eventIds;
+      showUndoToast({
+        message: plan.message,
+        subtitle: plan.subtitle,
+        onUndo: async () => {
+          try {
+            const { data, error: undoErr } = await undoVehicleCompletions(eventIds);
+            if (undoErr || !data) return { ok: false, message: "Couldn't undo. Check your connection." };
+            if (data.ok) {
+              // Resolve on the server's answer. The host races onUndo against a
+              // 10s timeout, so awaiting the rerun could report a real undo as a
+              // failure.
+              fireSideEffects(userId, vid);
+              return { ok: true };
+            }
+            if (data.error === "conflict") return { ok: false, message: "That task changed since you saved. Check Tasks." };
+            if (data.error === "not_found") return { ok: false, message: "Those updates are no longer available to undo." };
+            return { ok: false, message: "Couldn't undo. Please try again." };
+          } catch {
+            return { ok: false, message: "Couldn't undo. Check your connection." };
+          }
+        },
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setTimeout(() => router.back(), BACK_NAV_UNDO_MS);
+    } else {
+      // planToast only reaches this arm with zero confirmed completions, so any
+      // subtitle here is a material fact rather than payoff - the haptic agrees.
+      fireSuccessToast(plan.message, plan.subtitle, !!plan.subtitle);
+      setTimeout(() => router.back(), plan.subtitle ? BACK_NAV_SAVE_MS : BACK_NAV_UNDO_MS);
+    }
+  }
 
   async function handleSave() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (isLoading) return;
+    if (locked || savingRef.current) return;
     if (!user || !vehicleId) return;
-    setIsLoading(true);
+    savingRef.current = true;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+
+    // The lock is taken at the SAVE TAP, before any await. Only a pre-commit
+    // validation stop gives it back.
+    setPhase("saving");
     setError(null);
     setReceiptWarning(false);
 
+    const validItems = scannedItems.filter(item => item.name.trim().length > 0);
+    if (scannedItems.length > 0 && validItems.length === 0) {
+      setError("Please add a name for at least one service");
+      savingRef.current = false;
+      setPhase("editing");
+      return;
+    }
+    if (scannedItems.length === 0 && !task.trim()) {
+      setError("Service description is required");
+      savingRef.current = false;
+      setPhase("editing");
+      return;
+    }
+
+    let milesVal: number | null = null;
+    let hoursVal: number | null = null;
+    if (usageMode === "both") {
+      if (mileage.trim()) milesVal = parseInt(mileage.replace(/,/g, ""), 10);
+      if (hoursReading.trim()) hoursVal = parseFloat(hoursReading.replace(/,/g, ""));
+    } else if (usageMode === "hours") {
+      if (mileage.trim()) hoursVal = parseFloat(mileage.replace(/,/g, ""));
+    } else if (usageMode === "mileage") {
+      if (mileage.trim()) milesVal = parseInt(mileage.replace(/,/g, ""), 10);
+    }
+    // An unparseable reading is no reading. It must not reach the durable record
+    // as NaN, where it would round-trip through JSON as a silent null anyway.
+    if (milesVal != null && !Number.isFinite(milesVal)) milesVal = null;
+    if (hoursVal != null && !Number.isFinite(hoursVal)) hoursVal = null;
+    const logMeter = milesVal ?? hoursVal ?? null;
+    const completedDate = date || new Date().toISOString().split("T")[0];
+
+    let storedReceiptPath: string | null = null;
+    let receiptFailed = false;
+    if (receiptLocalUri) {
+      storedReceiptPath = await uploadReceiptImage(receiptLocalUri, user.id, vehicleId);
+      if (!storedReceiptPath) {
+        receiptFailed = true;
+        setReceiptWarning(true);
+      }
+    }
+
+    // P1. The insert is the commit point.
     try {
-      let storedReceiptPath: string | null = null;
-      if (receiptLocalUri) {
-        storedReceiptPath = await uploadReceiptImage(receiptLocalUri, user.id, vehicleId);
-        if (!storedReceiptPath) {
-          setReceiptWarning(true);
-        }
-      }
-
-      let milesVal: number | null = null;
-      let hoursVal: number | null = null;
-      if (usageMode === "both") {
-        if (mileage.trim()) milesVal = parseInt(mileage.replace(/,/g, ""), 10);
-        if (hoursReading.trim()) hoursVal = parseFloat(hoursReading.replace(/,/g, ""));
-      } else if (usageMode === "hours") {
-        if (mileage.trim()) hoursVal = parseFloat(mileage.replace(/,/g, ""));
-      } else if (usageMode === "mileage") {
-        if (mileage.trim()) milesVal = parseInt(mileage.replace(/,/g, ""), 10);
-      }
-      const logMeter = milesVal ?? hoursVal ?? null;
-
-      const validItems = scannedItems.filter(item => item.name.trim().length > 0);
       if (scannedItems.length > 0) {
-        if (validItems.length === 0) {
-          setError("Please add a name for at least one service");
-          setIsLoading(false);
-          return;
-        }
         const rows = validItems.map(item => ({
-          user_id: user!.id,
+          user_id: user.id,
           vehicle_id: vehicleId,
           service_name: item.name.trim(),
-          service_date: date || new Date().toISOString().split("T")[0],
+          service_date: completedDate,
           mileage: logMeter,
           cost: item.cost,
           provider_name: provider.trim() || null,
@@ -370,128 +929,134 @@ export default function LogServiceScreen() {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }));
-        const { error: err } = await supabase.from("maintenance_logs").insert(rows);
-        if (err) throw err;
+        const { error: insertErr } = await supabase.from("maintenance_logs").insert(rows);
+        if (insertErr) throw insertErr;
       } else {
-        if (!task.trim()) {
-          setError("Service description is required");
-          setIsLoading(false);
-          return;
-        }
-        const { error: err } = await supabase.from("maintenance_logs").insert({
-          user_id: user!.id,
+        const parsedCost = cost.trim() ? parseFloat(cost.replace(/,/g, "")) : null;
+        const { error: insertErr } = await supabase.from("maintenance_logs").insert({
+          user_id: user.id,
           vehicle_id: vehicleId,
           service_name: task.trim(),
-          service_date: date || new Date().toISOString().split("T")[0],
+          service_date: completedDate,
           mileage: logMeter,
-          cost: cost ? parseFloat(cost) : null,
+          cost: parsedCost != null && Number.isFinite(parsedCost) ? parsedCost : null,
           provider_name: provider.trim() || null,
           notes: notes.trim() || null,
           receipt_url: storedReceiptPath,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
-        if (err) throw err;
+        if (insertErr) throw insertErr;
       }
-
-      // 2. Update vehicle usage reading and history (non-blocking: a usage-update
-      // failure must not make a successfully-saved log look failed).
-      try {
-        await updateVehicleUsage(
-          vehicleId,
-          milesVal,
-          hoursVal,
-          date || new Date().toISOString(),
-          vehicleData?.mileage ?? null,
-          vehicleData?.hours ?? null,
-        );
-      } catch (usageErr) {
-        console.error("updateVehicleUsage failed (non-blocking):", usageErr);
-      }
-
-      // 3. Auto-match and update maintenance tasks
-      const serviceNames = scannedItems.length > 0
-        ? validItems.map(i => i.name.trim())
-        : [task.trim()].filter(Boolean);
-      const updatedTasks: MatchResult[] = [];
-      for (const name of serviceNames) {
-        const result = await matchAndUpdateVehicleTask(vehicleId, name, date, milesVal, hoursVal);
-        if (result) updatedTasks.push(result);
-      }
-
-      // 4. Invalidate queries
-      queryClient.invalidateQueries({ queryKey: ["maintenance_logs", vehicleId] });
-      queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
-      queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", vehicleId] });
-      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
-      queryClient.invalidateQueries({ queryKey: ["mileage_vehicles"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-
-      // 5. Schedule notifications (after queries invalidated)
-      if (user?.id) {
-        scheduleMaintenanceNotifications(user.id);
-      }
-
-      const firstServiceName = (scannedItems.length > 0 ? validItems[0]?.name?.trim() : "") || task.trim();
-      const firstMatch = updatedTasks[0] ?? null;
-      const nextDueMiles = firstMatch?.nextDueMiles ?? null;
-      const nextDueHours = firstMatch?.nextDueHours ?? null;
-      const nextDueDate = firstMatch?.nextDueDate ?? null;
-      let dueSub: string | undefined;
-      if (nextDueMiles != null) {
-        dueSub = `Next due at ${Number(nextDueMiles).toLocaleString()} mi`;
-      } else if (nextDueHours != null) {
-        dueSub = `Next due at ${Number(nextDueHours).toLocaleString()} hrs`;
-      } else if (nextDueDate) {
-        dueSub = `Next due ${new Date(nextDueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
-      }
-
-      if (updatedTasks.length === 0 && storedReceiptPath === null && receiptLocalUri) {
-        // Pure receipt failure with no other success — surface inline error and stay on screen
-        setError("Receipt couldn't be saved. Please try again.");
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      } else {
-        // Success — toast synced with haptic, then navigate back
-        const receiptFailed = storedReceiptPath === null && !!receiptLocalUri;
-        const subtitle = receiptFailed ? "Service saved, but receipt couldn't be uploaded." : dueSub;
-        const matchedName = firstMatch?.taskName?.trim();
-        fireSuccessToast(
-          matchedName ? `${matchedName} marked complete` : `${firstServiceName} logged`,
-          subtitle,
-        );
-        // Matched logs carry two lines of payoff — hold long enough to read it.
-        setTimeout(() => router.back(), matchedName ? 2200 : 1200);
-      }
-    } catch (err: any) {
+    } catch (insertErr) {
+      // Nothing committed. This is the ONLY path back to an editable screen.
+      Sentry.captureException(insertErr, { tags: { area: "log_service_commit" }, extra: { vehicleId } });
       setError("Couldn't save that just now. Please try again.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setIsLoading(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      savingRef.current = false;
+      setPhase("editing");
+      return;
     }
+
+    // COMMITTED. The screen is terminal from here: it reports and exits. A
+    // failed receipt is now a committed outcome carried by the outcome list, not
+    // a reason to hand back an editable form that would log the service twice.
+    const names = scannedItems.length > 0 ? validItems.map(item => item.name.trim()) : [task.trim()];
+    const items: PendingSaveItem[] = names.map((name, index) => {
+      const entry: PendingSaveItem = { itemKey: `item:${index}`, serviceName: name, opId: newOperationId() };
+      if (index === 0 && scannedItems.length === 0 && directTask && directTask.name === name) {
+        entry.directTaskId = directTask.id;
+        entry.directTaskName = directTask.name;
+      }
+      return entry;
+    });
+    const rec: PendingSaveRecord = {
+      v: 1,
+      createdAt: Date.now(),
+      completedDate,
+      milesVal,
+      hoursVal,
+      receiptPath: storedReceiptPath,
+      items,
+    };
+    // Written post-commit, so its existence always means exactly one thing: the
+    // log landed and the task updates may not have.
+    await writePendingSave(user.id, vehicleId, rec);
+
+    // The odometer write is non-blocking - it can never make a committed log
+    // look failed, and completions carry their own meter values.
+    Promise.resolve(
+      updateVehicleUsage(
+        vehicleId,
+        milesVal,
+        hoursVal,
+        date || new Date().toISOString(),
+        vehicleData?.mileage ?? null,
+        vehicleData?.hours ?? null,
+      ),
+    ).catch(usageErr => {
+      Sentry.captureException(usageErr, { tags: { area: "log_service_usage" }, extra: { vehicleId } });
+    });
+
+    await runSaveFlow(rec, receiptFailed);
   }
 
-  const COMMON_TASKS = ["Oil Change", "Tire Rotation", "Brake Service", "Air Filter", "Fluid Top-off", "Inspection", "Transmission Service", "Battery Replacement"];
+  function handleResumeContinue() {
+    if (!resumeAsk || savingRef.current) return;
+    savingRef.current = true;
+    const rec = resumeAsk.rec;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setResumeAsk(null);
+    setPhase("saving");
+    void runSaveFlow(rec, false);
+  }
+
+  async function handleResumeDiscard() {
+    // Same synchronous guard as Continue: two taps in one frame must not both
+    // win, or a discard could unlock the screen while a resume is running.
+    if (!user || !vehicleId || savingRef.current) return;
+    savingRef.current = true;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    // Overlay goes first so the buttons cannot be tapped again behind the await.
+    setResumeAsk(null);
+    // Clears only the recovery record. The logged service itself is untouched.
+    await clearPendingSave(user.id, vehicleId);
+    savingRef.current = false;
+    setPhase("editing");
+  }
 
   return (
     <BottomSheetModalProvider>
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <Pressable onPress={() => router.back()} style={styles.closeBtn}>
+          <Pressable
+            onPress={() => router.back()}
+            style={({ pressed }) => [styles.closeBtn, { opacity: locked ? 0.35 : pressed ? 0.6 : 1 }]}
+            disabled={locked}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            accessibilityState={{ disabled: locked }}
+          >
             <Ionicons name="close" size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.title}>Log Service</Text>
           <Pressable
-            style={({ pressed }) => [styles.saveBtn, { opacity: pressed ? 0.8 : 1 }]}
+            style={({ pressed }) => [styles.saveBtn, { opacity: pressed || locked ? 0.8 : 1 }]}
             onPress={handleSave}
-            disabled={isLoading}
+            disabled={locked}
+            accessibilityRole="button"
+            accessibilityLabel="Log service"
+            accessibilityState={{ disabled: locked, busy: phase === "saving" }}
           >
-            {isLoading ? <ActivityIndicator size="small" color={Colors.textInverse} /> : <Text style={styles.saveBtnText}>Log Service</Text>}
+            {phase === "saving" ? <ActivityIndicator size="small" color={Colors.textInverse} /> : <Text style={styles.saveBtnText}>Log Service</Text>}
           </Pressable>
         </View>
 
         <ScrollView
           ref={scrollRef}
+          pointerEvents={locked ? "none" : "auto"}
+          style={phase === "saving" ? styles.scrollLocked : undefined}
           onScroll={e => { scrollOffset.current = e.nativeEvent.contentOffset.y; }}
           scrollEventThrottle={16}
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
@@ -652,22 +1217,39 @@ export default function LogServiceScreen() {
           {scannedItems.length === 0 && (
             <View style={styles.fieldGroup}>
               <Text style={styles.groupLabel}>Service Type</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickPicks}>
-                {COMMON_TASKS.map(t => (
-                  <Pressable
-                    key={t}
-                    style={[styles.quickPick, task === t && styles.quickPickSelected]}
-                    onPress={() => { setTask(t); Haptics.selectionAsync(); }}
-                  >
-                    <Text style={[styles.quickPickText, task === t && styles.quickPickTextSelected]}>{t}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
+              {taskChips.length > 0 && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickPicks}>
+                  {taskChips.map(chip => {
+                    const selected = directTask?.id === chip.id && task === chip.name;
+                    return (
+                      <Pressable
+                        key={chip.id}
+                        style={[styles.quickPick, selected && styles.quickPickSelected]}
+                        onPress={() => {
+                          setTask(chip.name);
+                          setDirectTask(chip);
+                          Haptics.selectionAsync().catch(() => {});
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={chip.name}
+                        accessibilityState={{ selected }}
+                      >
+                        <Text style={[styles.quickPickText, selected && styles.quickPickTextSelected]}>{chip.name}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
               <TextInput
                 style={styles.input}
                 value={task}
-                onChangeText={setTask}
-                placeholder="Or describe the service..."
+                onChangeText={text => {
+                  // Any manual edit drops the identity binding. A chip taps one
+                  // specific task; typed text is a claim the matcher must earn.
+                  setDirectTask(null);
+                  setTask(text);
+                }}
+                placeholder={taskChips.length > 0 ? "Or describe the service..." : "What did you have done?"}
                 placeholderTextColor={Colors.textTertiary}
                 returnKeyType="done"
               />
@@ -819,6 +1401,54 @@ export default function LogServiceScreen() {
         ref={scanPackModalRef}
         onClose={() => {}}
         onSuccess={() => {}}
+      />
+      {resumeAsk && (
+        <View style={styles.resumeOverlay}>
+          <View style={styles.resumeCard}>
+            <View style={styles.resumeIcon}>
+              <Ionicons name="time-outline" size={24} color={Colors.accent} />
+            </View>
+            <Text style={styles.resumeTitle}>{resumeAsk.title}</Text>
+            <Text style={styles.resumeDetail}>{resumeAsk.detail}</Text>
+            <Text style={styles.resumeNote}>Your service is already saved. This only updates the matching tasks.</Text>
+            <Pressable
+              style={({ pressed }) => [styles.resumePrimary, { opacity: pressed ? 0.85 : 1 }]}
+              onPress={handleResumeContinue}
+              accessibilityRole="button"
+              accessibilityLabel="Finish updating"
+            >
+              <Text style={styles.resumePrimaryText}>Finish updating</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.resumeSecondary, { opacity: pressed ? 0.7 : 1 }]}
+              onPress={handleResumeDiscard}
+              accessibilityRole="button"
+              accessibilityLabel="Discard"
+            >
+              <Text style={styles.resumeSecondaryText}>Discard</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+      <TaskMatchPicker
+        ref={pickerRef}
+        serviceName={pickerService}
+        candidates={pickerCandidates}
+        busy={pickerBusy}
+        workingTaskId={pickerWorkingTaskId}
+        lockedTaskId={pickerLockedTaskId}
+        errorText={pickerError}
+        onSelect={(taskId, taskName) => answerPicker({ kind: "select", taskId, taskName })}
+        onRetry={() => {
+          const last = lastPickRef.current;
+          if (last) answerPicker({ kind: "select", taskId: last.taskId, taskName: last.taskName });
+        }}
+        onSkip={() => {
+          // The button answers directly; the sheet is closed by runPicker, which
+          // is the only place allowed to request a dismissal.
+          answerPicker({ kind: "skip" });
+        }}
+        onSheetDismiss={handleSheetDismiss}
       />
       <SaveToast visible={successToastVisible} message={successToastTitle} subtitle={successToastSubtitle} />
       <SaveToast visible={scanPackOpenErrorVisible} message="Couldn't open scan packs. Please try again." isError />
@@ -1030,4 +1660,73 @@ const styles = StyleSheet.create({
     borderColor: Colors.accent + "33",
   },
   mileageChipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
+  scrollLocked: { opacity: 0.45 },
+  resumeOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    backgroundColor: "rgba(12, 17, 27, 0.82)",
+    zIndex: 900,
+  },
+  resumeCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: Colors.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 14,
+  },
+  resumeIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    backgroundColor: Colors.accentLight,
+    borderWidth: 1,
+    borderColor: Colors.accentMuted,
+  },
+  resumeTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.text,
+    textAlign: "center",
+    marginTop: 14,
+  },
+  resumeDetail: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    textAlign: "center",
+    marginTop: 6,
+  },
+  resumeNote: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textTertiary,
+    textAlign: "center",
+    marginTop: 10,
+    lineHeight: 17,
+  },
+  resumePrimary: {
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    height: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+  },
+  resumePrimaryText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  resumeSecondary: { height: 44, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  resumeSecondaryText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
 });
+
