@@ -352,7 +352,7 @@ Deno.serve(async (req: Request) => {
     const today = new Date();
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     const vehicleDesc = `${year} ${make} ${vehicleModel}`.trim();
-    const cacheKey = `v2|${year}|${make}|${vehicleModel}|${vehicleCategory}|${effectiveFuel}|${trackingMode}`.toLowerCase().trim();
+    const cacheKeyBase = `v2|${year}|${make}|${vehicleModel}|${vehicleCategory}|${effectiveFuel}|${trackingMode}`.toLowerCase().trim();
 
     interface ValidatedTask {
       task: string;
@@ -608,6 +608,44 @@ Deno.serve(async (req: Request) => {
     const ICE_ONLY: RegExp[] = [/oil.*change/i, /oil.*filter/i, /engine oil/i, /spark.*plug/i, /fuel.*filter/i, /fuel.*system/i, /fuel.*inject/i, /emission/i, /\bpcv\b/i, /catalytic/i, /muffler/i, /exhaust/i, /smog/i, /timing belt/i, /serpentine/i, /accessory belt/i];
     const isEvFuel = effectiveFuel === "ev";
     const isIceOnly = (name: string) => ICE_ONLY.some(re => re.test(name));
+    // Hoisted from the post-processing block so it participates in the rules
+    // hash and has a single definition. Behaviour unchanged.
+    const PROTECTED_NAMES = ["Engine Oil and Filter Change", "Clean, Lubricate, and Adjust Chain", "Inspect Brake Pads", "Check Tire Pressure and Condition", "Check and Adjust Valve Clearance"];
+
+    // -- Rules-versioned cache key -----------------------------------------
+    // A cached schedule is only as current as the rules that shaped it. The
+    // hash covers the rules DATA (required tables, clamps, exclusions,
+    // ICE_ONLY, protected names, category sets); RULES_EPOCH covers rules
+    // LOGIC - bump it whenever code in the generation/post-processing region
+    // changes semantics without changing this data. Spurious invalidation
+    // costs one model call; missing invalidation is the defect this fixes.
+    const RULES_EPOCH = 1;
+    const serializeRules = (v: unknown): unknown => {
+      if (v instanceof RegExp) return String(v);
+      if (v instanceof Set) return Array.from(v).sort();
+      if (Array.isArray(v)) return v.map(serializeRules);
+      if (v && typeof v === "object") {
+        const o: Record<string, unknown> = {};
+        for (const k of Object.keys(v as Record<string, unknown>).sort()) o[k] = serializeRules((v as Record<string, unknown>)[k]);
+        return o;
+      }
+      return v;
+    };
+    const rulesBlob = JSON.stringify(serializeRules({
+      epoch: RULES_EPOCH,
+      required: { car: CAR_TRUCK_REQUIRED, moto: MOTORCYCLE_REQUIRED, boat: BOAT_PWC_REQUIRED, small: SMALL_EQUIPMENT_REQUIRED, heavy: HEAVY_EQUIPMENT_REQUIRED },
+      clamps: { car: CAR_TRUCK_CLAMPS, moto: MOTORCYCLE_CLAMPS, boat: BOAT_PWC_CLAMPS, small: SMALL_EQUIPMENT_CLAMPS, heavy: HEAVY_EQUIPMENT_CLAMPS },
+      exclusions: CATEGORY_EXCLUSIONS,
+      iceOnly: ICE_ONLY,
+      protectedNames: PROTECTED_NAMES,
+      cats: { small: SMALL_EQUIPMENT_CATS, heavy: HEAVY_EQUIPMENT_CATS, dump: DUMP_CATEGORIES },
+    }));
+    let rulesHash = 0x811c9dc5;
+    for (let i = 0; i < rulesBlob.length; i++) {
+      rulesHash ^= rulesBlob.charCodeAt(i);
+      rulesHash = Math.imul(rulesHash, 0x01000193) >>> 0;
+    }
+    const RULES_VERSION = rulesHash.toString(16).padStart(8, "0");
     function validateAndEnforce(tasks: ValidatedTask[], vCat: string): ValidatedTask[] {
       const clamps = getClampsForCategory(vCat);
       const required = getRequiredForCategory(vCat);
@@ -625,6 +663,36 @@ Deno.serve(async (req: Request) => {
       return v;
     }
 
+    const cacheKey = `${cacheKeyBase}|r${RULES_VERSION}`;
+
+    /**
+     * Inject-if-missing + name dedupe, and NOTHING else. Deliberately not
+     * validateAndEnforce: no clamps, no normalisation, no interval changes -
+     * so deliberately-set fuel/make intervals survive (the diesel 10,000-mi
+     * rotation would otherwise be clamped to the gas 7,500). Idempotent by
+     * construction: it appends only when every match regex misses, and each
+     * canonical task name satisfies its own regexes, so a rerun appends
+     * nothing. Closure-captures isEvFuel/isIceOnly so the EV guard cannot
+     * drift from validateAndEnforce's.
+     */
+    function ensureRequiredTasks(tasks: ValidatedTask[], vCat: string): ValidatedTask[] {
+      const required = getRequiredForCategory(vCat);
+      const out = tasks.slice();
+      for (const req of required) {
+        if (isEvFuel && isIceOnly(req.task)) continue;
+        if (!out.some(t => req.match.some(re => re.test(t.task)))) {
+          out.push({ task: req.task, description: req.description, category: normalizeCategory(req.category), interval_miles: req.interval_miles, interval_hours: req.interval_hours, interval_months: req.interval_months, priority: normalizePriority(req.priority) });
+        }
+      }
+      const seen = new Set<string>();
+      return out.filter(t => { const k = t.task.toLowerCase().trim(); if (seen.has(k)) return false; seen.add(k); return true; });
+    }
+    // Gates on schedule size must reflect what generation PRODUCED, not what
+    // injection added, or an EV whose model output was thin would newly pass
+    // the 5-task gate and cache a sparse schedule instead of falling through
+    // to the richer template path.
+    let preInjectionTaskCount = 0;
+
     let aiSuccess = false;
     try {
       const { data: cached } = await adminClient.from("ai_schedule_cache").select("tasks_json").eq("cache_key", cacheKey).maybeSingle();
@@ -636,6 +704,13 @@ Deno.serve(async (req: Request) => {
           validatedTasks = Array.isArray(raw)
             ? raw.map((t) => ({ ...t, interval_hours: t.interval_hours ?? null, interval_miles: t.interval_miles ?? null }))
             : null;
+          if (validatedTasks) {
+            // A cached row is only as current as the rules that shaped it;
+            // the versioned key handles rule-data changes, and this repairs
+            // any row that still slips through with a required task missing.
+            preInjectionTaskCount = validatedTasks.length;
+            validatedTasks = ensureRequiredTasks(validatedTasks, vehicleCategory);
+          }
         } catch { console.warn("[CACHE] Parse failed"); }
       }
 
@@ -956,7 +1031,6 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               validatedTasks = validatedTasks.map(t => /fork.*oil/i.test(t.task) ? { ...t, priority: "medium" } : t);
 
               // Step 6: Interval diversity — max 2 unrelated tasks with same interval_miles
-              const PROTECTED_NAMES = ["Engine Oil and Filter Change", "Clean, Lubricate, and Adjust Chain", "Inspect Brake Pads", "Check Tire Pressure and Condition", "Check and Adjust Valve Clearance"];
               const mileageCounts = new Map<number, number[]>();
               validatedTasks.forEach((t, i) => {
                 if (t.interval_miles !== null) {
@@ -1037,16 +1111,24 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               if (isHoursOnlyMode && validatedTasks.length < 5) {
                 console.warn(`[POST-PROCESS] Hours vehicle: only ${validatedTasks.length} tasks after cleanup`);
               }
+              // Required-task injection runs LAST - after both trims - so no
+              // downstream pass can remove what it adds. Neither trim protects
+              // "Tire Rotation" (medium priority, absent from PROTECTED_NAMES),
+              // so injecting any earlier lets the cap delete it again. The cap
+              // therefore becomes soft: at most 18 + the category's required
+              // count. Gates below use the pre-injection count.
+              preInjectionTaskCount = validatedTasks.length;
+              validatedTasks = ensureRequiredTasks(validatedTasks, vehicleCategory);
             }
 
-            if (validatedTasks.length >= 5) {
+            if (preInjectionTaskCount >= 5) {
               await adminClient.from("ai_schedule_cache").upsert({ cache_key: cacheKey, vehicle_desc: vehicleDesc, vehicle_category: vehicleCategory, fuel_type: effectiveFuel, tasks_json: JSON.stringify(validatedTasks), task_count: validatedTasks.length }, { onConflict: "cache_key" });
             }
           }
         }
       }
 
-      if (validatedTasks && validatedTasks.length >= 5) {
+      if (validatedTasks && preInjectionTaskCount >= 5) {
         const aiTasksToInsert = validatedTasks.map(t => ({
           user_id: authUserId, vehicle_id, template_id: null,
           name: t.task, description: t.description, category: t.category,
@@ -1407,6 +1489,44 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
         is_custom: false,
         source: "template",
       });
+    }
+
+    // Required-task guarantee for the template path - the same guarantee the
+    // AI path now carries. Add-only: existing rows are never modified, a
+    // required task whose regexes already match anything present is skipped,
+    // and next-due anchors to current usage exactly as fresh rows do. Runs
+    // BEFORE the empty check so a fully-filtered set still yields required
+    // coverage rather than an empty schedule.
+    {
+      const requiredForTemplate = getRequiredForCategory(vehicleCategory);
+      for (const req of requiredForTemplate) {
+        if (isEvFuel && isIceOnly(req.task)) continue;
+        if (tasksToInsert.some(row => req.match.some(re => re.test(row.name as string)))) continue;
+        const reqMiles = isHoursOnlyMode ? null : req.interval_miles;
+        const reqMonths = req.interval_months;
+        if ((reqMiles === null || reqMiles <= 0) && (reqMonths === null || reqMonths <= 0)) continue;
+        tasksToInsert.push({
+          user_id: authUserId,
+          vehicle_id,
+          template_id: null,
+          name: req.task,
+          description: req.description,
+          category: req.category,
+          interval_miles: reqMiles,
+          interval_hours: null,
+          interval_months: reqMonths,
+          last_completed_date: null,
+          last_completed_miles: null,
+          last_completed_hours: null,
+          next_due_miles: reqMiles !== null && reqMiles > 0 ? Math.round(resolvedCurrentMileage) + reqMiles : null,
+          next_due_hours: null,
+          next_due_date: reqMonths !== null && reqMonths > 0 ? addMonths(today, reqMonths).toISOString() : null,
+          status: "upcoming",
+          priority: req.priority,
+          is_custom: false,
+          source: "template",
+        });
+      }
     }
 
     if (tasksToInsert.length === 0) {
