@@ -1,6 +1,6 @@
 import { newOperationId, isOperationId } from "./operationId.ts";
 import { planToast, buildSubtitle, materialFacts, type OutcomeInput, type CompletionOutcome } from "./saveOutcome.ts";
-import { pendingSaveKey, serializePendingSave, parsePendingSave, resumeMode, resumePrompt, resumeServiceDateLabel, SILENT_RESUME_WINDOW_MS, type PendingSaveRecord } from "./pendingSave.ts";
+import { pendingSaveKey, serializePendingSave, parsePendingSave, resumeMode, resumePrompt, resumeServiceDateLabel, SILENT_RESUME_WINDOW_MS, rewritePendingRemainder, mergeCarriedItems, carriedCreatedAt, saveTimePriorNeedsHold, defusePendingSave, rebindItem, settleItem, type PendingSaveItem, type PendingSaveRecord } from "./pendingSave.ts";
 
 let pass = 0, fail = 0;
 function chk(label: string, got: unknown, want: unknown) {
@@ -183,5 +183,60 @@ chk("resume prompt singular", resumePrompt({ ...rec, items: [rec.items[0]] }),
 chk("resume prompt without a parseable date", resumePrompt({ ...rec, completedDate: "x" }).title,
   "Finish updating your earlier service?");
 ok("prompt never promises a task count", !resumePrompt(rec).detail.includes("task"));
+
+
+// ---- Packet R: remainder rewrite + carried-item merge ----
+{
+  const op1 = newOperationId(); const op2 = newOperationId(); const op3 = newOperationId();
+  const rec: PendingSaveRecord = { v: 1, createdAt: 1111, completedDate: "2026-07-20", milesVal: 42000, hoursVal: null, receiptPath: null, items: [
+    { itemKey: "item:0", serviceName: "Oil Change", opId: op1 },
+    { itemKey: "item:1", serviceName: "Tire Rotation", opId: op2, directTaskId: "t2", directTaskName: "Tire Rotation" },
+  ] };
+  ok("remainder: empty keep clears", rewritePendingRemainder(rec, []) === null);
+  const rw = rewritePendingRemainder(rec, [rec.items[1]]);
+  ok("remainder: non-empty keeps record", rw !== null);
+  ok("remainder: createdAt preserved", rw !== null && rw.createdAt === 1111);
+  ok("remainder: completedDate preserved", rw !== null && rw.completedDate === "2026-07-20");
+  ok("remainder: meters preserved", rw !== null && rw.milesVal === 42000 && rw.hoursVal === null);
+  ok("remainder: items are exactly keep", rw !== null && rw.items.length === 1 && rw.items[0].opId === op2);
+  ok("remainder: binding preserved", rw !== null && rw.items[0].directTaskId === "t2" && rw.items[0].directTaskName === "Tire Rotation");
+  ok("remainder: round-trips parse", rw !== null && parsePendingSave(serializePendingSave(rw)) !== null);
+
+  const fresh: PendingSaveItem[] = [{ itemKey: "item:0", serviceName: "Brake Fluid", opId: op3 }];
+  ok("merge: null prior passes through", mergeCarriedItems(null, fresh) === fresh);
+  const merged = mergeCarriedItems(rec, fresh);
+  ok("merge: new items lead", merged.length === 3 && merged[0].opId === op3);
+  ok("merge: carried opIds preserved", merged[1].opId === op1 && merged[2].opId === op2);
+  ok("merge: carried keys re-keyed", merged[1].itemKey === "carry:0:item:0" && merged[2].itemKey === "carry:1:item:1");
+  ok("merge: keys unique", new Set(merged.map(m => m.itemKey)).size === 3);
+  ok("merge: carried stamped with own date", merged[1].completedDate === "2026-07-20");
+  ok("merge: carried stamped with own meters", merged[1].milesVal === 42000 && merged[1].hoursVal === null);
+  ok("merge: binding survives carry", merged[2].directTaskId === "t2" && merged[2].directTaskName === "Tire Rotation");
+  const mergedRec: PendingSaveRecord = { v: 1, createdAt: 2222, completedDate: "2026-07-27", milesVal: null, hoursVal: 12, receiptPath: null, items: merged };
+  const rt = parsePendingSave(serializePendingSave(mergedRec));
+  ok("merge: merged record round-trips", rt !== null && rt.items.length === 3);
+  ok("merge: item overrides survive round-trip", rt !== null && rt.items[1].completedDate === "2026-07-20" && rt.items[1].milesVal === 42000 && rt.items[1].hoursVal === null);
+  ok("merge: double-carry keys stay unique", (() => { const again = mergeCarriedItems(mergedRec, [{ itemKey: "item:0", serviceName: "Coolant", opId: newOperationId() }]); return new Set(again.map(m => m.itemKey)).size === again.length && again.length === 4; })());
+  ok("createdAt: no prior uses now", carriedCreatedAt(null, 5000) === 5000);
+  ok("createdAt: older prior preserved", carriedCreatedAt(rec, 5000) === 1111);
+  ok("createdAt: future prior forced past the silent window", carriedCreatedAt({ ...rec, createdAt: 9999 }, 5000) === 5000 - SILENT_RESUME_WINDOW_MS - 1);
+  ok("createdAt: future prior composes to confirm", (() => { const NOW = Date.now(); return resumeMode({ ...rec, createdAt: carriedCreatedAt({ ...rec, createdAt: NOW + 3600000 }, NOW) }, NOW) === "confirm"; })());
+  ok("createdAt: merged record ages into confirm", resumeMode({ ...rec, createdAt: carriedCreatedAt(rec, Date.now()) }, Date.now()) === "confirm");
+  ok("rebind: replaces exactly the matching key", (() => { const b = { ...rec.items[0], directTaskId: "tA", directTaskName: "A" }; const out = rebindItem(rec.items, b); return out.length === 2 && out[0].directTaskId === "tA" && out[0].opId === op1; })());
+  ok("rebind: other items untouched, order kept", (() => { const b = { ...rec.items[0], directTaskId: "tA", directTaskName: "A" }; const out = rebindItem(rec.items, b); return out[1] === rec.items[1]; })());
+  ok("rebind: absent key is a no-op", (() => { const ghost: PendingSaveItem = { itemKey: "ghost", serviceName: "x", opId: op3 }; const out = rebindItem(rec.items, ghost); return out.length === 2 && out[0] === rec.items[0] && out[1] === rec.items[1]; })());
+  ok("settle: removes exactly the key", (() => { const out = settleItem(rec.items, "item:0"); return out.length === 1 && out[0].opId === op2; })());
+  ok("settle: absent key is a no-op", (() => { const out = settleItem(rec.items, "nope"); return out.length === 2 && out[0] === rec.items[0]; })());
+  ok("wal: defused image preserves bindings and confirms", (() => { const NOW = Date.now(); const img = { ...rec, items: rebindItem(rec.items, { ...rec.items[0], directTaskId: "tA", directTaskName: "A" }) }; const d = defusePendingSave(img, NOW); return d.items[0].directTaskId === "tA" && resumeMode(d, NOW) === "confirm"; })());
+  ok("defuse: in-window record composes to confirm", (() => { const NOW = Date.now(); return resumeMode(defusePendingSave({ ...rec, createdAt: NOW }, NOW), NOW) === "confirm"; })());
+  ok("defuse: stays confirm as time passes", (() => { const NOW = Date.now(); return resumeMode(defusePendingSave({ ...rec, createdAt: NOW }, NOW), NOW + 3600000) === "confirm"; })());
+  ok("defuse: items and opIds untouched", (() => { const d = defusePendingSave(rec, Date.now()); return d.items === rec.items && d.items[1].opId === op2 && d.completedDate === "2026-07-20"; })());
+  ok("hold: no prior never holds", saveTimePriorNeedsHold(null, false, Date.now()) === false);
+  ok("hold: session-adjudicated stale prior runs", saveTimePriorNeedsHold(rec, true, Date.now()) === false);
+  ok("hold: unadjudicated in-window prior runs", saveTimePriorNeedsHold({ ...rec, createdAt: Date.now() - 1000 }, false, Date.now()) === false);
+  ok("hold: unadjudicated stale prior is held", saveTimePriorNeedsHold({ ...rec, createdAt: Date.now() - SILENT_RESUME_WINDOW_MS - 60000 }, false, Date.now()) === true);
+  ok("parse: rejects empty items", parsePendingSave(JSON.stringify({ v: 1, createdAt: 1, completedDate: "2026-01-01", milesVal: null, hoursVal: null, receiptPath: null, items: [] })) === null);
+  ok("parse: rejects bad item override type", parsePendingSave(JSON.stringify({ v: 1, createdAt: 1, completedDate: "2026-01-01", milesVal: null, hoursVal: null, receiptPath: null, items: [{ itemKey: "a", serviceName: "x", opId: op1, milesVal: "nope" }] })) === null);
+}
 
 console.log(fail === 0 ? "SAVEFLOW ALL PASS (" + pass + ")" : fail + " FAIL / " + pass + " pass");

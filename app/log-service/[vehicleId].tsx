@@ -42,7 +42,7 @@ import {
   type TaskCompletionSnapshot,
 } from "@/lib/rpc";
 import { newOperationId } from "@/lib/operationId";
-import { resumeMode, resumePrompt, type PendingSaveItem, type PendingSaveRecord } from "@/lib/pendingSave";
+import { resumeMode, resumePrompt, rewritePendingRemainder, mergeCarriedItems, carriedCreatedAt, saveTimePriorNeedsHold, defusePendingSave, rebindItem, settleItem, type PendingSaveItem, type PendingSaveRecord } from "@/lib/pendingSave";
 import { writePendingSave, readPendingSave, clearPendingSave } from "@/lib/pendingSaveStore";
 import { planToast, type CompletionOutcome } from "@/lib/saveOutcome";
 import { showUndoToast } from "@/components/UndoToast";
@@ -88,6 +88,12 @@ const AUTO_RETRY_DELAY_MS = 400;
 const BACK_NAV_UNDO_MS = 1200;
 /** A screen-local toast dies with the screen; a disclosed loss must stay readable. */
 const BACK_NAV_SAVE_MS = 2400;
+/**
+ * Bounded wait for a session refresh before a resume decision. Expiry alone is
+ * not proof of a dead session, but an unconfirmed one must not run silently.
+ */
+const SESSION_CONFIRM_TIMEOUT_MS = 6000;
+const SESSION_EXPIRY_MARGIN_MS = 60_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -109,7 +115,7 @@ function formatNextDue(applied: TaskCompletionSnapshot): string | null {
 export default function LogServiceScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
   const insets = useSafeAreaInsets();
-  const { user, profile } = useAuth();
+  const { user, profile, session, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
 
   const scrollRef = useRef<any>(null);
@@ -143,6 +149,21 @@ export default function LogServiceScreen() {
   const [pendingMileageChip, setPendingMileageChip] = useState<number | null>(null);
   const [phase, setPhase] = useState<SavePhase>("checking");
   const [resumeAsk, setResumeAsk] = useState<{ rec: PendingSaveRecord; title: string; detail: string } | null>(null);
+  /** The recovery check runs exactly once per mount, after auth hydration settles. */
+  const recoveryStartedRef = useRef(false);
+  /**
+   * In-memory shadow of the remainder this session last decided (a preserved
+   * record, or null after a clear or an explicit discard).
+   */
+  const pendingRemainderRef = useRef<PendingSaveRecord | null>(null);
+  /**
+   * True once THIS SESSION has adjudicated the prior - the save flow decided
+   * the remainder, or the user explicitly discarded. From that point the
+   * shadow is the authoritative truth, including "none", and the save path
+   * never falls back to disk: a fallback there could resurrect a record the
+   * user just discarded behind a failed storage clear.
+   */
+  const priorAdjudicatedRef = useRef(false);
   const [directTask, setDirectTask] = useState<TaskChip | null>(null);
   const [pickerService, setPickerService] = useState("");
   const [pickerCandidates, setPickerCandidates] = useState<MatchCandidate[]>([]);
@@ -257,11 +278,38 @@ export default function LogServiceScreen() {
     return out;
   }, [chipRows]);
 
+  /**
+   * A session is CONFIRMED when its expiry sits comfortably in the future, or
+   * a bounded refresh proves it. An unconfirmed session must never start a
+   * silent resume: every completion would resolve unknown against a dead auth
+   * state, burning the automatic attempt on a run that cannot succeed.
+   */
+  async function confirmSession(): Promise<boolean> {
+    const live = session;
+    if (live && typeof live.expires_at === "number" && live.expires_at * 1000 > Date.now() + SESSION_EXPIRY_MARGIN_MS) {
+      return true;
+    }
+    try {
+      const refreshed = await Promise.race([
+        supabase.auth.refreshSession().then(r => r.data.session),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), SESSION_CONFIRM_TIMEOUT_MS)),
+      ]);
+      return !!(refreshed && typeof refreshed.expires_at === "number" && refreshed.expires_at * 1000 > Date.now() + SESSION_EXPIRY_MARGIN_MS);
+    } catch {
+      return false;
+    }
+  }
+
   // A recovery record means a log committed whose task updates never ran. The
   // lock is already held (phase starts "checking"), so nothing is actionable
-  // while this resolves.
+  // while this resolves. The check waits for auth hydration and runs once per
+  // mount: a silent resume starts only on a confirmed session, and an
+  // unconfirmed one falls to the ask overlay, where both choices stay
+  // non-destructive.
   useEffect(() => {
-    if (!user || !vehicleId) return;
+    if (!user || !vehicleId || authLoading) return;
+    if (recoveryStartedRef.current) return;
+    recoveryStartedRef.current = true;
     let cancelled = false;
     (async () => {
       const rec = await readPendingSave(user.id, vehicleId);
@@ -270,11 +318,19 @@ export default function LogServiceScreen() {
         setPhase("editing");
         return;
       }
-      if (resumeMode(rec, Date.now()) === "silent") {
+      const confirmed = await confirmSession();
+      if (cancelled) return;
+      if (confirmed && resumeMode(rec, Date.now()) === "silent") {
         savingRef.current = true;
         setPhase("saving");
-        void runSaveFlow(rec, false);
+        void runSaveFlow(rec, false, true, new Set<string>());
       } else {
+        if (!confirmed) {
+          Sentry.captureMessage("log_service session unconfirmed", {
+            tags: { area: "log_service_recovery", arm: "session_unconfirmed" },
+            extra: { vehicleId },
+          });
+        }
         const prompt = resumePrompt(rec);
         setResumeAsk({ rec, title: prompt.title, detail: prompt.detail });
         setPhase("asking");
@@ -282,7 +338,7 @@ export default function LogServiceScreen() {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, vehicleId]);
+  }, [user?.id, vehicleId, authLoading]);
 
   useEffect(() => {
     if (insightTimerRef.current) clearTimeout(insightTimerRef.current);
@@ -576,14 +632,21 @@ export default function LogServiceScreen() {
     explicit: boolean,
     rec: PendingSaveRecord,
   ): Promise<CompletionOutcome> {
+    // A carried item completes against ITS OWN save's date and meters - the
+    // values stamped when its record was first written - never the values of
+    // the save that happened to carry it. The operation id is stable, so a
+    // replay must present identical arguments.
+    const itemDate = item.completedDate ?? rec.completedDate;
+    const itemMiles = item.milesVal !== undefined ? item.milesVal : rec.milesVal;
+    const itemHours = item.hoursVal !== undefined ? item.hoursVal : rec.hoursVal;
     const args: CompleteVehicleTaskIdempotentArgs = {
       p_task_id: taskId,
       p_operation_id: item.opId,
-      p_completed_date: rec.completedDate,
+      p_completed_date: itemDate,
       p_skip_log: true,
     };
-    if (rec.milesVal != null && Number.isFinite(rec.milesVal)) args.p_mileage = rec.milesVal;
-    if (rec.hoursVal != null && Number.isFinite(rec.hoursVal)) args.p_hours = rec.hoursVal;
+    if (itemMiles != null && Number.isFinite(itemMiles)) args.p_mileage = itemMiles;
+    if (itemHours != null && Number.isFinite(itemHours)) args.p_hours = itemHours;
 
     async function attempt() {
       try {
@@ -662,6 +725,7 @@ export default function LogServiceScreen() {
     item: PendingSaveItem,
     candidates: MatchCandidate[],
     rec: PendingSaveRecord,
+    persistBinding: (bound: PendingSaveItem) => Promise<boolean>,
   ): Promise<CompletionOutcome | null> {
     setPickerService(item.serviceName);
     setPickerCandidates(candidates);
@@ -686,7 +750,22 @@ export default function LogServiceScreen() {
       setPickerWorkingTaskId(answer.taskId);
       setPickerError(null);
 
-      const outcome = await completeOne(item, answer.taskId, answer.taskName, true, rec);
+      const bound = { ...item, directTaskId: answer.taskId, directTaskName: answer.taskName };
+      const durable = await persistBinding(bound);
+      if (!durable) {
+        // No durable binding, no RPC - same write-ahead rule as the auto
+        // path. The user can try the same task again or skip; skipping is a
+        // disclosed decision.
+        Sentry.captureMessage("log_service binding unpersisted", {
+          tags: { area: "log_service_recovery", arm: "binding_unpersisted" },
+          extra: { vehicleId, decision: "picker" },
+        });
+        setPickerBusy(false);
+        setPickerWorkingTaskId(null);
+        setPickerError("Couldn't start that update safely. Try again or skip.");
+        continue;
+      }
+      const outcome = await completeOne(bound, answer.taskId, answer.taskName, true, rec);
 
       setPickerBusy(false);
       setPickerWorkingTaskId(null);
@@ -729,12 +808,51 @@ export default function LogServiceScreen() {
    * resume both land here, so the two paths are identical by construction
    * rather than by discipline.
    */
-  async function runSaveFlow(rec: PendingSaveRecord, receiptFailed: boolean) {
+  async function runSaveFlow(rec: PendingSaveRecord, receiptFailed: boolean, isResume: boolean, holdKeys: ReadonlySet<string>) {
     if (!user || !vehicleId) return;
     const userId = user.id;
     const vid = vehicleId;
 
     const outcomes: CompletionOutcome[] = [];
+    /**
+     * Items whose adjudication is still open - unknown writes and items never
+     * matched at all - carried forward so a transient outage cannot erase
+     * replay intent. Every settled outcome stays out: completed, hard-failed,
+     * consumed, skipped, and disclosed review drops are decisions, not losses.
+     */
+    const kept: PendingSaveItem[] = [];
+    let durableItems = rec.items.slice();
+    /**
+     * Write-ahead binding. A match-derived completion may only run AFTER the
+     * chosen task is durable on the item: if the process dies mid-RPC, the
+     * next resume replays the SAME task deterministically instead of matching
+     * again - a second pass could choose a different task and advance both
+     * tasks under one operation id.
+     */
+    async function persistItemBinding(bound: PendingSaveItem): Promise<boolean> {
+      durableItems = rebindItem(durableItems, bound);
+      const next: PendingSaveRecord = { ...rec, items: durableItems };
+      return (await writePendingSave(userId, vid, next)) || (await writePendingSave(userId, vid, next));
+    }
+    /**
+     * Settle checkpoint. A decided item leaves the durable image immediately,
+     * so neither a crash nor a failed final write can resurrect settled or
+     * declined work. An empty image serializes to a row the total parser
+     * rejects, which reads back as no record - clear-by-overwrite. Failures
+     * are non-gating: the end-of-flow rewrite is the catch-all, and each miss
+     * is reported.
+     */
+    async function settleDurable(itemKey: string): Promise<void> {
+      durableItems = settleItem(durableItems, itemKey);
+      const next: PendingSaveRecord = { ...rec, items: durableItems };
+      const landed = (await writePendingSave(userId, vid, next)) || (await writePendingSave(userId, vid, next));
+      if (!landed) {
+        Sentry.captureMessage("log_service checkpoint unpersisted", {
+          tags: { area: "log_service_recovery", arm: "checkpoint_unpersisted" },
+          extra: { vehicleId: vid, itemKey },
+        });
+      }
+    }
     let droppedReviewCount = 0;
     let matchingUnavailable = false;
 
@@ -743,8 +861,18 @@ export default function LogServiceScreen() {
     // completion they explicitly chose.
     const unbound: PendingSaveItem[] = [];
     for (const item of rec.items) {
+      if (holdKeys.has(item.itemKey)) {
+        // Discovered at save time, outside the silent window, never confirmed
+        // this session. Preserved for the next open's ask - not executed
+        // behind the user's back.
+        kept.push(item);
+        continue;
+      }
       if (item.directTaskId && item.directTaskName) {
-        outcomes.push(await completeOne(item, item.directTaskId, item.directTaskName, true, rec));
+        const outcome = await completeOne(item, item.directTaskId, item.directTaskName, true, rec);
+        outcomes.push(outcome);
+        if (outcome.kind === "unknown") kept.push(item);
+        else await settleDurable(item.itemKey);
       } else {
         unbound.push(item);
       }
@@ -763,6 +891,17 @@ export default function LogServiceScreen() {
         tasks = (data ?? [])
           .filter(row => typeof row.name === "string" && row.name.trim().length > 0)
           .map(row => ({ id: row.id, name: row.name.trim() }));
+        if (tasks.length === 0) {
+          // Zero rows for a vehicle is anomalous - the schedule guarantees a
+          // floor of required tasks - so this is an unavailable matcher, not a
+          // genuine everything-maps-to-nothing result.
+          matchingUnavailable = true;
+          tasks = null;
+          Sentry.captureMessage("log_service task fetch zero rows", {
+            tags: { area: "log_service_task_fetch", arm: "zero_rows" },
+            extra: { vehicleId: vid },
+          });
+        }
       } catch (taskErr) {
         // Caught on its own: this costs matching and confirmation only. P3, P4
         // and P5 still run, and the loss is disclosed rather than swallowed.
@@ -793,28 +932,109 @@ export default function LogServiceScreen() {
       for (const item of unbound) {
         const match = matchServiceToTask(item.serviceName, tasks, ownerType);
         if (match.decision === "AUTO" && match.task) {
-          outcomes.push(await completeOne(item, match.task.taskId, match.task.taskName, false, rec));
+          const bound = { ...item, directTaskId: match.task.taskId, directTaskName: match.task.taskName };
+          const durable = await persistItemBinding(bound);
+          if (!durable) {
+            // No durable binding, no RPC: an unexecuted item cannot
+            // double-advance. Preserved in memory; the end-of-flow ladder
+            // retries persistence, and disclosure covers the rest.
+            Sentry.captureMessage("log_service binding unpersisted", {
+              tags: { area: "log_service_recovery", arm: "binding_unpersisted" },
+              extra: { vehicleId: vid, decision: "auto" },
+            });
+            droppedReviewCount++;
+            kept.push(bound);
+          } else {
+            const outcome = await completeOne(bound, match.task.taskId, match.task.taskName, false, rec);
+            outcomes.push(outcome);
+            if (outcome.kind === "unknown") kept.push(bound);
+            else await settleDurable(bound.itemKey);
+          }
         } else if (match.decision === "REVIEW") {
           // A REVIEW with nothing to choose from is not a question worth asking.
-          if (match.candidates.length === 0) droppedReviewCount++;
-          else reviews.push({ item, candidates: match.candidates });
+          if (match.candidates.length === 0) {
+            droppedReviewCount++;
+            await settleDurable(item.itemKey);
+          } else {
+            reviews.push({ item, candidates: match.candidates });
+          }
+        } else {
+          // NONE is not a loss: the service genuinely maps to no tracked
+          // task. It is decided, so it leaves the durable image now.
+          await settleDurable(item.itemKey);
         }
-        // NONE is not a loss: the service genuinely maps to no tracked task.
       }
       for (let i = 0; i < reviews.length; i++) {
         if (i >= MAX_PICKERS_PER_SAVE) {
           droppedReviewCount++;
+          await settleDurable(reviews[i].item.itemKey);
           continue;
         }
-        const outcome = await runPicker(reviews[i].item, reviews[i].candidates, rec);
-        if (outcome) outcomes.push(outcome);
-        else droppedReviewCount++;
+        const outcome = await runPicker(reviews[i].item, reviews[i].candidates, rec, persistItemBinding);
+        if (outcome) {
+          outcomes.push(outcome);
+          if (outcome.kind === "unknown") {
+            kept.push({ ...reviews[i].item, directTaskId: outcome.taskId, directTaskName: outcome.taskName });
+          } else {
+            await settleDurable(reviews[i].item.itemKey);
+          }
+        } else {
+          droppedReviewCount++;
+          await settleDurable(reviews[i].item.itemKey);
+        }
       }
     }
 
-    // The record is now fully consumed. Clearing earlier would forfeit the
-    // replay guarantee mid-flight; clearing later would resume finished work.
-    await clearPendingSave(userId, vid);
+    if (tasks === null && unbound.length > 0) {
+      // Never matched at all. These items carry forward exactly as written so
+      // a later open can adjudicate them for real.
+      for (const item of unbound) kept.push(item);
+    }
+
+    // The record is rewritten down to the still-open remainder. Clearing with
+    // open items would forfeit the replay guarantee; keeping settled items
+    // would resume finished work. An empty remainder clears.
+    const remainder = rewritePendingRemainder(rec, kept);
+    pendingRemainderRef.current = remainder;
+    priorAdjudicatedRef.current = true;
+    if (remainder) {
+      const wrote = (await writePendingSave(userId, vid, remainder))
+        || (await writePendingSave(userId, vid, remainder));
+      if (wrote) {
+        Sentry.captureMessage("log_service remainder preserved", {
+          tags: { area: "log_service_recovery", arm: "remainder_preserved" },
+          extra: { vehicleId: vid, itemCount: remainder.items.length, isResume },
+        });
+      } else {
+        // The disk still holds the last durable image. Write-ahead binding
+        // guarantees every attempted item is bound there, and settle
+        // checkpoints removed decided items as they settled - so what
+        // survives is the reduced remainder up to any checkpoint that itself
+        // failed (each miss is reported). Clearing would erase open unknown
+        // outcomes.
+        Sentry.captureMessage("log_service remainder write failed", {
+          tags: { area: "log_service_recovery", arm: "remainder_write_failed_stuck" },
+          extra: { vehicleId: vid, itemCount: remainder.items.length, isResume },
+        });
+      }
+    } else {
+      const cleared = await clearPendingSave(userId, vid);
+      if (!cleared) {
+        // Overwrite with the defused CURRENT durable image, never the original
+        // rec - restoring rec would strip write-ahead bindings and reopen the
+        // second-matching-pass hazard. With checkpoints the image is usually
+        // already empty, and an empty image reads back as no record.
+        const walImage: PendingSaveRecord = { ...rec, items: durableItems };
+        const defusedOk = (await writePendingSave(userId, vid, defusePendingSave(walImage, Date.now())))
+          || (await writePendingSave(userId, vid, defusePendingSave(walImage, Date.now())));
+        if (!defusedOk) {
+          Sentry.captureMessage("log_service settled clear unpersisted", {
+            tags: { area: "log_service_recovery", arm: "settled_clear_unpersisted" },
+            extra: { vehicleId: vid },
+          });
+        }
+      }
+    }
 
     fireSideEffects(userId, vid);
 
@@ -851,12 +1071,24 @@ export default function LogServiceScreen() {
         },
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      setTimeout(() => router.back(), BACK_NAV_UNDO_MS);
+      if (isResume && remainder) {
+        // A resume still holding open items hands the screen back instead of
+        // ejecting - an eject here replays a doomed open-fail-exit loop.
+        savingRef.current = false;
+        setPhase("editing");
+      } else {
+        setTimeout(() => router.back(), BACK_NAV_UNDO_MS);
+      }
     } else {
       // planToast only reaches this arm with zero confirmed completions, so any
       // subtitle here is a material fact rather than payoff - the haptic agrees.
       fireSuccessToast(plan.message, plan.subtitle, !!plan.subtitle);
-      setTimeout(() => router.back(), plan.subtitle ? BACK_NAV_SAVE_MS : BACK_NAV_UNDO_MS);
+      if (isResume && remainder) {
+        savingRef.current = false;
+        setPhase("editing");
+      } else {
+        setTimeout(() => router.back(), plan.subtitle ? BACK_NAV_SAVE_MS : BACK_NAV_UNDO_MS);
+      }
     }
   }
 
@@ -970,18 +1202,44 @@ export default function LogServiceScreen() {
       }
       return entry;
     });
+    // A prior remainder for this vehicle is folded into the new record rather
+    // than clobbered - overwriting it would erase the replay intent the
+    // recovery path just preserved. The in-memory shadow is consulted first,
+    // so a failed storage read cannot masquerade as "no remainder"; the disk
+    // read is the fallback for a remainder this session never saw. Carried
+    // items keep their opIds and their own completion arguments, and the
+    // merged record keeps the OLDEST anchor so stale carried work ages into
+    // the confirm path instead of regaining a silent-resume window.
+    // Three-state prior resolution. Once this session adjudicated, the shadow
+    // is authoritative - including "none" after a discard, where a disk
+    // fallback could resurrect the very record the user removed. The disk is
+    // consulted only for a prior this session genuinely never observed.
+    const prior = priorAdjudicatedRef.current
+      ? pendingRemainderRef.current
+      : await readPendingSave(user.id, vehicleId);
+    const carried = mergeCarriedItems(prior, items);
+    // A stale prior this session never adjudicated is carried but HELD: its
+    // items skip execution and land in the remainder under the original
+    // anchor, so the next open runs the standard confirmation ask for them.
+    const holdKeys = new Set<string>();
+    if (saveTimePriorNeedsHold(prior, priorAdjudicatedRef.current, Date.now())) {
+      for (let i = items.length; i < carried.length; i++) holdKeys.add(carried[i].itemKey);
+    }
     const rec: PendingSaveRecord = {
       v: 1,
-      createdAt: Date.now(),
+      createdAt: carriedCreatedAt(prior, Date.now()),
       completedDate,
       milesVal,
       hoursVal,
       receiptPath: storedReceiptPath,
-      items,
+      items: carried,
     };
     // Written post-commit, so its existence always means exactly one thing: the
-    // log landed and the task updates may not have.
-    await writePendingSave(user.id, vehicleId, rec);
+    // log landed and the task updates may not have. The write is observed with
+    // one bounded retry: if it cannot land, this run still executes from the
+    // in-memory record, and the store has already reported the failure.
+    const recorded = (await writePendingSave(user.id, vehicleId, rec))
+      || (await writePendingSave(user.id, vehicleId, rec));
 
     // The odometer write is non-blocking - it can never make a committed log
     // look failed, and completions carry their own meter values.
@@ -998,7 +1256,19 @@ export default function LogServiceScreen() {
       Sentry.captureException(usageErr, { tags: { area: "log_service_usage" }, extra: { vehicleId } });
     });
 
-    await runSaveFlow(rec, receiptFailed);
+    if (!recorded) {
+      // Task mutations without a durable record are unrecoverable on process
+      // death: no replay, no adjudication, silent partial completion. The log
+      // itself is committed and disclosed; the updates are matched from Tasks.
+      Sentry.captureMessage("log_service initial record unpersisted", {
+        tags: { area: "log_service_recovery", arm: "initial_record_unpersisted" },
+        extra: { vehicleId, itemCount: rec.items.length },
+      });
+      fireSuccessToast("Service logged.", "Couldn't start task updates safely. Match them from Tasks.", true);
+      setTimeout(() => router.back(), BACK_NAV_SAVE_MS);
+      return;
+    }
+    await runSaveFlow(rec, receiptFailed, false, holdKeys);
   }
 
   function handleResumeContinue() {
@@ -1008,7 +1278,7 @@ export default function LogServiceScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setResumeAsk(null);
     setPhase("saving");
-    void runSaveFlow(rec, false);
+    void runSaveFlow(rec, false, true, new Set<string>());
   }
 
   async function handleResumeDiscard() {
@@ -1020,7 +1290,30 @@ export default function LogServiceScreen() {
     // Overlay goes first so the buttons cannot be tapped again behind the await.
     setResumeAsk(null);
     // Clears only the recovery record. The logged service itself is untouched.
-    await clearPendingSave(user.id, vehicleId);
+    const cleared = await clearPendingSave(user.id, vehicleId);
+    if (!cleared && resumeAsk) {
+      // A failed removal leaves a zombie row a LATER mount would read fresh.
+      // Defusing rewrites it with an anchor past the silent window, so the
+      // worst outcome of broken storage is one extra ask - never a silent
+      // replay of items the user explicitly discarded. The write is observed
+      // and retried; if neither removal nor defusing lands, the decision is
+      // honored for this session and the gap is DISCLOSED, not papered over.
+      const defused = (await writePendingSave(user.id, vehicleId, defusePendingSave(resumeAsk.rec, Date.now())))
+        || (await writePendingSave(user.id, vehicleId, defusePendingSave(resumeAsk.rec, Date.now())));
+      if (!defused) {
+        Sentry.captureMessage("log_service discard unpersisted", {
+          tags: { area: "log_service_recovery", arm: "discard_unpersisted" },
+          extra: { vehicleId },
+        });
+        setError("Couldn't discard those earlier updates. They may still apply automatically next time.");
+      }
+    }
+    // The user's decision IS the adjudication, whether or not the storage
+    // clear landed. Session truth is now "no remainder": the save path will
+    // not fall back to disk and resurrect a discarded record, and a fresh
+    // save's write replaces any zombie row a failed clear left behind.
+    pendingRemainderRef.current = null;
+    priorAdjudicatedRef.current = true;
     savingRef.current = false;
     setPhase("editing");
   }
