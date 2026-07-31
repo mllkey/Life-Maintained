@@ -34,7 +34,7 @@ const unk = (n: string, explicit = true): CompletionOutcome => ({ kind: "unknown
 const bad = (n: string, explicit = true): CompletionOutcome => ({ kind: "failed", taskId: "t-" + n, taskName: n, explicit });
 const base = (o: Partial<OutcomeInput> = {}): OutcomeInput => ({
   outcomes: [], receiptFailed: false, droppedReviewCount: 0,
-  matchingUnavailable: false, firstServiceName: "Oil change", ...o,
+  matchingUnavailable: false, noneCount: 0, firstServiceName: "Oil change", ...o,
 });
 
 const UNK_OIL = "Couldn't confirm Oil Change. Check Tasks.";
@@ -111,10 +111,10 @@ chk("three completions -> plural + all event ids",
   { kind: "undo", message: "3 tasks marked complete", subtitle: undefined, eventIds: ["e-A", "e-B", "e-C"] });
 chk("undone alone is NOT a completion",
   planToast(base({ outcomes: [undone("Oil Change")] })),
-  { kind: "save", message: "Oil change logged", subtitle: "Oil Change stayed unchanged because your earlier undo was preserved.", isError: false });
+  { kind: "save", message: "Oil change logged", subtitle: "Oil Change stayed unchanged because your earlier undo was preserved.", isError: false, noneDisclosed: false, offerAttach: false });
 chk("zero completions -> save toast, never isError",
   planToast(base({ outcomes: [unk("Oil Change")], receiptFailed: true })),
-  { kind: "save", message: "Oil change logged", subtitle: RECEIPT + " 1 more task item to check in Tasks.", isError: false });
+  { kind: "save", message: "Oil change logged", subtitle: RECEIPT + " 1 more task item to check in Tasks.", isError: false, noneDisclosed: false, offerAttach: false });
 
 // D4 - title counts confirmed only; unknown disclosure is never suppressed
 const d4 = planToast(base({ outcomes: [done("A"), done("B"), unk("C")] }));
@@ -131,7 +131,37 @@ chk("dropped plural", buildSubtitle(base({ droppedReviewCount: 2 })), "2 possibl
 
 // Clean save
 chk("nothing happened -> plain logged",
-  planToast(base()), { kind: "save", message: "Oil change logged", subtitle: undefined, isError: false });
+  planToast(base()), { kind: "save", message: "Oil change logged", subtitle: undefined, isError: false, noneDisclosed: false, offerAttach: false });
+
+// ---- Packet D: NONE-outcome disclosure + attach offer ----
+const NONE_ONE = "Not tied to a maintenance task.";
+const NONE_MANY = "Not tied to your maintenance tasks.";
+chk("D-none singular disclosure", buildSubtitle(base({ noneCount: 1 })), NONE_ONE);
+chk("D-none plural disclosure", buildSubtitle(base({ noneCount: 3 })), NONE_MANY);
+chk("D-none silent when a completion has payoff",
+  buildSubtitle(base({ outcomes: [done("Tire Rotation", "Next due at 50,000 mi")], noneCount: 1 })),
+  "Next due at 50,000 mi");
+chk("D-none silent when a completion has no payoff",
+  buildSubtitle(base({ outcomes: [done("Tire Rotation", null)], noneCount: 1 })), undefined);
+chk("D-none never displaces a material fact",
+  buildSubtitle(base({ receiptFailed: true, noneCount: 1 })), RECEIPT);
+chk("D-none never inflates the residual summary",
+  buildSubtitle(base({ receiptFailed: true, outcomes: [unk("Oil Change")], noneCount: 2 })),
+  RECEIPT + " 1 more task item to check in Tasks.");
+chk("D-none outranked by consumed_undone",
+  buildSubtitle(base({ outcomes: [undone("Coolant Flush")], noneCount: 1 })),
+  "Coolant Flush stayed unchanged because your earlier undo was preserved.");
+chk("D-spec toast: single NONE offers attach",
+  planToast(base({ noneCount: 1, firstServiceName: "Car wash" })),
+  { kind: "save", message: "Car wash logged", subtitle: NONE_ONE, isError: false, noneDisclosed: true, offerAttach: true });
+chk("D-multi NONE discloses but never offers",
+  planToast(base({ noneCount: 2 })),
+  { kind: "save", message: "Oil change logged", subtitle: NONE_MANY, isError: false, noneDisclosed: true, offerAttach: false });
+const dFact = planToast(base({ noneCount: 1, receiptFailed: true }));
+ok("D-attach never offered past a material fact",
+  dFact.kind === "save" && dFact.offerAttach === false && dFact.noneDisclosed === false);
+ok("D-attach never offered when a completion exists",
+  planToast(base({ outcomes: [done("A")], noneCount: 1 })).kind === "undo");
 
 // ---------- pendingSave record ----------
 const OP = "00000000-0000-4000-8000-000000000001";

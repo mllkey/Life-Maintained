@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-nati
 import {
   BottomSheetModal,
   BottomSheetView,
+  BottomSheetScrollView,
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from "@gorhom/bottom-sheet";
@@ -35,6 +36,13 @@ export type TaskMatchPickerHandle = {
 };
 
 interface TaskMatchPickerProps {
+  /**
+   * "match" confirms a REVIEW against ranked candidates (default, unchanged).
+   * "attach" shows the FULL task list for a service that matched nothing:
+   * no ranking tag, a scrollable list, and honest attach copy. Same selection
+   * contract - the screen still owns every async decision.
+   */
+  mode?: "match" | "attach";
   serviceName: string;
   candidates: MatchCandidate[];
   busy: boolean;
@@ -60,10 +68,28 @@ interface TaskMatchPickerProps {
 
 const MAX_VISIBLE_CANDIDATES = 4;
 
+/**
+ * Match mode keeps the original static list. Attach mode shows every task, so
+ * the list scrolls inside a bounded height while the sheet stays fixed-snap.
+ */
+function ListWrap({ isAttach, children }: { isAttach: boolean; children: React.ReactNode }) {
+  if (!isAttach) return <View style={styles.list}>{children}</View>;
+  return (
+    <BottomSheetScrollView
+      style={styles.attachScroll}
+      contentContainerStyle={styles.list}
+      showsVerticalScrollIndicator={false}
+    >
+      {children}
+    </BottomSheetScrollView>
+  );
+}
+
 export default forwardRef<TaskMatchPickerHandle, TaskMatchPickerProps>(function TaskMatchPicker(
-  { serviceName, candidates, busy, workingTaskId, lockedTaskId, errorText, onSelect, onRetry, onSkip, onSheetDismiss },
+  { mode = "match", serviceName, candidates, busy, workingTaskId, lockedTaskId, errorText, onSelect, onRetry, onSkip, onSheetDismiss },
   ref,
 ) {
+  const isAttach = mode === "attach";
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
 
@@ -100,13 +126,18 @@ export default forwardRef<TaskMatchPickerHandle, TaskMatchPickerProps>(function 
   const handleIndicatorStyle = useMemo(() => ({ backgroundColor: Colors.border, width: 36, height: 4 }), []);
   const backgroundStyle = useMemo(() => ({ backgroundColor: Colors.card }), []);
 
-  const visible = useMemo(() => candidates.slice(0, MAX_VISIBLE_CANDIDATES), [candidates]);
+  const visible = useMemo(
+    () => (isAttach ? candidates : candidates.slice(0, MAX_VISIBLE_CANDIDATES)),
+    [candidates, isAttach],
+  );
 
   const snapPoints = useMemo(() => {
-    const rows = Math.min(Math.max(visible.length, 1), MAX_VISIBLE_CANDIDATES);
+    const rowCap = isAttach ? 6 : MAX_VISIBLE_CANDIDATES;
+    const rows = Math.min(Math.max(visible.length, 1), rowCap);
     const base = 42 + rows * 8;
-    return [String(errorText ? base + 10 : base) + "%"];
-  }, [visible.length, errorText]);
+    const pct = errorText ? base + 10 : base;
+    return [String(isAttach ? Math.min(pct, 82) : pct) + "%"];
+  }, [visible.length, errorText, isAttach]);
 
   return (
     <BottomSheetModal
@@ -123,13 +154,13 @@ export default forwardRef<TaskMatchPickerHandle, TaskMatchPickerProps>(function 
     >
       <BottomSheetView style={[styles.content, { paddingBottom: 24 + insets.bottom }]}>
         <View style={styles.iconWrap}>
-          <Ionicons name="git-compare-outline" size={26} color={Colors.accent} />
+          <Ionicons name={isAttach ? "link-outline" : "git-compare-outline"} size={26} color={Colors.accent} />
         </View>
-        <Text style={styles.eyebrow}>CONFIRM THE MATCH</Text>
+        <Text style={styles.eyebrow}>{isAttach ? "ATTACH TO A TASK" : "CONFIRM THE MATCH"}</Text>
         <Text style={styles.title} numberOfLines={2}>{serviceName}</Text>
-        <Text style={styles.subtitle}>Which task did this cover?</Text>
+        <Text style={styles.subtitle}>{isAttach ? "Choose the task this covered." : "Which task did this cover?"}</Text>
 
-        <View style={styles.list}>
+        <ListWrap isAttach={isAttach}>
           {visible.map((c, i) => {
             const working = busy && workingTaskId === c.taskId;
             const frozenOut = lockedTaskId !== null && lockedTaskId !== c.taskId;
@@ -153,7 +184,7 @@ export default forwardRef<TaskMatchPickerHandle, TaskMatchPickerProps>(function 
               >
                 <View style={styles.rowText}>
                   <Text style={styles.rowName} numberOfLines={2}>{c.taskName}</Text>
-                  {i === 0 && !errorText ? <Text style={styles.rowTag}>Closest match</Text> : null}
+                  {i === 0 && !errorText && !isAttach ? <Text style={styles.rowTag}>Closest match</Text> : null}
                 </View>
                 {working ? (
                   <ActivityIndicator size="small" color={Colors.accent} />
@@ -163,7 +194,7 @@ export default forwardRef<TaskMatchPickerHandle, TaskMatchPickerProps>(function 
               </Pressable>
             );
           })}
-        </View>
+        </ListWrap>
 
         {errorText ? (
           <View style={styles.errorBox}>
@@ -195,11 +226,11 @@ export default forwardRef<TaskMatchPickerHandle, TaskMatchPickerProps>(function 
               onSkip();
             }}
             accessibilityRole="button"
-            accessibilityLabel="Continue without confirmation"
+            accessibilityLabel={isAttach ? "Don't attach" : "Continue without confirmation"}
             accessibilityState={{ disabled: busy }}
             style={({ pressed }) => [styles.secondaryBtn, { opacity: pressed || busy ? 0.7 : 1 }]}
           >
-            <Text style={styles.secondaryText}>Continue without confirmation</Text>
+            <Text style={styles.secondaryText}>{isAttach ? "Don't attach" : "Continue without confirmation"}</Text>
           </Pressable>
         </View>
       </BottomSheetView>
@@ -243,6 +274,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   list: { marginTop: 16, gap: 8 },
+  attachScroll: { flexGrow: 0, maxHeight: 372 },
   row: {
     flexDirection: "row",
     alignItems: "center",

@@ -22,6 +22,12 @@
  * highest-priority concrete fact plus fixed summary copy. Copy is kept short
  * because the subtitle is a fixed two-line surface at the largest supported
  * dynamic type.
+ *
+ * Tier 6 (Packet D): a save whose items matched NO tracked task discloses
+ * that fact - "logged" alone implies the schedule moved when nothing did.
+ * The disclosure is informational, never a warning, and renders only when
+ * there are no completions and no material facts; when exactly one item is
+ * involved the plan also offers a hand-attach.
  */
 
 export type CompletionOutcome =
@@ -35,12 +41,26 @@ export type OutcomeInput = {
   receiptFailed: boolean;
   droppedReviewCount: number;
   matchingUnavailable: boolean;
+  /**
+   * Items whose service matched no tracked task (a NONE decision). The log is
+   * saved and nothing failed, but silence would imply a task moved.
+   */
+  noneCount: number;
   firstServiceName: string;
 };
 
 export type ToastPlan =
   | { kind: "undo"; message: string; subtitle?: string; eventIds: string[] }
-  | { kind: "save"; message: string; subtitle?: string; isError: boolean };
+  | {
+      kind: "save";
+      message: string;
+      subtitle?: string;
+      isError: boolean;
+      /** True when the subtitle is the NONE disclosure - informational, not a warning. */
+      noneDisclosed: boolean;
+      /** True only for the unambiguous case: exactly one NONE item, nothing else to report. */
+      offerAttach: boolean;
+    };
 
 const RECEIPT_FACT = "Receipt wasn't uploaded.";
 const MATCHING_FACT = "Automatic matching was unavailable.";
@@ -59,6 +79,9 @@ function autoFact(n: number): string {
  */
 function undoneFact(name: string): string {
   return name + " stayed unchanged because your earlier undo was preserved.";
+}
+function noneFact(n: number): string {
+  return n === 1 ? "Not tied to a maintenance task." : "Not tied to your maintenance tasks.";
 }
 function droppedFact(n: number): string {
   return n === 1 ? "1 possible task match needs review." : n + " possible task matches need review.";
@@ -98,7 +121,9 @@ export function buildSubtitle(input: OutcomeInput): string | undefined {
     const first = input.outcomes.find(o => o.kind === "completed") as
       | Extract<CompletionOutcome, { kind: "completed" }>
       | undefined;
-    return first && first.nextDue ? first.nextDue : undefined;
+    if (first) return first.nextDue ? first.nextDue : undefined;
+    if (input.noneCount > 0) return noneFact(input.noneCount);
+    return undefined;
   }
   if (facts.length === 1) return facts[0];
   return facts[0] + " " + summaryFact(facts.length - 1);
@@ -122,6 +147,10 @@ export function planToast(input: OutcomeInput): ToastPlan {
   }
 
   // The log DID commit. Error styling would suggest the whole save failed and
-  // invite a duplicate log; the subtitle carries what was lost.
-  return { kind: "save", message: input.firstServiceName + " logged", subtitle, isError: false };
+  // invite a duplicate log; the subtitle carries what was lost. A NONE
+  // disclosure is not a loss: it renders only when nothing else is reportable,
+  // so noneDisclosed is exactly "the subtitle is the NONE fact".
+  const noneDisclosed = input.noneCount > 0 && materialFacts(input).length === 0;
+  const offerAttach = noneDisclosed && input.noneCount === 1;
+  return { kind: "save", message: input.firstServiceName + " logged", subtitle, isError: false, noneDisclosed, offerAttach };
 }

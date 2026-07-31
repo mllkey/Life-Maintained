@@ -88,6 +88,8 @@ const AUTO_RETRY_DELAY_MS = 400;
 const BACK_NAV_UNDO_MS = 1200;
 /** A screen-local toast dies with the screen; a disclosed loss must stay readable. */
 const BACK_NAV_SAVE_MS = 2400;
+/** The attach offer needs a real decision window - matches the undo toast. */
+const ATTACH_TOAST_MS = 6000;
 /**
  * Bounded wait for a session refresh before a resume decision. Expiry alone is
  * not proof of a dead session, but an unconfirmed one must not run silently.
@@ -190,6 +192,14 @@ export default function LogServiceScreen() {
   // "close" a render-driven side effect we cannot attribute.
   const [pickerRequest, setPickerRequest] = useState(0);
 
+  // Attach-by-hand affordance (Packet D). Context is retained ONLY when the
+  // toast offers Attach: the settled NONE item, the save's record (for date
+  // and meters), and the task list already fetched by this save.
+  const [attachToastVisible, setAttachToastVisible] = useState(false);
+  const attachCtxRef = useRef<{ item: PendingSaveItem; rec: PendingSaveRecord; tasks: TaskChip[] } | null>(null);
+  const attachNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pickerMode, setPickerMode] = useState<"match" | "attach">("match");
+
   /** The form starts locked and is unlocked only once the recovery check clears. */
   const locked = phase !== "editing";
 
@@ -204,6 +214,7 @@ export default function LogServiceScreen() {
   // lets the flow finish its own teardown instead of hanging on a dead promise.
   useEffect(() => {
     return () => {
+      if (attachNavTimerRef.current) { clearTimeout(attachNavTimerRef.current); attachNavTimerRef.current = null; }
       pickerOpenRef.current = false;
       const ack = pickerDismissAckRef.current;
       pickerDismissAckRef.current = null;
@@ -804,6 +815,114 @@ export default function LogServiceScreen() {
   }
 
   /**
+   * Attach-by-hand for a save whose only item matched no tracked task. Runs
+   * the SAME confirmation machinery as a REVIEW - write-ahead binding, the
+   * item's stable operation id, the unknown-retry lock - against the full
+   * task list. The log is already committed; this only updates the chosen
+   * task.
+   */
+  async function runAttachFlow() {
+    const ctx = attachCtxRef.current;
+    attachCtxRef.current = null;
+    if (!ctx || !user || !vehicleId) return;
+    const userId = user.id;
+    const vid = vehicleId;
+    const attachRec: PendingSaveRecord = { ...ctx.rec, items: [ctx.item] };
+    let attachItems = attachRec.items;
+    async function persistAttachBinding(bound: PendingSaveItem): Promise<boolean> {
+      attachItems = rebindItem(attachItems, bound);
+      const next: PendingSaveRecord = { ...attachRec, items: attachItems };
+      const landed = (await writePendingSave(userId, vid, next)) || (await writePendingSave(userId, vid, next));
+      if (!landed) {
+        Sentry.captureMessage("log_service binding unpersisted", {
+          tags: { area: "log_service_recovery", arm: "binding_unpersisted" },
+          extra: { vehicleId: vid, decision: "attach" },
+        });
+      }
+      return landed;
+    }
+    const candidates: MatchCandidate[] = ctx.tasks.map(t => ({
+      taskId: t.id,
+      taskName: t.name,
+      score: 0,
+      component: null,
+      action: null,
+    }));
+    setPickerMode("attach");
+    const outcome = await runPicker(ctx.item, candidates, attachRec, persistAttachBinding);
+    setPickerMode("match");
+    if (outcome && outcome.kind === "unknown") {
+      // The write may have landed. The bound record stays durable so the next
+      // open replays the SAME task deterministically; the loss is disclosed.
+      fireSuccessToast(ctx.item.serviceName + " logged", "Couldn't confirm " + outcome.taskName + ". Check Tasks.", true);
+      setTimeout(() => router.back(), BACK_NAV_SAVE_MS);
+      return;
+    }
+    if (outcome || attachItems !== attachRec.items) {
+      // A settled decision - completed or hard-failed - or a written binding
+      // whose attempt the user then abandoned must not resurrect as a resume.
+      // Clear; on a failed clear, overwrite with an empty defused image, which
+      // parses back as no record.
+      const cleared = await clearPendingSave(userId, vid);
+      if (!cleared) {
+        const empty: PendingSaveRecord = { ...attachRec, items: [] };
+        const defusedOk = (await writePendingSave(userId, vid, defusePendingSave(empty, Date.now())))
+          || (await writePendingSave(userId, vid, defusePendingSave(empty, Date.now())));
+        if (!defusedOk) {
+          Sentry.captureMessage("log_service settled clear unpersisted", {
+            tags: { area: "log_service_recovery", arm: "settled_clear_unpersisted" },
+            extra: { vehicleId: vid, attach: true },
+          });
+        }
+      }
+    }
+    if (outcome && outcome.kind === "completed") {
+      const eventIds = [outcome.eventId];
+      showUndoToast({
+        message: outcome.taskName + " marked complete",
+        subtitle: outcome.nextDue ?? undefined,
+        onUndo: async () => {
+          try {
+            const { data, error: undoErr } = await undoVehicleCompletions(eventIds);
+            if (undoErr || !data) return { ok: false, message: "Couldn't undo. Check your connection." };
+            if (data.ok) {
+              fireSideEffects(userId, vid);
+              return { ok: true };
+            }
+            if (data.error === "conflict") return { ok: false, message: "That task changed since you saved. Check Tasks." };
+            if (data.error === "not_found") return { ok: false, message: "Those updates are no longer available to undo." };
+            return { ok: false, message: "Couldn't undo. Please try again." };
+          } catch {
+            return { ok: false, message: "Couldn't undo. Check your connection." };
+          }
+        },
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      fireSideEffects(userId, vid);
+      setTimeout(() => router.back(), BACK_NAV_UNDO_MS);
+      return;
+    }
+    if (outcome && outcome.kind === "failed") {
+      fireSuccessToast(ctx.item.serviceName + " logged", "Couldn't update " + outcome.taskName + ". Check Tasks.", true);
+      setTimeout(() => router.back(), BACK_NAV_SAVE_MS);
+      return;
+    }
+    // consumed_undone cannot occur here - a NONE item's operation was never
+    // consumed - and a skip is a decision: the log is saved, leave quietly.
+    router.back();
+  }
+
+  function handleAttachPress() {
+    if (attachNavTimerRef.current) {
+      clearTimeout(attachNavTimerRef.current);
+      attachNavTimerRef.current = null;
+    }
+    setAttachToastVisible(false);
+    Haptics.selectionAsync().catch(() => {});
+    void runAttachFlow();
+  }
+
+  /**
    * P2 through P5 for a record that has already committed. A fresh save and a
    * resume both land here, so the two paths are identical by construction
    * rather than by discipline.
@@ -855,6 +974,7 @@ export default function LogServiceScreen() {
     }
     let droppedReviewCount = 0;
     let matchingUnavailable = false;
+    const noneItems: PendingSaveItem[] = [];
 
     // Direct bindings resolve BEFORE the task fetch. A chip tap already carries
     // the task identity, so a matcher or fetch outage cannot cost the user a
@@ -960,7 +1080,10 @@ export default function LogServiceScreen() {
           }
         } else {
           // NONE is not a loss: the service genuinely maps to no tracked
-          // task. It is decided, so it leaves the durable image now.
+          // task. It is decided, so it leaves the durable image now. Retained
+          // in memory so a clean save can disclose it - and, when it is the
+          // only one, offer to attach it by hand.
+          noneItems.push(item);
           await settleDurable(item.itemKey);
         }
       }
@@ -1043,6 +1166,7 @@ export default function LogServiceScreen() {
       receiptFailed,
       droppedReviewCount,
       matchingUnavailable,
+      noneCount: noneItems.length,
       firstServiceName: rec.items[0]?.serviceName ?? "Service",
     });
 
@@ -1079,10 +1203,27 @@ export default function LogServiceScreen() {
       } else {
         setTimeout(() => router.back(), BACK_NAV_UNDO_MS);
       }
+    } else if (plan.offerAttach && remainder === null && tasks && tasks.length > 0 && noneItems.length === 1 && !isResume) {
+      // The one thing that happened is a service that maps to no tracked task.
+      // The toast tells that truth and offers to attach it by hand; the screen
+      // holds until the offer is answered or expires. Success haptic - nothing
+      // failed.
+      attachCtxRef.current = { item: noneItems[0], rec, tasks };
+      setSuccessToastTitle(plan.message);
+      setSuccessToastSubtitle(plan.subtitle);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setAttachToastVisible(true);
+      attachNavTimerRef.current = setTimeout(() => {
+        attachNavTimerRef.current = null;
+        attachCtxRef.current = null;
+        setAttachToastVisible(false);
+        setTimeout(() => router.back(), 220);
+      }, ATTACH_TOAST_MS);
     } else {
-      // planToast only reaches this arm with zero confirmed completions, so any
-      // subtitle here is a material fact rather than payoff - the haptic agrees.
-      fireSuccessToast(plan.message, plan.subtitle, !!plan.subtitle);
+      // planToast only reaches this arm with zero confirmed completions. A
+      // material-fact subtitle warns; a NONE disclosure is informational and
+      // keeps the success haptic - nothing failed.
+      fireSuccessToast(plan.message, plan.subtitle, !!plan.subtitle && !plan.noneDisclosed);
       if (isResume && remainder) {
         savingRef.current = false;
         setPhase("editing");
@@ -1725,6 +1866,7 @@ export default function LogServiceScreen() {
       )}
       <TaskMatchPicker
         ref={pickerRef}
+        mode={pickerMode}
         serviceName={pickerService}
         candidates={pickerCandidates}
         busy={pickerBusy}
@@ -1744,6 +1886,13 @@ export default function LogServiceScreen() {
         onSheetDismiss={handleSheetDismiss}
       />
       <SaveToast visible={successToastVisible} message={successToastTitle} subtitle={successToastSubtitle} />
+      <SaveToast
+        visible={attachToastVisible}
+        message={successToastTitle}
+        subtitle={successToastSubtitle}
+        actionLabel="Attach to task"
+        onAction={handleAttachPress}
+      />
       <SaveToast visible={scanPackOpenErrorVisible} message="Couldn't open scan packs. Please try again." isError />
     </KeyboardAvoidingView>
     </BottomSheetModalProvider>
