@@ -13,7 +13,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2.98.0";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.98.0";
-import * as XLSX from "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
+import * as XLSX from "./vendor/xlsx.mjs";
 import Papa from "npm:papaparse@5";
 import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/json.ts";
