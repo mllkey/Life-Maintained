@@ -219,6 +219,13 @@ export default function LogServiceScreen() {
       const ack = pickerDismissAckRef.current;
       pickerDismissAckRef.current = null;
       if (ack) ack();
+      if (pickerResolveRef.current) {
+        // DIAG-1 (temporary): a teardown that answers a live picker is exactly
+        // the invisible adjudication we are hunting.
+        Sentry.captureMessage("log_service diag teardown_resolved_picker", {
+          level: "info", tags: { area: "pending_save_diag", op: "teardown_resolved_picker" }, extra: { vehicleId },
+        });
+      }
       const resolve = pickerResolveRef.current;
       pickerResolveRef.current = null;
       if (resolve) resolve({ kind: "skip" });
@@ -323,15 +330,25 @@ export default function LogServiceScreen() {
     recoveryStartedRef.current = true;
     let cancelled = false;
     (async () => {
+      // DIAG-1 (temporary): observe every recovery branch.
+      Sentry.captureMessage("log_service diag recovery_run", {
+        level: "info", tags: { area: "pending_save_diag", op: "recovery_run" }, extra: { vehicleId },
+      });
       const rec = await readPendingSave(user.id, vehicleId);
       if (cancelled) return;
       if (!rec) {
+        Sentry.captureMessage("log_service diag recovery_rec_null", {
+          level: "info", tags: { area: "pending_save_diag", op: "recovery_rec_null" }, extra: { vehicleId },
+        });
         setPhase("editing");
         return;
       }
       const confirmed = await confirmSession();
       if (cancelled) return;
       if (confirmed && resumeMode(rec, Date.now()) === "silent") {
+        Sentry.captureMessage("log_service diag recovery_silent", {
+          level: "info", tags: { area: "pending_save_diag", op: "recovery_silent" }, extra: { vehicleId, items: rec.items.length },
+        });
         savingRef.current = true;
         setPhase("saving");
         void runSaveFlow(rec, false, true, new Set<string>());
@@ -342,6 +359,9 @@ export default function LogServiceScreen() {
             extra: { vehicleId },
           });
         }
+        Sentry.captureMessage("log_service diag recovery_ask", {
+          level: "info", tags: { area: "pending_save_diag", op: "recovery_ask" }, extra: { vehicleId, confirmed },
+        });
         const prompt = resumePrompt(rec);
         setResumeAsk({ rec, title: prompt.title, detail: prompt.detail });
         setPhase("asking");
