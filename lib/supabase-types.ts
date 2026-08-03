@@ -394,6 +394,39 @@ export type Database = {
         }
         Relationships: []
       }
+      import_requests: {
+        Row: {
+          created_at: string
+          created_log_count: number
+          created_vehicle_ids: string[]
+          id: string
+          payload_hash: string
+          request_id: string
+          result: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_log_count?: number
+          created_vehicle_ids?: string[]
+          id?: string
+          payload_hash: string
+          request_id: string
+          result?: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_log_count?: number
+          created_vehicle_ids?: string[]
+          id?: string
+          payload_hash?: string
+          request_id?: string
+          result?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       interval_corrections: {
         Row: {
           change_method: string
@@ -2330,6 +2363,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      import_fleet_commit: {
+        Args: { p_request_id: string; p_vehicles: Json; p_logs: Json }
+        Returns: Json
       }
       log_medication_dose: {
         Args: {
