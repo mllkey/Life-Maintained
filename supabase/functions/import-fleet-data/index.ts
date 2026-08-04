@@ -346,13 +346,53 @@ function splitYearMakeModel(text: string): { year: number; make: string; model: 
   return { year, make: tokens[1], model: tokens.slice(2).join(" ") };
 }
 
-function compositeKey(
-  year: number | null,
+/**
+ * THE canonicalizer. Every composite identity value — on imported vehicle
+ * rows, on service/meter identity cells, and on existing DB rows — is produced
+ * by this one function, so the three sides are comparable by construction.
+ * Case, surrounding padding, and internal whitespace runs are the only things
+ * it collapses; it never reorders or drops tokens.
+ */
+function canon(s: unknown): string {
+  return String(s ?? "").toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+/**
+ * The composite aliases for one vehicle, built identically for imported rows
+ * and for existing DB rows.
+ *
+ * Resolves to null unless year, make and model are ALL non-empty: a nullable
+ * DB column must never produce an alias carrying the text "null"/"undefined",
+ * which would false-match every other row with the same hole.
+ *
+ * `base` is the year/make/model identity a service sheet usually writes.
+ * `named` exists only when the vehicle actually carries a nickname, so an
+ * absent nickname is never confused with the literal text of one.
+ */
+function compositeAliases(
+  year: number | string | null,
   make: string | null,
   model: string | null,
   nickname: string | null,
-): string {
-  return normAlias(`${year ?? ""}|${make ?? ""}|${model ?? ""}|${nickname ?? ""}`);
+): { base: string; named: string | null } | null {
+  if (!canon(year) || !canon(make) || !canon(model)) return null;
+  const base = canon(`${year} ${make} ${model}`);
+  const named = canon(nickname) ? canon(`${year} ${make} ${model} ${nickname}`) : null;
+  return { base, named };
+}
+
+/**
+ * Composite dedup against an existing DB vehicle. Nicknamed twins — same
+ * year/make/model, different nicknames — are DIFFERENT vehicles, so they may
+ * only match on their named aliases. Base equality decides only when at least
+ * one side carries no nickname to be distinguished by.
+ */
+function compositeMatchesExisting(
+  incoming: { base: string; named: string | null },
+  existing: { base: string; named: string | null },
+): boolean {
+  if (incoming.named && existing.named) return incoming.named === existing.named;
+  return incoming.base === existing.base;
 }
 
 class Counter {
@@ -832,7 +872,9 @@ function matchVehicle(
   }
 
   if (rawIdentity) {
-    const value = normAlias(rawIdentity);
+    // Same canonicalizer that built the vehicles' composite aliases, so the
+    // composite tier below compares like with like.
+    const value = canon(rawIdentity);
     if (value) {
       for (const type of order) {
         const hits = vehicles.filter((v) => v.aliases.some((a) => a.type === type && a.value === value));
@@ -1015,7 +1057,7 @@ Deno.serve(async (req: Request) => {
       if (problem) return jsonResponse({ error: problem, request_id }, 422);
 
       const payload = body.normalized_payload as unknown as NormalizedPayload;
-      const { data, error } = await userClient.rpc("import_fleet_commit", {
+      const { data: rpcResult, error } = await userClient.rpc("import_fleet_commit", {
         p_request_id: request_id,
         p_vehicles: payload.vehicles,
         p_logs: payload.logs,
@@ -1042,7 +1084,10 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: "Internal server error", request_id }, 500);
       }
 
-      return jsonResponse({ request_id, result: data }, 200);
+      // The RPC result IS the contract: replayed / vehicle_ids / temp_map /
+      // log_count are top-level keys. Spread first so the outer request_id
+      // stays authoritative even if the RPC ever echoes one back.
+      return jsonResponse({ ...rpcResult, request_id }, 200);
     }
 
     // -----------------------------------------------------------------------
@@ -1234,15 +1279,23 @@ Deno.serve(async (req: Request) => {
     }
 
     // Composite aliases stitch service rows and flag DB duplicates; they never merge.
+    // Both tiers are registered: a sheet may name a vehicle by year/make/model
+    // alone or by its nickname. Twins that collide on `base` make that alias
+    // ambiguous, and the tiered matcher declines rather than guessing.
     const compositeCounts = new Map<string, number>();
     for (const v of live) {
-      const key = compositeKey(v.year, v.make, v.model, v.nickname);
+      const composite = compositeAliases(v.year, v.make, v.model, v.nickname);
+      if (!composite) continue;
+      addAlias(v.aliases, "composite", composite.base);
+      if (composite.named) addAlias(v.aliases, "composite", composite.named);
+      const key = composite.named ?? composite.base;
       compositeCounts.set(key, (compositeCounts.get(key) ?? 0) + 1);
-      addAlias(v.aliases, "composite", key);
     }
     const compositeSeen = new Map<string, number>();
     for (const v of live) {
-      const key = compositeKey(v.year, v.make, v.model, v.nickname);
+      const composite = compositeAliases(v.year, v.make, v.model, v.nickname);
+      if (!composite) continue;
+      const key = composite.named ?? composite.base;
       if ((compositeCounts.get(key) ?? 0) < 2) continue;
       const n = (compositeSeen.get(key) ?? 0) + 1;
       compositeSeen.set(key, n);
@@ -1355,14 +1408,24 @@ Deno.serve(async (req: Request) => {
     // --- existing-DB dedup ------------------------------------------------
     try {
       const existing = await loadExistingVehicles(userClient);
+      // DB rows go through the SAME alias builder as the imported rows, guard
+      // included, so a nullable column yields no composite alias at all rather
+      // than one that matches every other incomplete row.
+      const existingIdentity = existing.map((e) => ({
+        vin: e.vin ? normAlias(e.vin) : null,
+        plate: e.license_plate ? normAlias(e.license_plate) : null,
+        composite: compositeAliases(e.year, e.make, e.model, e.nickname),
+      }));
       for (const v of live) {
         const vin = v.vin ? normAlias(v.vin) : null;
         const plate = v.license_plate ? normAlias(v.license_plate) : null;
-        const composite = compositeKey(v.year, v.make, v.model, v.nickname);
-        v.duplicate_existing = existing.some((e) => {
-          if (vin && e.vin && normAlias(e.vin) === vin) return true;
-          if (plate && e.license_plate && normAlias(e.license_plate) === plate) return true;
-          return compositeKey(e.year, e.make, e.model, e.nickname) === composite;
+        const composite = compositeAliases(v.year, v.make, v.model, v.nickname);
+        v.duplicate_existing = existingIdentity.some((e) => {
+          // VIN and plate stay the strong tiers, checked first.
+          if (vin && e.vin && e.vin === vin) return true;
+          if (plate && e.plate && e.plate === plate) return true;
+          if (!composite || !e.composite) return false;
+          return compositeMatchesExisting(composite, e.composite);
         });
       }
     } catch (e) {
