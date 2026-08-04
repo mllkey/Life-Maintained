@@ -1071,7 +1071,7 @@ export default function AddVehicleScreen() {
           vehicle_category: selectedVehicleCategory,
           fuel_type: fuelType,
           is_awd: isAwd,
-          tracking_mode: (MILEAGE_TRACKED_TYPES.has(vehicleType) ? 'mileage' : HOURS_TRACKED_TYPES.has(vehicleType) ? 'hours' : 'time'),
+          tracking_mode: (MILEAGE_TRACKED_TYPES.has(vehicleType) ? 'mileage' : HOURS_TRACKED_TYPES.has(vehicleType) ? 'hours' : 'time_only'),
           mileage: HOURS_TRACKED_TYPES.has(vehicleType) ? null : (mileage ? parseInt(mileage.replace(/,/g, ""), 10) : null),
           hours: HOURS_TRACKED_TYPES.has(vehicleType) ? parsedEngineHours : null,
           average_miles_per_month: (MILEAGE_TRACKED_TYPES.has(vehicleType) || HOURS_TRACKED_TYPES.has(vehicleType)) ? parseInt(avgMilesPerMonth, 10) : null,
