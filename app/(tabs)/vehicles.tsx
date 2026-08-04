@@ -141,27 +141,41 @@ export default function VehiclesScreen() {
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
         <Text style={styles.title}>Vehicles</Text>
-        <Pressable
-          style={({ pressed }) => [{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 5,
-            backgroundColor: "#E8943A",
-            paddingHorizontal: 14,
-            paddingVertical: 8,
-            borderRadius: 10,
-            opacity: pressed ? 0.85 : 1,
-          }]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            guardedAddVehiclePress();
-          }}
-          accessibilityLabel="Add a new vehicle"
-          accessibilityRole="button"
-        >
-          <Ionicons name="add" size={18} color={Colors.textInverse} />
-          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse }}>Vehicle</Text>
-        </Pressable>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Pressable
+            style={({ pressed }) => [{ padding: 8, borderRadius: 10, borderWidth: 1,
+              borderColor: Colors.border, backgroundColor: Colors.card,
+              opacity: pressed ? 0.85 : 1 }]}
+            hitSlop={6}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/import-fleet"); }}
+            accessibilityRole="button"
+            accessibilityLabel="Import vehicles from a file"
+          >
+            <Ionicons name="arrow-down-circle-outline" size={18} color={Colors.text} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 5,
+              backgroundColor: "#E8943A",
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              borderRadius: 10,
+              opacity: pressed ? 0.85 : 1,
+            }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              guardedAddVehiclePress();
+            }}
+            accessibilityLabel="Add a new vehicle"
+            accessibilityRole="button"
+          >
+            <Ionicons name="add" size={18} color={Colors.textInverse} />
+            <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse }}>Vehicle</Text>
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -181,7 +195,8 @@ export default function VehiclesScreen() {
         ) : (!vehicles?.length && (isError || fetchStatus === "paused")) ? (
           <LoadErrorState onRetry={refetch} title="Unable to load your vehicles" body="Your vehicles are saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading vehicles again" />
         ) : vehicles?.length === 0 ? (
-          <EmptyVehicles onAddPress={guardedAddVehiclePress} />
+          <EmptyVehicles onAddPress={guardedAddVehiclePress}
+            onImportPress={() => router.push("/import-fleet")} />
         ) : (
           vehicles?.map((v, idx) => {
             const isLocked = idx >= vehicleLimit(profile);
@@ -328,7 +343,7 @@ function VehicleListSkeleton() {
   );
 }
 
-function EmptyVehicles({ onAddPress }: { onAddPress: () => void }) {
+function EmptyVehicles({ onAddPress, onImportPress }: { onAddPress: () => void; onImportPress: () => void }) {
   return (
     <View style={styles.emptyWrap}>
       <Text style={styles.emptyTitle}>No vehicles yet</Text>
@@ -337,6 +352,17 @@ function EmptyVehicles({ onAddPress }: { onAddPress: () => void }) {
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onAddPress(); }}
       >
         <Text style={styles.emptyLink}>Add your first vehicle</Text>
+      </Pressable>
+      <Pressable
+        style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, minHeight: 44,
+          justifyContent: "center" }]}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onImportPress(); }}
+        accessibilityRole="button"
+        accessibilityLabel="Import vehicles from a spreadsheet"
+      >
+        <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular",
+          color: Colors.textSecondary }}>or import from a spreadsheet</Text>
       </Pressable>
     </View>
   );

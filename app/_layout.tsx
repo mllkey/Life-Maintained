@@ -621,6 +621,7 @@ function RootLayoutNav() {
           <Stack.Screen name="add-family-member" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="health-profile" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="update-mileage/[vehicleId]" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="import-fleet" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="subscription" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="notifications-settings" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="terms-of-service" options={{ headerShown: false, presentation: "fullScreenModal" }} />

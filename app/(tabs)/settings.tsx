@@ -660,6 +660,26 @@ export default function SettingsScreen() {
             </>
           )}
 
+          <Text style={styles.sectionLabel}>Your Data</Text>
+          <View style={styles.groupCard}>
+            <Pressable
+              style={({ pressed }) => [styles.scansRow, { opacity: pressed ? 0.7 : 1 }]}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/import-fleet"); }}
+              accessibilityRole="button"
+              accessibilityLabel="Import vehicles from a file"
+            >
+              <View style={styles.scansIconWrap}>
+                <Ionicons name="arrow-down-circle-outline" size={18} color={Colors.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.scansLabel}>Import vehicles</Text>
+                <Text style={styles.scansSub}>Bring in a fleet from a CSV or Excel file</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+            </Pressable>
+          </View>
+
           {/* NOTIFICATIONS */}
           <Text style={styles.sectionLabel}>Notifications</Text>
           <View style={styles.groupCard}>

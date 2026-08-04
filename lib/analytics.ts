@@ -37,6 +37,11 @@ export type AnalyticsEvents = {
   scan_completed: { asset_type: string; asset_id: string; source: "camera" | "library" };
   paywall_viewed: { context_vertical?: string; context_reason?: string };
   notification_opened: { asset_kind: string; task_kind: string };
+  fleet_import_started: { files: number };
+  fleet_import_previewed: { vehicles: number; service_records: number };
+  fleet_import_committed: { vehicles: number; service_records: number; schedules_failed: number; replayed: boolean };
+  fleet_import_schedules_retried: { retried: number; still_failed: number };
+  fleet_import_undone: { attempted: number; removed: number };
 };
 
 export type EventName = keyof AnalyticsEvents;
