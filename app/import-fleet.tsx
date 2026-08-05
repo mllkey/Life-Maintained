@@ -140,7 +140,7 @@ async function readErrorBody(err: unknown): Promise<ServerErrorBody | null> {
   const ctx = (err as { context?: InvokeErrorContext })?.context;
   if (!ctx || typeof ctx.json !== "function") return null;
   try {
-    const raw = await ctx.json();
+    const raw = await withTimeout(ctx.json(), AUTH_REFRESH_TIMEOUT_MS);
     if (!raw || typeof raw !== "object") return null;
     const obj: Record<string, unknown> = raw as Record<string, unknown>;
     return { error_code: typeof obj.error_code === "string" ? obj.error_code : undefined };
@@ -175,6 +175,7 @@ const IMPORT_MAX_WAIT_MS = 30000;
 const COMMIT_TIMEOUT_MS = 30000;
 const SCHEDULE_TIMEOUT_MS = 20000;
 const UNDO_TIMEOUT_MS = 30000;
+const AUTH_REFRESH_TIMEOUT_MS = 10000;
 const PARTICLE_COUNT = 12;
 const ORBIT_RADIUS = 96;
 const ORBIT_DOTS = Array.from({ length: 8 }, (_, i) => {
@@ -713,7 +714,11 @@ export default function ImportFleetScreen() {
           return;
         }
         if (status === 401) {
-          await supabase.auth.refreshSession();
+          try {
+            await withTimeout(supabase.auth.refreshSession(), AUTH_REFRESH_TIMEOUT_MS);
+          } catch {
+            // Refresh hung or failed — the 401 failure copy below fits both.
+          }
           if (attempt !== attemptRef.current) return;
           setSceneFailure(FAILURE_401);
           setSceneStatus("failed");
@@ -868,14 +873,24 @@ export default function ImportFleetScreen() {
   // -------------------------------------------------------------------------
   const fetchCap = useCallback(async (): Promise<boolean> => {
     if (!user) return false;
-    const { count, error } = await supabase
-      .from("vehicles")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id);
-    if (error) { setCapKnown(false); return false; }
-    setCapExisting(count ?? 0);
-    setCapKnown(true);
-    return true;
+    try {
+      const { count, error } = await withTimeout(
+        Promise.resolve(
+          supabase
+            .from("vehicles")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", user.id),
+        ),
+        AUTH_REFRESH_TIMEOUT_MS,
+      );
+      if (error) { setCapKnown(false); return false; }
+      setCapExisting(count ?? 0);
+      setCapKnown(true);
+      return true;
+    } catch {
+      setCapKnown(false);
+      return false;
+    }
   }, [user]);
 
   useEffect(() => {
@@ -943,7 +958,11 @@ export default function ImportFleetScreen() {
           return;
         }
         if (status === 401) {
-          await supabase.auth.refreshSession();
+          try {
+            await withTimeout(supabase.auth.refreshSession(), AUTH_REFRESH_TIMEOUT_MS);
+          } catch {
+            // Refresh hung or failed — same ambiguous handling either way.
+          }
           setCommitFailure("ambiguous");
           setRequestInFlight(false);
           return;
@@ -1395,9 +1414,7 @@ export default function ImportFleetScreen() {
         <View style={[styles.centered, { paddingBottom: insets.bottom + 24 }]}>
           {commitFailure === null ? (
             <>
-              <View style={styles.heroTile}>
-                <Ionicons name="document-text-outline" size={40} color={Colors.accent} />
-              </View>
+              <PulsingTile icon="document-text-outline" />
               <Text style={styles.statusTitle}>Adding your fleet…</Text>
             </>
           ) : commitFailure === "sync" ? (
@@ -1426,9 +1443,7 @@ export default function ImportFleetScreen() {
 
       {phase === "generating" && (
         <View style={[styles.centered, { paddingBottom: insets.bottom + 24 }]}>
-          <View style={styles.heroTile}>
-            <Ionicons name="construct-outline" size={40} color={Colors.accent} />
-          </View>
+          <PulsingTile icon="construct-outline" />
           <Text style={styles.statusTitle}>Building maintenance schedules — {genIndex} of {genTotal}</Text>
           <Text style={styles.statusSub}>{genLabel}</Text>
         </View>
@@ -1469,9 +1484,8 @@ export default function ImportFleetScreen() {
                 <PaidActionCTA
                   label="View my vehicles"
                   onPress={() => {
-                    // Tab switches behind the modal, then the dismissal reveals it.
-                    router.navigate("/(tabs)/vehicles");
-                    router.back();
+                    // One deterministic action: pop this screen and land on the tab.
+                    router.dismissTo("/(tabs)/vehicles");
                   }}
                 />
               </View>
@@ -1534,6 +1548,32 @@ function DoneCheck() {
   );
 }
 
+function PulsingTile({ icon }: { icon: React.ComponentProps<typeof Ionicons>["name"] }) {
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true,
+    );
+  }, [pulse]);
+  const halo = useAnimatedStyle(() => ({
+    opacity: 0.10 + pulse.value * 0.18,
+    transform: [{ scale: 1 + pulse.value * 0.18 }],
+  }));
+  const tile = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + pulse.value * 0.04 }],
+  }));
+  return (
+    <View style={styles.pulseWrap}>
+      <Animated.View style={[styles.pulseHalo, halo]} />
+      <Animated.View style={[styles.heroTile, tile]}>
+        <Ionicons name={icon} size={40} color={Colors.accent} />
+      </Animated.View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
@@ -1556,6 +1596,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  pulseWrap: { alignItems: "center", justifyContent: "center" },
+  pulseHalo: { position: "absolute", width: 120, height: 120,
+               borderRadius: 60, backgroundColor: Colors.accent },
   gateTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, textAlign: "center" },
   gateBody: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 21 },
   gateCtaWrap: { alignSelf: "stretch", marginTop: 6 },
