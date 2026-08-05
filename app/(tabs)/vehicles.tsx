@@ -14,7 +14,7 @@ import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -25,6 +25,7 @@ import { resolveTrackingMode, isHoursTracked, isMileageTracked, currentUsageValu
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 import Paywall from "@/components/Paywall";
 import LoadErrorState from "@/components/LoadErrorState";
+import { vehicleGlyph } from "@/lib/vehicleIcons";
 
 type Vehicle = {
   id: string;
@@ -55,20 +56,6 @@ function getTaskStatus(date: string | null): "overdue" | "due_soon" | "good" {
   if (isBefore(d, new Date())) return "overdue";
   if (isBefore(d, addDays(new Date(), 30))) return "due_soon";
   return "good";
-}
-
-function getVehicleIcon(type: string | null): string {
-  switch (type) {
-    case "motorcycle": return "bicycle-outline";
-    case "rv":         return "bus-outline";
-    case "boat":       return "boat-outline";
-    case "atv":        return "trail-sign-outline";
-    case "utv":        return "trail-sign-outline";
-    case "pwc":        return "water-outline";
-    case "snowmobile": return "snow-outline";
-    case "semi_truck":  return "bus-outline";
-    default:           return "car-outline";
-  }
 }
 
 export default function VehiclesScreen() {
@@ -202,7 +189,7 @@ export default function VehiclesScreen() {
             const isLocked = idx >= vehicleLimit(profile);
             const td = taskData?.[v.id];
             const worstStatus = td?.worstStatus ?? "good";
-            const icon = getVehicleIcon(v.vehicle_type);
+            const icon = vehicleGlyph(v.vehicle_type);
             const title = `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim();
             const displayName = v.nickname ?? title;
 
@@ -271,8 +258,10 @@ export default function VehiclesScreen() {
               >
                 {v.photo_url ? (
                   <Image source={{ uri: v.photo_url }} style={{ width: 36, height: 36, borderRadius: 10 }} resizeMode="cover" />
+                ) : icon.family === "ionicons" ? (
+                  <Ionicons name={icon.name} size={18} color={Colors.vehicle} />
                 ) : (
-                  <Ionicons name={icon as any} size={18} color={Colors.vehicle} />
+                  <MaterialCommunityIcons name={icon.name} size={18} color={Colors.vehicle} />
                 )}
                 <View style={styles.vehicleInfo}>
                   <View style={styles.vehicleTitleRow}>

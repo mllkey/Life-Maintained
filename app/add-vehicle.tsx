@@ -304,7 +304,7 @@ const VEHICLE_TYPE_GROUPS: { label: string; types: { value: string; label: strin
     types: [
       { value: "dump_truck", label: "Dump Truck", icon: "dump-truck" },
       { value: "trailer", label: "Trailer", icon: "truck-trailer" },
-      { value: "dumpster", label: "Dumpster", icon: "dumpster" },
+      { value: "dumpster", label: "Dumpster", icon: "trash-can" },
     ],
   },
   {
