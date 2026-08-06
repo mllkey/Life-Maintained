@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/react-native';
 
-Sentry.init({
+const sentryOptions = {
   dsn: Constants.expoConfig?.extra?.sentryDsn,
   enabled: !__DEV__,
   environment: __DEV__ ? 'development' : 'production',
@@ -11,9 +11,12 @@ Sentry.init({
   dist: nativeBuildVersion ?? undefined,
   tracesSampleRate: 0.2,
   enableAppHangTracking: true,
+  enableAppHangTrackingV2: true,
   appHangTimeoutInterval: 2,
   enableWatchdogTerminationTracking: true,
-});
+};
+
+Sentry.init(sentryOptions);
 
 import { QueryClientProvider, focusManager, onlineManager } from "@tanstack/react-query";
 import { Stack, router, usePathname, useRootNavigationState } from "expo-router";
