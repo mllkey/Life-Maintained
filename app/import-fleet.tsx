@@ -614,8 +614,7 @@ export default function ImportFleetScreen() {
   const [retriedSchedules, setRetriedSchedules] = useState(false);
 
   const [undoConfirm, setUndoConfirm] = useState(false);
-  const [undoStatus, setUndoStatus] = useState<string | null>(null);
-  const [undoPartial, setUndoPartial] = useState<{ ok: number; total: number } | null>(null);
+  const [undoStatus, setUndoStatus] = useState<"idle" | "removing" | "removed" | "failed">("idle");
   const [undoToast, setUndoToast] = useState(false);
 
   const attemptRef = useRef(0);
@@ -663,8 +662,7 @@ export default function ImportFleetScreen() {
     setScheduleOutcomes({});
     setRetriedSchedules(false);
     setUndoConfirm(false);
-    setUndoStatus(null);
-    setUndoPartial(null);
+    setUndoStatus("idle");
     setSceneFailure(null);
     setSceneStatus("running");
     setRequestInFlight(false);
@@ -1115,16 +1113,15 @@ export default function ImportFleetScreen() {
   // -------------------------------------------------------------------------
   // Undo
   // -------------------------------------------------------------------------
-  const runUndo = useCallback(async () => {
+  const runUndoRemoval = useCallback(async () => {
     if (inFlightRef.current || !commitResult) return;
     inFlightRef.current = true;
     setRequestInFlight(true);
-    setUndoConfirm(false);
-    const ids = commitResult.vehicle_ids;
-    let okCount = 0;
+    setUndoStatus("removing");
     try {
+      const ids = commitResult.vehicle_ids;
+      let okCount = 0;
       for (let i = 0; i < ids.length; i++) {
-        setUndoStatus(`Removing — ${i + 1} of ${ids.length}`);
         try {
           const { error } = await withTimeout(deleteVehicleCascade({ p_vehicle_id: ids[i] }), UNDO_TIMEOUT_MS);
           if (!error) okCount += 1;
@@ -1137,18 +1134,23 @@ export default function ImportFleetScreen() {
       queryClient.invalidateQueries({ queryKey: ["settings_pred_vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["maintenance_tasks"] });
       capture("fleet_import_undone", { attempted: ids.length, removed: okCount });
-      setUndoStatus(null);
       if (okCount === ids.length) {
-        setUndoToast(true);
-        setTimeout(() => { router.back(); }, 900);
+        setUndoStatus("removed");
       } else {
-        setUndoPartial({ ok: okCount, total: ids.length });
+        setUndoStatus("failed");
       }
+    } catch {
+      setUndoStatus("failed");
     } finally {
-      setRequestInFlight(false);
       inFlightRef.current = false;
+      setRequestInFlight(false);
     }
   }, [commitResult, queryClient]);
+
+  const confirmUndoRemoval = () => {
+    setUndoConfirm(false);
+    void runUndoRemoval();
+  };
 
   // -------------------------------------------------------------------------
   // Render helpers
@@ -1451,19 +1453,50 @@ export default function ImportFleetScreen() {
 
       {phase === "done" && (
         <View style={[styles.centered, { paddingBottom: insets.bottom + 24 }]}>
-          {undoStatus ? (
-            <Text style={styles.statusTitle}>{undoStatus}</Text>
-          ) : undoPartial ? (
-            <>
-              <Text style={styles.statusSub}>
-                Removed {undoPartial.ok} of {undoPartial.total}. The rest can be deleted from each vehicle&apos;s screen.
-              </Text>
-              <View style={styles.gateCtaWrap}>
-                <PaidActionCTA label="Done" onPress={() => router.back()} />
-              </View>
-            </>
-          ) : (
-            <>
+          {(() => {
+            if (undoStatus === "removing") {
+              return (
+                <>
+                  <PulsingTile icon="trash-outline" />
+                  <Text style={styles.statusTitle}>Removing your import…</Text>
+                </>
+              );
+            }
+            if (undoStatus === "removed") {
+              return (
+                <>
+                  <DoneCheck />
+                  <Text style={styles.doneTitle}>Import removed</Text>
+                  <Text style={styles.statusSub}>
+                    {committedCount} vehicle{plural(committedCount)} and{" "}
+                    {committedCount === 1 ? "its" : "their"} service records are gone.
+                  </Text>
+                  <View style={styles.gateCtaWrap}>
+                    <PaidActionCTA
+                      label="Done"
+                      onPress={() => {
+                        router.dismissTo("/(tabs)/vehicles");
+                      }}
+                    />
+                  </View>
+                </>
+              );
+            }
+            if (undoStatus === "failed") {
+              return (
+                <>
+                  <Text style={styles.statusTitle}>Couldn&apos;t finish removing your import</Text>
+                  <Text style={styles.statusSub}>
+                    Try again to complete it — nothing will be added back.
+                  </Text>
+                  <View style={styles.gateCtaWrap}>
+                    <PaidActionCTA label="Try again" onPress={runUndoRemoval} />
+                  </View>
+                </>
+              );
+            }
+            return (
+              <>
               <DoneCheck />
               <Text style={styles.doneTitle}>
                 {committedCount} vehicle{plural(committedCount)} added
@@ -1490,14 +1523,14 @@ export default function ImportFleetScreen() {
                 />
               </View>
 
-              {undoConfirm ? (
+              {undoConfirm && undoStatus === "idle" ? (
                 <View style={styles.undoWrap}>
                   <Text style={styles.undoPrompt}>
                     Remove all {committedCount} imported vehicles and their records?
                   </Text>
                   <Pressable
                     style={({ pressed }) => [styles.destructive, { opacity: pressed ? 0.85 : 1 }]}
-                    onPress={() => { void runUndo(); }}
+                    onPress={confirmUndoRemoval}
                     accessibilityRole="button"
                     accessibilityLabel="Yes, remove them"
                   >
@@ -1522,8 +1555,9 @@ export default function ImportFleetScreen() {
                   <Text style={styles.tertiaryText}>Undo import</Text>
                 </Pressable>
               )}
-            </>
-          )}
+              </>
+            );
+          })()}
         </View>
       )}
 
@@ -1558,11 +1592,11 @@ function PulsingTile({ icon }: { icon: React.ComponentProps<typeof Ionicons>["na
     );
   }, [pulse]);
   const halo = useAnimatedStyle(() => ({
-    opacity: 0.10 + pulse.value * 0.18,
-    transform: [{ scale: 1 + pulse.value * 0.18 }],
+    opacity: 0.05 + pulse.value * 0.10,
+    transform: [{ scale: 1 + pulse.value * 0.35 }],
   }));
   const tile = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + pulse.value * 0.04 }],
+    transform: [{ scale: 1 + pulse.value * 0.09 }],
   }));
   return (
     <View style={styles.pulseWrap}>
@@ -1597,8 +1631,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   pulseWrap: { alignItems: "center", justifyContent: "center" },
-  pulseHalo: { position: "absolute", width: 120, height: 120,
-               borderRadius: 60, backgroundColor: Colors.accent },
+  pulseHalo: { position: "absolute", width: 104, height: 104,
+               borderRadius: 52, backgroundColor: Colors.accent },
   gateTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, textAlign: "center" },
   gateBody: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 21 },
   gateCtaWrap: { alignSelf: "stretch", marginTop: 6 },
