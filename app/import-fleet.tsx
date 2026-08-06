@@ -402,6 +402,39 @@ function MappingScene({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const resetSceneValues = () => {
+    titleOpacity.value = 0;
+    titleY.value = 10;
+    subtitleOpacity.value = 1;
+    chip1Opacity.value = 0;
+    chip1Y.value = 12;
+    chip2Opacity.value = 0;
+    chip2Y.value = 12;
+    chip3Opacity.value = 0;
+    chip3Y.value = 12;
+    chipIcon0.value = 0;
+    chipIcon1.value = 0;
+    chipIcon2.value = 0;
+    haloPulse.value = 0;
+    orbitSpin.value = 0;
+    docScale.value = 0;
+    docOpacity.value = 0;
+    docGlow.value = 0;
+    readyOpacity.value = 0;
+    particle0.value = 0;
+    particle1.value = 0;
+    particle2.value = 0;
+    particle3.value = 0;
+    particle4.value = 0;
+    particle5.value = 0;
+    particle6.value = 0;
+    particle7.value = 0;
+    particle8.value = 0;
+    particle9.value = 0;
+    particle10.value = 0;
+    particle11.value = 0;
+  };
+
   const armScene = useCallback(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     titleOpacity.value = withTiming(1, { duration: 480, easing: Easing.out(Easing.cubic) });
@@ -451,6 +484,16 @@ function MappingScene({
       subtitleOpacity.value = 1;
       return;
     }
+      if (status === "running" && failedRef.current) {
+        failedRef.current = false;
+        doneRef.current = false;
+        revealed.current = false;
+        stopScene();
+        resetSceneValues();
+        setSubtitleText(SCENE_COPY.initial);
+        sceneStart.current = Date.now();
+        sceneTimers.current = armScene();
+      }
     if (status === "ready" && !revealed.current) {
       revealed.current = true;
       doneRef.current = true;

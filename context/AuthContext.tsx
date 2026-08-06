@@ -153,9 +153,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return buildProfile(userId, data);
         } catch (error: any) {
           if (attempt === 0) {
-            try {
-              await supabase.auth.getSession();
-            } catch {}
             await new Promise((r) => setTimeout(r, 500));
             return fetchProfileFromDb(userId, 1);
           }
@@ -357,16 +354,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (event === "SIGNED_IN") {
-        hydrateFromSession(nextSession, { showLoading: false, quiet: false }).catch((e) => {
-          console.error("[AUTH] SIGNED_IN hydrate failed:", e);
-        });
+        setTimeout(() => {
+          hydrateFromSession(nextSession, { showLoading: false, quiet: false }).catch((e) => {
+            console.error("[AUTH] SIGNED_IN hydrate failed:", e);
+          });
+        }, 0);
         return;
       }
 
       if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
-        hydrateFromSession(nextSession, { showLoading: false, quiet: true }).catch((e) => {
-          console.error(`[AUTH] ${event} hydrate failed:`, e);
-        });
+        setTimeout(() => {
+          hydrateFromSession(nextSession, { showLoading: false, quiet: true }).catch((e) => {
+            console.error(`[AUTH] ${event} hydrate failed:`, e);
+          });
+        }, 0);
       }
     });
 
