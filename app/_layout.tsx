@@ -10,6 +10,9 @@ Sentry.init({
       : undefined,
   dist: nativeBuildVersion ?? undefined,
   tracesSampleRate: 0.2,
+  enableAppHangTracking: true,
+  appHangTimeoutInterval: 2,
+  enableWatchdogTerminationTracking: true,
 });
 
 import { QueryClientProvider, focusManager, onlineManager } from "@tanstack/react-query";
@@ -105,6 +108,7 @@ focusManager.setEventListener((handleFocus) => {
 if (Platform.OS !== "web") {
   onlineManager.setEventListener((setOnline) => {
     const sub = Network.addNetworkStateListener((state) => {
+      Sentry.addBreadcrumb({ category: "freeze-trace", message: "network state change", level: "info" });
       setOnline(state.isInternetReachable ?? state.isConnected ?? true);
     });
     return () => sub.remove();
@@ -144,6 +148,7 @@ function RootLayoutNav() {
       const prev = appStateRef.current;
       appStateRef.current = nextState;
       if (nextState === "active" && prev !== "active") {
+        Sentry.addBreadcrumb({ category: "freeze-trace", message: "app foregrounded", level: "info" });
         Notifications.setBadgeCountAsync(0).catch(() => {});
         runAgingAwareScheduling(userId).catch(() => {});
         capture("app_foregrounded", {});

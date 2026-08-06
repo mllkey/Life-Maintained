@@ -8,6 +8,7 @@ import {
   useRef,
   useCallback,
 } from "react";
+import * as Sentry from '@sentry/react-native';
 import { AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
@@ -355,6 +356,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (event === "SIGNED_IN") {
         setTimeout(() => {
+          Sentry.addBreadcrumb({ category: "freeze-trace", message: "auth hydrate deferred (SIGNED_IN)", level: "info" });
           hydrateFromSession(nextSession, { showLoading: false, quiet: false }).catch((e) => {
             console.error("[AUTH] SIGNED_IN hydrate failed:", e);
           });
@@ -364,6 +366,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
         setTimeout(() => {
+          Sentry.addBreadcrumb({ category: "freeze-trace", message: "auth hydrate deferred (refresh)", level: "info" });
           hydrateFromSession(nextSession, { showLoading: false, quiet: true }).catch((e) => {
             console.error(`[AUTH] ${event} hydrate failed:`, e);
           });

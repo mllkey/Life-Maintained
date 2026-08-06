@@ -37,6 +37,7 @@ import Animated, {
   cancelAnimation,
   type SharedValue,
 } from "react-native-reanimated";
+import * as Sentry from '@sentry/react-native';
 import { Colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -899,6 +900,7 @@ export default function ImportFleetScreen() {
   }, [files, runPreview]);
 
   const retryPreview = useCallback(() => {
+    Sentry.addBreadcrumb({ category: "freeze-trace", message: "retryPreview tapped", level: "info" });
     const contents = files.map((f, i) => ({ name: f.name, base64: fileContentsRef.current[i] ?? "" }));
     if (contents.some((c) => c.base64 === "")) { resetAll(); return; }
     const rid = Crypto.randomUUID();
@@ -961,6 +963,7 @@ export default function ImportFleetScreen() {
   // Commit
   // -------------------------------------------------------------------------
   const runCommit = useCallback(async (rid: string, payload: NormalizedPayload) => {
+    Sentry.addBreadcrumb({ category: "freeze-trace", message: "runCommit start", level: "info" });
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setCommitFailure(null);
@@ -997,6 +1000,7 @@ export default function ImportFleetScreen() {
           return;
         }
         if (status === 401) {
+          Sentry.addBreadcrumb({ category: "freeze-trace", message: "runCommit 401", level: "info" });
           try {
             await withTimeout(supabase.auth.refreshSession(), AUTH_REFRESH_TIMEOUT_MS);
           } catch {
@@ -1021,6 +1025,7 @@ export default function ImportFleetScreen() {
       setRequestInFlight(false);
       setPhase("generating");
     } catch (e) {
+      Sentry.addBreadcrumb({ category: "freeze-trace", message: "runCommit ambiguous", level: "info" });
       if (__DEV__) console.warn("[import-fleet] commit failed:", e);
       setCommitFailure("ambiguous");
       setRequestInFlight(false);
@@ -1156,6 +1161,7 @@ export default function ImportFleetScreen() {
   // -------------------------------------------------------------------------
   const runUndoRemoval = useCallback(async () => {
     if (inFlightRef.current || !commitResult) return;
+    Sentry.addBreadcrumb({ category: "freeze-trace", message: "runUndoRemoval start", level: "info" });
     inFlightRef.current = true;
     setRequestInFlight(true);
     setUndoStatus("removing");
