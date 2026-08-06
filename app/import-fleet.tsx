@@ -484,16 +484,16 @@ function MappingScene({
       subtitleOpacity.value = 1;
       return;
     }
-      if (status === "running" && failedRef.current) {
-        failedRef.current = false;
-        doneRef.current = false;
-        revealed.current = false;
-        stopScene();
-        resetSceneValues();
-        setSubtitleText(SCENE_COPY.initial);
-        sceneStart.current = Date.now();
-        sceneTimers.current = armScene();
-      }
+    if (status === "running" && failedRef.current) {
+      failedRef.current = false;
+      doneRef.current = false;
+      revealed.current = false;
+      stopScene();
+      resetSceneValues();
+      setSubtitleText(SCENE_COPY.initial);
+      sceneStart.current = Date.now();
+      sceneTimers.current = armScene();
+    }
     if (status === "ready" && !revealed.current) {
       revealed.current = true;
       doneRef.current = true;
