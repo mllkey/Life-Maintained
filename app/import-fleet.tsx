@@ -43,7 +43,6 @@ import { useAuth } from "@/context/AuthContext";
 import { capture } from "@/lib/analytics";
 import { hasActivePremium, vehicleLimit } from "@/lib/subscription";
 import { PaidActionCTA } from "@/components/PaidActionCTA";
-import { SaveToast } from "@/components/SaveToast";
 import Paywall from "@/components/Paywall";
 import { deleteVehicleCascade } from "@/lib/rpc";
 import { getInvokeStatus } from "@/components/onboarding/BuildingScene";
@@ -615,7 +614,6 @@ export default function ImportFleetScreen() {
 
   const [undoConfirm, setUndoConfirm] = useState(false);
   const [undoStatus, setUndoStatus] = useState<"idle" | "removing" | "removed" | "failed">("idle");
-  const [undoToast, setUndoToast] = useState(false);
 
   const attemptRef = useRef(0);
   const inFlightRef = useRef(false);
@@ -1561,7 +1559,6 @@ export default function ImportFleetScreen() {
         </View>
       )}
 
-      <SaveToast visible={undoToast} message="Import undone" />
       {paywallModal}
     </View>
   );
