@@ -137,8 +137,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfileFromDb = useCallback(
     async (userId: string, attempt = 0): Promise<Profile | null> => {
       if (profileFetchPromiseRef.current && profileFetchUserIdRef.current === userId) {
+        Sentry.setTag("freeze_auth_profile_fetch", `reuse:${attempt}`);
+        Sentry.addBreadcrumb({
+          category: "freeze-trace",
+          message: "auth profile fetch reuse",
+          level: "info",
+          data: { attempt },
+        });
         return profileFetchPromiseRef.current;
       }
+
+      Sentry.setTag("freeze_auth_profile_fetch", `start:${attempt}`);
+      Sentry.addBreadcrumb({
+        category: "freeze-trace",
+        message: "auth profile fetch start",
+        level: "info",
+        data: { attempt },
+      });
 
       const promise = (async () => {
         try {
@@ -167,6 +182,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         return await promise;
       } finally {
+        Sentry.setTag("freeze_auth_profile_fetch", `finish:${attempt}`);
+        Sentry.addBreadcrumb({
+          category: "freeze-trace",
+          message: "auth profile fetch finish",
+          level: "info",
+          data: { attempt },
+        });
         if (profileFetchPromiseRef.current === promise) {
           profileFetchPromiseRef.current = null;
           profileFetchUserIdRef.current = null;
@@ -186,7 +208,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const instant = options?.instant ?? false;
       const runId = ++hydrateRunIdRef.current;
 
-      if (!mountedRef.current) return;
+      Sentry.setTag("freeze_auth_hydrate", `start:${runId}`);
+      Sentry.addBreadcrumb({
+        category: "freeze-trace",
+        message: "auth hydrate start",
+        level: "info",
+        data: { runId, instant, quiet, showLoading },
+      });
+
+      const finishHydrate = (result: string) => {
+        Sentry.setTag("freeze_auth_hydrate", `finish:${runId}:${result}`);
+        Sentry.addBreadcrumb({
+          category: "freeze-trace",
+          message: "auth hydrate finish",
+          level: "info",
+          data: { runId, result },
+        });
+      };
+
+      if (!mountedRef.current) {
+        finishHydrate("unmounted");
+        return;
+      }
 
       const userId = nextSession.user.id;
       sessionRef.current = nextSession;
@@ -246,6 +289,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (isStale()) {
           if (showLoading && mountedRef.current) setIsLoading(false);
+          finishHydrate("stale-instant");
           return;
         }
 
@@ -264,6 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .catch((e) => {
             console.error("[AUTH] background profile refresh failed:", e);
           });
+        finishHydrate("instant-background-started");
         return;
       }
 
@@ -273,6 +318,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (isStale()) {
         if (showLoading && mountedRef.current) setIsLoading(false);
+        finishHydrate("stale-default-before-fetch");
         return;
       }
 
@@ -286,6 +332,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error("[AUTH] hydrateFromSession profile fetch failed:", e);
         if (isStale()) {
           if (showLoading && mountedRef.current) setIsLoading(false);
+          finishHydrate("stale-default-catch");
           return;
         }
         if (cachedOnboarding) setOnboardingCompleted(true);
@@ -295,6 +342,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsLoading(false);
         }
       }
+      finishHydrate("default-settled");
     },
     [
       clearOnboardingCache,

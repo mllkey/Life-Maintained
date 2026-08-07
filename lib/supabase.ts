@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Sentry from "@sentry/react-native";
 import { createClient, processLock } from "@supabase/supabase-js";
 import { AppState, Platform } from "react-native";
 import type { Database } from './supabase-types';
@@ -59,9 +60,33 @@ if (Platform.OS !== "web" && !global.__lmSupabaseAutoRefreshRegistered) {
 
   AppState.addEventListener("change", (state) => {
     if (state === "active") {
+      Sentry.setTag("freeze_supabase_auto_refresh", "start");
+      Sentry.addBreadcrumb({
+        category: "freeze-trace",
+        message: "supabase auto refresh start",
+        level: "info",
+      });
       supabase.auth.startAutoRefresh();
+      Sentry.setTag("freeze_supabase_auto_refresh", "finish");
+      Sentry.addBreadcrumb({
+        category: "freeze-trace",
+        message: "supabase auto refresh finish",
+        level: "info",
+      });
     } else {
+      Sentry.setTag("freeze_supabase_auto_refresh", "stop-start");
+      Sentry.addBreadcrumb({
+        category: "freeze-trace",
+        message: "supabase auto refresh stop start",
+        level: "info",
+      });
       supabase.auth.stopAutoRefresh();
+      Sentry.setTag("freeze_supabase_auto_refresh", "stop-finish");
+      Sentry.addBreadcrumb({
+        category: "freeze-trace",
+        message: "supabase auto refresh stop finish",
+        level: "info",
+      });
     }
   });
 

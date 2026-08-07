@@ -174,7 +174,27 @@ type Candidate = {
 };
 
 export async function scheduleMaintenanceNotifications(userId: string): Promise<boolean> {
-  if (Platform.OS === "web") return false;
+  Sentry.setTag("freeze_notification_scheduler", "start");
+  Sentry.addBreadcrumb({
+    category: "freeze-trace",
+    message: "notification scheduler start",
+    level: "info",
+  });
+
+  const finishScheduling = (result: string) => {
+    Sentry.setTag("freeze_notification_scheduler", `finish:${result}`);
+    Sentry.addBreadcrumb({
+      category: "freeze-trace",
+      message: "notification scheduler finish",
+      level: "info",
+      data: { result },
+    });
+  };
+
+  if (Platform.OS === "web") {
+    finishScheduling("web");
+    return false;
+  }
 
   try {
     const warmupStart = Date.now();
@@ -190,11 +210,15 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     }
     if (!warmedUp) {
       console.warn("[NotifScheduler] aborting scheduling run: native module warmup failed after 2s");
+      finishScheduling("warmup-failed");
       return false;
     }
 
     const { status } = await Notifications.getPermissionsAsync();
-    if (status !== "granted") return false;
+    if (status !== "granted") {
+      finishScheduling("permission-not-granted");
+      return false;
+    }
 
     // Register/refresh the push token whenever OS permission is granted,
     // regardless of the in-app pushEnabled toggle.
@@ -211,6 +235,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       }
       await Notifications.cancelAllScheduledNotificationsAsync();
       await Notifications.setBadgeCountAsync(0);
+      finishScheduling("push-disabled");
       return false;
     }
 
@@ -810,10 +835,12 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     }).length;
 
     await Notifications.setBadgeCountAsync(overdueVehicle + overdueProperty + overdueHealth);
+    finishScheduling("success");
     return true;
 
   } catch (err) {
     console.error("Notification scheduling failed:", err);
+    finishScheduling("error");
     return false;
   }
 }
