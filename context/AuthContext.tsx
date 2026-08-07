@@ -136,46 +136,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const fetchProfileFromDb = useCallback(
-    async (userId: string, attempt = 0): Promise<Profile | null> => {
+    async (userId: string): Promise<Profile | null> => {
       if (profileFetchPromiseRef.current && profileFetchUserIdRef.current === userId) {
-        Sentry.setTag("freeze_auth_profile_fetch", `reuse:${attempt}`);
+        Sentry.setTag("freeze_auth_profile_fetch", "reuse");
         Sentry.addBreadcrumb({
           category: "freeze-trace",
           message: "auth profile fetch reuse",
           level: "info",
-          data: { attempt },
         });
-        recordFreezeMilestone("auth profile fetch reuse", { attempt });
+        recordFreezeMilestone("auth profile fetch reuse");
         return profileFetchPromiseRef.current;
       }
 
-      Sentry.setTag("freeze_auth_profile_fetch", `start:${attempt}`);
-      Sentry.addBreadcrumb({
-        category: "freeze-trace",
-        message: "auth profile fetch start",
-        level: "info",
-        data: { attempt },
-      });
-      recordFreezeMilestone("auth profile fetch start", { attempt });
+      const fetchAttempt = async (attempt: number): Promise<Profile | null> => {
+        Sentry.setTag("freeze_auth_profile_fetch", `start:${attempt}`);
+        Sentry.addBreadcrumb({
+          category: "freeze-trace",
+          message: "auth profile fetch start",
+          level: "info",
+          data: { attempt },
+        });
+        recordFreezeMilestone("auth profile fetch start", { attempt });
+
+        const { data, error } = await supabase
+          .from("profiles")
+          .select(PROFILE_SELECT)
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!data) return null;
+
+        return buildProfile(userId, data);
+      };
 
       const promise = (async () => {
         try {
-          const { data, error } = await supabase
-            .from("profiles")
-            .select(PROFILE_SELECT)
-            .eq("user_id", userId)
-            .maybeSingle();
-
-          if (error) throw error;
-          if (!data) return null;
-
-          return buildProfile(userId, data);
-        } catch (error: any) {
-          if (attempt === 0) {
-            await new Promise((r) => setTimeout(r, 500));
-            return fetchProfileFromDb(userId, 1);
-          }
-          throw error;
+          return await fetchAttempt(0);
+        } catch {
+          await new Promise((r) => setTimeout(r, 500));
+          return fetchAttempt(1);
         }
       })();
 
@@ -185,14 +185,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         return await promise;
       } finally {
-        Sentry.setTag("freeze_auth_profile_fetch", `finish:${attempt}`);
+        Sentry.setTag("freeze_auth_profile_fetch", "finish");
         Sentry.addBreadcrumb({
           category: "freeze-trace",
           message: "auth profile fetch finish",
           level: "info",
-          data: { attempt },
         });
-        recordFreezeMilestone("auth profile fetch finish", { attempt });
+        recordFreezeMilestone("auth profile fetch finish");
         if (profileFetchPromiseRef.current === promise) {
           profileFetchPromiseRef.current = null;
           profileFetchUserIdRef.current = null;
