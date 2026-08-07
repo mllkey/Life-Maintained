@@ -5,6 +5,7 @@ import { supabase } from "./supabase";
 import { loadNotifPrefs } from "./notificationPrefs";
 import { projectedMileage, projectedHours } from "./usageHelpers";
 import * as Sentry from "@sentry/react-native";
+import { recordFreezeMilestone } from "./freezeJournal";
 
 function parseNotifTime(timeStr: string): { hour: number; minute: number } {
   const parts = (timeStr ?? "09:00").split(":");
@@ -180,6 +181,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     message: "notification scheduler start",
     level: "info",
   });
+  recordFreezeMilestone("notification scheduler start");
 
   const finishScheduling = (result: string) => {
     Sentry.setTag("freeze_notification_scheduler", `finish:${result}`);
@@ -189,6 +191,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       level: "info",
       data: { result },
     });
+    recordFreezeMilestone("notification scheduler finish", { result });
   };
 
   if (Platform.OS === "web") {

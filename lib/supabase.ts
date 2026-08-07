@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Sentry from "@sentry/react-native";
+import { recordFreezeMilestone } from "./freezeJournal";
 import { createClient, processLock } from "@supabase/supabase-js";
 import { AppState, Platform } from "react-native";
 import type { Database } from './supabase-types';
@@ -66,6 +67,7 @@ if (Platform.OS !== "web" && !global.__lmSupabaseAutoRefreshRegistered) {
         message: "supabase auto refresh start",
         level: "info",
       });
+      recordFreezeMilestone("supabase auto refresh start");
       supabase.auth.startAutoRefresh();
       Sentry.setTag("freeze_supabase_auto_refresh", "finish");
       Sentry.addBreadcrumb({
@@ -73,6 +75,7 @@ if (Platform.OS !== "web" && !global.__lmSupabaseAutoRefreshRegistered) {
         message: "supabase auto refresh finish",
         level: "info",
       });
+      recordFreezeMilestone("supabase auto refresh finish");
     } else {
       Sentry.setTag("freeze_supabase_auto_refresh", "stop-start");
       Sentry.addBreadcrumb({
@@ -80,6 +83,7 @@ if (Platform.OS !== "web" && !global.__lmSupabaseAutoRefreshRegistered) {
         message: "supabase auto refresh stop start",
         level: "info",
       });
+      recordFreezeMilestone("supabase auto refresh stop start");
       supabase.auth.stopAutoRefresh();
       Sentry.setTag("freeze_supabase_auto_refresh", "stop-finish");
       Sentry.addBreadcrumb({
@@ -87,6 +91,7 @@ if (Platform.OS !== "web" && !global.__lmSupabaseAutoRefreshRegistered) {
         message: "supabase auto refresh stop finish",
         level: "info",
       });
+      recordFreezeMilestone("supabase auto refresh stop finish");
     }
   });
 

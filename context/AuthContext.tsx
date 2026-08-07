@@ -9,6 +9,7 @@ import {
   useCallback,
 } from "react";
 import * as Sentry from '@sentry/react-native';
+import { recordFreezeMilestone } from "@/lib/freezeJournal";
 import { AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
@@ -144,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           level: "info",
           data: { attempt },
         });
+        recordFreezeMilestone("auth profile fetch reuse", { attempt });
         return profileFetchPromiseRef.current;
       }
 
@@ -154,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         level: "info",
         data: { attempt },
       });
+      recordFreezeMilestone("auth profile fetch start", { attempt });
 
       const promise = (async () => {
         try {
@@ -189,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           level: "info",
           data: { attempt },
         });
+        recordFreezeMilestone("auth profile fetch finish", { attempt });
         if (profileFetchPromiseRef.current === promise) {
           profileFetchPromiseRef.current = null;
           profileFetchUserIdRef.current = null;
@@ -215,6 +219,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         level: "info",
         data: { runId, instant, quiet, showLoading },
       });
+      recordFreezeMilestone("auth hydrate start", {
+        runId,
+        instant,
+        quiet,
+        showLoading,
+      });
 
       const finishHydrate = (result: string) => {
         Sentry.setTag("freeze_auth_hydrate", `finish:${runId}:${result}`);
@@ -224,6 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           level: "info",
           data: { runId, result },
         });
+        recordFreezeMilestone("auth hydrate finish", { runId, result });
       };
 
       if (!mountedRef.current) {
