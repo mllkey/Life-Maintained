@@ -158,12 +158,62 @@ function contextualSubtitle(ctx: PaywallContext | undefined): string {
   return "Choose the plan that fits your life";
 }
 
-// Tier preselect: free user hitting any context starts at Personal; Personal user
-// hitting any context starts at Pro. Defaults to Personal otherwise.
-function preselectedTierFor(profile: { subscription_tier: string | null } | null | undefined): TierKey {
-  const t = profile?.subscription_tier ?? null;
-  if (t === "personal") return "pro";
-  return "personal";
+type PaywallProfile = {
+  subscription_tier: string | null;
+  subscription_expires_at?: string | null;
+  trial_expires_at?: string | null;
+};
+
+function isFutureDate(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time > Date.now();
+}
+
+function activeTierForPaywall(profile: PaywallProfile | null | undefined): TierKey | null {
+  const tier = profile?.subscription_tier;
+  if (tier !== "personal" && tier !== "pro" && tier !== "business") return null;
+  if (isFutureDate(profile?.trial_expires_at) || isFutureDate(profile?.subscription_expires_at)) {
+    return tier;
+  }
+  return null;
+}
+
+function preselectedTierFor(
+  profile: PaywallProfile | null | undefined,
+  context: PaywallContext | undefined,
+): TierKey {
+  const isLimitContext = context?.reason === "limit_reached" || context?.reason === "locked_existing";
+  if (isFutureDate(profile?.trial_expires_at) && profile?.subscription_tier === "trial") {
+    return isLimitContext ? "business" : "personal";
+  }
+
+  const current = activeTierForPaywall(profile);
+  if (!current) return "personal";
+  if (isLimitContext) {
+    if (current === "personal") return "pro";
+    if (current === "pro") return "business";
+  }
+  return current;
+}
+
+function tierRank(tier: TierKey): number {
+  if (tier === "personal") return 1;
+  if (tier === "pro") return 2;
+  return 3;
+}
+
+function purchaseCtaLabel(
+  selectedTier: TierKey,
+  profile: PaywallProfile | null | undefined,
+): string {
+  const selectedLabel = TIER_CONFIG[selectedTier].label;
+  if (isFutureDate(profile?.trial_expires_at)) return `Choose ${selectedLabel}`;
+  const current = activeTierForPaywall(profile);
+  if (!current) return `Continue with ${selectedLabel}`;
+  if (tierRank(selectedTier) > tierRank(current)) return `Upgrade to ${selectedLabel}`;
+  if (tierRank(selectedTier) < tierRank(current)) return `Switch to ${selectedLabel}`;
+  return `Continue with ${selectedLabel}`;
 }
 
 export default function Paywall({
@@ -177,7 +227,7 @@ export default function Paywall({
   const insets = useSafeAreaInsets();
   const { user, profile, refreshProfile } = useAuth();
   const [billing, setBilling] = useState<Billing>("annual");
-  const [selectedTier, setSelectedTier] = useState<TierKey>(context ? preselectedTierFor(profile) : "personal");
+  const [selectedTier, setSelectedTier] = useState<TierKey>(context ? preselectedTierFor(profile, context) : "personal");
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [showPromo, setShowPromo] = useState(false);
@@ -188,7 +238,7 @@ export default function Paywall({
   const [offeringsError, setOfferingsError] = useState(false);
   const [loadingOfferings, setLoadingOfferings] = useState(Platform.OS !== "web");
   const [toastVisible, setToastVisible] = useState(false);
-  const [toastMessage, setToastMessage] = useState("You're in. Trial starts now.");
+  const [toastMessage, setToastMessage] = useState("Your plan is active.");
   const [toastSubtitle, setToastSubtitle] = useState<string | null>(null);
   const [toastIsError, setToastIsError] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -358,7 +408,7 @@ export default function Paywall({
         const synced = await waitForWebhookProfileTier(tier);
 
         if (synced) {
-          setToastMessage("You're in. Trial starts now.");
+          setToastMessage(`${TIER_CONFIG[tier].label} is active.`);
           setToastVisible(true);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setTimeout(() => {
@@ -370,7 +420,7 @@ export default function Paywall({
           await refreshProfile();
 
           if (syncResult.ok && latestProfileTierRef.current === tier) {
-            setToastMessage("You're in. Trial starts now.");
+            setToastMessage(`${TIER_CONFIG[tier].label} is active.`);
             setToastVisible(true);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setTimeout(() => {
@@ -519,6 +569,14 @@ export default function Paywall({
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
   const tiers: TierKey[] = ["personal", "pro", "business"];
+  const currentPaywallTier = activeTierForPaywall(profile);
+  const hasActiveTrial = isFutureDate(profile?.trial_expires_at);
+  const purchaseLabel = purchaseCtaLabel(selectedTier, profile);
+  const planCallout = hasActiveTrial
+    ? "Your free trial is active · Manage in Settings"
+    : currentPaywallTier
+      ? "Manage your plan anytime in Settings"
+      : "14-day free trial for eligible new subscribers";
 
   if (Platform.OS === "web") {
     return (
@@ -680,7 +738,7 @@ export default function Paywall({
           </View>
 
           <Text style={styles.trialCalloutText}>
-            14 days free · Full access · Manage in Settings
+            {planCallout}
           </Text>
 
           {inlineError && (
@@ -723,22 +781,18 @@ export default function Paywall({
             onPress={handlePurchase}
             disabled={isPurchasing || isRestoring || loadingOfferings}
             testID="paywall-cta"
-            accessibilityLabel="Subscribe to plan"
+            accessibilityLabel={purchaseLabel}
             accessibilityRole="button"
           >
             {isPurchasing ? (
               <ActivityIndicator color={Colors.background} />
             ) : (
-              <Text style={styles.ctaBtnText}>
-                {profile?.subscription_tier === "trial" && profile?.trial_expires_at && new Date(profile.trial_expires_at) > new Date()
-                  ? "Choose Plan"
-                  : "Start Free Trial"}
-              </Text>
+              <Text style={styles.ctaBtnText}>{purchaseLabel}</Text>
             )}
           </Pressable>
 
           <Text style={styles.legalText}>
-            Cancel anytime · Billed through App Store after trial
+            Billed through the App Store · Cancel anytime
           </Text>
 
           {showSkip && (

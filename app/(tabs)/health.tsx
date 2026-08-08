@@ -428,7 +428,7 @@ export default function HealthScreen() {
     const currentPeople = familyMembers?.filter(fm => fm.member_type !== "pet").length ?? 0;
     const maxPeople = personLimit(profile);
     if (currentPeople >= maxPeople) {
-      openPlanUpsell("Adding more people requires Pro.");
+      openPlanUpsell("Upgrade to add more family members.");
       return;
     }
     router.push("/add-family-member");
@@ -438,7 +438,7 @@ export default function HealthScreen() {
     const currentPets = familyMembers?.filter(fm => fm.member_type === "pet").length ?? 0;
     const maxPets = petLimit(profile);
     if (currentPets >= maxPets) {
-      openPlanUpsell("Adding more pets requires Pro.");
+      openPlanUpsell("Upgrade to add more pets.");
       return;
     }
     router.push("/add-family-member?type=pet" as any);
@@ -694,7 +694,7 @@ export default function HealthScreen() {
                             {isLocked && (
                               <Pressable
                                 style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                                onPress={() => openPlanUpsell("Accessing more family members requires Pro.")}
+                                onPress={() => openPlanUpsell("Upgrade to access this family member.")}
                               />
                             )}
                           </View>
@@ -727,7 +727,7 @@ export default function HealthScreen() {
                             {isLocked && (
                               <Pressable
                                 style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                                onPress={() => openPlanUpsell("Accessing more pets requires Pro.")}
+                                onPress={() => openPlanUpsell("Upgrade to access this pet.")}
                               />
                             )}
                           </View>
