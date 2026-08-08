@@ -27,7 +27,7 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { personLimit, petLimit } from "@/lib/subscription";
 import { SaveToast } from "@/components/SaveToast";
-import Paywall from "@/components/Paywall";
+import Paywall, { type PaywallVertical } from "@/components/Paywall";
 import DatePicker from "@/components/DatePicker";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
@@ -84,6 +84,9 @@ export default function HealthScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastIsError, setToastIsError] = useState(false);
   const [paywallSubtitle, setPaywallSubtitle] = useState("Upgrade to unlock more family tracking.");
+  // Which family limit blocked the user. personLimit and petLimit do not rise at
+  // the same tier, so the Paywall needs the specific one to preselect correctly.
+  const [paywallVertical, setPaywallVertical] = useState<PaywallVertical>("family");
   const [showPaywall, setShowPaywall] = useState(false);
 
   function showToast(msg: string, isError = false) {
@@ -419,8 +422,9 @@ export default function HealthScreen() {
 
   const hasNoMembers = !familyMembers?.length;
 
-  function openPlanUpsell(subtitle: string) {
+  function openPlanUpsell(subtitle: string, vertical: PaywallVertical) {
     setPaywallSubtitle(subtitle);
+    setPaywallVertical(vertical);
     setShowPaywall(true);
   }
 
@@ -428,7 +432,7 @@ export default function HealthScreen() {
     const currentPeople = familyMembers?.filter(fm => fm.member_type !== "pet").length ?? 0;
     const maxPeople = personLimit(profile);
     if (currentPeople >= maxPeople) {
-      openPlanUpsell("Upgrade to add more family members.");
+      openPlanUpsell("Upgrade to add more family members.", "person");
       return;
     }
     router.push("/add-family-member");
@@ -438,7 +442,7 @@ export default function HealthScreen() {
     const currentPets = familyMembers?.filter(fm => fm.member_type === "pet").length ?? 0;
     const maxPets = petLimit(profile);
     if (currentPets >= maxPets) {
-      openPlanUpsell("Upgrade to add more pets.");
+      openPlanUpsell("Upgrade to add more pets.", "pet");
       return;
     }
     router.push("/add-family-member?type=pet" as any);
@@ -694,7 +698,7 @@ export default function HealthScreen() {
                             {isLocked && (
                               <Pressable
                                 style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                                onPress={() => openPlanUpsell("Upgrade to access this family member.")}
+                                onPress={() => openPlanUpsell("Upgrade to access this family member.", "person")}
                               />
                             )}
                           </View>
@@ -727,7 +731,7 @@ export default function HealthScreen() {
                             {isLocked && (
                               <Pressable
                                 style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                                onPress={() => openPlanUpsell("Upgrade to access this pet.")}
+                                onPress={() => openPlanUpsell("Upgrade to access this pet.", "pet")}
                               />
                             )}
                           </View>
@@ -791,7 +795,7 @@ export default function HealthScreen() {
         <Paywall
           canDismiss
           showSkip={false}
-          context={{ vertical: "family", reason: "limit_reached" }}
+          context={{ vertical: paywallVertical, reason: "limit_reached" }}
           subtitle={paywallSubtitle}
           onDismiss={() => setShowPaywall(false)}
         />

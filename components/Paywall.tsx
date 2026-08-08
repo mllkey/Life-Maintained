@@ -20,6 +20,15 @@ import { capture as captureAnalytics } from "@/lib/analytics";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
 import { rcReady, extractTierHintFromCustomerInfo, syncSubscriptionFromRc } from "@/lib/revenuecat";
+import {
+  vehicleLimit,
+  propertyLimit,
+  personLimit,
+  petLimit,
+  scanLimit,
+  type Profile as SubscriptionProfile,
+} from "@/lib/subscription";
+import { voiceCapPerDay } from "@/lib/voiceQuota";
 
 type Billing = "monthly" | "annual";
 type TierKey = "personal" | "pro" | "business";
@@ -107,7 +116,12 @@ type PaywallInlineError = {
   feedback?: "error" | "warning";
 };
 
-export type PaywallVertical = "vehicle" | "property" | "family" | "scans" | "voice" | "general";
+// "person" and "pet" are preselection-only refinements of "family": they let
+// the Paywall know WHICH family limit blocked the user, because personLimit and
+// petLimit do not move at the same tier. "family" is retained for compatibility
+// and behaves exactly as before. Everything the user sees or that analytics
+// records treats person/pet as family — see displayVertical.
+export type PaywallVertical = "vehicle" | "property" | "family" | "person" | "pet" | "scans" | "voice" | "general";
 export type PaywallReason = "limit_reached" | "feature_locked" | "locked_existing" | "general";
 export interface PaywallContext {
   vertical: PaywallVertical;
@@ -123,8 +137,20 @@ interface PaywallProps {
   context?: PaywallContext;
 }
 
+/**
+ * Collapses the preselection-only verticals back onto the surface they belong
+ * to. Every consumer that a user can see — accent color, default subtitle — and
+ * the analytics payload go through this, so introducing person/pet changes
+ * nothing observable; only tier preselection reads the refined value.
+ */
+function displayVertical(vertical: PaywallVertical): PaywallVertical {
+  if (vertical === "person" || vertical === "pet") return "family";
+  return vertical;
+}
+
 // Per-vertical accent color for the primary CTA and contextual subtitle tint.
-function verticalAccent(vertical: PaywallVertical): string {
+function verticalAccent(rawVertical: PaywallVertical): string {
+  const vertical = displayVertical(rawVertical);
   if (vertical === "vehicle") return Colors.vehicle;
   if (vertical === "property") return Colors.home;
   if (vertical === "family") return Colors.health;
@@ -136,23 +162,24 @@ function verticalAccent(vertical: PaywallVertical): string {
 // asked to grow beyond their current plan.
 function contextualSubtitle(ctx: PaywallContext | undefined): string {
   if (!ctx) return "Choose the plan that fits your life";
+  const vertical = displayVertical(ctx.vertical);
   if (ctx.reason === "locked_existing") {
-    if (ctx.vertical === "vehicle") return "Unlock your other vehicles";
-    if (ctx.vertical === "property") return "Unlock your other properties";
-    if (ctx.vertical === "family") return "Unlock your other family members";
+    if (vertical === "vehicle") return "Unlock your other vehicles";
+    if (vertical === "property") return "Unlock your other properties";
+    if (vertical === "family") return "Unlock your other family members";
     return "Unlock everything you have";
   }
   if (ctx.reason === "limit_reached") {
-    if (ctx.vertical === "vehicle") return "Upgrade to add more vehicles";
-    if (ctx.vertical === "property") return "Upgrade to add more properties";
-    if (ctx.vertical === "family") return "Upgrade to add more family members";
-    if (ctx.vertical === "scans") return "Upgrade for more receipt scans";
-    if (ctx.vertical === "voice") return "Upgrade for more voice logging";
+    if (vertical === "vehicle") return "Upgrade to add more vehicles";
+    if (vertical === "property") return "Upgrade to add more properties";
+    if (vertical === "family") return "Upgrade to add more family members";
+    if (vertical === "scans") return "Upgrade for more receipt scans";
+    if (vertical === "voice") return "Upgrade for more voice logging";
     return "Upgrade to keep going";
   }
   if (ctx.reason === "feature_locked") {
-    if (ctx.vertical === "vehicle") return "Upgrade to export your service history";
-    if (ctx.vertical === "scans") return "Upgrade to scan receipts with AI";
+    if (vertical === "vehicle") return "Upgrade to export your service history";
+    if (vertical === "scans") return "Upgrade to scan receipts with AI";
     return "Upgrade to unlock this";
   }
   return "Choose the plan that fits your life";
@@ -179,11 +206,59 @@ function activeTierForPaywall(profile: PaywallProfile | null | undefined): TierK
   return null;
 }
 
-function preselectedTierFor(
+/** Price order. The first qualifying candidate is therefore the cheapest one. */
+const TIER_LADDER: TierKey[] = ["personal", "pro", "business"];
+
+const FAR_FUTURE_ISO = "9999-12-31T00:00:00.000Z";
+
+/**
+ * A synthetic profile that reads as exactly `tier` to the read-only limit
+ * authorities (null = no active paid tier, i.e. free). This is how the ladder
+ * asks "what would this tier grant me?" without this file ever restating a
+ * limit number — lib/subscription.ts and lib/voiceQuota.ts stay the only
+ * places those numbers live.
+ */
+function probeProfileForTier(tier: TierKey | null): SubscriptionProfile {
+  return {
+    subscription_tier: tier,
+    trial_started_at: null,
+    trial_expires_at: null,
+    subscription_expires_at: tier ? FAR_FUTURE_ISO : null,
+    revenuecat_customer_id: null,
+    push_token: null,
+    monthly_scan_count: 0,
+    scan_count_reset_at: null,
+    onboarding_completed: true,
+  };
+}
+
+/**
+ * The limit that `vertical` imposes at `tier`, or null when the vertical does
+ * not map to a known capability — in which case the caller preserves the
+ * legacy rank-based answer rather than guessing.
+ */
+function limitForVertical(vertical: PaywallVertical, tier: TierKey | null): number | null {
+  const probe = probeProfileForTier(tier);
+  if (vertical === "vehicle") return vehicleLimit(probe);
+  if (vertical === "property") return propertyLimit(probe);
+  if (vertical === "person") return personLimit(probe);
+  if (vertical === "pet") return petLimit(probe);
+  if (vertical === "scans") return scanLimit(probe);
+  if (vertical === "voice") return voiceCapPerDay(probe);
+  return null;
+}
+
+/**
+ * The pre-G6.12 rank-based answer. Retained verbatim as the fallback for every
+ * case capability selection cannot improve on: non-limit reasons, unknown or
+ * legacy verticals, trial, and any vertical where no higher tier actually
+ * raises the limit. Keeping it intact is what makes the change provably
+ * neutral everywhere except the person cap.
+ */
+function legacyPreselectedTierFor(
   profile: PaywallProfile | null | undefined,
-  context: PaywallContext | undefined,
+  isLimitContext: boolean,
 ): TierKey {
-  const isLimitContext = context?.reason === "limit_reached" || context?.reason === "locked_existing";
   if (isFutureDate(profile?.trial_expires_at) && profile?.subscription_tier === "trial") {
     return isLimitContext ? "business" : "personal";
   }
@@ -195,6 +270,44 @@ function preselectedTierFor(
     if (current === "pro") return "business";
   }
   return current;
+}
+
+/**
+ * Capability-aware preselection.
+ *
+ * Ranking alone was wrong: it assumed the next tier up always raises the limit
+ * that blocked you. personLimit is 1 on both Free and Personal, so a free user
+ * at the one-person cap was preselected Personal and could pay while staying
+ * blocked. The ladder now asks each tier what it would actually grant for the
+ * blocking vertical and takes the cheapest one that strictly beats what the
+ * user already has.
+ */
+function preselectedTierFor(
+  profile: PaywallProfile | null | undefined,
+  context: PaywallContext | undefined,
+): TierKey {
+  const isLimitContext = context?.reason === "limit_reached" || context?.reason === "locked_existing";
+  const legacy = legacyPreselectedTierFor(profile, isLimitContext);
+
+  if (!isLimitContext) return legacy;
+  if (!context) return legacy;
+
+  // Trial keeps its existing mapping to Business by contract; no capability
+  // probe can improve on the top tier anyway.
+  if (isFutureDate(profile?.trial_expires_at) && profile?.subscription_tier === "trial") return legacy;
+
+  const current = activeTierForPaywall(profile);
+  const currentLimit = limitForVertical(context.vertical, current);
+  if (currentLimit === null) return legacy;
+
+  const currentRank = current ? tierRank(current) : 0;
+  for (const candidate of TIER_LADDER) {
+    if (tierRank(candidate) <= currentRank) continue;
+    const candidateLimit = limitForVertical(context.vertical, candidate);
+    // Infinity beats every finite limit, so unlimited tiers qualify naturally.
+    if (candidateLimit !== null && candidateLimit > currentLimit) return candidate;
+  }
+  return legacy;
 }
 
 function tierRank(tier: TierKey): number {
@@ -251,7 +364,9 @@ export default function Paywall({
 
   useEffect(() => {
     captureAnalytics("paywall_viewed", {
-      context_vertical: context?.vertical,
+      // Normalized so person/pet keep reporting as family — existing funnels
+      // keyed on context_vertical stay comparable across this change.
+      context_vertical: context ? displayVertical(context.vertical) : undefined,
       context_reason: context?.reason,
     });
   }, []);

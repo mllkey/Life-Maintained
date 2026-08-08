@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { SaveToast } from "@/components/SaveToast";
-import Paywall from "@/components/Paywall";
+import Paywall, { type PaywallVertical } from "@/components/Paywall";
 import { personLimit, petLimit } from "@/lib/subscription";
 import {
   View,
@@ -47,6 +47,9 @@ export default function AddFamilyMemberScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+  // Records which family limit fired the guard below, so the Paywall can
+  // preselect against personLimit or petLimit rather than a generic family cap.
+  const [paywallVertical, setPaywallVertical] = useState<PaywallVertical>("family");
 
   function formatDob(text: string) {
     const digits = text.replace(/\D/g, "");
@@ -71,10 +74,12 @@ export default function AddFamilyMemberScreen() {
       const peopleCount = existing?.filter((r: { member_type: string }) => r.member_type !== "pet").length ?? 0;
       const petsCount = existing?.filter((r: { member_type: string }) => r.member_type === "pet").length ?? 0;
       if (memberType === "person" && peopleCount >= personLimit(profile)) {
+        setPaywallVertical("person");
         setShowPaywall(true);
         return;
       }
       if (memberType === "pet" && petsCount >= petLimit(profile)) {
+        setPaywallVertical("pet");
         setShowPaywall(true);
         return;
       }
@@ -239,7 +244,7 @@ export default function AddFamilyMemberScreen() {
         <Modal visible animationType="slide" onRequestClose={() => setShowPaywall(false)}>
           <Paywall
             canDismiss
-            context={{ vertical: "family", reason: "limit_reached" }}
+            context={{ vertical: paywallVertical, reason: "limit_reached" }}
             onDismiss={() => setShowPaywall(false)}
           />
         </Modal>
