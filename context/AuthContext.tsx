@@ -8,8 +8,6 @@ import {
   useRef,
   useCallback,
 } from "react";
-import * as Sentry from '@sentry/react-native';
-import { recordFreezeMilestone } from "@/lib/freezeJournal";
 import { AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
@@ -138,26 +136,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfileFromDb = useCallback(
     async (userId: string): Promise<Profile | null> => {
       if (profileFetchPromiseRef.current && profileFetchUserIdRef.current === userId) {
-        Sentry.setTag("freeze_auth_profile_fetch", "reuse");
-        Sentry.addBreadcrumb({
-          category: "freeze-trace",
-          message: "auth profile fetch reuse",
-          level: "info",
-        });
-        recordFreezeMilestone("auth profile fetch reuse");
         return profileFetchPromiseRef.current;
       }
 
       const fetchAttempt = async (attempt: number): Promise<Profile | null> => {
-        Sentry.setTag("freeze_auth_profile_fetch", `start:${attempt}`);
-        Sentry.addBreadcrumb({
-          category: "freeze-trace",
-          message: "auth profile fetch start",
-          level: "info",
-          data: { attempt },
-        });
-        recordFreezeMilestone("auth profile fetch start", { attempt });
-
         const { data, error } = await supabase
           .from("profiles")
           .select(PROFILE_SELECT)
@@ -185,13 +167,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         return await promise;
       } finally {
-        Sentry.setTag("freeze_auth_profile_fetch", "finish");
-        Sentry.addBreadcrumb({
-          category: "freeze-trace",
-          message: "auth profile fetch finish",
-          level: "info",
-        });
-        recordFreezeMilestone("auth profile fetch finish");
         if (profileFetchPromiseRef.current === promise) {
           profileFetchPromiseRef.current = null;
           profileFetchUserIdRef.current = null;
@@ -211,35 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const instant = options?.instant ?? false;
       const runId = ++hydrateRunIdRef.current;
 
-      Sentry.setTag("freeze_auth_hydrate", `start:${runId}`);
-      Sentry.addBreadcrumb({
-        category: "freeze-trace",
-        message: "auth hydrate start",
-        level: "info",
-        data: { runId, instant, quiet, showLoading },
-      });
-      recordFreezeMilestone("auth hydrate start", {
-        runId,
-        instant,
-        quiet,
-        showLoading,
-      });
-
-      const finishHydrate = (result: string) => {
-        Sentry.setTag("freeze_auth_hydrate", `finish:${runId}:${result}`);
-        Sentry.addBreadcrumb({
-          category: "freeze-trace",
-          message: "auth hydrate finish",
-          level: "info",
-          data: { runId, result },
-        });
-        recordFreezeMilestone("auth hydrate finish", { runId, result });
-      };
-
-      if (!mountedRef.current) {
-        finishHydrate("unmounted");
-        return;
-      }
+      if (!mountedRef.current) return;
 
       const userId = nextSession.user.id;
       sessionRef.current = nextSession;
@@ -299,7 +246,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (isStale()) {
           if (showLoading && mountedRef.current) setIsLoading(false);
-          finishHydrate("stale-instant");
           return;
         }
 
@@ -318,7 +264,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .catch((e) => {
             console.error("[AUTH] background profile refresh failed:", e);
           });
-        finishHydrate("instant-background-started");
         return;
       }
 
@@ -328,7 +273,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (isStale()) {
         if (showLoading && mountedRef.current) setIsLoading(false);
-        finishHydrate("stale-default-before-fetch");
         return;
       }
 
@@ -342,7 +286,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error("[AUTH] hydrateFromSession profile fetch failed:", e);
         if (isStale()) {
           if (showLoading && mountedRef.current) setIsLoading(false);
-          finishHydrate("stale-default-catch");
           return;
         }
         if (cachedOnboarding) setOnboardingCompleted(true);
@@ -352,7 +295,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsLoading(false);
         }
       }
-      finishHydrate("default-settled");
     },
     [
       clearOnboardingCache,
@@ -414,7 +356,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (event === "SIGNED_IN") {
         setTimeout(() => {
-          Sentry.addBreadcrumb({ category: "freeze-trace", message: "auth hydrate deferred (SIGNED_IN)", level: "info" });
           hydrateFromSession(nextSession, { showLoading: false, quiet: false }).catch((e) => {
             console.error("[AUTH] SIGNED_IN hydrate failed:", e);
           });
@@ -424,7 +365,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
         setTimeout(() => {
-          Sentry.addBreadcrumb({ category: "freeze-trace", message: "auth hydrate deferred (refresh)", level: "info" });
           hydrateFromSession(nextSession, { showLoading: false, quiet: true }).catch((e) => {
             console.error(`[AUTH] ${event} hydrate failed:`, e);
           });

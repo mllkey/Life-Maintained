@@ -1,7 +1,6 @@
 import * as Sentry from '@sentry/react-native';
-import { armFreezeJournal, recoverFreezeJournal, recordFreezeMilestone } from "@/lib/freezeJournal";
 
-const sentryOptions = {
+Sentry.init({
   dsn: Constants.expoConfig?.extra?.sentryDsn,
   enabled: !__DEV__,
   environment: __DEV__ ? 'development' : 'production',
@@ -11,15 +10,7 @@ const sentryOptions = {
       : undefined,
   dist: nativeBuildVersion ?? undefined,
   tracesSampleRate: 0.2,
-  enableAppHangTracking: true,
-  enableAppHangTrackingV2: true,
-  appHangTimeoutInterval: 2,
-  enableWatchdogTerminationTracking: true,
-};
-
-Sentry.init(sentryOptions);
-
-void recoverFreezeJournal();
+});
 
 import { QueryClientProvider, focusManager, onlineManager } from "@tanstack/react-query";
 import { Stack, router, usePathname, useRootNavigationState } from "expo-router";
@@ -48,24 +39,7 @@ import { checkAgingTransitions } from "@/lib/agingTransitions";
 let agingAwareSchedulingInFlight: Promise<void> | null = null;
 
 function runAgingAwareScheduling(userId: string): Promise<void> {
-  if (agingAwareSchedulingInFlight) {
-    Sentry.setTag("freeze_aging_scheduling", "reuse");
-    Sentry.addBreadcrumb({
-      category: "freeze-trace",
-      message: "aging scheduling reuse",
-      level: "info",
-    });
-    recordFreezeMilestone("aging scheduling reuse");
-    return agingAwareSchedulingInFlight;
-  }
-
-  Sentry.setTag("freeze_aging_scheduling", "start");
-  Sentry.addBreadcrumb({
-    category: "freeze-trace",
-    message: "aging scheduling start",
-    level: "info",
-  });
-  recordFreezeMilestone("aging scheduling start");
+  if (agingAwareSchedulingInFlight) return agingAwareSchedulingInFlight;
 
   const run = (async () => {
     let sweep: Awaited<ReturnType<typeof checkAgingTransitions>> | null = null;
@@ -95,13 +69,6 @@ function runAgingAwareScheduling(userId: string): Promise<void> {
 
   agingAwareSchedulingInFlight = run;
   run.finally(() => {
-    Sentry.setTag("freeze_aging_scheduling", "finish");
-    Sentry.addBreadcrumb({
-      category: "freeze-trace",
-      message: "aging scheduling finish",
-      level: "info",
-    });
-    recordFreezeMilestone("aging scheduling finish");
     if (agingAwareSchedulingInFlight === run) agingAwareSchedulingInFlight = null;
   }).catch(() => {});
   return run;
@@ -130,26 +97,7 @@ const VOICE_LOG_URL = "lifemaintained://voice-log";
 
 focusManager.setEventListener((handleFocus) => {
   const subscription = AppState.addEventListener("change", (state: AppStateStatus) => {
-    const focused = state === "active";
-    Sentry.setTag("freeze_query_focus", focused ? "start" : "blur-start");
-    Sentry.addBreadcrumb({
-      category: "freeze-trace",
-      message: focused ? "query focus dispatch start" : "query blur dispatch start",
-      level: "info",
-    });
-    recordFreezeMilestone(
-      focused ? "query focus dispatch start" : "query blur dispatch start",
-    );
-    handleFocus(focused);
-    Sentry.setTag("freeze_query_focus", focused ? "finish" : "blur-finish");
-    Sentry.addBreadcrumb({
-      category: "freeze-trace",
-      message: focused ? "query focus dispatch finish" : "query blur dispatch finish",
-      level: "info",
-    });
-    recordFreezeMilestone(
-      focused ? "query focus dispatch finish" : "query blur dispatch finish",
-    );
+    handleFocus(state === "active");
   });
   return () => subscription.remove();
 });
@@ -157,35 +105,7 @@ focusManager.setEventListener((handleFocus) => {
 if (Platform.OS !== "web") {
   onlineManager.setEventListener((setOnline) => {
     const sub = Network.addNetworkStateListener((state) => {
-      const online = state.isInternetReachable ?? state.isConnected ?? true;
-      if (!online) armFreezeJournal("network-offline");
-      Sentry.setTag("freeze_query_reconnect", online ? "start" : "offline-start");
-      Sentry.addBreadcrumb({
-        category: "freeze-trace",
-        message: online ? "query reconnect dispatch start" : "query offline dispatch start",
-        level: "info",
-        data: {
-          isConnected: state.isConnected ?? null,
-          isInternetReachable: state.isInternetReachable ?? null,
-        },
-      });
-      recordFreezeMilestone(
-        online ? "query reconnect dispatch start" : "query offline dispatch start",
-        {
-          isConnected: state.isConnected ?? null,
-          isInternetReachable: state.isInternetReachable ?? null,
-        },
-      );
-      setOnline(online);
-      Sentry.setTag("freeze_query_reconnect", online ? "finish" : "offline-finish");
-      Sentry.addBreadcrumb({
-        category: "freeze-trace",
-        message: online ? "query reconnect dispatch finish" : "query offline dispatch finish",
-        level: "info",
-      });
-      recordFreezeMilestone(
-        online ? "query reconnect dispatch finish" : "query offline dispatch finish",
-      );
+      setOnline(state.isInternetReachable ?? state.isConnected ?? true);
     });
     return () => sub.remove();
   });
@@ -224,7 +144,6 @@ function RootLayoutNav() {
       const prev = appStateRef.current;
       appStateRef.current = nextState;
       if (nextState === "active" && prev !== "active") {
-        Sentry.addBreadcrumb({ category: "freeze-trace", message: "app foregrounded", level: "info" });
         Notifications.setBadgeCountAsync(0).catch(() => {});
         runAgingAwareScheduling(userId).catch(() => {});
         capture("app_foregrounded", {});
