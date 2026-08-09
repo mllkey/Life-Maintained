@@ -10,6 +10,8 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
@@ -80,6 +82,20 @@ type ExtractedItem = {
   notes: string | null;
   confidence: "high" | "medium" | "low";
 };
+
+// Mount motion for the voice-area branches: opacity 0->1 and translateY
+// 12->0 over 220ms, run once when the branch replaces the placeholder.
+function MountRise({ style, children }: { style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.value = withTiming(1, { duration: 220, easing: ReaEasing.out(ReaEasing.cubic) });
+  }, []);
+  const anim = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ translateY: 12 * (1 - progress.value) }],
+  }));
+  return <Reanimated.View style={[style, anim]}>{children}</Reanimated.View>;
+}
 
 // ─── Voice Orb (Reanimated — sonar pulse rings + breathing glow layers) ──────
 
@@ -620,6 +636,7 @@ export function LogSheet({
   const [items, setItems] = useState<CardItem[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
   const [voiceCapHit, setVoiceCapHit] = useState(false);
+  const [capChecked, setCapChecked] = useState(false);
   const [firstOpenProminence, setFirstOpenProminence] = useState(false);
   const [logToastVisible, setLogToastVisible] = useState(false);
   const [logToastTitle, setLogToastTitle] = useState("");
@@ -645,8 +662,23 @@ export function LogSheet({
       setItems([]);
       setErrorMsg("");
       setVoiceCapHit(false);
+      setCapChecked(false);
       amplitudeRef.current = 0;
       void syncVoiceUsedFromServer(profile);
+
+      // Gate-before-paint: the voice area holds the placeholder until this
+      // local read resolves, so the recorder is never painted at cap. Fired,
+      // not awaited, so it does not delay the rest of this effect.
+      void (async () => {
+        try {
+          const remaining = await localVoiceRemainingToday(profile);
+          setVoiceCapHit(remaining <= 0);
+        } catch {
+          setVoiceCapHit(false);
+        } finally {
+          setCapChecked(true);
+        }
+      })();
 
       AsyncStorage.getItem(VOICE_ORB_FIRST_OPEN_KEY)
         .then(seen => {
@@ -901,91 +933,101 @@ export function LogSheet({
               />
             </View>
 
-            {/* Orb — centered in upper portion */}
-            <View style={styles.recordingCenter}>
-              <Pressable
-                onPress={dismissFirstOpenProminence}
-                disabled={!firstOpenProminence}
-                hitSlop={12}
-              >
-                <VoiceOrb
-                  amplitudeRef={amplitudeRef}
-                  isRecording={phase === "recording"}
-                  phase={phase}
-                  firstOpen={firstOpenProminence}
-                />
-              </Pressable>
-              {firstOpenProminence ? (
+            {/* Voice area — exactly one of: placeholder / cap state / recorder */}
+            {!capChecked ? (
+              <View style={styles.voiceAreaFill} pointerEvents="none" />
+            ) : voiceCapHit ? (
+              <MountRise style={styles.voiceCapBlock}>
+                <View style={styles.voiceCapIconTile}>
+                  <Ionicons name="mic-off-outline" size={40} color={Colors.accent} />
+                </View>
+                <Text style={styles.voiceCapTitle}>{voiceCapTitleFor(profile)}</Text>
+                <Text style={styles.voiceCapBody}>{voiceCapBodyFor(profile)}</Text>
                 <Pressable
-                  onPress={dismissFirstOpenProminence}
-                  hitSlop={8}
-                  style={styles.firstOpenCaption}
+                  style={styles.voiceCapBtn}
+                  onPress={() => {
+                    const cta = voiceCapCtaActionFor(profile);
+                    handleClose();
+                    if (cta === "paywall") {
+                      setTimeout(() => router.push("/subscription?vertical=voice&reason=limit_reached" as Href), 50);
+                    }
+                  }}
                   accessibilityRole="button"
-                  accessibilityLabel="Dismiss voice introduction"
                 >
-                  <Text style={styles.firstOpenCaptionText}>Tap to record by voice</Text>
+                  <Text style={styles.voiceCapBtnText}>{voiceCapCtaLabelFor(profile)}</Text>
                 </Pressable>
-              ) : null}
-            </View>
-
-            {/* Bottom group: button → status text → type-instead */}
-            <View style={styles.recordingBottom}>
-              {voiceCapHit ? (
-                <View style={styles.voiceCapBlock}>
-                  <Text style={styles.voiceCapTitle}>{voiceCapTitleFor(profile)}</Text>
-                  <Text style={styles.voiceCapBody}>{voiceCapBodyFor(profile)}</Text>
+                <Pressable onPress={() => { setVoiceCapHit(false); setPhase("type"); }} hitSlop={12} style={{ marginTop: 12 }}>
+                  <Text style={styles.typeInsteadText}>or type instead</Text>
+                </Pressable>
+              </MountRise>
+            ) : (
+              <MountRise style={styles.voiceAreaFill}>
+                {/* Orb — centered in upper portion */}
+                <View style={styles.recordingCenter}>
                   <Pressable
-                    style={styles.voiceCapBtn}
-                    onPress={() => {
-                      const cta = voiceCapCtaActionFor(profile);
-                      handleClose();
-                      if (cta === "paywall") {
-                        setTimeout(() => router.push("/subscription?vertical=voice&reason=limit_reached" as Href), 50);
-                      }
-                    }}
-                    accessibilityRole="button"
+                    onPress={dismissFirstOpenProminence}
+                    disabled={!firstOpenProminence}
+                    hitSlop={12}
                   >
-                    <Text style={styles.voiceCapBtnText}>{voiceCapCtaLabelFor(profile)}</Text>
-                  </Pressable>
-                  <Pressable onPress={() => { setVoiceCapHit(false); setPhase("type"); }} hitSlop={12} style={{ marginTop: 14 }}>
-                    <Text style={styles.typeInsteadText}>or type instead</Text>
-                  </Pressable>
-                </View>
-              ) : phase === "transcribing" ? (
-                <View style={styles.transcribingRow}>
-                  <ActivityIndicator size="small" color={Colors.accent} />
-                  <Text style={styles.transcribingText}>Processing audio...</Text>
-                </View>
-              ) : (
-                <>
-                  <Pressable
-                    style={[
-                      styles.recordingBtn,
-                      phase === "recording" && styles.recordingBtnStop,
-                    ]}
-                    onPress={phase === "idle" ? handleStartRecording : handleStopRecording}
-                    accessibilityLabel="Start recording"
-                    accessibilityRole="button"
-                  >
-                    <Ionicons
-                      name={phase === "idle" ? "mic" : "stop"}
-                      size={24}
-                      color="#fff"
+                    <VoiceOrb
+                      amplitudeRef={amplitudeRef}
+                      isRecording={phase === "recording"}
+                      phase={phase}
+                      firstOpen={firstOpenProminence}
                     />
                   </Pressable>
-                  <Text style={[
-                    styles.recordingStatus,
-                    { marginTop: 12 },
-                    phase === "recording" && { color: "#fff" },
-                  ]}>
-                    {phase === "idle" ? "Tap to record" : "Recording..."}
-                  </Text>
-                  <Pressable onPress={() => setPhase("type")} hitSlop={12} style={{ marginTop: 16 }}>
-                    <Text style={styles.typeInsteadText}>or type instead</Text>
-                  </Pressable>
-                </>
-              )}
-            </View>
+                  {firstOpenProminence ? (
+                    <Pressable
+                      onPress={dismissFirstOpenProminence}
+                      hitSlop={8}
+                      style={styles.firstOpenCaption}
+                      accessibilityRole="button"
+                      accessibilityLabel="Dismiss voice introduction"
+                    >
+                      <Text style={styles.firstOpenCaptionText}>Tap to record by voice</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                {/* Bottom group: button → status text → type-instead */}
+                <View style={styles.recordingBottom}>
+                  {phase === "transcribing" ? (
+                    <View style={styles.transcribingRow}>
+                      <ActivityIndicator size="small" color={Colors.accent} />
+                      <Text style={styles.transcribingText}>Processing audio...</Text>
+                    </View>
+                  ) : (
+                    <>
+                      <Pressable
+                        style={[
+                          styles.recordingBtn,
+                          phase === "recording" && styles.recordingBtnStop,
+                        ]}
+                        onPress={phase === "idle" ? handleStartRecording : handleStopRecording}
+                        accessibilityLabel="Start recording"
+                        accessibilityRole="button"
+                      >
+                        <Ionicons
+                          name={phase === "idle" ? "mic" : "stop"}
+                          size={24}
+                          color="#fff"
+                        />
+                      </Pressable>
+                      <Text style={[
+                        styles.recordingStatus,
+                        { marginTop: 12 },
+                        phase === "recording" && { color: "#fff" },
+                      ]}>
+                        {phase === "idle" ? "Tap to record" : "Recording..."}
+                      </Text>
+                      <Pressable onPress={() => setPhase("type")} hitSlop={12} style={{ marginTop: 16 }}>
+                        <Text style={styles.typeInsteadText}>or type instead</Text>
+                      </Pressable>
+                    </>
+                  )}
+                </View>
+              </MountRise>
+            )}
           </View>
         )}
 
@@ -1416,26 +1458,44 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     flexShrink: 0,
   },
+  // Placeholder + cap state both fill the voice area exactly as the recorder
+  // branch does (recordingCenter is flex:1), so no branch swap moves layout.
+  voiceAreaFill: {
+    flex: 1,
+  },
   voiceCapBlock: {
+    flex: 1,
     alignItems: "center",
-    paddingHorizontal: 24,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  voiceCapIconTile: {
+    width: 88,
+    height: 88,
+    borderRadius: 20,
+    backgroundColor: Colors.card,
+    alignItems: "center",
+    justifyContent: "center",
   },
   voiceCapTitle: {
-    fontSize: 17,
+    marginTop: 20,
+    fontSize: 22,
     fontFamily: "Inter_600SemiBold",
     color: Colors.text,
     textAlign: "center",
-    marginBottom: 8,
   },
   voiceCapBody: {
-    fontSize: 14,
+    marginTop: 8,
+    fontSize: 15,
     fontFamily: "Inter_400Regular",
     color: Colors.textSecondary,
     textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 18,
+    lineHeight: 21,
+    paddingHorizontal: 12,
   },
   voiceCapBtn: {
+    marginTop: 20,
+    alignSelf: "stretch",
     height: 44,
     paddingHorizontal: 22,
     borderRadius: 22,
