@@ -10,6 +10,9 @@ Sentry.init({
       : undefined,
   dist: nativeBuildVersion ?? undefined,
   tracesSampleRate: 0.2,
+  enableAppHangTracking: true,
+  appHangTimeoutInterval: 4,
+  enableWatchdogTerminationTracking: true,
 });
 
 import { QueryClientProvider, focusManager, onlineManager } from "@tanstack/react-query";
