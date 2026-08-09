@@ -1,12 +1,8 @@
 // DEV-ONLY TEST TOOL — notification deep-link validation.
 //
-// TODO POST-VALIDATION: revert the gate in app/(tabs)/settings.tsx from
-//   {(__DEV__ || user?.email === "...") && <DeveloperTestNotifications />}
-// to:
-//   {__DEV__ && <DeveloperTestNotifications />}
-// once Mikey confirms test notif deep-links route correctly. The email gate
-// is acceptable for ONE TestFlight validation build only — leaving it in
-// production ships dev tools to anyone with a matching email session.
+// Gated to __DEV__ in app/(tabs)/settings.tsx, so it never ships in a
+// production build. The temporary email-based gate used for TestFlight
+// validation has been removed; do not reintroduce it.
 
 import React, { useEffect, useState, useCallback } from "react";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
