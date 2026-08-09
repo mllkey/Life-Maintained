@@ -26,6 +26,7 @@ import {
   localVoiceRemainingToday,
   incrementLocalVoiceCount,
   reconcileLocalVoiceFromServer,
+  syncVoiceUsedFromServer,
 } from "@/lib/voiceQuota";
 import * as Haptics from "expo-haptics";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -645,6 +646,7 @@ export function LogSheet({
       setErrorMsg("");
       setVoiceCapHit(false);
       amplitudeRef.current = 0;
+      void syncVoiceUsedFromServer(profile);
 
       AsyncStorage.getItem(VOICE_ORB_FIRST_OPEN_KEY)
         .then(seen => {

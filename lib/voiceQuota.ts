@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Profile } from "./subscription";
 import { hasPersonalOrAbove, hasProOrAbove } from "./subscription";
+import { supabase } from "./supabase";
 
 // Per-tier daily voice transcription cap.
 // Free 5/day, Personal 30/day, Pro/Business unlimited (Infinity client-side).
@@ -62,4 +63,58 @@ export async function reconcileLocalVoiceFromServer(
   const targetUsed = Math.max(0, cap - remainingFromServer);
   await AsyncStorage.setItem(DATE_KEY, today);
   await AsyncStorage.setItem(COUNT_KEY, String(targetUsed));
+}
+
+type VoiceQuotaRpcClient = typeof supabase & {
+  rpc(
+    fn: string,
+    args: { p_tz: string },
+  ): PromiseLike<{
+    data: number | null;
+    error: { message: string } | null;
+  }>;
+};
+
+const SYNC_TIMEOUT_MS = 4000;
+
+// Pulls the server's authoritative used-today count and quietly prewarms
+// the local counter at sheet-open. If an at-cap snapshot arrives before
+// the user's tap, the existing local gate can catch it before recording.
+// It never delays a tap; every failure path is silent.
+export async function syncVoiceUsedFromServer(
+  profile: Profile | null | undefined,
+): Promise<void> {
+  try {
+    if (voiceCapPerDay(profile) === Infinity) return;
+    const dayKey = todayLocalKey();
+    const [dateBefore, countBefore] = await Promise.all([
+      AsyncStorage.getItem(DATE_KEY),
+      AsyncStorage.getItem(COUNT_KEY),
+    ]);
+
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+    const rpcClient = supabase as VoiceQuotaRpcClient;
+    const rpc = rpcClient.rpc("get_voice_used_today", { p_tz: tz });
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("voice sync timeout")), SYNC_TIMEOUT_MS),
+    );
+    const { data, error } = await Promise.race([Promise.resolve(rpc), timeout]);
+    if (error) return;
+    const used = typeof data === "number" && Number.isFinite(data) ? data : null;
+    if (used === null || todayLocalKey() !== dayKey) return;
+
+    const [dateAfter, countAfter] = await Promise.all([
+      AsyncStorage.getItem(DATE_KEY),
+      AsyncStorage.getItem(COUNT_KEY),
+    ]);
+    if (dateAfter !== dateBefore || countAfter !== countBefore) return;
+
+    await AsyncStorage.multiSet([
+      [DATE_KEY, dayKey],
+      [COUNT_KEY, String(Math.max(0, used))],
+    ]);
+  } catch {
+    // Silent by design — the tap gate falls back to the local counter and
+    // the server backstop still enforces the cap.
+  }
 }
