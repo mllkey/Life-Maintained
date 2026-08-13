@@ -324,6 +324,7 @@ export default function HealthScreen() {
           provider_name: completeProvider.trim() || null,
           provider_contact: null,
           receipt_url: null,
+          client_logged_at: new Date().toISOString(),
           notes: completeNotes.trim() || null,
           did_it_myself: false,
         }),

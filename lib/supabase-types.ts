@@ -494,6 +494,7 @@ export type Database = {
       }
       maintenance_logs: {
         Row: {
+          client_logged_at: string | null
           cost: number | null
           created_at: string
           did_it_myself: boolean | null
@@ -504,6 +505,9 @@ export type Database = {
           property_id: string | null
           provider_contact: string | null
           provider_name: string | null
+          receipt_replaced_count: number
+          receipt_sha256: string | null
+          receipt_source: string | null
           receipt_url: string | null
           service_date: string
           service_name: string
@@ -513,6 +517,7 @@ export type Database = {
           zip_code: string | null
         }
         Insert: {
+          client_logged_at?: string | null
           cost?: number | null
           created_at?: string
           did_it_myself?: boolean | null
@@ -523,6 +528,9 @@ export type Database = {
           property_id?: string | null
           provider_contact?: string | null
           provider_name?: string | null
+          receipt_replaced_count?: number
+          receipt_sha256?: string | null
+          receipt_source?: string | null
           receipt_url?: string | null
           service_date: string
           service_name: string
@@ -532,6 +540,7 @@ export type Database = {
           zip_code?: string | null
         }
         Update: {
+          client_logged_at?: string | null
           cost?: number | null
           created_at?: string
           did_it_myself?: boolean | null
@@ -542,6 +551,9 @@ export type Database = {
           property_id?: string | null
           provider_contact?: string | null
           provider_name?: string | null
+          receipt_replaced_count?: number
+          receipt_sha256?: string | null
+          receipt_source?: string | null
           receipt_url?: string | null
           service_date?: string
           service_name?: string

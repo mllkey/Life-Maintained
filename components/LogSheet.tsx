@@ -383,6 +383,7 @@ function ConfirmCard({
         provider_name: provider.trim() || null,
         notes: notes.trim() || null,
         receipt_url: null,
+        client_logged_at: new Date().toISOString(),
         created_at: now,
         updated_at: now,
       });

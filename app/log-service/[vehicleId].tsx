@@ -32,6 +32,7 @@ import { SaveToast } from "@/components/SaveToast";
 import { CATEGORY_GROUPS } from "@/lib/maintenanceMatcher";
 import { resolveTrackingMode, isHoursTracked, isMileageTracked } from "@/lib/usageHelpers";
 import { updateVehicleUsage } from "@/lib/vehicleUsageHelper";
+import { sha256OfBytes } from "@/lib/receiptVerification";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 import * as Sentry from "@sentry/react-native";
 import { matchServiceToTask, type MatchCandidate } from "@/lib/serviceMatcher";
@@ -135,6 +136,9 @@ export default function LogServiceScreen() {
   const [ocrApplied, setOcrApplied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [receiptLocalUri, setReceiptLocalUri] = useState<string | null>(null);
+  // Verification capture only. Carries the hash of the bytes this save actually
+  // uploaded from the upload site to the insert; never gates a save.
+  const receiptShaRef = useRef<string | null>(null);
   const [receiptWarning, setReceiptWarning] = useState(false);
   const [historicalReceiptDate, setHistoricalReceiptDate] = useState<string | null>(null);
   const [pricingInsight, setPricingInsight] = useState<PricingInsight | null>(null);
@@ -533,6 +537,10 @@ export default function LogServiceScreen() {
       if (!response.ok) throw new Error("Could not read receipt file");
       const arrayBuffer = await response.arrayBuffer();
       if (arrayBuffer.byteLength === 0) throw new Error("Empty receipt file");
+      // Hash the exact bytes handed to .upload() below - same buffer, no re-read,
+      // no re-encode. Returns null on any failure; capture never blocks a save.
+      const receiptSha = await sha256OfBytes(arrayBuffer);
+      receiptShaRef.current = receiptSha;
       const { data, error: uploadErr } = await supabase.storage
         .from("receipts")
         .upload(path, arrayBuffer, { contentType: "image/jpeg", upsert: false });
@@ -1298,6 +1306,7 @@ export default function LogServiceScreen() {
 
     let storedReceiptPath: string | null = null;
     let receiptFailed = false;
+    receiptShaRef.current = null;
     if (receiptLocalUri) {
       storedReceiptPath = await uploadReceiptImage(receiptLocalUri, user.id, vehicleId);
       if (!storedReceiptPath) {
@@ -1319,6 +1328,13 @@ export default function LogServiceScreen() {
           provider_name: provider.trim() || null,
           notes: item.details || null,
           receipt_url: storedReceiptPath,
+          // Verification capture. The hash describes the stored bytes, so it is
+          // carried only when a receipt actually landed. Source stays null: the
+          // camera/library choice lives inside the scan button and never reaches
+          // this write site, and an unknown origin is recorded, never guessed.
+          receipt_sha256: storedReceiptPath ? receiptShaRef.current : null,
+          receipt_source: null,
+          client_logged_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }));
@@ -1336,6 +1352,9 @@ export default function LogServiceScreen() {
           provider_name: provider.trim() || null,
           notes: notes.trim() || null,
           receipt_url: storedReceiptPath,
+          receipt_sha256: storedReceiptPath ? receiptShaRef.current : null,
+          receipt_source: null,
+          client_logged_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
