@@ -970,57 +970,203 @@ export default function VehicleDetailScreen() {
     }
   }
 
-  function buildCsv(logsData: any[]) {
-    const tracksHrs = isHoursTracked(vehicle);
-    const usageLabel = tracksHrs ? "Hours" : "Mileage";
-    const header = `Date,Service,${usageLabel},Cost,Provider,Notes,Receipt`;
-    const rows = logsData.map(log => {
-      const date = log.service_date ?? "";
-      const task = (log.service_name ?? "").replace(/,/g, ";");
-      const usage = log.mileage ?? "";
-      const cost = log.cost != null ? `$${log.cost.toFixed(2)}` : "";
-      const provider = (log.provider_name ?? "").replace(/,/g, ";");
-      const notes = (log.notes ?? "").replace(/,/g, ";").replace(/\n/g, " ");
-      const receipt = log.receipt_url ? "Receipt on file (view in app)" : "-";
-      return `${date},${task},${usage},${cost},${provider},${notes},${receipt}`;
-    });
-    return [header, ...rows, "", "Usage data is self-reported by the owner and has not been independently verified."].join("\n");
+  function compareLogsAsc(a: any, b: any) {
+    const left = a?.service_date ? String(a.service_date) : "";
+    const right = b?.service_date ? String(b.service_date) : "";
+    if (left === right) return 0;
+    if (!left) return 1;
+    if (!right) return -1;
+    return left < right ? -1 : 1;
   }
 
-  function buildHtml(logsData: any[], vehicleData: any) {
-    const name = vehicleData?.nickname ?? `${vehicleData?.year} ${vehicleData?.make} ${vehicleData?.model}`;
-    const rows = logsData.map(log => {
-      const receiptCell = log.receipt_url ? "Receipt on file (view in app)" : "-";
+  function buildCsv(logsData: any[]) {
+    const csvField = (value: any): string => {
+      if (value == null) return "";
+      const text = String(value);
+      return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const header = "service_date,service_name,mileage,hours,cost_usd,provider_name,provider_contact,did_it_myself,notes,receipt_on_file";
+    const records = [...logsData].sort(compareLogsAsc).map(log => [
+      csvField(log?.service_date == null ? null : String(log.service_date).slice(0, 10)),
+      csvField(log?.service_name),
+      csvField(log?.mileage),
+      csvField(log?.hours),
+      csvField(log?.cost),
+      csvField(log?.provider_name),
+      csvField(log?.provider_contact),
+      csvField(log?.did_it_myself == null ? null : log.did_it_myself === true ? "true" : "false"),
+      csvField(log?.notes),
+      csvField(log?.receipt_url ? "true" : "false"),
+    ].join(","));
+    return [header, ...records].map(record => `${record}\r\n`).join("");
+  }
+
+  function buildHtml(logsData: any[], vehicleData: any, receiptUrlByLogId: Map<string, string>) {
+    const esc = (value: unknown): string =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    const dash = "—";
+    const group = (digits: string): string => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    const num = (value: any): string => {
+      const parts = String(Number(value)).split(".");
+      const whole = parts[0] ?? "";
+      const negative = whole.startsWith("-");
+      return `${negative ? "-" : ""}${group(negative ? whole.slice(1) : whole)}${parts[1] ? `.${parts[1]}` : ""}`;
+    };
+    const money = (value: any): string => {
+      const amount = Number(value);
+      const fixed = Math.abs(amount).toFixed(2).split(".");
+      return `${amount < 0 ? "-" : ""}$${group(fixed[0] ?? "0")}.${fixed[1] ?? "00"}`;
+    };
+    const dayLabel = (value: any): string => {
+      if (!value) return dash;
+      const parsed = parseISO(String(value).slice(0, 10));
+      return Number.isNaN(parsed.getTime()) ? dash : format(parsed, "MMM d, yyyy");
+    };
+    const monthLabel = (value: any): string => {
+      if (!value) return dash;
+      const parsed = parseISO(String(value).slice(0, 10));
+      return Number.isNaN(parsed.getTime()) ? dash : format(parsed, "MMM yyyy");
+    };
+
+    const ordered = [...logsData].sort(compareLogsAsc);
+    const tracksHrs = isHoursTracked(vehicleData);
+    const usageHeader = tracksHrs ? "Hours" : "Mileage";
+    const yearMakeModel = [vehicleData?.year, vehicleData?.make, vehicleData?.model].filter(Boolean).join(" ");
+    const nickname = vehicleData?.nickname ? String(vehicleData.nickname) : "";
+    const identity = nickname || yearMakeModel;
+    const lastRecordedValue = tracksHrs ? vehicleData?.hours : vehicleData?.mileage;
+
+    const costed = ordered.filter(log => log?.cost != null);
+    const totalSpent = costed.reduce((sum, log) => sum + Number(log.cost), 0);
+    const dated = ordered.filter(log => !!log?.service_date);
+    const spanStart = dated.length > 0 ? monthLabel(dated[0]?.service_date) : dash;
+    const spanEnd = dated.length > 0 ? monthLabel(dated[dated.length - 1]?.service_date) : dash;
+    const receiptLogs = ordered.filter(log => !!log?.receipt_url);
+    const appendixLogs = receiptLogs.slice(0, 30);
+    const overflowCount = receiptLogs.length - appendixLogs.length;
+
+    const rows = ordered.map(log => {
+      const usageValue = tracksHrs ? log?.hours : log?.mileage;
+      const signedUrl = receiptUrlByLogId.get(String(log?.id));
+      const providerText = log?.provider_name != null && String(log.provider_name).length > 0 ? esc(log.provider_name) : dash;
       return `
       <tr>
-        <td>${log.service_date ? format(parseISO(log.service_date), "MMM d, yyyy") : "-"}</td>
-        <td>${log.service_name ?? "Service"}</td>
-        <td>${log.mileage != null ? log.mileage.toLocaleString() + (isHoursTracked(vehicle) ? " hrs" : " mi") : "-"}</td>
-        <td>${log.cost != null ? "$" + log.cost.toFixed(2) : "-"}</td>
-        <td>${log.provider_name ?? "-"}</td>
-        <td>${log.notes ?? ""}</td>
-        <td>${receiptCell}</td>
+        <td>${dayLabel(log?.service_date)}</td>
+        <td>${usageValue != null ? esc(num(usageValue)) : dash}</td>
+        <td>${esc(log?.service_name ?? "")}</td>
+        <td>${log?.cost != null ? esc(money(log.cost)) : dash}</td>
+        <td>${providerText}</td>
+        <td>${signedUrl ? `<img class="thumb" src="${esc(signedUrl)}" />` : dash}</td>
       </tr>`;
     }).join("");
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Service History</title>
+
+    const appendixBlocks = appendixLogs.map(log => {
+      const signedUrl = receiptUrlByLogId.get(String(log?.id));
+      if (!signedUrl) return "";
+      return `
+      <div class="receiptBlock">
+        <img src="${esc(signedUrl)}" />
+        <div class="receiptCaption">${dayLabel(log?.service_date)} — ${esc(log?.service_name ?? "")}</div>
+      </div>`;
+    }).join("");
+    const overflowLine = overflowCount > 0
+      ? `<div class="overflowNote">Plus ${overflowCount} additional receipts on file in LifeMaintained.</div>`
+      : "";
+    const appendix = appendixBlocks.length > 0 || overflowLine.length > 0
+      ? `<h2 class="appendixHeading">Receipt Documentation</h2>${appendixBlocks}${overflowLine}`
+      : "";
+
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Service History Report</title>
     <style>
-      body { font-family: -apple-system, Helvetica, sans-serif; padding: 32px; color: #111; }
-      h1 { font-size: 22px; margin-bottom: 4px; }
-      .sub { color: #666; font-size: 14px; margin-bottom: 24px; }
-      table { width: 100%; border-collapse: collapse; font-size: 13px; }
-      th { background: #f0f0f0; text-align: left; padding: 8px 10px; border-bottom: 2px solid #ddd; }
-      td { padding: 8px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
-      tr:nth-child(even) td { background: #fafafa; }
-      .footer { margin-top: 24px; font-size: 12px; color: #999; }
+      body { font-family: -apple-system, Helvetica, sans-serif; color: #111; background: #ffffff; margin: 0; padding: 32px 32px 56px 32px; }
+      table.brand { width: 100%; border-collapse: collapse; }
+      table.brand td { padding: 0; vertical-align: baseline; }
+      .wordmark { font-size: 20px; font-weight: 700; color: #E8943A; }
+      .docType { font-size: 11px; color: #666; text-align: right; }
+      .identity { font-size: 28px; font-weight: 800; color: #111; margin-top: 20px; }
+      .ymm { font-size: 13px; color: #444; margin-top: 3px; }
+      .lastRecorded { font-size: 13px; color: #444; margin-top: 3px; }
+      table.summary { width: 100%; border-collapse: collapse; margin-top: 20px; }
+      table.summary td { border: 1px solid #ddd; padding: 10px; width: 25%; vertical-align: top; }
+      .summaryLabel { font-size: 10px; color: #666; letter-spacing: 0.4px; text-transform: uppercase; }
+      .summaryValue { font-size: 13px; color: #111; margin-top: 4px; }
+      table.timeline { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 26px; }
+      table.timeline th { background: #f5f5f5; text-align: left; font-size: 12px; padding: 8px 10px; border: 1px solid #eee; }
+      table.timeline td { font-size: 12px; padding: 8px 10px; border: 1px solid #eee; vertical-align: top; }
+      table.timeline tr { page-break-inside: avoid; }
+      .thumb { height: 40px; width: auto; display: block; }
+      .appendixHeading { font-size: 16px; font-weight: 700; color: #111; margin: 28px 0 12px 0; }
+      .receiptBlock { page-break-inside: avoid; margin-bottom: 18px; }
+      .receiptBlock img { max-width: 100%; max-height: 640px; display: block; }
+      .receiptCaption { font-size: 11px; color: #666; margin-top: 5px; }
+      .overflowNote { font-size: 12px; color: #444; margin-top: 12px; }
+      .pageFooter { position: fixed; left: 32px; right: 32px; bottom: 16px; font-size: 9px; color: #999; }
     </style></head><body>
-    <h1>Service History: ${name}</h1>
-    <div class="sub">Exported from LifeMaintained · ${format(new Date(), "MMMM d, yyyy")}</div>
-    <table>
-      <thead><tr><th>Date</th><th>Service</th><th>${isHoursTracked(vehicle) ? "Hours" : "Mileage"}</th><th>Cost</th><th>Provider</th><th>Notes</th><th>Receipt</th></tr></thead>
+    <div class="pageFooter">Generated by LifeMaintained on ${esc(format(new Date(), "MMM d, yyyy"))}</div>
+    <table class="brand"><tr>
+      <td class="wordmark">LifeMaintained</td>
+      <td class="docType">Service History Report</td>
+    </tr></table>
+    <div class="identity">${esc(identity)}</div>
+    ${nickname ? `<div class="ymm">${esc(yearMakeModel)}</div>` : ""}
+    ${lastRecordedValue != null ? `<div class="lastRecorded">Last recorded: ${esc(num(lastRecordedValue))} ${tracksHrs ? "hours" : "miles"}</div>` : ""}
+    <table class="summary"><tr>
+      <td><div class="summaryLabel">Total records</div><div class="summaryValue">${ordered.length}</div></td>
+      <td><div class="summaryLabel">Total spent</div><div class="summaryValue">${costed.length > 0 ? esc(money(totalSpent)) : dash}</div></td>
+      <td><div class="summaryLabel">History span</div><div class="summaryValue">${spanStart} – ${spanEnd}</div></td>
+      <td><div class="summaryLabel">Documentation</div><div class="summaryValue">${receiptLogs.length} of ${ordered.length} records include receipt documentation</div></td>
+    </tr></table>
+    <table class="timeline">
+      <thead><tr><th>Date</th><th>${usageHeader}</th><th>Service</th><th>Cost</th><th>Provider</th><th>Receipt</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="footer">Generated by LifeMaintained · lifemaintained.app<br/>Usage data is self-reported by the owner and has not been independently verified.</div>
+    ${appendix}
     </body></html>`;
+  }
+
+  function exportFileName(vehicleData: any, ext: "pdf" | "csv") {
+    const base = `${vehicleData?.year ?? ""}-${vehicleData?.make ?? ""}-${vehicleData?.model ?? ""}-Service-History-${format(new Date(), "yyyy-MM-dd")}`;
+    return `${base.replace(/\s+/g, "-").replace(/[^A-Za-z0-9-]/g, "")}.${ext}`;
+  }
+
+  async function copyToNamedDestination(sourceUri: string, fileName: string) {
+    const destUri = FileSystem.cacheDirectory + fileName;
+    await FileSystem.deleteAsync(destUri, { idempotent: true });
+    await FileSystem.copyAsync({ from: sourceUri, to: destUri });
+    return destUri;
+  }
+
+  async function resolveReceiptUrls(logsData: any[]): Promise<Map<string, string>> {
+    const resolved = new Map<string, string>();
+    const entries = [...logsData]
+      .sort(compareLogsAsc)
+      .filter(log => !!log?.receipt_url)
+      .map(log => ({ logId: String(log.id), storagePath: String(log.receipt_url) }));
+    if (entries.length === 0) return resolved;
+    try {
+      const outcome = await Promise.race([
+        supabase.storage.from("receipts").createSignedUrls(entries.map(entry => entry.storagePath), 3600),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 8000)),
+      ]);
+      if (outcome == null) return resolved;
+      const { data, error } = outcome;
+      if (error || !data) return resolved;
+      data.forEach((item, index) => {
+        const entry = entries[index];
+        const signedUrl = item?.signedUrl;
+        if (entry && typeof signedUrl === "string" && signedUrl.length > 0) {
+          resolved.set(entry.logId, signedUrl);
+        }
+      });
+    } catch {
+      return resolved;
+    }
+    return resolved;
   }
 
   async function exportHistory(fmt: "pdf" | "csv") {
@@ -1032,23 +1178,25 @@ export default function VehicleDetailScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       if (fmt === "pdf") {
-        const html = buildHtml(logs, vehicle);
+        const receiptUrlByLogId = await resolveReceiptUrls(logs);
+        const html = buildHtml(logs, vehicle, receiptUrlByLogId);
         const { uri } = await Print.printToFileAsync({ html });
+        const destUri = await copyToNamedDestination(uri, exportFileName(vehicle, "pdf"));
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf" });
+          await Sharing.shareAsync(destUri, { mimeType: "application/pdf", UTI: "com.adobe.pdf" });
         } else {
-          showToast("PDF Saved", false, `Saved to: ${uri}`);
+          showToast("PDF Saved", false, `Saved to: ${destUri}`);
         }
       } else {
         const csv = buildCsv(logs);
-        const vehicleName = vehicle?.nickname ?? `${vehicle?.year}_${vehicle?.make}_${vehicle?.model}`;
-        const fileName = `${vehicleName.replace(/\s+/g, "_")}_service_history.csv`;
+        const fileName = exportFileName(vehicle, "csv");
         const fileUri = FileSystem.documentDirectory + fileName;
         await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+        const destUri = await copyToNamedDestination(fileUri, fileName);
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(fileUri, { mimeType: "text/csv", UTI: "public.comma-separated-values-text" });
+          await Sharing.shareAsync(destUri, { mimeType: "text/csv", UTI: "public.comma-separated-values-text" });
         } else {
-          showToast("CSV Saved", false, `Saved to: ${fileUri}`);
+          showToast("CSV Saved", false, `Saved to: ${destUri}`);
         }
       }
     } catch (e: any) {
@@ -1143,8 +1291,8 @@ export default function VehicleDetailScreen() {
       return;
     }
     Alert.alert("Export Service History", "Choose a format for resale documentation", [
-      { text: "PDF", onPress: () => exportHistory("pdf") },
-      { text: "CSV", onPress: () => exportHistory("csv") },
+      { text: "Service History Report (PDF)", onPress: () => exportHistory("pdf") },
+      { text: "Spreadsheet (CSV)", onPress: () => exportHistory("csv") },
       { text: "Cancel", style: "cancel" },
     ]);
   }
@@ -1659,6 +1807,7 @@ export default function VehicleDetailScreen() {
                       </>
                     )}
                   </Pressable>
+                  <Text style={styles.exportSellCopy}>Documented history helps your vehicle sell for more.</Text>
                 </>
               )}
             </View>
@@ -3095,6 +3244,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.vehicle, borderRadius: 12, paddingVertical: 11,
   },
   exportBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  exportSellCopy: {
+    fontSize: 12, fontFamily: "Inter_400Regular", color: "#8a8f98", textAlign: "center", marginTop: 8,
+  },
   historyContainer: { gap: 16 },
   historySummaryBar: {
     flexDirection: "row", backgroundColor: Colors.card, borderRadius: 14,
