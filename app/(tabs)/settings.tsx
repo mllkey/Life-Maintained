@@ -64,6 +64,7 @@ type PredTask = {
   interval_months: number | null;
   interval_miles: number | null;
   next_due_date: string | null;
+  next_due_miles: number | null;
   last_completed_miles: number | null;
   priority: string | null;
 };
@@ -72,10 +73,15 @@ function getDaysUntil(t: PredTask, v: PredVehicle | null): number | null {
   if (t.next_due_date) {
     return differenceInDays(parseISO(t.next_due_date), new Date());
   }
-  if (t.interval_miles != null && v?.mileage != null && v.average_miles_per_month) {
+  if (v?.mileage != null && v.average_miles_per_month) {
     const cur = projectedMileage(v) ?? v.mileage;
-    const milesLeft = t.interval_miles - (cur - (t.last_completed_miles ?? 0));
-    return Math.round(milesLeft / (v.average_miles_per_month / 30.44));
+    let milesLeft: number | null = null;
+    if (t.next_due_miles != null) {
+      milesLeft = t.next_due_miles - cur;
+    } else if (t.interval_miles != null && t.last_completed_miles != null) {
+      milesLeft = t.interval_miles - (cur - t.last_completed_miles);
+    }
+    if (milesLeft != null) return Math.round(milesLeft / (v.average_miles_per_month / 30.44));
   }
   return null;
 }
@@ -216,7 +222,7 @@ export default function SettingsScreen() {
       if (!selectedVehicleId) return [] as PredTask[];
       const { data, error } = await supabase
         .from("user_vehicle_maintenance_tasks")
-        .select("id, name, interval_months, interval_miles, next_due_date, last_completed_miles, priority")
+        .select("id, name, interval_months, interval_miles, next_due_date, next_due_miles, last_completed_miles, priority")
         .eq("vehicle_id", selectedVehicleId)
         .order("next_due_date", { ascending: true, nullsFirst: false });
       if (error) throw error;
@@ -794,7 +800,6 @@ export default function SettingsScreen() {
                       <Text style={[styles.tableCol, { flex: 2 }]}>Service</Text>
                       <Text style={[styles.tableCol, styles.tableColRight]}>Interval</Text>
                       <Text style={[styles.tableCol, styles.tableColRight]}>Next Due</Text>
-                      <Text style={[styles.tableCol, styles.tableColRight]}>Est. Cost</Text>
                     </View>
 
                     {predTasks.map((pt, idx) => {
