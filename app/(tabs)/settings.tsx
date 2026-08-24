@@ -37,6 +37,10 @@ import {
 import ScanPackModal, { type ScanPackModalHandle } from "@/components/ScanPackModal";
 import { PaidActionCTA } from "@/components/PaidActionCTA";
 import { projectedMileage } from "@/lib/usageHelpers";
+import ServicePredictionSheet, {
+  type ServicePredictionSheetHandle,
+  type ServicePredictionSheetData,
+} from "@/components/ServicePredictionSheet";
 
 const SETTINGS_KEY = "app_settings_v2";
 
@@ -196,6 +200,13 @@ export default function SettingsScreen() {
 
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [actionButtonExpanded, setActionButtonExpanded] = useState(false);
+  const predSheetRef = useRef<ServicePredictionSheetHandle>(null);
+  const [predSheetData, setPredSheetData] = useState<ServicePredictionSheetData | null>(null);
+
+  useEffect(() => {
+    if (!predSheetData) return;
+    predSheetRef.current?.present();
+  }, [predSheetData]);
 
   const { data: predVehicles } = useQuery({
     queryKey: ["settings_pred_vehicles", user?.id],
@@ -824,8 +835,8 @@ export default function SettingsScreen() {
                   <>
                     <View style={styles.tableHeader}>
                       <Text style={[styles.tableCol, { flex: 2 }]}>Service</Text>
-                      <Text style={[styles.tableCol, styles.tableColRight]}>Interval</Text>
-                      <Text style={[styles.tableCol, styles.tableColRight]}>Next Due</Text>
+                      <Text style={[styles.tableCol, styles.tableColRight, { flex: 0.85 }]}>Interval</Text>
+                      <Text style={[styles.tableCol, styles.tableColRight, { flex: 1.35 }]}>Next Due</Text>
                       <Text style={[styles.tableCol, styles.tableColRight]}>Est. Cost</Text>
                     </View>
 
@@ -838,18 +849,30 @@ export default function SettingsScreen() {
                       const costLabel = est && est.shop_low != null
                         ? formatCostDisplay(Number(est.shop_low), est.shop_high != null ? Number(est.shop_high) : null)
                         : null;
+                      const vehicleLabel = selectedVehicle
+                        ? (selectedVehicle.nickname ?? `${selectedVehicle.year ?? ""} ${selectedVehicle.make ?? ""} ${selectedVehicle.model ?? ""}`.trim())
+                        : "";
                       return (
-                        <View key={pt.id} style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}>
+                        <Pressable
+                          key={pt.id}
+                          style={({ pressed }) => [styles.tableRow, idx % 2 === 1 && styles.tableRowAlt, { opacity: pressed ? 0.55 : 1 }]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${pt.name}, ${intervalLabel}, ${dateLabel}`}
+                          onPress={() => {
+                            Haptics.selectionAsync();
+                            setPredSheetData({ name: pt.name, vehicleLabel, intervalLabel, dueLabel: dateLabel, dueColor: color, costLabel });
+                          }}
+                        >
                           <View style={{ flex: 2, flexDirection: "row", alignItems: "center", gap: 6 }}>
                             <View style={[styles.tableDot, { backgroundColor: color }]} />
                             <Text style={styles.tableCellMain} numberOfLines={1}>{pt.name}</Text>
                           </View>
-                          <Text style={[styles.tableCell, styles.tableCellRight]}>{intervalLabel}</Text>
-                          <Text style={[styles.tableCell, styles.tableCellRight, { color }]}>{dateLabel}</Text>
+                          <Text style={[styles.tableCell, styles.tableCellRight, { flex: 0.85 }]} numberOfLines={1}>{intervalLabel}</Text>
+                          <Text style={[styles.tableCell, styles.tableCellRight, { flex: 1.35, color }]} numberOfLines={1}>{dateLabel}</Text>
                           <Text style={[styles.tableCell, styles.tableCellRight, costLabel ? { color: Colors.textSecondary } : { color: Colors.textTertiary }]}>
                             {costLabel ?? "\u2014"}
                           </Text>
-                        </View>
+                        </Pressable>
                       );
                     })}
 
@@ -864,6 +887,13 @@ export default function SettingsScreen() {
               </>
             )}
           </SectionCard>
+
+          <ServicePredictionSheet
+            ref={predSheetRef}
+            data={predSheetData}
+            onLogService={() => { if (selectedVehicleId) router.push(`/log-service/${selectedVehicleId}`); }}
+            onViewVehicle={() => { if (selectedVehicleId) router.push(`/vehicle/${selectedVehicleId}`); }}
+          />
 
           {/* Action Button shortcut tip card */}
           <Pressable
