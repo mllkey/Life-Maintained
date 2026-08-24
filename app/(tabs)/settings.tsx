@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { formatCostDisplay } from "@/lib/costFormat";
 import {
   View,
   Text,
@@ -56,7 +57,10 @@ type PredVehicle = {
   mileage: number | null;
   average_miles_per_month: number | null;
   last_mileage_update: string | null;
+  vehicle_type: string | null;
 };
+
+type PredCost = { shop_low: number | null; shop_high: number | null };
 
 type PredTask = {
   id: string;
@@ -199,7 +203,7 @@ export default function SettingsScreen() {
       if (!user) return [] as PredVehicle[];
       const { data, error } = await supabase
         .from("vehicles")
-        .select("id, year, make, model, nickname, mileage, average_miles_per_month, last_mileage_update")
+        .select("id, year, make, model, nickname, mileage, average_miles_per_month, last_mileage_update, vehicle_type")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -229,6 +233,28 @@ export default function SettingsScreen() {
       return (data ?? []) as PredTask[];
     },
     enabled: !!selectedVehicleId,
+  });
+
+  const { data: predCosts } = useQuery({
+    queryKey: ["settings_pred_costs", selectedVehicleId, predTasks?.length ?? 0],
+    queryFn: async () => {
+      const out: Record<string, PredCost> = {};
+      if (!selectedVehicle?.make || !predTasks?.length) return out;
+      const vehicleKey = `${selectedVehicle.year ?? ""}|${selectedVehicle.make}|${selectedVehicle.model ?? ""}|${selectedVehicle.vehicle_type ?? ""}`.toLowerCase();
+      const names = predTasks.map(t => t.name.toLowerCase().trim());
+      const { data, error } = await supabase
+        .from("repair_cost_cache")
+        .select("service_name, shop_low, shop_high")
+        .eq("vehicle_key", vehicleKey)
+        .in("service_name", names);
+      if (error) throw error;
+      for (const row of data ?? []) {
+        out[row.service_name] = { shop_low: row.shop_low, shop_high: row.shop_high };
+      }
+      return out;
+    },
+    enabled: !!selectedVehicle?.make && !!predTasks?.length,
+    staleTime: 1000 * 60 * 60,
   });
 
   useEffect(() => {
@@ -800,6 +826,7 @@ export default function SettingsScreen() {
                       <Text style={[styles.tableCol, { flex: 2 }]}>Service</Text>
                       <Text style={[styles.tableCol, styles.tableColRight]}>Interval</Text>
                       <Text style={[styles.tableCol, styles.tableColRight]}>Next Due</Text>
+                      <Text style={[styles.tableCol, styles.tableColRight]}>Est. Cost</Text>
                     </View>
 
                     {predTasks.map((pt, idx) => {
@@ -807,6 +834,10 @@ export default function SettingsScreen() {
                       const color = rowColor(daysLeft);
                       const dateLabel = formatDaysUntil(daysLeft, pt.next_due_date);
                       const intervalLabel = formatInterval(pt);
+                      const est = predCosts?.[pt.name.toLowerCase().trim()];
+                      const costLabel = est && est.shop_low != null
+                        ? formatCostDisplay(Number(est.shop_low), est.shop_high != null ? Number(est.shop_high) : null)
+                        : null;
                       return (
                         <View key={pt.id} style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}>
                           <View style={{ flex: 2, flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -815,6 +846,9 @@ export default function SettingsScreen() {
                           </View>
                           <Text style={[styles.tableCell, styles.tableCellRight]}>{intervalLabel}</Text>
                           <Text style={[styles.tableCell, styles.tableCellRight, { color }]}>{dateLabel}</Text>
+                          <Text style={[styles.tableCell, styles.tableCellRight, costLabel ? { color: Colors.textSecondary } : { color: Colors.textTertiary }]}>
+                            {costLabel ?? "\u2014"}
+                          </Text>
                         </View>
                       );
                     })}
