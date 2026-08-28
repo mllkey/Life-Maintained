@@ -18,7 +18,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
-import { Icon, MciIcon, type MciName } from "@/components/ui/Icon";
+import { Icon, MciIcon } from "@/components/ui/Icon";
 import { Typography } from "@/constants/typography";
 import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
@@ -1577,7 +1577,7 @@ export default function AddVehicleScreen() {
                                 }}
                                 style={({ pressed }) => [{ height: 56, flexDirection: "row", alignItems: "center", paddingHorizontal: 20, gap: 16, backgroundColor: pressed ? Colors.surface : "transparent" }]}
                               >
-                                <MciIcon name={t.icon as MciName} size={24} color={isSelected ? Colors.accent : Colors.textSecondary} />
+                                <Icon name={t.icon} size={24} color={isSelected ? Colors.accent : Colors.textSecondary} />
                                 <Text style={{ ...Typography.body, flex: 1, fontWeight: isSelected ? "600" : "400", color: isSelected ? Colors.accent : Colors.text }}>
                                   {t.label}
                                 </Text>
