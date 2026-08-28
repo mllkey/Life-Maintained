@@ -23,8 +23,11 @@ import type { Href } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { Icon } from "@/components/ui/Icon";
+import { Section } from "@/components/ui/Section";
+import { Row as UiRow } from "@/components/ui/Row";
 import { Typography } from "@/constants/typography";
 import { Radius } from "@/constants/radius";
+import { Spacing } from "@/constants/spacing";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { LinearGradient } from "expo-linear-gradient";
@@ -642,20 +645,17 @@ export default function DashboardScreen() {
             <SpendingChartCard spending={spending} />
 
             {screenings.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionLabel}>HEALTH SCREENINGS</Text>
-                </View>
+              <Section title="Health screenings">
                 {screenings.slice(0, 3).map((s, i) => (
-                  <Pressable key={i} style={({ pressed }) => [styles.screeningCard, { opacity: pressed ? 0.8 : 1 }]} onPress={() => router.push("/add-appointment" as any)}>
-                    <View style={styles.screeningBar} />
-                    <View style={styles.screeningContent}>
-                      <Text style={styles.screeningTitle}>{s.title}</Text>
-                      <Text style={styles.screeningDesc}>{s.description}</Text>
-                    </View>
-                  </Pressable>
+                  <UiRow
+                    key={i}
+                    appearIndex={i}
+                    title={s.title}
+                    subtitle={s.description}
+                    onPress={() => router.push("/add-appointment" as any)}
+                  />
                 ))}
-              </View>
+              </Section>
             )}
           </>
         )}
@@ -1354,29 +1354,24 @@ function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
   const seeAllRoute: any = firstNavItem?.category === "vehicles" ? "/(tabs)/vehicles" : "/(tabs)/home-tab";
 
   return (
-    <View style={{ gap: 0 }}>
-      <Text style={[styles.sectionLabel, { marginBottom: 4 }]}>NEEDS ATTENTION</Text>
-      <View style={styles.sectionDivider} />
-      <View style={styles.taskList}>
+    <Section title="Needs attention">
         {visibleItems.map((item, idx) => {
           const statusColor = item.status === "overdue" ? Colors.overdue : Colors.dueSoon;
           return (
-            <Pressable
+            <UiRow
               key={item.id}
-              style={({ pressed }) => [
-                styles.taskRow,
-                (idx < visibleItems.length - 1 || hasMore) && styles.taskRowBorder,
-                { opacity: pressed ? 0.75 : 1 },
-              ]}
+              appearIndex={idx}
+              title={item.title}
+              subtitle={item.subtitle}
+              chevron={false}
               onPress={() => handlePress(item)}
-            >
-              <View style={[styles.taskBar, { backgroundColor: statusColor }]} />
-              <View style={styles.taskInfo}>
-                <Text style={styles.taskTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={styles.taskSub} numberOfLines={1}>{item.subtitle}</Text>
-              </View>
-              <Text style={[styles.taskDue, { color: statusColor }]}>{formatDueDate(item.dueDate)}</Text>
-            </Pressable>
+              trailing={
+                <View style={styles.taskTrailing}>
+                  <Text style={[styles.taskDue, { color: statusColor }]}>{formatDueDate(item.dueDate)}</Text>
+                </View>
+              }
+              style={{ borderLeftWidth: 4, borderLeftColor: statusColor }}
+            />
           );
         })}
         {hasMore && (
@@ -1387,8 +1382,7 @@ function UpcomingTasksCard({ items }: { items: DashboardItem[] }) {
             <Text style={styles.seeAllText}>{"See all "}{items.length}{" items →"}</Text>
           </Pressable>
         )}
-      </View>
-    </View>
+    </Section>
   );
 }
 
@@ -1702,15 +1696,8 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 8,
   },
-  sectionDivider: { height: 1, backgroundColor: Colors.borderSubtle, width: "100%" },
 
-  taskList: { gap: 0 },
-  taskRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 16 },
-  taskRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle },
-  taskBar: { width: 4, height: 28, borderRadius: Radius.sm, flexShrink: 0 },
-  taskInfo: { flex: 1, gap: 2 },
-  taskTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
-  taskSub: { ...Typography.footnote, color: Colors.textSecondary },
+  taskTrailing: { alignItems: "flex-end", flexShrink: 0 },
   taskDue: { ...Typography.caption, fontWeight: "500", flexShrink: 0 },
 
   seeAllRow: { paddingVertical: 12, alignItems: "center" },
@@ -1718,14 +1705,7 @@ const styles = StyleSheet.create({
 
   headerSummary: { ...Typography.footnote, color: Colors.textTertiary, marginTop: 4 },
 
-  section: { gap: 12 },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   sectionTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
-  screeningCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 16, borderWidth: 1, borderColor: Colors.border },
-  screeningBar: { width: 4, height: 28, borderRadius: Radius.sm, backgroundColor: Colors.health, flexShrink: 0 },
-  screeningContent: { flex: 1, gap: 2 },
-  screeningTitle: { ...Typography.subheadline, fontWeight: "500", color: Colors.text },
-  screeningDesc: { ...Typography.caption, color: Colors.textSecondary },
 
   welcomeWrap: { gap: 16 },
   welcomeTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },

@@ -2,21 +2,22 @@ import React, { useState, useCallback} from "react";
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   Pressable,
   RefreshControl,
-  Platform,
   Modal,
 } from "react-native";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { Icon } from "@/components/ui/Icon";
+import { Screen } from "@/components/ui/Screen";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Typography } from "@/constants/typography";
 import { Radius } from "@/constants/radius";
+import { Spacing } from "@/constants/spacing";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -73,9 +74,7 @@ function getPropertyLabel(p: Property): string {
 }
 
 export default function HomeTabScreen() {
-  const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
-  const webTopPad = Platform.OS === "web" ? 67 : 0;
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallReason, setPaywallReason] = useState<"limit_reached" | "locked_existing">("limit_reached");
 
@@ -129,10 +128,7 @@ export default function HomeTabScreen() {
     router.push('/add-property');
   }, [properties, profile, router, setShowPaywall]);
 
-  return (
-    <View style={{ flex: 1, backgroundColor: Colors.background }}>
-      <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
-        <Text style={styles.title}>Properties</Text>
+  const trailing = (
         <Pressable
           style={({ pressed }) => [{
             flexDirection: "row",
@@ -154,19 +150,27 @@ export default function HomeTabScreen() {
           <Icon name="add" size={18} color={Colors.textInverse} />
           <Text style={{ ...Typography.footnote, fontWeight: "600", color: Colors.textInverse }}>Property</Text>
         </Pressable>
-      </View>
+  );
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
+  return (
+    <View style={{ flex: 1, backgroundColor: Colors.background }}>
+      <Screen
+        title="Properties"
+        trailing={trailing}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.accent} />}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0), flexGrow: 1 }]}
+        contentStyle={styles.content}
       >
         {isLoading ? (
           <PropertyListSkeleton />
         ) : (!properties?.length && (isError || fetchStatus === "paused")) ? (
           <LoadErrorState onRetry={refetch} title="Unable to load your properties" body="Your properties are saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading properties again" />
         ) : properties?.length === 0 ? (
-          <EmptyProperties onAddPress={guardedAddPropertyPress} />
+          <EmptyState
+            icon="home-outline"
+            tone="home"
+            title="No properties yet"
+            action={{ label: "Add your first property", onPress: guardedAddPropertyPress }}
+          />
         ) : (
           properties?.map((p, idx) => {
             const isLocked = idx >= propertyLimit(profile);
@@ -190,12 +194,11 @@ export default function HomeTabScreen() {
               : (typeLabel[p.property_type ?? "other"] ?? "Property");
 
             return (
-              <Pressable
+              <Card
                 key={p.id}
-                style={({ pressed }) => [
-                  styles.propertyCard,
-                  { opacity: pressed ? 0.88 : isLocked ? 0.5 : 1 },
-                ]}
+                padding={Spacing.lg}
+                style={isLocked ? styles.lockedCard : null}
+                accessibilityLabel={label}
                 onPress={() => {
                   if (isLocked) {
                     setPaywallReason("locked_existing");
@@ -203,9 +206,9 @@ export default function HomeTabScreen() {
                     return;
                   }
                   router.push(`/property/${p.id}` as any);
-                  Haptics.selectionAsync();
                 }}
               >
+                <View style={styles.cardRow}>
                 <Icon name={icon as any} size={18} color={Colors.home} />
 
                 <View style={styles.cardInfo}>
@@ -219,11 +222,12 @@ export default function HomeTabScreen() {
                 <View style={styles.cardRight}>
                   <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
                 </View>
-              </Pressable>
+                </View>
+              </Card>
             );
           })
         )}
-      </ScrollView>
+      </Screen>
 
       <Modal visible={showPaywall} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowPaywall(false)}>
         <Paywall
@@ -261,32 +265,10 @@ function PropertyListSkeleton() {
   );
 }
 
-function EmptyProperties({ onAddPress }: { onAddPress: () => void }) {
-  return (
-    <View style={styles.emptyWrap}>
-      <Text style={styles.emptyTitle}>No properties yet</Text>
-      <Pressable
-        style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onAddPress(); }}
-      >
-        <Text style={styles.emptyLink}>Add your first property</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    backgroundColor: Colors.background,
-  },
-  title: { ...Typography.largeTitle, color: Colors.text },
-  addText: { ...Typography.subheadline, fontWeight: "500", color: Colors.accent },
-  content: { paddingHorizontal: 20, paddingTop: 8, gap: 12 },
+  content: { gap: Spacing.md },
+  cardRow: { flexDirection: "row", alignItems: "center", gap: Spacing.lg },
+  lockedCard: { opacity: 0.5 },
 
   propertyCard: {
     flexDirection: "row",
@@ -302,8 +284,4 @@ const styles = StyleSheet.create({
   cardMeta: { ...Typography.footnote, color: Colors.textSecondary },
   cardRight: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   statusDot: { width: 8, height: 8, borderRadius: Radius.pill },
-
-  emptyWrap: { paddingTop: 60, alignItems: "center", gap: 8 },
-  emptyTitle: { ...Typography.subheadline, color: Colors.textSecondary },
-  emptyLink: { ...Typography.subheadline, fontWeight: "500", color: Colors.accent },
 });

@@ -15,8 +15,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Colors } from "@/constants/colors";
 import { Icon } from "@/components/ui/Icon";
+import { Screen } from "@/components/ui/Screen";
+import { Section } from "@/components/ui/Section";
+import { Row as UiRow } from "@/components/ui/Row";
 import { Typography } from "@/constants/typography";
 import { Radius } from "@/constants/radius";
+import { Spacing } from "@/constants/spacing";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
@@ -551,18 +555,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
-      <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
-        <Text style={styles.title}>Settings</Text>
-      </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + 120 + (Platform.OS === "web" ? 34 : 0) },
-        ]}
-      >
+      <Screen title="Settings" keyboardShouldPersistTaps="handled" contentStyle={styles.content}>
         <View style={styles.maxWidth}>
           {/* Banners */}
           {userIsInTrial && (
@@ -642,26 +635,25 @@ export default function SettingsScreen() {
           )}
 
           {/* ACCOUNT */}
-          <Text style={styles.sectionLabel}>Account</Text>
-          <View style={styles.groupCard}>
-            <View style={styles.accountEmailRow}>
-              <Text style={styles.accountEmail} numberOfLines={1}>{user?.email}</Text>
-              <Text style={styles.accountTierLabel}>{tierLabel}</Text>
-            </View>
-            <View style={styles.groupDivider} />
-            <Pressable
-              style={({ pressed }) => [styles.signOutRow, { opacity: pressed ? 0.7 : 1 }]}
+          <Section title="Account">
+            <UiRow
+              title={user?.email ?? ""}
+              appearIndex={0}
+              trailing={<Text style={styles.accountTierLabel}>{tierLabel}</Text>}
+            />
+            <UiRow
+              title="Sign Out"
+              destructive
+              chevron={false}
+              appearIndex={1}
+              trailing={null}
               onPress={handleSignOut}
-              hitSlop={4}
-            >
-              <Text style={styles.signOutText}>Sign Out</Text>
-            </Pressable>
-          </View>
+            />
+          </Section>
 
           {isPaidNonTrialUser && (
             <>
-              <Text style={styles.sectionLabel}>Scans</Text>
-              <View style={styles.groupCard}>
+              <Section title="Scans">
                 <View style={styles.scansRow}>
                   <View style={styles.scansIconWrap}>
                     <Icon name="receipt-outline" size={18} color={Colors.accent} />
@@ -686,7 +678,6 @@ export default function SettingsScreen() {
                     )}
                   </View>
                 </View>
-                <View style={styles.groupDivider} />
                 <View style={styles.scansCtaWrap}>
                   <PaidActionCTA
                     label="Buy more scans"
@@ -701,49 +692,45 @@ export default function SettingsScreen() {
                     testID="settings-buy-scans"
                   />
                 </View>
-              </View>
+              </Section>
             </>
           )}
 
-          <Text style={styles.sectionLabel}>Your Data</Text>
-          <View style={styles.groupCard}>
-            <Pressable
-              style={({ pressed }) => [styles.scansRow, { opacity: pressed ? 0.7 : 1 }]}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/import-fleet"); }}
-              accessibilityRole="button"
+          <Section title="Your Data" dividerInset={56}>
+            <UiRow
+              icon="arrow-down-circle-outline"
+              iconBackground={Colors.accentMuted}
+              title="Import vehicles"
+              subtitle="Bring in a fleet from a CSV or Excel file"
               accessibilityLabel="Import vehicles from a file"
-            >
-              <View style={styles.scansIconWrap}>
-                <Icon name="arrow-down-circle-outline" size={18} color={Colors.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.scansLabel}>Import vehicles</Text>
-                <Text style={styles.scansSub}>Bring in a fleet from a CSV or Excel file</Text>
-              </View>
-              <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
-            </Pressable>
-          </View>
+              onPress={() => router.push("/import-fleet")}
+            />
+          </Section>
 
           {/* NOTIFICATIONS */}
-          <Text style={styles.sectionLabel}>Notifications</Text>
-          <View style={styles.groupCard}>
-            <ToggleRow
-              label="Push Notifications"
-              sublabel="In-app alerts and banners"
-              value={notifPrefs.pushEnabled}
-              onToggle={() => togglePush(!notifPrefs.pushEnabled)}
+          <Section title="Notifications">
+            <UiRow
+              title="Push Notifications"
+              subtitle="In-app alerts and banners"
               disabled={isPushTogglePending}
-              loading={isPushTogglePending}
+              onPress={() => togglePush(!notifPrefs.pushEnabled)}
+              trailing={
+                <View
+                  style={[
+                    styles.toggle,
+                    notifPrefs.pushEnabled && styles.toggleOn,
+                    isPushTogglePending && styles.toggleDisabled,
+                    isPushTogglePending && styles.toggleLoading,
+                  ]}
+                >
+                  <View style={[styles.toggleThumb, notifPrefs.pushEnabled && styles.toggleThumbOn, isPushTogglePending && styles.toggleThumbLoading]} />
+                </View>
+              }
             />
-          </View>
+          </Section>
           {/* BUDGET */}
-          <Text style={styles.sectionLabel}>Budget Notifications</Text>
-          <SectionCard
-            title="Budget Notifications"
-            subtitle="Get alerted when costs exceed your threshold"
-          >
-            <View style={styles.budgetContent}>
+          <Section title="Budget Notifications">
+            <View style={[styles.sectionBody, styles.budgetContent]}>
               <Text style={styles.budgetHint}>
                 We&apos;ll notify you when upcoming maintenance costs in a given month exceed this amount.
               </Text>
@@ -768,15 +755,10 @@ export default function SettingsScreen() {
                 </Text>
               )}
             </View>
-          </SectionCard>
+          </Section>
 
-          <Text style={styles.sectionLabel}>Service Prediction</Text>
-          <SectionCard
-            title="Service Prediction"
-            subtitle={selectedVehicle
-              ? (selectedVehicle.nickname ?? `${selectedVehicle.year ?? ""} ${selectedVehicle.make ?? ""} ${selectedVehicle.model ?? ""}`.trim())
-              : "Predict upcoming services by vehicle"}
-          >
+          <Section title="Service Prediction">
+            <View style={styles.sectionBody}>
             {(predVehicles?.length ?? 0) === 0 ? (
               <View style={styles.predEmpty}>
                 <Icon name="car-outline" size={28} color={Colors.textTertiary} />
@@ -888,7 +870,8 @@ export default function SettingsScreen() {
                 )}
               </>
             )}
-          </SectionCard>
+          </View>
+          </Section>
 
           <ServicePredictionSheet
             ref={predSheetRef}
@@ -1002,7 +985,7 @@ export default function SettingsScreen() {
         </View>
                 {__DEV__ && <DeveloperTestNotifications />}
                 {__DEV__ && <DeveloperTestUndoToast />}
-        </ScrollView>
+      </Screen>
 
       {hasChanges && (
         <View style={[styles.saveBar, { paddingBottom: insets.bottom + 8 + (Platform.OS === "web" ? 34 : 0) }]}>
@@ -1030,59 +1013,8 @@ export default function SettingsScreen() {
   );
 }
 
-function SectionCard({ title, subtitle, children }: {
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.sectionCard}>
-      <View style={styles.sectionCardBody}>{children}</View>
-    </View>
-  );
-}
-
-function ToggleRow({ label, sublabel, value, onToggle, disabled = false, loading = false }: {
-  label: string;
-  sublabel: string;
-  value: boolean;
-  onToggle: () => void;
-  disabled?: boolean;
-  loading?: boolean;
-}) {
-  return (
-    <Pressable
-      style={styles.toggleRow}
-      onPress={disabled ? undefined : onToggle}
-      hitSlop={4}
-      disabled={disabled}
-    >
-      <View style={styles.toggleRowInfo}>
-        <Text style={styles.toggleRowLabel}>{label}</Text>
-        <Text style={styles.toggleRowSub}>{sublabel}</Text>
-      </View>
-      <Pressable
-        onPress={disabled ? undefined : onToggle}
-        style={styles.toggleHitArea}
-        hitSlop={8}
-        disabled={disabled}
-      >
-        <View style={[styles.toggle, value && styles.toggleOn, disabled && styles.toggleDisabled, loading && styles.toggleLoading]}>
-          <View style={[styles.toggleThumb, value && styles.toggleThumbOn, loading && styles.toggleThumbLoading]} />
-        </View>
-      </Pressable>
-    </Pressable>
-  );
-}
-
-
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    backgroundColor: Colors.background,
-  },
-  title: { ...Typography.largeTitle, color: Colors.text },
+  sectionBody: { padding: Spacing.lg },
   content: { paddingHorizontal: 20, paddingTop: 8, gap: 16 },
   maxWidth: {
     maxWidth: 768,
@@ -1091,14 +1023,6 @@ const styles = StyleSheet.create({
     gap: 16,
   },
 
-  sectionLabel: {
-    ...Typography.caption,
-    fontWeight: "600",
-    color: Colors.textTertiary,
-    textTransform: "uppercase",
-    letterSpacing: 1.5,
-    marginBottom: -4,
-  },
 
   banner: {
     flexDirection: "row",
@@ -1125,55 +1049,11 @@ const styles = StyleSheet.create({
   },
   bannerBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
 
-  groupCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: "hidden",
-  },
-  groupDivider: { height: 1, backgroundColor: Colors.borderSubtle },
 
-  accountEmailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    gap: 12,
-  },
-  accountEmail: { ...Typography.subheadline, flex: 1, color: Colors.text },
   accountTierLabel: { ...Typography.caption, fontWeight: "600", color: Colors.accent },
 
-  signOutRow: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    minHeight: 48,
-    justifyContent: "center",
-  },
-  signOutText: { ...Typography.subheadline, color: Colors.overdue },
 
-  sectionCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: "hidden",
-  },
-  sectionCardBody: { padding: 16, gap: 0 },
 
-  toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    minHeight: 56,
-  },
-  toggleRowInfo: { flex: 1 },
-  toggleRowLabel: { ...Typography.subheadline, fontWeight: "500", color: Colors.text },
-  toggleRowSub: { ...Typography.footnote, color: Colors.textSecondary, marginTop: 2 },
-  toggleHitArea: { padding: 4 },
   toggle: {
     width: 50,
     height: 30,

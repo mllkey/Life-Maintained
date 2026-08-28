@@ -2,22 +2,23 @@ import React, { useState, useCallback} from "react";
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   Pressable,
   RefreshControl,
-  Platform,
   Modal,
   Image,
 } from "react-native";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { Icon, MciIcon, type IconName } from "@/components/ui/Icon";
+import { Screen } from "@/components/ui/Screen";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Typography } from "@/constants/typography";
 import { Radius } from "@/constants/radius";
+import { Spacing } from "@/constants/spacing";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -61,9 +62,7 @@ function getTaskStatus(date: string | null): "overdue" | "due_soon" | "good" {
 }
 
 export default function VehiclesScreen() {
-  const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
-  const webTopPad = Platform.OS === "web" ? 67 : 0;
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallReason, setPaywallReason] = useState<"limit_reached" | "locked_existing">("limit_reached");
 
@@ -126,11 +125,8 @@ export default function VehiclesScreen() {
     router.push('/add-vehicle');
   }, [vehicles, profile, router, setShowPaywall]);
 
-  return (
-    <View style={{ flex: 1, backgroundColor: Colors.background }}>
-      <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
-        <Text style={styles.title}>Vehicles</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+  const trailing = (
+    <>
           <Pressable
             style={({ pressed }) => [{ padding: 8, borderRadius: Radius.md, borderWidth: 1,
               borderColor: Colors.border, backgroundColor: Colors.card,
@@ -164,13 +160,16 @@ export default function VehiclesScreen() {
             <Icon name="add" size={18} color={Colors.textInverse} />
             <Text style={{ ...Typography.footnote, fontWeight: "600", color: Colors.textInverse }}>Vehicle</Text>
           </Pressable>
-        </View>
-      </View>
+    </>
+  );
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
+  return (
+    <View style={{ flex: 1, backgroundColor: Colors.background }}>
+      <Screen
+        title="Vehicles"
+        trailing={trailing}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.accent} />}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0), flexGrow: 1 }]}
+        contentStyle={styles.content}
       >
         {!isLoading && (
           <Tooltip
@@ -184,8 +183,13 @@ export default function VehiclesScreen() {
         ) : (!vehicles?.length && (isError || fetchStatus === "paused")) ? (
           <LoadErrorState onRetry={refetch} title="Unable to load your vehicles" body="Your vehicles are saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading vehicles again" />
         ) : vehicles?.length === 0 ? (
-          <EmptyVehicles onAddPress={guardedAddVehiclePress}
-            onImportPress={() => router.push("/import-fleet")} />
+          <EmptyState
+            icon="car-outline"
+            tone="vehicle"
+            title="No vehicles yet"
+            action={{ label: "Add your first vehicle", onPress: guardedAddVehiclePress }}
+            secondaryAction={{ label: "or import from a spreadsheet", onPress: () => router.push("/import-fleet") }}
+          />
         ) : (
           vehicles?.map((v, idx) => {
             const isLocked = idx >= vehicleLimit(profile);
@@ -245,9 +249,11 @@ export default function VehiclesScreen() {
                 : null;
 
             return (
-              <Pressable
+              <Card
                 key={v.id}
-                style={({ pressed }) => [styles.vehicleCard, { opacity: pressed ? 0.88 : isLocked ? 0.55 : 1 }]}
+                padding={Spacing.lg}
+                style={isLocked ? styles.lockedCard : null}
+                accessibilityLabel={displayName}
                 onPress={() => {
                   if (isLocked) {
                     setPaywallReason("locked_existing");
@@ -255,9 +261,9 @@ export default function VehiclesScreen() {
                     return;
                   }
                   router.push(`/vehicle/${v.id}` as any);
-                  Haptics.selectionAsync();
                 }}
               >
+                <View style={styles.cardRow}>
                 {v.photo_url ? (
                   <Image source={{ uri: v.photo_url }} style={{ width: 36, height: 36, borderRadius: Radius.md }} resizeMode="cover" />
                 ) : icon.family === "ionicons" ? (
@@ -293,11 +299,12 @@ export default function VehiclesScreen() {
                 <View style={styles.cardRight}>
                   <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
                 </View>
-              </Pressable>
+                </View>
+              </Card>
             );
           })
         )}
-      </ScrollView>
+      </Screen>
 
       <Modal visible={showPaywall} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowPaywall(false)}>
         <Paywall
@@ -334,45 +341,10 @@ function VehicleListSkeleton() {
   );
 }
 
-function EmptyVehicles({ onAddPress, onImportPress }: { onAddPress: () => void; onImportPress: () => void }) {
-  return (
-    <View style={styles.emptyWrap}>
-      <Text style={styles.emptyTitle}>No vehicles yet</Text>
-      <Pressable
-        style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onAddPress(); }}
-      >
-        <Text style={styles.emptyLink}>Add your first vehicle</Text>
-      </Pressable>
-      <Pressable
-        style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, minHeight: 44,
-          justifyContent: "center" }]}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onImportPress(); }}
-        accessibilityRole="button"
-        accessibilityLabel="Import vehicles from a spreadsheet"
-      >
-        <Text style={{
-          ...Typography.footnote,
-          color: Colors.textSecondary,
-        }}>or import from a spreadsheet</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    backgroundColor: Colors.background,
-  },
-  title: { ...Typography.largeTitle, color: Colors.text },
-  addText: { ...Typography.subheadline, fontWeight: "500", color: Colors.accent },
-  content: { paddingHorizontal: 20, paddingTop: 8, gap: 12 },
+  content: { gap: Spacing.md },
+  cardRow: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
+  lockedCard: { opacity: 0.55 },
 
   vehicleCard: {
     flexDirection: "row",
@@ -390,9 +362,4 @@ const styles = StyleSheet.create({
   statusDot: { width: 8, height: 8, borderRadius: Radius.pill },
   lockedRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   lockedText: { ...Typography.caption, color: Colors.textTertiary },
-
-  emptyWrap: { flex: 1, paddingTop: 60, alignItems: "center", gap: 12 },
-  emptyTitle: { ...Typography.subheadline, color: Colors.textSecondary },
-  emptyLink: { ...Typography.subheadline, fontWeight: "500", color: Colors.accent },
-
 });

@@ -18,8 +18,13 @@ import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { Icon } from "@/components/ui/Icon";
+import { Screen } from "@/components/ui/Screen";
+import { Section } from "@/components/ui/Section";
+import { Row as UiRow } from "@/components/ui/Row";
+import { Card } from "@/components/ui/Card";
 import { Typography } from "@/constants/typography";
 import { Radius } from "@/constants/radius";
+import { Spacing } from "@/constants/spacing";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -548,11 +553,8 @@ export default function HealthScreen() {
     (!appointments || appointments.length === 0) &&
     (!medications || medications.length === 0);
 
-  return (
-    <View style={{ flex: 1, backgroundColor: Colors.background }}>
-      <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
-        <Text style={styles.title}>Health</Text>
-        <View style={styles.headerActions}>
+  const trailing = (
+        <>
           <Pressable
             onPress={handleExportHealth}
             style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, padding: 8 })}
@@ -579,13 +581,16 @@ export default function HealthScreen() {
             <Icon name="add" size={18} color={Colors.textInverse} />
             <Text style={styles.addHeaderBtnText}>Add</Text>
           </Pressable>
-        </View>
-      </View>
+        </>
+  );
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
+  return (
+    <View style={{ flex: 1, backgroundColor: Colors.background }}>
+      <Screen
+        title="Health"
+        trailing={trailing}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={Colors.accent} />}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0), flexGrow: 1 }]}
+        contentStyle={styles.content}
       >
         {isLoading ? (
           <View style={{ padding: 20, gap: 16 }}>
@@ -642,17 +647,17 @@ export default function HealthScreen() {
                 )}
 
                 {actionNeededAppts.length > 0 && (
-                  <SectionBlock title={`Action Needed (${actionNeededAppts.length})`} titleColor={Colors.overdue}>
+                  <Section title={`Action Needed (${actionNeededAppts.length})`}>
                     <View style={styles.apptList}>
                       {actionNeededAppts.map(a => (
                         <AppointmentCard key={a.id} appointment={a} onMarkComplete={handleOpenMarkComplete} />
                       ))}
                     </View>
-                  </SectionBlock>
+                  </Section>
                 )}
 
                 {screeningSuggestions.length > 0 && (
-                  <SectionBlock title="Recommended Screenings">
+                  <Section title="Recommended Screenings">
                     <View style={styles.screeningList}>
                       {screeningSuggestions.map(s => (
                         <View key={s.title} style={styles.screeningCard}>
@@ -675,13 +680,13 @@ export default function HealthScreen() {
                         </View>
                       ))}
                     </View>
-                  </SectionBlock>
+                  </Section>
                 )}
 
                 {people.length > 0 && (
-                  <SectionBlock
+                  <Section
                     title="Family Members"
-                    onAdd={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openAddPerson(); }}
+                    action={{ icon: "add", onPress: openAddPerson }}
                   >
                     <View style={styles.memberGrid}>
                       {people.map((person, personIdx) => {
@@ -708,13 +713,13 @@ export default function HealthScreen() {
                         );
                       })}
                     </View>
-                  </SectionBlock>
+                  </Section>
                 )}
 
                 {pets.length > 0 && (
-                  <SectionBlock
+                  <Section
                     title="Pets"
-                    onAdd={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openAddPet(); }}
+                    action={{ icon: "add", onPress: openAddPet }}
                   >
                     <View style={styles.memberGrid}>
                       {pets.map((pet, petIdx) => {
@@ -741,13 +746,13 @@ export default function HealthScreen() {
                         );
                       })}
                     </View>
-                  </SectionBlock>
+                  </Section>
                 )}
 
                 {medications && medications.length > 0 && (
-                  <SectionBlock
+                  <Section
                     title="Medication Tracker"
-                    onAdd={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-medication"); }}
+                    action={{ icon: "add", onPress: () => router.push("/add-medication") }}
                   >
                     <View style={styles.medList}>
                       {medications.map(m => {
@@ -755,13 +760,11 @@ export default function HealthScreen() {
                         if ((m as any).family_members?.name) metaParts.push((m as any).family_members.name);
                         if (m.reminder_time) metaParts.push(`Daily · ${m.reminder_time}`);
                         return (
-                          <View key={m.id} style={styles.medCard}>
-                            <View style={styles.medInfo}>
-                              <Text style={styles.medName}>{m.name}</Text>
-                              {metaParts.length > 0 && (
-                                <Text style={styles.medMetaText} numberOfLines={1}>{metaParts.join(" · ")}</Text>
-                              )}
-                            </View>
+                          <UiRow
+                            key={m.id}
+                            title={m.name}
+                            subtitle={metaParts.length > 0 ? metaParts.join(" · ") : undefined}
+                            trailing={
                             <View style={styles.medRight}>
                               <View style={[styles.reminderDot, { backgroundColor: m.reminders_enabled ? Colors.good : Colors.border }]} />
                               {m.reminder_time && (
@@ -778,11 +781,12 @@ export default function HealthScreen() {
                                 </Pressable>
                               )}
                             </View>
-                          </View>
+                            }
+                          />
                         );
                       })}
                     </View>
-                  </SectionBlock>
+                  </Section>
                 )}
 
                 <Text style={styles.disclaimer}>
@@ -792,7 +796,7 @@ export default function HealthScreen() {
             )}
           </>
         )}
-      </ScrollView>
+      </Screen>
 
       <Modal visible={showPaywall} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowPaywall(false)}>
         <Paywall
@@ -968,26 +972,6 @@ function AppointmentCard({ appointment, onMarkComplete }: { appointment: any; on
   );
 }
 
-function SectionBlock({ title, titleColor, onAdd, children }: { title: string; titleColor?: string; onAdd?: () => void; children: React.ReactNode }) {
-  return (
-    <View style={styles.sectionBlock}>
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionLabel, titleColor ? { color: titleColor } : {}]}>{title.toUpperCase()}</Text>
-        {onAdd && (
-          <Pressable
-            style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-            onPress={onAdd}
-            hitSlop={8}
-          >
-            <Icon name="add" size={18} color={Colors.textTertiary} />
-          </Pressable>
-        )}
-      </View>
-      {children}
-    </View>
-  );
-}
-
 function MemberCard({ member, overdue, upcoming, onPress }: { member: any; overdue: number; upcoming: number; onPress: () => void }) {
   const isPet = member.member_type === "pet";
   const label = isPet
@@ -996,10 +980,8 @@ function MemberCard({ member, overdue, upcoming, onPress }: { member: any; overd
   const statusDotColor = overdue > 0 ? Colors.overdue : upcoming > 0 ? Colors.dueSoon : null;
 
   return (
-    <Pressable
-      style={({ pressed }) => [styles.memberCard, { opacity: pressed ? 0.88 : 1 }]}
-      onPress={onPress}
-    >
+    <Card padding={Spacing.lg} onPress={onPress} accessibilityLabel={member.name}>
+      <View style={styles.memberRow}>
       <Icon name={isPet ? "paw-outline" : "person-outline"} size={18} color={Colors.health} />
       <View style={styles.memberInfo}>
         <View style={styles.memberTitleRow}>
@@ -1011,21 +993,13 @@ function MemberCard({ member, overdue, upcoming, onPress }: { member: any; overd
       <View style={styles.memberRight}>
         <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
       </View>
-    </Pressable>
+      </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    backgroundColor: Colors.background,
-  },
-  title: { ...Typography.largeTitle, color: Colors.text },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 4 },
+  memberRow: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
   addHeaderBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1051,25 +1025,8 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
 
-  sectionBlock: { gap: 12 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sectionLabel: {
-    ...Typography.caption,
-    fontWeight: "600",
-    color: Colors.textTertiary,
-    textTransform: "uppercase",
-    letterSpacing: 1.5,
-  },
 
   memberGrid: { gap: 12 },
-  memberCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    padding: 16,
-  },
   memberInfo: { flex: 1, gap: 4 },
   memberTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   memberName: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
@@ -1110,19 +1067,6 @@ const styles = StyleSheet.create({
   screeningAddBtn: { flexShrink: 0 },
 
   medList: { gap: 8 },
-  medCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  medInfo: { flex: 1, gap: 4 },
-  medName: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
-  medMetaText: { ...Typography.footnote, color: Colors.textSecondary },
   medRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   reminderDot: { width: 8, height: 8, borderRadius: Radius.pill },
   notifBtn: {

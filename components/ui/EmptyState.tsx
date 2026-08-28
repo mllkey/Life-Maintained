@@ -11,7 +11,7 @@ export interface EmptyStateProps {
   icon: IconName;
   tone?: Tone;
   title: string;
-  body: string;
+  body?: string;
   action: { label: string; onPress: () => void };
   /** A quieter alternative under the main action ("or import from a spreadsheet"). */
   secondaryAction?: { label: string; onPress: () => void };
@@ -29,9 +29,11 @@ export function EmptyState({ icon, tone = "accent", title, body, action, seconda
       <Text variant="headline" align="center">
         {title}
       </Text>
-      <Text variant="subheadline" color="textSecondary" align="center" style={styles.body}>
-        {body}
-      </Text>
+      {body ? (
+        <Text variant="subheadline" color="textSecondary" align="center" style={styles.body}>
+          {body}
+        </Text>
+      ) : null}
       <View style={styles.actions}>
         <Button label={action.label} onPress={action.onPress} fullWidth={false} />
         {secondaryAction ? (
