@@ -21,8 +21,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { completeVehicleTask, deleteVehicleCascade } from "@/lib/rpc";
 import * as Haptics from "expo-haptics";
@@ -1360,12 +1362,12 @@ export default function VehicleDetailScreen() {
     <View style={[styles.container, { backgroundColor: Colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={6} accessibilityLabel="Go back" accessibilityRole="button">
-          <Ionicons name="chevron-back" size={24} color={Colors.text} />
+          <Icon name="chevron-back" size={24} color={Colors.text} />
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>{vehicleName}</Text>
           {vehicle?.nickname && (
-            <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "#8B93A8" }} numberOfLines={1}>
+            <Text style={{ ...Typography.footnote, color: Colors.textSecondary }} numberOfLines={1}>
               {`${vehicle.year ?? ""} ${vehicle.make ?? ""} ${vehicle.model ?? ""}`.trim()}
             </Text>
           )}
@@ -1374,31 +1376,31 @@ export default function VehicleDetailScreen() {
           )}
           {vehicle?.mileage != null && isMileageTracked(vehicle) && (
             <View style={styles.headerMileageRow}>
-              <Ionicons name="speedometer-outline" size={11} color={Colors.textTertiary} />
+              <Icon name="speedometer-outline" size={11} color={Colors.textTertiary} />
               <Text style={styles.headerMileage}>{(projectedMileage(vehicle) ?? vehicle.mileage).toLocaleString()} mi</Text>
             </View>
           )}
           {vehicle?.hours != null && isHoursTracked(vehicle) && (
             <View style={styles.headerMileageRow}>
-              <Ionicons name="timer-outline" size={11} color={Colors.textTertiary} />
+              <Icon name="timer-outline" size={11} color={Colors.textTertiary} />
               <Text style={styles.headerMileage}>{(projectedHours(vehicle) ?? vehicle.hours).toLocaleString()} hrs</Text>
             </View>
           )}
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Pressable
-            style={({ pressed }) => [{ width: 34, height: 34, borderRadius: 10, backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.7 : 1 }]}
+            style={({ pressed }) => [{ width: 34, height: 34, borderRadius: Radius.md, backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.7 : 1 }]}
             onPress={() => router.push(`/edit-vehicle?vehicleId=${id}` as any)}
             hitSlop={4}
           >
-            <Ionicons name="pencil-outline" size={16} color={Colors.text} />
+            <Icon name="pencil-outline" size={16} color={Colors.text} />
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.deleteVehicleBtn, { opacity: pressed ? 0.7 : 1 }]}
             onPress={handleDeleteVehicle}
             hitSlop={4}
           >
-            <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
+            <Icon name="trash-outline" size={16} color={Colors.overdue} />
           </Pressable>
         </View>
       </View>
@@ -1424,7 +1426,7 @@ export default function VehicleDetailScreen() {
               <Pressable onPress={handleVehiclePhoto} style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}>
                 <Image
                   source={{ uri: vehicle.photo_url }}
-                  style={{ width: "100%", height: 180, borderRadius: 14 }}
+                  style={{ width: "100%", height: 180, borderRadius: Radius.lg }}
                   resizeMode="cover"
                 />
               </Pressable>
@@ -1432,16 +1434,16 @@ export default function VehicleDetailScreen() {
               <Pressable
                 onPress={handleVehiclePhoto}
                 style={({ pressed }) => [{
-                  height: 100, borderRadius: 14, borderWidth: 1.5, borderColor: "#2A3550", borderStyle: "dashed",
-                  alignItems: "center", justifyContent: "center", gap: 6, opacity: pressed ? 0.7 : 1,
+                  height: 100, borderRadius: Radius.lg, borderWidth: 1.5, borderColor: Colors.border, borderStyle: "dashed",
+                  alignItems: "center", justifyContent: "center", gap: 8, opacity: pressed ? 0.7 : 1,
                 }]}
               >
                 {uploadingPhoto ? (
-                  <ActivityIndicator color="#E8943A" />
+                  <ActivityIndicator color={Colors.accent} />
                 ) : (
                   <>
-                    <Ionicons name="camera-outline" size={24} color="#5A6480" />
-                    <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "#5A6480" }}>Add vehicle photo</Text>
+                    <Icon name="camera-outline" size={24} color={Colors.textTertiary} />
+                    <Text style={{ ...Typography.footnote, color: Colors.textTertiary }}>Add vehicle photo</Text>
                   </>
                 )}
               </Pressable>
@@ -1520,7 +1522,7 @@ export default function VehicleDetailScreen() {
                 <ScheduleSkeleton />
               ) : scheduleError ? (
                 <View style={styles.scheduleError}>
-                  <Ionicons name="alert-circle-outline" size={32} color={Colors.overdue} />
+                  <Icon name="alert-circle-outline" size={32} color={Colors.overdue} />
                   <Text style={styles.scheduleErrorText}>Failed to load maintenance schedule</Text>
                   <Pressable
                     style={({ pressed }) => [styles.retryBtn, { opacity: pressed ? 0.8 : 1 }]}
@@ -1536,20 +1538,20 @@ export default function VehicleDetailScreen() {
                       onPress={() => { if (insightTaskName) { setHighlightedTask(insightTaskName); setTimeout(() => setHighlightedTask(null), 2000); } }}
                       style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, flexDirection: "column", alignItems: "flex-start", gap: 4 }}
                     >
-                      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
-                        <Ionicons name="bulb-outline" size={16} color={Colors.textSecondary} style={{ marginTop: 1 }} />
-                        <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary, flex: 1 }}>
+                      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+                        <Icon name="bulb-outline" size={16} color={Colors.textSecondary} style={{ marginTop: 1 }} />
+                        <Text style={{ ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary, flex: 1 }}>
                           {scheduleInsight}
                         </Text>
                       </View>
-                      <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 }}>
+                      <Text style={{ ...Typography.caption, color: Colors.textTertiary, marginTop: 2 }}>
                         Based on your vehicle and usage
                       </Text>
                     </Pressable>
                   )}
-                  <View style={{ backgroundColor: Colors.dueSoonMuted, borderRadius: 10, padding: 12, marginHorizontal: 16, marginTop: 8, marginBottom: 12, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
-                    <Ionicons name="information-circle-outline" size={18} color={Colors.dueSoon} style={{ marginTop: 1 }} />
-                    <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.dueSoon, flex: 1 }}>
+                  <View style={{ backgroundColor: Colors.dueSoonMuted, borderRadius: Radius.md, padding: 12, marginHorizontal: 16, marginTop: 8, marginBottom: 12, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
+                    <Icon name="information-circle-outline" size={18} color={Colors.dueSoon} style={{ marginTop: 1 }} />
+                    <Text style={{ ...Typography.footnote, color: Colors.dueSoon, flex: 1 }}>
                       This schedule is estimated from your current usage. Tap any task to log your last service date for more accurate due dates.
                     </Text>
                   </View>
@@ -1603,37 +1605,37 @@ export default function VehicleDetailScreen() {
                     />
                   )}
                   {Object.keys(costEstimates ?? {}).length > 0 && (
-                    <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", marginTop: 12, paddingHorizontal: 16 }}>
+                    <Text style={{ ...Typography.caption, color: Colors.textTertiary, textAlign: "center", marginTop: 12, paddingHorizontal: 16 }}>
                       Cost estimates are approximate and vary by location and shop. Not a guarantee of pricing.
                     </Text>
                   )}
                   <Pressable
-                    style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 12, opacity: pressed || refreshingSchedule ? 0.6 : 1 }]}
+                    style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, opacity: pressed || refreshingSchedule ? 0.6 : 1 }]}
                     onPress={handleRefreshSchedulePress}
                     disabled={refreshingSchedule}
                   >
-                    <Ionicons name="refresh-outline" size={14} color={Colors.textTertiary} />
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary }}>Refresh Schedule</Text>
+                    <Icon name="refresh-outline" size={14} color={Colors.textTertiary} />
+                    <Text style={{ ...Typography.caption, color: Colors.textTertiary }}>Refresh Schedule</Text>
                   </Pressable>
                 </Animated.View>
               ) : processedScheduleTasks.length === 0 ? (
                 <View style={{ paddingTop: 16 }}>
                   <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
-                    <Text style={{ fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, marginBottom: 4 }}>
+                    <Text style={{ ...Typography.headline, color: Colors.text, marginBottom: 4 }}>
                       Building your maintenance plan
                     </Text>
-                    <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary }}>
+                    <Text style={{ ...Typography.footnote, color: Colors.textTertiary }}>
                       This usually takes about 10–20 seconds
                     </Text>
                   </View>
                   {!generatingSchedule && (
                     <Pressable
                       onPress={() => { generateSchedule(); }}
-                      style={({ pressed }) => [{ marginTop: 16, marginHorizontal: 16, paddingVertical: 14, paddingHorizontal: 20, backgroundColor: '#E8943A', borderRadius: 12, alignItems: 'center', opacity: pressed ? 0.85 : 1 }]}
+                      style={({ pressed }) => [{ marginTop: 16, marginHorizontal: 16, paddingVertical: 16, paddingHorizontal: 20, backgroundColor: Colors.accent, borderRadius: Radius.md, alignItems: 'center', opacity: pressed ? 0.85 : 1 }]}
                       accessibilityRole="button"
                       accessibilityLabel="Generate maintenance schedule"
                     >
-                      <Text style={{ color: Colors.textInverse, fontSize: 16, fontFamily: 'Inter_600SemiBold' }}>Generate Schedule</Text>
+                      <Text style={{ ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse }}>Generate Schedule</Text>
                     </Pressable>
                   )}
                   <ScheduleSkeleton />
@@ -1690,17 +1692,17 @@ export default function VehicleDetailScreen() {
                     />
                   )}
                   {Object.keys(costEstimates ?? {}).length > 0 && (
-                    <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", marginTop: 12, paddingHorizontal: 16 }}>
+                    <Text style={{ ...Typography.caption, color: Colors.textTertiary, textAlign: "center", marginTop: 12, paddingHorizontal: 16 }}>
                       Cost estimates are approximate and vary by location and shop. Not a guarantee of pricing.
                     </Text>
                   )}
                   <Pressable
-                    style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 12, opacity: pressed || refreshingSchedule ? 0.6 : 1 }]}
+                    style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, opacity: pressed || refreshingSchedule ? 0.6 : 1 }]}
                     onPress={handleRefreshSchedulePress}
                     disabled={refreshingSchedule}
                   >
-                    <Ionicons name="refresh-outline" size={14} color={Colors.textTertiary} />
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary }}>Refresh Schedule</Text>
+                    <Icon name="refresh-outline" size={14} color={Colors.textTertiary} />
+                    <Text style={{ ...Typography.caption, color: Colors.textTertiary }}>Refresh Schedule</Text>
                   </Pressable>
                 </Animated.View>
               )}
@@ -1723,7 +1725,7 @@ export default function VehicleDetailScreen() {
               />
               {groupedHistory.length === 0 ? (
                 <View style={styles.emptyTasks}>
-                  <Ionicons name="document-outline" size={36} color={Colors.textTertiary} />
+                  <Icon name="document-outline" size={36} color={Colors.textTertiary} />
                   <Text style={styles.emptyTasksText}>No service records yet</Text>
                   <Text style={styles.emptyTasksSubtext}>Tap Log Service to add your first record</Text>
                 </View>
@@ -1789,7 +1791,7 @@ export default function VehicleDetailScreen() {
                           {group.lastCost != null && (
                             <Text style={styles.historyGroupCardCost}>${group.lastCost.toFixed(2)}</Text>
                           )}
-                          <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+                          <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
                         </View>
                       </Pressable>
                     ))}
@@ -1804,7 +1806,7 @@ export default function VehicleDetailScreen() {
                       <ActivityIndicator size="small" color={Colors.textInverse} />
                     ) : (
                       <>
-                        <Ionicons name="share-outline" size={16} color={Colors.textInverse} />
+                        <Icon name="share-outline" size={16} color={Colors.textInverse} />
                         <Text style={styles.exportBtnText}>Export History</Text>
                       </>
                     )}
@@ -1819,13 +1821,13 @@ export default function VehicleDetailScreen() {
         <LoadErrorState onRetry={handleVehicleRetry} title="Unable to load this vehicle" body="Your vehicle is saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading vehicle again" />
       ) : (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 }}>
-          <Text style={{ fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" }}>Vehicle not found</Text>
-          <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" }}>This vehicle may have been deleted.</Text>
+          <Text style={{ ...Typography.headline, color: Colors.text, textAlign: "center" }}>Vehicle not found</Text>
+          <Text style={{ ...Typography.footnote, color: Colors.textSecondary, textAlign: "center" }}>This vehicle may have been deleted.</Text>
           <Pressable
             onPress={() => router.back()}
-            style={{ paddingHorizontal: 24, paddingVertical: 12, backgroundColor: Colors.accent, borderRadius: 12 }}
+            style={{ paddingHorizontal: 24, paddingVertical: 12, backgroundColor: Colors.accent, borderRadius: Radius.md }}
           >
-            <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse }}>Go Back</Text>
+            <Text style={{ ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse }}>Go Back</Text>
           </Pressable>
         </View>
       )}
@@ -1889,39 +1891,39 @@ export default function VehicleDetailScreen() {
               paddingBottom: insets.bottom + 40,
             }}
           >
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.borderSubtle, alignSelf: "center", marginBottom: 16 }} />
-            <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.textPrimary, marginBottom: 16 }}>
+            <View style={{ width: 36, height: 4, borderRadius: Radius.sm, backgroundColor: Colors.borderSubtle, alignSelf: "center", marginBottom: 16 }} />
+            <Text style={{ ...Typography.headline, fontWeight: "700", color: Colors.textPrimary, marginBottom: 16 }}>
               DIY Difficulty Levels
             </Text>
-            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-              <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: Colors.good, backgroundColor: Colors.goodMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
+              <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.good, backgroundColor: Colors.goodMuted, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
                 Easy DIY
               </Text>
-              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 }}>
+              <Text style={{ ...Typography.footnote, color: Colors.textSecondary, flex: 1 }}>
                 No special tools or experience needed. Most people can do this with basic supplies and a YouTube video. Examples: air filter, wiper blades, cabin filter.
               </Text>
             </View>
-            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-              <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: Colors.dueSoon, backgroundColor: Colors.dueSoonMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
+              <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.dueSoon, backgroundColor: Colors.dueSoonMuted, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
                 Moderate
               </Text>
-              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 }}>
+              <Text style={{ ...Typography.footnote, color: Colors.textSecondary, flex: 1 }}>
                 Requires some tools and comfort working on your vehicle. May take 1-2 hours. Examples: brake pads, spark plugs, battery replacement.
               </Text>
             </View>
-            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-              <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: Colors.overdue, backgroundColor: Colors.overdueMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
+              <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.overdue, backgroundColor: Colors.overdueMuted, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
                 Pro Recommended
               </Text>
-              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 }}>
+              <Text style={{ ...Typography.footnote, color: Colors.textSecondary, flex: 1 }}>
                 Complex job requiring professional tools, expertise, or safety equipment. Best left to a certified mechanic. Examples: timing belt, transmission service, suspension work.
               </Text>
             </View>
             <Pressable
               onPress={() => setShowDifficultyInfo(false)}
-              style={{ width: "100%", backgroundColor: Colors.vehicle, borderRadius: 10, paddingVertical: 13, marginTop: 8 }}
+              style={{ width: "100%", backgroundColor: Colors.vehicle, borderRadius: Radius.md, paddingVertical: 12, marginTop: 8 }}
             >
-              <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#FFFFFF", textAlign: "center" }}>
+              <Text style={{ ...Typography.subheadline, fontWeight: "600", color: Colors.white, textAlign: "center" }}>
                 Got it
               </Text>
             </Pressable>
@@ -1962,7 +1964,7 @@ function ScheduleSkeleton() {
     <View style={styles.skeletonContainer}>
       {[1, 2, 3, 4].map(i => (
         <View key={i} style={styles.skeletonCard}>
-          <View style={{ width: 4, height: 28, borderRadius: 2, backgroundColor: Colors.surface, flexShrink: 0 }} />
+          <View style={{ width: 4, height: 28, borderRadius: Radius.sm, backgroundColor: Colors.surface, flexShrink: 0 }} />
           <View style={{ flex: 1, gap: 8 }}>
             <View style={styles.skeletonLine} />
             <View style={[styles.skeletonLine, { width: "55%" }]} />
@@ -2010,7 +2012,7 @@ function ScheduleSection({
         <Text style={styles.scheduleSectionTitle}>
           {title.toUpperCase()}
         </Text>
-        <Ionicons
+        <Icon
           name={expanded ? "chevron-up" : "chevron-down"}
           size={14}
           color={Colors.textTertiary}
@@ -2029,7 +2031,7 @@ function ScheduleSection({
                   ref={(node) => { registerRow?.(task.id, node); }}
                   collapsable={false}
                   pointerEvents="box-none"
-                  style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
+                  style={{ position: "relative", borderRadius: Radius.lg, overflow: "hidden" }}
                 >
                   <ScheduleTaskCard
                     task={task}
@@ -2130,7 +2132,7 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, isLast, c
           </Text>
         )}
         {!!lastServicedText && (
-          <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.vehicle, marginTop: 4 }}>
+          <Text style={{ ...Typography.caption, fontWeight: "600", color: Colors.vehicle, marginTop: 4 }}>
             {lastServicedText}
           </Text>
         )}
@@ -2143,18 +2145,18 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, isLast, c
           );
           if (!costLine && !costEstimate.difficulty) return null;
           return (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
-            {!!costLine && <Ionicons name="cash-outline" size={12} color={Colors.good} />}
-            {!!costLine && <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+            {!!costLine && <Icon name="cash-outline" size={12} color={Colors.good} />}
+            {!!costLine && <Text style={{ ...Typography.caption, color: Colors.good }}>
               {costLine}
             </Text>}
             {costEstimate.difficulty && (
               <>
-                <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: costEstimate.difficulty === 1 ? Colors.good : costEstimate.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: costEstimate.difficulty === 1 ? Colors.goodMuted : costEstimate.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
+                <Text style={{ ...Typography.caption, fontWeight: "500", color: costEstimate.difficulty === 1 ? Colors.good : costEstimate.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: costEstimate.difficulty === 1 ? Colors.goodMuted : costEstimate.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
                   {costEstimate.difficulty === 1 ? "Easy DIY" : costEstimate.difficulty === 2 ? "Moderate" : "Pro"}
                 </Text>
                 <Pressable onPress={() => onShowDifficultyInfo?.()} hitSlop={8}>
-                  <Ionicons name="information-circle-outline" size={14} color={Colors.textTertiary} />
+                  <Icon name="information-circle-outline" size={14} color={Colors.textTertiary} />
                 </Pressable>
               </>
             )}
@@ -2291,10 +2293,10 @@ function EditTaskSheet({
           ) : (
             <Pressable
               onPress={() => { setIsEditingName(true); setTimeout(() => nameInputRef.current?.focus(), 50); }}
-              style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 20 }}
+              style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 20 }}
             >
               <Text style={[styles.sheetTitle, { marginBottom: 0, flex: 1, textAlign: "center" }]} numberOfLines={2}>{editName}</Text>
-              <Ionicons name="pencil-outline" size={14} color={Colors.textTertiary} />
+              <Icon name="pencil-outline" size={14} color={Colors.textTertiary} />
             </Pressable>
           )}
 
@@ -2306,17 +2308,17 @@ function EditTaskSheet({
                 style={({ pressed }) => [{
                   flexDirection: "row" as const, alignItems: "center" as const,
                   justifyContent: "space-between" as const,
-                  backgroundColor: Colors.surface, borderRadius: 12, padding: 14,
+                  backgroundColor: Colors.surface, borderRadius: Radius.md, padding: 16,
                   borderWidth: 1, borderColor: showIntervalEditor ? Colors.accent : Colors.border,
                   opacity: pressed ? 0.8 : 1,
                 }]}
                 onPress={() => setShowIntervalEditor(v => !v)}
               >
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Ionicons name="time-outline" size={18} color={Colors.textSecondary} />
-                  <Text style={{ fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.text }}>{intervalText}</Text>
+                  <Icon name="time-outline" size={18} color={Colors.textSecondary} />
+                  <Text style={{ ...Typography.subheadline, color: Colors.text }}>{intervalText}</Text>
                 </View>
-                <Ionicons name={showIntervalEditor ? "chevron-up" : "chevron-down"} size={16} color={Colors.textTertiary} />
+                <Icon name={showIntervalEditor ? "chevron-up" : "chevron-down"} size={16} color={Colors.textTertiary} />
               </Pressable>
 
               {/* Interval editor */}
@@ -2331,30 +2333,36 @@ function EditTaskSheet({
                           <Pressable
                             key={val}
                             style={({ pressed }) => [{
-                              paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                              paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.lg,
                               borderWidth: 1, opacity: pressed ? 0.8 : 1,
                               borderColor: editMiles === val && !useCustomMiles ? Colors.accent : Colors.border,
                               backgroundColor: editMiles === val && !useCustomMiles ? Colors.accentMuted : Colors.surface,
                             }]}
                             onPress={() => handleMilesPreset(val)}
                           >
-                            <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium",
-                              color: editMiles === val && !useCustomMiles ? Colors.accent : Colors.textSecondary }}>
+                            <Text style={{
+                              ...Typography.footnote,
+                              fontWeight: "500",
+                              color: editMiles === val && !useCustomMiles ? Colors.accent : Colors.textSecondary,
+                            }}>
                               {val.toLocaleString()}
                             </Text>
                           </Pressable>
                         ))}
                         <Pressable
                           style={({ pressed }) => [{
-                            paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                            paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.lg,
                             borderWidth: 1, opacity: pressed ? 0.8 : 1,
                             borderColor: useCustomMiles ? Colors.accent : Colors.border,
                             backgroundColor: useCustomMiles ? Colors.accentMuted : Colors.surface,
                           }]}
                           onPress={() => { setUseCustomMiles(true); setChangeMethod("custom"); }}
                         >
-                          <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium",
-                            color: useCustomMiles ? Colors.accent : Colors.textSecondary }}>Custom</Text>
+                          <Text style={{
+                            ...Typography.footnote,
+                            fontWeight: "500",
+                            color: useCustomMiles ? Colors.accent : Colors.textSecondary,
+                          }}>Custom</Text>
                         </Pressable>
                       </View>
                       {useCustomMiles && (
@@ -2379,30 +2387,36 @@ function EditTaskSheet({
                         <Pressable
                           key={val}
                           style={({ pressed }) => [{
-                            paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                            paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.lg,
                             borderWidth: 1, opacity: pressed ? 0.8 : 1,
                             borderColor: editMonths === val && !useCustomMonths ? Colors.accent : Colors.border,
                             backgroundColor: editMonths === val && !useCustomMonths ? Colors.accentMuted : Colors.surface,
                           }]}
                           onPress={() => handleMonthsPreset(val)}
                         >
-                          <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium",
-                            color: editMonths === val && !useCustomMonths ? Colors.accent : Colors.textSecondary }}>
+                          <Text style={{
+                            ...Typography.footnote,
+                            fontWeight: "500",
+                            color: editMonths === val && !useCustomMonths ? Colors.accent : Colors.textSecondary,
+                          }}>
                             {val} mo
                           </Text>
                         </Pressable>
                       ))}
                       <Pressable
                         style={({ pressed }) => [{
-                          paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                          paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.lg,
                           borderWidth: 1, opacity: pressed ? 0.8 : 1,
                           borderColor: useCustomMonths ? Colors.accent : Colors.border,
                           backgroundColor: useCustomMonths ? Colors.accentMuted : Colors.surface,
                         }]}
                         onPress={() => { setUseCustomMonths(true); setChangeMethod("custom"); }}
                       >
-                        <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium",
-                          color: useCustomMonths ? Colors.accent : Colors.textSecondary }}>Custom</Text>
+                        <Text style={{
+                          ...Typography.footnote,
+                          fontWeight: "500",
+                          color: useCustomMonths ? Colors.accent : Colors.textSecondary,
+                        }}>Custom</Text>
                       </Pressable>
                     </View>
                     {useCustomMonths && (
@@ -2426,13 +2440,13 @@ function EditTaskSheet({
                   style={({ pressed }) => [{
                     flexDirection: "row" as const, alignItems: "center" as const,
                     justifyContent: "center" as const, gap: 8,
-                    backgroundColor: Colors.surface, borderRadius: 12, paddingVertical: 13,
+                    backgroundColor: Colors.surface, borderRadius: Radius.md, paddingVertical: 12,
                     borderWidth: 1, borderColor: Colors.border, opacity: pressed ? 0.8 : 1,
                   }]}
                   onPress={() => { onClose(); onMarkComplete(task); }}
                 >
-                  <Ionicons name="checkmark-circle-outline" size={18} color={Colors.good} />
-                  <Text style={{ fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.good }}>Mark as Done</Text>
+                  <Icon name="checkmark-circle-outline" size={18} color={Colors.good} />
+                  <Text style={{ ...Typography.subheadline, fontWeight: "500", color: Colors.good }}>Mark as Done</Text>
                 </Pressable>
               )}
 
@@ -2441,14 +2455,14 @@ function EditTaskSheet({
                 style={({ pressed }) => [{
                   flexDirection: "row" as const, alignItems: "center" as const,
                   justifyContent: "center" as const, gap: 8,
-                  borderRadius: 12, paddingVertical: 13, borderWidth: 1,
+                  borderRadius: Radius.md, paddingVertical: 12, borderWidth: 1,
                   borderColor: Colors.overdue + "40", backgroundColor: Colors.overdueMuted,
                   opacity: pressed ? 0.8 : 1,
                 }]}
                 onPress={() => onDelete(task)}
               >
-                <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
-                <Text style={{ fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.overdue }}>Delete Task</Text>
+                <Icon name="trash-outline" size={16} color={Colors.overdue} />
+                <Text style={{ ...Typography.subheadline, fontWeight: "500", color: Colors.overdue }}>Delete Task</Text>
               </Pressable>
             </View>
           </ScrollView>
@@ -2622,17 +2636,17 @@ function MarkCompleteSheet({
 
             <Pressable
               onPress={() => onDiyChange(!diy)}
-              style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 }}
             >
               <View style={{
-                width: 24, height: 24, borderRadius: 6, borderWidth: 2,
-                borderColor: diy ? "#E8943A" : Colors.border,
-                backgroundColor: diy ? "#E8943A" : "transparent",
+                width: 24, height: 24, borderRadius: Radius.sm, borderWidth: 2,
+                borderColor: diy ? Colors.accent : Colors.border,
+                backgroundColor: diy ? Colors.accent : "transparent",
                 alignItems: "center", justifyContent: "center",
               }}>
-                {diy && <Ionicons name="checkmark" size={16} color={Colors.textInverse} />}
+                {diy && <Icon name="checkmark" size={16} color={Colors.textInverse} />}
               </View>
-              <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text }}>I did this myself</Text>
+              <Text style={{ ...Typography.footnote, fontWeight: "500", color: Colors.text }}>I did this myself</Text>
             </Pressable>
           </View>
           </ScrollView>
@@ -2656,7 +2670,7 @@ function MarkCompleteSheet({
                 <ActivityIndicator size="small" color={Colors.textInverse} />
               ) : (
                 <>
-                  <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
+                  <Icon name="checkmark" size={16} color={Colors.textInverse} />
                   <Text style={styles.sheetSaveText}>Mark as Done</Text>
                 </>
               )}
@@ -2986,7 +3000,7 @@ function WalletTab({ vehicleId, userId }: { vehicleId: string; userId: string })
           ) : null}
         </Pressable>
       </Modal>
-      <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, lineHeight: 16 }}>
+      <Text style={{ ...Typography.caption, color: Colors.textTertiary, textAlign: "center", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
         Photos stored here are for personal reference only. Check your local laws regarding acceptable identification documents.
       </Text>
       <SaveToast visible={walletToastVisible} message={walletToastTitle} subtitle={walletToastSubtitle} isError={walletToastIsError} />
@@ -3032,7 +3046,7 @@ function DocPhotoSlot({
         <View style={walletStyles.slotLabelRow}>
           <Text style={walletStyles.slotLabelText}>{label}</Text>
           <Pressable onPress={onLongPress} hitSlop={8} style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}>
-            <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
+            <Icon name="trash-outline" size={16} color={Colors.overdue} />
           </Pressable>
         </View>
       </Pressable>
@@ -3067,7 +3081,7 @@ function DocPhotoSlot({
         ]}
         onPress={onTap}
       >
-        <Ionicons name="camera-outline" size={28} color={Colors.textTertiary} />
+        <Icon name="camera-outline" size={28} color={Colors.textTertiary} />
         <Text style={walletStyles.slotName}>{label}</Text>
         <Text style={walletStyles.slotHint}>Tap to add photo</Text>
       </Pressable>
@@ -3076,10 +3090,10 @@ function DocPhotoSlot({
 }
 
 const walletStyles = StyleSheet.create({
-  container: { gap: 14 },
+  container: { gap: 16 },
   loading: { paddingVertical: 40, alignItems: "center" },
   slotEmpty: {
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1.5,
     borderColor: Colors.border,
     minHeight: 160,
@@ -3089,19 +3103,19 @@ const walletStyles = StyleSheet.create({
   slotCopyBlock: {
     alignSelf: "stretch",
     paddingHorizontal: 12,
-    paddingTop: 10,
+    paddingTop: 12,
     paddingBottom: 4,
     gap: 8,
     alignItems: "center",
   },
   slotCopyLink: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.footnote,
+    fontWeight: "600",
     color: Colors.textInverse,
-    backgroundColor: "#E8943A",
-    paddingHorizontal: 14,
+    backgroundColor: Colors.accent,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     overflow: "hidden",
     textAlign: "center",
   },
@@ -3113,10 +3127,10 @@ const walletStyles = StyleSheet.create({
     paddingBottom: 12,
     minHeight: 120,
   },
-  slotName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  slotHint: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  slotName: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  slotHint: { ...Typography.footnote, color: Colors.textSecondary },
   slotFilled: {
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
@@ -3127,21 +3141,21 @@ const walletStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  slotLabelText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  slotLabelText: { ...Typography.footnote, fontWeight: "600", color: Colors.text },
   slotLoading: {
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 160,
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 12,
     backgroundColor: Colors.surface,
   },
-  slotLoadingText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  slotLoadingText: { ...Typography.footnote, color: Colors.textSecondary },
   photoViewer: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.95)",
@@ -3157,10 +3171,10 @@ const walletStyles = StyleSheet.create({
   },
   photoViewerImage: { width: "100%", flex: 1 },
   photoViewerHint: {
+    ...Typography.footnote,
+    fontWeight: "500",
     position: "absolute",
     bottom: 48,
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
     color: "rgba(255,255,255,0.7)",
   },
 });
@@ -3178,29 +3192,29 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 40, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   headerCenter: { flex: 1, alignItems: "center", gap: 1 },
-  headerTitle: { fontSize: 22, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
-  headerTrim: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
-  headerMileageRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 1 },
-  headerMileage: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  headerTitle: { ...Typography.title2, fontWeight: "600", color: Colors.text, textAlign: "center" },
+  headerTrim: { ...Typography.caption, color: Colors.textSecondary, textAlign: "center" },
+  headerMileageRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 },
+  headerMileage: { ...Typography.subheadline, color: Colors.textTertiary },
   deleteVehicleBtn: {
-    width: 34, height: 34, borderRadius: 10,
+    width: 34, height: 34, borderRadius: Radius.md,
     backgroundColor: Colors.overdueMuted, alignItems: "center", justifyContent: "center",
   },
   scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 12 },
   vehicleCard: {
     gap: 12,
   },
-  vehicleFullName: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
-  vehicleMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  vehicleFullName: { ...Typography.title2, color: Colors.text },
+  vehicleMeta: { ...Typography.footnote, color: Colors.textSecondary },
   logServiceBtn: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 48,
     alignItems: "center",
     justifyContent: "center",
   },
-  logServiceBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#fff" },
-  updateMileageLink: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
+  logServiceBtnText: { ...Typography.subheadline, fontWeight: "600", color: Colors.white },
+  updateMileageLink: { ...Typography.footnote, fontWeight: "500", color: Colors.accent },
   tabs: {
     flexDirection: "row",
     backgroundColor: Colors.background,
@@ -3210,70 +3224,77 @@ const styles = StyleSheet.create({
   tabActive: {},
   tabUnderline: {
     position: "absolute", bottom: 0, left: 0, right: 0,
-    height: 2, backgroundColor: Colors.accent, borderRadius: 1,
+    height: 2, backgroundColor: Colors.accent, borderRadius: Radius.sm,
   },
-  tabText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
-  tabTextActive: { color: Colors.text, fontFamily: "Inter_600SemiBold" },
+  tabText: { ...Typography.footnote, fontWeight: "500", color: Colors.textTertiary },
+  tabTextActive: { fontWeight: "600", color: Colors.text },
   tasksContainer: { gap: 12 },
   taskGroup: { gap: 8 },
-  taskGroupHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
-  taskGroupDot: { width: 6, height: 6, borderRadius: 3 },
+  taskGroupHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  taskGroupDot: { width: 6, height: 6, borderRadius: Radius.pill },
   taskGroupTitle: {
-    fontSize: 12, fontFamily: "Inter_600SemiBold",
-    textTransform: "uppercase", letterSpacing: 1.5,
+    ...Typography.caption,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
   },
   taskCard: {
     flexDirection: "row", alignItems: "center", backgroundColor: Colors.card,
-    borderRadius: 12, padding: 12, gap: 12, borderWidth: 1, borderColor: Colors.border,
+    borderRadius: Radius.md, padding: 12, gap: 12, borderWidth: 1, borderColor: Colors.border,
   },
   taskCardLeft: { flex: 1 },
-  taskName: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
-  taskMeta: { flexDirection: "row", gap: 8, marginTop: 3, flexWrap: "wrap" },
-  taskDue: { fontSize: 12, fontFamily: "Inter_500Medium" },
-  taskInterval: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  taskCost: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  taskName: { ...Typography.subheadline, fontWeight: "500", color: Colors.text },
+  taskMeta: { flexDirection: "row", gap: 8, marginTop: 4, flexWrap: "wrap" },
+  taskDue: { ...Typography.caption, fontWeight: "500" },
+  taskInterval: { ...Typography.caption, color: Colors.textTertiary },
+  taskCost: { ...Typography.caption, color: Colors.textTertiary },
   completeBtn: {
-    width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.goodMuted,
+    width: 36, height: 36, borderRadius: Radius.md, backgroundColor: Colors.goodMuted,
     alignItems: "center", justifyContent: "center",
   },
   emptyTasks: { alignItems: "center", paddingVertical: 32, gap: 8 },
-  emptyTasksText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  emptyTasksText: { ...Typography.footnote, color: Colors.textSecondary },
   emptyTasksSubtext: {
-    fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center",
+    ...Typography.footnote,
+    color: Colors.textTertiary,
+    textAlign: "center",
   },
   exportBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: Colors.vehicle, borderRadius: 12, paddingVertical: 11,
+    backgroundColor: Colors.vehicle, borderRadius: Radius.md, paddingVertical: 12,
   },
-  exportBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  exportBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
   exportSellCopy: {
-    fontSize: 12, fontFamily: "Inter_400Regular", color: "#8a8f98", textAlign: "center", marginTop: 8,
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    marginTop: 8,
   },
   historyContainer: { gap: 16 },
   historySummaryBar: {
-    flexDirection: "row", backgroundColor: Colors.card, borderRadius: 14,
+    flexDirection: "row", backgroundColor: Colors.card, borderRadius: Radius.lg,
     borderWidth: 1, borderColor: Colors.border, padding: 16,
     alignItems: "center", justifyContent: "space-around",
   },
-  historySummaryStat: { alignItems: "center", gap: 3 },
-  historySummaryValue: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text },
-  historySummaryLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  historySummaryStat: { alignItems: "center", gap: 4 },
+  historySummaryValue: { ...Typography.title3, fontWeight: "700", color: Colors.text },
+  historySummaryLabel: { ...Typography.caption, color: Colors.textSecondary },
   historySummaryDivider: { width: 1, height: 36, backgroundColor: Colors.border },
-  historyGroupList: { gap: 10 },
+  historyGroupList: { gap: 12 },
   historyGroupCard: {
     flexDirection: "row", alignItems: "center", backgroundColor: Colors.card,
-    borderRadius: 14, borderWidth: 1, borderColor: Colors.border,
+    borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border,
     padding: 16, minHeight: 44, gap: 12,
   },
-  historyGroupCardLeft: { flex: 1, gap: 3 },
-  historyGroupCardName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 21 },
-  historyGroupCardMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  historyGroupCardProvider: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  historyGroupCardLeft: { flex: 1, gap: 4 },
+  historyGroupCardName: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  historyGroupCardMeta: { ...Typography.footnote, color: Colors.textSecondary },
+  historyGroupCardProvider: { ...Typography.footnote, color: Colors.textTertiary },
   historyGroupCardFooter: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
-  historyGroupCardCount: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  historyGroupCardTotal: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.vehicle },
-  historyGroupCardRight: { alignItems: "flex-end", gap: 6, flexShrink: 0 },
-  historyGroupCardCost: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.vehicle },
+  historyGroupCardCount: { ...Typography.caption, color: Colors.textTertiary },
+  historyGroupCardTotal: { ...Typography.caption, fontWeight: "500", color: Colors.vehicle },
+  historyGroupCardRight: { alignItems: "flex-end", gap: 8, flexShrink: 0 },
+  historyGroupCardCost: { ...Typography.headline, fontWeight: "700", color: Colors.vehicle },
 
   scheduleContainer: { gap: 16 },
   scheduleSection: { gap: 0 },
@@ -3282,75 +3303,93 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4, paddingBottom: 8,
   },
   scheduleSectionTitle: {
-    fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary,
-    textTransform: "uppercase", letterSpacing: 1.5,
+    ...Typography.caption,
+    fontWeight: "600",
+    color: Colors.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
   },
   scheduleSectionContent: {
-    backgroundColor: Colors.card, borderRadius: 14,
+    backgroundColor: Colors.card, borderRadius: Radius.lg,
     borderWidth: 1, borderColor: Colors.border, overflow: "hidden",
   },
   scheduleSectionEmpty: {
-    fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
-    textAlign: "center", paddingVertical: 20,
+    ...Typography.footnote,
+    color: Colors.textTertiary,
+    textAlign: "center",
+    paddingVertical: 20,
   },
   scheduleCard: {
-    flexDirection: "row", alignItems: "center", gap: 14,
-    paddingHorizontal: 20, paddingVertical: 14,
+    flexDirection: "row", alignItems: "center", gap: 16,
+    paddingHorizontal: 20, paddingVertical: 16,
   },
   scheduleCardBorder: {
     borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
   },
   scheduleCardBar: {
-    width: 4, height: 28, borderRadius: 2, flexShrink: 0,
+    width: 4, height: 28, borderRadius: Radius.sm, flexShrink: 0,
   },
-  scheduleCardBody: { flex: 1, gap: 3 },
+  scheduleCardBody: { flex: 1, gap: 4 },
   scheduleCardName: {
-    fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text,
+    ...Typography.subheadline,
+    fontWeight: "600",
+    color: Colors.text,
   },
   scheduleCardNameDone: {
-    fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
+    ...Typography.footnote,
+    color: Colors.textTertiary,
   },
   scheduleCardDue: {
-    fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary,
+    ...Typography.footnote,
+    color: Colors.textSecondary,
   },
   scheduleCardDueDone: {
-    fontSize: 12, color: Colors.textTertiary,
+    ...Typography.caption,
+    color: Colors.textTertiary,
   },
   scheduleCardCompletedInfo: {
-    fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 4,
+    ...Typography.footnote,
+    color: Colors.textSecondary,
+    marginTop: 4,
   },
   scheduleEmpty: {
     alignItems: "center", paddingVertical: 40, paddingHorizontal: 20, gap: 8,
   },
   scheduleEmptyTitle: {
-    fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary, textAlign: "center",
+    ...Typography.subheadline,
+    fontWeight: "500",
+    color: Colors.textSecondary,
+    textAlign: "center",
   },
   scheduleEmptySubtitle: {
-    fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
+    ...Typography.footnote,
+    color: Colors.textTertiary,
     textAlign: "center",
   },
   generateBtn: {
-    flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: Colors.accent,
-    borderRadius: 12, paddingHorizontal: 22, paddingVertical: 12, marginTop: 6,
+    flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.accent,
+    borderRadius: Radius.md, paddingHorizontal: 24, paddingVertical: 12, marginTop: 8,
   },
-  generateBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  scheduleError: { alignItems: "center", paddingVertical: 36, gap: 10 },
+  generateBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
+  scheduleError: { alignItems: "center", paddingVertical: 40, gap: 12 },
   scheduleErrorText: {
-    fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center",
+    ...Typography.footnote,
+    color: Colors.textSecondary,
+    textAlign: "center",
   },
   retryBtn: {
-    backgroundColor: Colors.surface, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 9,
+    backgroundColor: Colors.surface, borderRadius: Radius.md, paddingHorizontal: 20, paddingVertical: 8,
     borderWidth: 1, borderColor: Colors.border, marginTop: 4,
   },
-  retryBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  skeletonContainer: { gap: 0, backgroundColor: Colors.card, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: Colors.border },
+  retryBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.text },
+  skeletonContainer: { gap: 0, backgroundColor: Colors.card, borderRadius: Radius.lg, overflow: "hidden", borderWidth: 1, borderColor: Colors.border },
   skeletonCard: {
-    flexDirection: "row", alignItems: "center", gap: 14,
-    paddingHorizontal: 16, paddingVertical: 14,
+    flexDirection: "row", alignItems: "center", gap: 16,
+    paddingHorizontal: 16, paddingVertical: 16,
     borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
   },
   skeletonLine: {
-    height: 14, borderRadius: 7, backgroundColor: Colors.surface, width: "80%",
+    height: 14, borderRadius: Radius.sm, backgroundColor: Colors.surface, width: "80%",
   },
 
   sheetOverlay: {
@@ -3372,49 +3411,63 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   sheetHandle: {
-    width: 36, height: 4, borderRadius: 2,
+    width: 36, height: 4, borderRadius: Radius.sm,
     backgroundColor: Colors.border, alignSelf: "center", marginBottom: 16,
   },
   sheetTitle: {
-    fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text,
-    marginBottom: 20, textAlign: "center",
+    ...Typography.headline,
+    color: Colors.text,
+    marginBottom: 20,
+    textAlign: "center",
   },
   sheetScroll: { maxHeight: 400 },
   sheetFields: { gap: 16 },
-  sheetField: { gap: 6 },
+  sheetField: { gap: 8 },
   sheetFieldLabel: {
-    fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary,
-    textTransform: "uppercase", letterSpacing: 1.5,
+    ...Typography.caption,
+    fontWeight: "600",
+    color: Colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
   },
   sheetFieldOptional: {
-    fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
-    textTransform: "none", letterSpacing: 0,
+    ...Typography.caption,
+    color: Colors.textTertiary,
+    textTransform: "none",
   },
   sheetInput: {
-    backgroundColor: Colors.surface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text,
-    borderWidth: 1, borderColor: Colors.border,
+    ...Typography.subheadline,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   sheetInputMultiline: {
     minHeight: 64, textAlignVertical: "top",
   },
   dateStepper: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: Colors.surface, borderRadius: 12,
+    backgroundColor: Colors.surface, borderRadius: Radius.md,
     borderWidth: 1, borderColor: Colors.border, overflow: "hidden",
   },
   dateStepBtn: {
     width: 44, height: 46, alignItems: "center", justifyContent: "center",
   },
   dateStepValue: {
-    flex: 1, textAlign: "center",
-    fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text,
+    ...Typography.subheadline,
+    fontWeight: "500",
+    flex: 1,
+    textAlign: "center",
+    color: Colors.text,
   },
   dateQuickRow: {
-    flexDirection: "row", gap: 8, marginTop: 6,
+    flexDirection: "row", gap: 8, marginTop: 8,
   },
   dateQuickBtn: {
-    flex: 1, paddingVertical: 8, borderRadius: 10,
+    flex: 1, paddingVertical: 8, borderRadius: Radius.md,
     backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
     alignItems: "center",
   },
@@ -3422,27 +3475,34 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accentMuted, borderColor: Colors.accent,
   },
   dateQuickText: {
-    fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary,
+    ...Typography.footnote,
+    fontWeight: "500",
+    color: Colors.textSecondary,
   },
   dateQuickTextActive: {
-    color: Colors.accent, fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
+    color: Colors.accent,
   },
   sheetActions: {
-    flexDirection: "row", gap: 10, marginTop: 24,
+    flexDirection: "row", gap: 12, marginTop: 24,
   },
   sheetCancelBtn: {
-    flex: 1, paddingVertical: 13, borderRadius: 13, alignItems: "center",
+    flex: 1, paddingVertical: 12, borderRadius: Radius.md, alignItems: "center",
     backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
   },
   sheetCancelText: {
-    fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary,
+    ...Typography.subheadline,
+    fontWeight: "500",
+    color: Colors.textSecondary,
   },
   sheetSaveBtn: {
-    flex: 2, paddingVertical: 13, borderRadius: 13,
+    flex: 2, paddingVertical: 12, borderRadius: Radius.md,
     backgroundColor: Colors.accent, alignItems: "center", justifyContent: "center",
-    flexDirection: "row", gap: 6,
+    flexDirection: "row", gap: 8,
   },
   sheetSaveText: {
-    fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse,
+    ...Typography.subheadline,
+    fontWeight: "600",
+    color: Colors.textInverse,
   },
 });

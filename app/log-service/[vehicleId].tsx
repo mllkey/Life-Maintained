@@ -14,8 +14,10 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -1511,7 +1513,7 @@ export default function LogServiceScreen() {
             accessibilityLabel="Close"
             accessibilityState={{ disabled: locked }}
           >
-            <Ionicons name="close" size={22} color={Colors.text} />
+            <Icon name="close" size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.title}>Log Service</Text>
           <Pressable
@@ -1538,7 +1540,7 @@ export default function LogServiceScreen() {
         >
           {error && (
             <View style={styles.errorBox}>
-              <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
+              <Icon name="alert-circle" size={16} color={Colors.overdue} />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
@@ -1554,17 +1556,17 @@ export default function LogServiceScreen() {
             <Text style={styles.groupLabel}>Receipt</Text>
             {ocrApplied ? (
               <View style={styles.ocrSuccess}>
-                <Ionicons name="checkmark-circle" size={14} color={Colors.good} />
+                <Icon name="checkmark-circle" size={14} color={Colors.good} />
                 <Text style={styles.ocrSuccessText}>Receipt scanned. Fields auto-filled below.</Text>
               </View>
             ) : null}
 
             {mismatchInfo ? (
               <View style={styles.mismatchCard}>
-                <Ionicons name="alert-circle" size={16} color={Colors.dueSoon} style={{ marginTop: 1 }} />
-                <View style={{ flex: 1, gap: 10 }}>
+                <Icon name="alert-circle" size={16} color={Colors.dueSoon} style={{ marginTop: 1 }} />
+                <View style={{ flex: 1, gap: 12 }}>
                   <Text style={styles.mismatchText}>
-                    This receipt looks like it's for a {mismatchInfo.description} — not your {vehicleData?.nickname || [vehicleData?.year, vehicleData?.make, vehicleData?.model].filter(Boolean).join(" ") || "this vehicle"}.
+                    This receipt looks like it&apos;s for a {mismatchInfo.description} — not your {vehicleData?.nickname || [vehicleData?.year, vehicleData?.make, vehicleData?.model].filter(Boolean).join(" ") || "this vehicle"}.
                   </Text>
                   <View style={{ flexDirection: "row", gap: 8 }}>
                     <Pressable style={({ pressed }) => [styles.mismatchBtn, { opacity: pressed ? 0.8 : 1 }]} onPress={handleMismatchUseAnyway}>
@@ -1586,10 +1588,10 @@ export default function LogServiceScreen() {
                   setShowPaywall(true);
                 }}
               >
-                <Ionicons name="camera-outline" size={16} color={Colors.accent} />
+                <Icon name="camera-outline" size={16} color={Colors.accent} />
                 <Text style={styles.scanGateBtnText}>Scan Receipt</Text>
                 <View style={styles.scanLockedBadge}>
-                  <Ionicons name="lock-closed" size={10} color={Colors.textInverse} />
+                  <Icon name="lock-closed" size={10} color={Colors.textInverse} />
                   <Text style={styles.scanLockedText}>Upgrade</Text>
                 </View>
               </Pressable>
@@ -1667,7 +1669,7 @@ export default function LogServiceScreen() {
                       style={styles.itemDeleteBtn}
                       hitSlop={8}
                     >
-                      <Ionicons name="close-circle" size={18} color={Colors.textTertiary} />
+                      <Icon name="close-circle" size={18} color={Colors.textTertiary} />
                     </Pressable>
                   </View>
                 </View>
@@ -1677,7 +1679,7 @@ export default function LogServiceScreen() {
                 style={({ pressed }) => [styles.addItemBtn, { opacity: pressed ? 0.7 : 1 }]}
                 onPress={addItem}
               >
-                <Ionicons name="add-circle-outline" size={16} color={Colors.accent} />
+                <Icon name="add-circle-outline" size={16} color={Colors.accent} />
                 <Text style={styles.addItemText}>Add Item</Text>
               </Pressable>
 
@@ -1730,7 +1732,7 @@ export default function LogServiceScreen() {
                 style={({ pressed }) => [styles.addItemBtn, { opacity: pressed ? 0.7 : 1 }]}
                 onPress={startMultiService}
               >
-                <Ionicons name="add-circle-outline" size={16} color={Colors.accent} />
+                <Icon name="add-circle-outline" size={16} color={Colors.accent} />
                 <Text style={styles.addItemText}>Add another service</Text>
               </Pressable>
             </View>
@@ -1747,7 +1749,7 @@ export default function LogServiceScreen() {
                   onClose={() => { const y = scrollOffset.current; setTimeout(() => { scrollRef.current?.scrollTo({ y, animated: false }); }, 100); }}
                 />
                 {historicalReceiptDate && (
-                  <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.needsAttention, marginTop: 4 }}>
+                  <Text style={{ ...Typography.caption, color: Colors.needsAttention, marginTop: 4 }}>
                     {`This receipt is from ${format(parseISO(historicalReceiptDate), "MMM d, yyyy")}. It will be logged as a historical service.`}
                   </Text>
                 )}
@@ -1809,7 +1811,7 @@ export default function LogServiceScreen() {
                 style={({ pressed }) => [styles.mileageChip, { opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => { setMileage(String(pendingMileageChip)); setPendingMileageChip(null); Haptics.selectionAsync().catch(() => {}); }}
               >
-                <Ionicons name="speedometer-outline" size={14} color={Colors.accent} />
+                <Icon name="speedometer-outline" size={14} color={Colors.accent} />
                 <Text style={styles.mileageChipText}>Receipt shows {pendingMileageChip.toLocaleString()} mi — tap to use</Text>
               </Pressable>
             ) : null}
@@ -1879,7 +1881,7 @@ export default function LogServiceScreen() {
         <View style={styles.resumeOverlay}>
           <View style={styles.resumeCard}>
             <View style={styles.resumeIcon}>
-              <Ionicons name="time-outline" size={24} color={Colors.accent} />
+              <Icon name="time-outline" size={24} color={Colors.accent} />
             </View>
             <Text style={styles.resumeTitle}>{resumeAsk.title}</Text>
             <Text style={styles.resumeDetail}>{resumeAsk.detail}</Text>
@@ -1940,7 +1942,7 @@ export default function LogServiceScreen() {
 
 function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: any }) {
   return (
-    <View style={[{ gap: 5 }, style]}>
+    <View style={[{ gap: 4 }, style]}>
       <Text style={styles.fieldLabel}>{label}</Text>
       {children}
     </View>
@@ -1964,7 +1966,7 @@ function PricingInsightBanner({ insight }: { insight: PricingInsight }) {
 
   return (
     <View style={insightStyles.banner}>
-      <Ionicons name="information-circle-outline" size={14} color={Colors.accent} style={{ flexShrink: 0, marginTop: 1 }} />
+      <Icon name="information-circle-outline" size={14} color={Colors.accent} style={{ flexShrink: 0, marginTop: 1 }} />
       <Text style={insightStyles.text} numberOfLines={2}>{label}</Text>
     </View>
   );
@@ -1974,20 +1976,18 @@ const insightStyles = StyleSheet.create({
   banner: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 7,
+    gap: 8,
     backgroundColor: Colors.accentMuted,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 8,
     borderWidth: 1,
     borderColor: Colors.accent + "33",
   },
   text: {
+    ...Typography.caption,
     flex: 1,
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
     color: Colors.textSecondary,
-    lineHeight: 17,
   },
 });
 
@@ -2003,30 +2003,29 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  saveBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
-  saveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  title: { ...Typography.headline, color: Colors.text },
+  saveBtn: { backgroundColor: Colors.accent, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 8 },
+  saveBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
   scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 20 },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: 10, padding: 12 },
-  errorText: { flex: 1, fontSize: 13, color: Colors.overdue, fontFamily: "Inter_400Regular" },
-  fieldGroup: { gap: 10 },
-  groupLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 1.5 },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: Radius.md, padding: 12 },
+  errorText: { ...Typography.footnote, flex: 1, color: Colors.overdue },
+  fieldGroup: { gap: 12 },
+  groupLabel: { ...Typography.caption, fontWeight: "600", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 1.5 },
   quickPicks: { gap: 8, paddingBottom: 4 },
-  quickPick: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
+  quickPick: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.md, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
   quickPickSelected: { backgroundColor: Colors.vehicleMuted, borderColor: Colors.vehicle },
-  quickPickText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  quickPickText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
   quickPickTextSelected: { color: Colors.vehicle },
-  row: { flexDirection: "row", gap: 10 },
-  fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  row: { flexDirection: "row", gap: 12 },
+  fieldLabel: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
   input: {
+    ...Typography.subheadline,
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
   },
   inputDerived: {
@@ -2034,51 +2033,51 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   textArea: { height: 80, paddingTop: 12 },
-  ocrSuccess: { flexDirection: "row", alignItems: "center", gap: 6 },
-  ocrSuccessText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good },
+  ocrSuccess: { flexDirection: "row", alignItems: "center", gap: 8 },
+  ocrSuccessText: { ...Typography.caption, color: Colors.good },
   scanGateBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     backgroundColor: Colors.accentLight,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: Colors.accent + "33",
   },
-  scanGateBtnText: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.accent },
+  scanGateBtnText: { ...Typography.footnote, fontWeight: "500", flex: 1, color: Colors.accent },
   scanLockedBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     backgroundColor: Colors.accent,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
   },
-  scanLockedText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  scanBadgeRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 6 },
-  scanBadgeText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.dueSoon },
+  scanLockedText: { ...Typography.caption, fontWeight: "600", color: Colors.textInverse },
+  scanBadgeRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8 },
+  scanBadgeText: { ...Typography.caption, color: Colors.dueSoon },
   itemRow: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.border,
     gap: 8,
   },
   itemLeft: { flex: 1 },
-  itemRight: { flexDirection: "row", alignItems: "center", gap: 6 },
-  itemName: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text },
-  itemDetails: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 },
-  itemCost: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.accent },
-  itemCostEmpty: { color: Colors.textTertiary, fontFamily: "Inter_400Regular" },
+  itemRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  itemName: { ...Typography.footnote, fontWeight: "500", color: Colors.text },
+  itemDetails: { ...Typography.caption, color: Colors.textTertiary, marginTop: 2 },
+  itemCost: { ...Typography.footnote, fontWeight: "600", color: Colors.accent },
+  itemCostEmpty: { fontWeight: "400", color: Colors.textTertiary },
   itemEditInput: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.text,
     borderBottomWidth: 1,
     borderBottomColor: Colors.accent,
@@ -2086,8 +2085,8 @@ const styles = StyleSheet.create({
     minWidth: 80,
   },
   itemCostInput: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.footnote,
+    fontWeight: "600",
     color: Colors.accent,
     borderBottomWidth: 1,
     borderBottomColor: Colors.accent,
@@ -2102,45 +2101,45 @@ const styles = StyleSheet.create({
   addItemBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 10,
+    gap: 8,
+    paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.accentMuted,
     borderStyle: "dashed",
     justifyContent: "center",
   },
-  addItemText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
-  itemHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  addItemText: { ...Typography.footnote, fontWeight: "500", color: Colors.accent },
+  itemHint: { ...Typography.caption, color: Colors.textTertiary },
   mismatchCard: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.dueSoon + "55",
   },
-  mismatchText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.text, lineHeight: 18 },
-  mismatchBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
-  mismatchBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
-  mismatchBtnGhost: { backgroundColor: Colors.card, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: Colors.border },
-  mismatchBtnGhostText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  mismatchText: { ...Typography.footnote, color: Colors.text },
+  mismatchBtn: { backgroundColor: Colors.accent, borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 8 },
+  mismatchBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
+  mismatchBtnGhost: { backgroundColor: Colors.card, borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: Colors.border },
+  mismatchBtnGhostText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
   mileageChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     alignSelf: "flex-start",
     backgroundColor: Colors.accentLight,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
     borderColor: Colors.accent + "33",
   },
-  mileageChipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
+  mileageChipText: { ...Typography.footnote, fontWeight: "500", color: Colors.accent },
   scrollLocked: { opacity: 0.45 },
   resumeOverlay: {
     position: "absolute",
@@ -2150,7 +2149,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 28,
+    paddingHorizontal: 32,
     backgroundColor: "rgba(12, 17, 27, 0.82)",
     zIndex: 900,
   },
@@ -2158,17 +2157,17 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 420,
     backgroundColor: Colors.card,
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 22,
-    paddingTop: 22,
-    paddingBottom: 14,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 16,
   },
   resumeIcon: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: Radius.pill,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
@@ -2177,37 +2176,33 @@ const styles = StyleSheet.create({
     borderColor: Colors.accentMuted,
   },
   resumeTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.headline,
     color: Colors.text,
     textAlign: "center",
-    marginTop: 14,
+    marginTop: 16,
   },
   resumeDetail: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
     textAlign: "center",
-    marginTop: 6,
+    marginTop: 8,
   },
   resumeNote: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     textAlign: "center",
-    marginTop: 10,
-    lineHeight: 17,
+    marginTop: 12,
   },
   resumePrimary: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 50,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 18,
+    marginTop: 20,
   },
-  resumePrimaryText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  resumePrimaryText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
   resumeSecondary: { height: 44, alignItems: "center", justifyContent: "center", marginTop: 2 },
-  resumeSecondaryText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  resumeSecondaryText: { ...Typography.subheadline, fontWeight: "500", color: Colors.textSecondary },
 });
 

@@ -12,8 +12,10 @@ import {
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -95,7 +97,7 @@ export default function UpdateMileageScreen() {
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
           <Pressable onPress={() => router.back()} style={styles.closeBtn}>
-            <Ionicons name="close" size={22} color={Colors.text} />
+            <Icon name="close" size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.title}>{tracksHours ? "Update Hours" : "Update Mileage"}</Text>
           <View style={{ width: 36 }} />
@@ -124,7 +126,7 @@ export default function UpdateMileageScreen() {
           <View style={styles.inputSection}>
             <Text style={styles.inputLabel}>{tracksHours ? "Current Hours" : "Current Mileage"}</Text>
             <View style={styles.inputWrapper}>
-              <Ionicons name="speedometer-outline" size={22} color={Colors.textTertiary} style={styles.inputIcon} />
+              <Icon name="speedometer-outline" size={22} color={Colors.textTertiary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 value={mileage}
@@ -142,10 +144,10 @@ export default function UpdateMileageScreen() {
             </View>
             {mileageWarning && (
               <Pressable onPress={() => Linking.openURL("mailto:support@lifemaintained.com?subject=Mileage%20Correction%20Request")}>
-                <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "#E8943A", marginTop: 6, lineHeight: 18 }}>
+                <Text style={{ ...Typography.footnote, color: Colors.accent, marginTop: 8 }}>
                   {mileageWarning}
                 </Text>
-                <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#E8943A", marginTop: 4 }}>
+                <Text style={{ ...Typography.footnote, fontWeight: "600", color: Colors.accent, marginTop: 4 }}>
                   Tap here to email us →
                 </Text>
               </Pressable>
@@ -184,33 +186,33 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  title: { ...Typography.headline, color: Colors.text },
   content: { flex: 1, paddingHorizontal: 20, paddingTop: 40, gap: 32 },
   vehicleInfo: { alignItems: "center", gap: 8 },
-  vehicleName: { fontSize: 20, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  currentMileage: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  vehicleName: { ...Typography.title3, color: Colors.text },
+  currentMileage: { ...Typography.footnote, color: Colors.textSecondary },
   inputSection: { gap: 8 },
-  inputLabel: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  inputLabel: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     height: 60,
   },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, fontSize: 24, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  inputUnit: { fontSize: 16, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
-  hint: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 4 },
+  inputIcon: { marginRight: 12 },
+  input: { ...Typography.title2, fontWeight: "600", flex: 1, color: Colors.text },
+  inputUnit: { ...Typography.subheadline, fontWeight: "500", color: Colors.textTertiary },
+  hint: { ...Typography.caption, color: Colors.textTertiary, marginTop: 4 },
   saveBtn: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 54,
     alignItems: "center",
     justifyContent: "center",
   },
-  saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  saveBtnText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
 });

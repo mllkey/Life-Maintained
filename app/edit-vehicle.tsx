@@ -15,8 +15,10 @@ import {
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -211,7 +213,7 @@ export default function EditVehicleScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Ionicons name="close" size={24} color={Colors.text} />
+          <Icon name="close" size={24} color={Colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Edit {vehicleTitle}</Text>
         <View style={{ width: 24 }} />
@@ -275,7 +277,7 @@ export default function EditVehicleScreen() {
                     <Text style={styles.warning}>
                       Mileage can only go up. Current: {(vehicle?.mileage ?? 0).toLocaleString()} mi. If you made a typo, email{" "}
                       <Text
-                        style={{ textDecorationLine: "underline", fontFamily: "Inter_600SemiBold" }}
+                        style={{ fontWeight: "600", textDecorationLine: "underline" }}
                         onPress={() => Linking.openURL("mailto:support@lifemaintained.com?subject=Mileage%20Correction%20Request")}
                       >
                         support@lifemaintained.com
@@ -434,8 +436,8 @@ export default function EditVehicleScreen() {
       </KeyboardAvoidingView>
       <InputAccessoryView nativeID="mileageToolbar">
         <View style={{ flexDirection: "row", justifyContent: "flex-end", backgroundColor: Colors.card, borderTopWidth: 1, borderTopColor: Colors.border, paddingHorizontal: 16, paddingVertical: 8 }}>
-          <Pressable onPress={() => Keyboard.dismiss()} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, paddingHorizontal: 12, paddingVertical: 6 }]}>
-            <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#E8943A" }}>Done</Text>
+          <Pressable onPress={() => Keyboard.dismiss()} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, paddingHorizontal: 12, paddingVertical: 8 }]}>
+            <Text style={{ ...Typography.subheadline, fontWeight: "600", color: Colors.accent }}>Done</Text>
           </Pressable>
         </View>
       </InputAccessoryView>
@@ -451,52 +453,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  headerTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  headerTitle: { ...Typography.headline, color: Colors.text },
   scroll: { paddingHorizontal: 20, paddingTop: 20, gap: 20 },
-  field: { gap: 6 },
+  field: { gap: 8 },
   label: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },
   optional: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     textTransform: "none",
-    letterSpacing: 0,
   },
   input: {
+    ...Typography.subheadline,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    borderRadius: Radius.md,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  hint: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 2 },
-  warning: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#E8943A", marginTop: 2, lineHeight: 18 },
-  readonlyValue: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, paddingVertical: 4 },
-  typePill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
-  typePillActive: { borderColor: "#E8943A", backgroundColor: "rgba(232,147,58,0.15)" },
-  typePillText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  typePillTextActive: { color: "#E8943A", fontFamily: "Inter_600SemiBold" },
+  hint: { ...Typography.caption, color: Colors.textTertiary, marginTop: 2 },
+  warning: { ...Typography.footnote, color: Colors.accent, marginTop: 2 },
+  readonlyValue: { ...Typography.subheadline, color: Colors.textSecondary, paddingVertical: 4 },
+  typePill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
+  typePillActive: { borderColor: Colors.accent, backgroundColor: Colors.accentMuted },
+  typePillText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
+  typePillTextActive: { fontWeight: "600", color: Colors.accent },
   saveBtn: {
-    backgroundColor: "#E8943A",
-    borderRadius: 14,
+    backgroundColor: Colors.accent,
+    borderRadius: Radius.lg,
     height: 50,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 8,
   },
-  saveBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.textInverse },
+  saveBtnText: { ...Typography.subheadline, fontWeight: "700", color: Colors.textInverse },
 });

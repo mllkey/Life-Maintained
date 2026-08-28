@@ -15,8 +15,10 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
@@ -151,7 +153,7 @@ export default function VehicleTaskHistoryScreen() {
     <View style={[styles.container, { backgroundColor: Colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
-          <Ionicons name="chevron-back" size={24} color={Colors.text} />
+          <Icon name="chevron-back" size={24} color={Colors.text} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={2}>{taskName}</Text>
       </View>
@@ -238,11 +240,11 @@ export default function VehicleTaskHistoryScreen() {
                             >
                               {isGenerating
                                 ? <ActivityIndicator size="small" color={Colors.accent} />
-                                : <Ionicons name="receipt-outline" size={18} color={Colors.accent} />
+                                : <Icon name="receipt-outline" size={18} color={Colors.accent} />
                               }
                             </Pressable>
                           ) : null}
-                          <Ionicons
+                          <Icon
                             name={isExpanded ? "chevron-up" : "chevron-down"}
                             size={16}
                             color={Colors.textTertiary}
@@ -254,7 +256,7 @@ export default function VehicleTaskHistoryScreen() {
                         <View style={styles.expandedSection}>
                           {log.provider_contact ? (
                             <View style={styles.expandedRow}>
-                              <Ionicons name="call-outline" size={14} color={Colors.textSecondary} />
+                              <Icon name="call-outline" size={14} color={Colors.textSecondary} />
                               <Text style={styles.expandedText}>{log.provider_contact}</Text>
                             </View>
                           ) : null}
@@ -262,7 +264,7 @@ export default function VehicleTaskHistoryScreen() {
                           {formattedUsage && !log.provider_name ? null : (
                             formattedUsage && (
                               <View style={styles.expandedRow}>
-                                <Ionicons name="speedometer-outline" size={14} color={Colors.textSecondary} />
+                                <Icon name="speedometer-outline" size={14} color={Colors.textSecondary} />
                                 <Text style={styles.expandedText}>{formattedUsage} at time of service</Text>
                               </View>
                             )
@@ -270,7 +272,7 @@ export default function VehicleTaskHistoryScreen() {
 
                           {log.notes ? (
                             <View style={styles.expandedRow}>
-                              <Ionicons name="document-text-outline" size={14} color={Colors.textSecondary} />
+                              <Icon name="document-text-outline" size={14} color={Colors.textSecondary} />
                               <Text style={styles.expandedNotes}>{log.notes}</Text>
                             </View>
                           ) : null}
@@ -286,7 +288,7 @@ export default function VehicleTaskHistoryScreen() {
                                   <ActivityIndicator color={Colors.accent} />
                                 ) : (
                                   <>
-                                    <Ionicons name="receipt-outline" size={28} color={Colors.accent} />
+                                    <Icon name="receipt-outline" size={28} color={Colors.accent} />
                                     <Text style={styles.receiptThumbLabel}>Tap to view receipt</Text>
                                   </>
                                 )}
@@ -306,14 +308,14 @@ export default function VehicleTaskHistoryScreen() {
                                 Haptics.selectionAsync();
                               }}
                             >
-                              <Ionicons name="pencil-outline" size={13} color={Colors.vehicle} />
+                              <Icon name="pencil-outline" size={13} color={Colors.vehicle} />
                               <Text style={styles.editBtnText}>Edit</Text>
                             </Pressable>
                             <Pressable
                               style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.7 : 1 }]}
                               onPress={() => handleDelete(log.id)}
                             >
-                              <Ionicons name="trash-outline" size={13} color={Colors.overdue} />
+                              <Icon name="trash-outline" size={13} color={Colors.overdue} />
                               <Text style={styles.deleteBtnText}>Delete</Text>
                             </Pressable>
                           </View>
@@ -360,13 +362,13 @@ export default function VehicleTaskHistoryScreen() {
           </ScrollView>
           {receiptImgStatus === "loading" && (
             <View style={styles.receiptStateOverlay} pointerEvents="none">
-              <ActivityIndicator size="large" color="#fff" />
+              <ActivityIndicator size="large" color={Colors.white} />
             </View>
           )}
           {receiptImgStatus === "error" && (
             <View style={styles.receiptStateOverlay}>
-              <Ionicons name="cloud-offline-outline" size={34} color="#fff" />
-              <Text style={styles.receiptStateTitle}>Couldn't load this receipt</Text>
+              <Icon name="cloud-offline-outline" size={34} color={Colors.white} />
+              <Text style={styles.receiptStateTitle}>Couldn&apos;t load this receipt</Text>
               <Text style={styles.receiptStateBody}>Check your connection and try again.</Text>
               <Pressable
                 style={({ pressed }) => [styles.receiptRetryBtn, { opacity: pressed ? 0.85 : 1 }]}
@@ -374,7 +376,7 @@ export default function VehicleTaskHistoryScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Try loading receipt again"
               >
-                <Ionicons name="refresh" size={16} color="#fff" />
+                <Icon name="refresh" size={16} color={Colors.white} />
                 <Text style={styles.receiptRetryText}>Try again</Text>
               </Pressable>
             </View>
@@ -385,7 +387,7 @@ export default function VehicleTaskHistoryScreen() {
             hitSlop={12}
           >
             <View style={styles.receiptCloseBtnInner}>
-              <Ionicons name="close" size={20} color="#fff" />
+              <Icon name="close" size={20} color={Colors.white} />
             </View>
           </Pressable>
         </View>
@@ -409,35 +411,34 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 40, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   headerTitle: {
+    ...Typography.title2,
     flex: 1,
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
     color: Colors.text,
   },
 
   scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 16 },
 
   emptyState: { alignItems: "center", paddingTop: 80 },
-  emptyText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  emptyText: { ...Typography.subheadline, color: Colors.textSecondary, textAlign: "center" },
 
   summaryBar: {
     flexDirection: "row",
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 16,
     alignItems: "center",
     justifyContent: "space-around",
   },
-  summaryStat: { alignItems: "center", gap: 3 },
-  summaryValue: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
-  summaryLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  summaryStat: { alignItems: "center", gap: 4 },
+  summaryValue: { ...Typography.title2, color: Colors.text },
+  summaryLabel: { ...Typography.caption, color: Colors.textSecondary },
   summaryDivider: { width: 1, height: 36, backgroundColor: Colors.border },
 
   logList: {
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -447,31 +448,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 16,
     minHeight: 64,
     gap: 12,
   },
-  verticalBar: { width: 4, height: 28, borderRadius: 2, backgroundColor: Colors.accent, flexShrink: 0 },
-  logCardLeft: { flex: 1, gap: 3 },
-  logTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  logSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  verticalBar: { width: 4, height: 28, borderRadius: Radius.sm, backgroundColor: Colors.accent, flexShrink: 0 },
+  logCardLeft: { flex: 1, gap: 4 },
+  logTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  logSubtitle: { ...Typography.footnote, color: Colors.textSecondary },
   logCardRight: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   receiptIconBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   logDivider: { height: 1, backgroundColor: Colors.borderSubtle, marginHorizontal: 16 },
 
   expandedSection: {
     paddingHorizontal: 20,
-    paddingBottom: 14,
+    paddingBottom: 16,
     paddingTop: 4,
-    gap: 10,
+    gap: 12,
   },
   expandedRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  expandedText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 },
-  expandedNotes: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1, lineHeight: 20, fontStyle: "italic" },
-  expandedEmpty: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontStyle: "italic" },
+  expandedText: { ...Typography.footnote, color: Colors.textSecondary, flex: 1 },
+  expandedNotes: { ...Typography.footnote, color: Colors.textSecondary, flex: 1, fontStyle: "italic" },
+  expandedEmpty: { ...Typography.footnote, color: Colors.textTertiary, fontStyle: "italic" },
 
   receiptThumb: {
-    borderRadius: 12,
+    borderRadius: Radius.md,
     overflow: "hidden",
     backgroundColor: Colors.accentMuted,
     borderWidth: 1,
@@ -482,12 +483,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 12,
     paddingHorizontal: 20,
   },
   receiptThumbLabel: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.accent,
   },
 
@@ -500,40 +501,40 @@ const styles = StyleSheet.create({
   editBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 9,
+    paddingVertical: 8,
+    borderRadius: Radius.md,
     backgroundColor: Colors.vehicleMuted,
     minHeight: 44,
     justifyContent: "center",
   },
-  editBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.vehicle },
+  editBtnText: { ...Typography.footnote, fontWeight: "500", color: Colors.vehicle },
   deleteBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 9,
+    paddingVertical: 8,
+    borderRadius: Radius.md,
     backgroundColor: Colors.overdueMuted,
     minHeight: 44,
     justifyContent: "center",
   },
-  deleteBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue },
+  deleteBtnText: { ...Typography.footnote, fontWeight: "500", color: Colors.overdue },
 
   receiptModal: { flex: 1, backgroundColor: "rgba(0,0,0,0.96)" },
-  receiptStateOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 32 },
-  receiptStateTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: "#fff", textAlign: "center" },
-  receiptStateBody: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.7)", textAlign: "center" },
-  receiptRetryBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.16)", paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, marginTop: 4 },
-  receiptRetryText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#fff" },
+  receiptStateOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 },
+  receiptStateTitle: { ...Typography.headline, color: Colors.white, textAlign: "center" },
+  receiptStateBody: { ...Typography.footnote, color: "rgba(255,255,255,0.7)", textAlign: "center" },
+  receiptRetryBtn: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(255,255,255,0.16)", paddingHorizontal: 20, paddingVertical: 12, borderRadius: Radius.md, marginTop: 4 },
+  receiptRetryText: { ...Typography.subheadline, fontWeight: "600", color: Colors.white },
   receiptScrollContent: { flex: 1, alignItems: "center", justifyContent: "center" },
   receiptCloseBtn: { position: "absolute", right: 16 },
   receiptCloseBtnInner: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: Radius.pill,
     backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",

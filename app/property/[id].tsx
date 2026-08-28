@@ -20,8 +20,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { completePropertyTask } from "@/lib/rpc";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
@@ -679,7 +681,7 @@ export default function PropertyDetailScreen() {
     <View style={[styles.container, { backgroundColor: Colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={6}>
-          <Ionicons name="chevron-back" size={24} color={Colors.text} />
+          <Icon name="chevron-back" size={24} color={Colors.text} />
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.propertyName} numberOfLines={1}>{propertyName}</Text>
@@ -690,7 +692,7 @@ export default function PropertyDetailScreen() {
           onPress={handleDelete}
           hitSlop={4}
         >
-          <Ionicons name="trash-outline" size={17} color={Colors.overdue} />
+          <Icon name="trash-outline" size={17} color={Colors.overdue} />
         </Pressable>
       </View>
 
@@ -699,11 +701,11 @@ export default function PropertyDetailScreen() {
           <Image source={{ uri: property.photo_url }} style={styles.photoHeader} resizeMode="cover" />
           {uploadingPhoto && (
             <View style={styles.photoOverlay}>
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={Colors.white} />
             </View>
           )}
           <View style={styles.photoEditBadge}>
-            <Ionicons name="camera-outline" size={14} color="#fff" />
+            <Icon name="camera-outline" size={14} color={Colors.white} />
           </View>
         </Pressable>
       ) : (
@@ -712,7 +714,7 @@ export default function PropertyDetailScreen() {
             <ActivityIndicator color={Colors.textTertiary} />
           ) : (
             <>
-              <Ionicons name="camera-outline" size={20} color={Colors.textTertiary} />
+              <Icon name="camera-outline" size={20} color={Colors.textTertiary} />
               <Text style={styles.photoPlaceholderText}>Add a photo</Text>
             </>
           )}
@@ -725,13 +727,13 @@ export default function PropertyDetailScreen() {
         <LoadErrorState onRetry={handlePropertyRetry} title="Unable to load this property" body="Your property is saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading property again" />
       ) : !property ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 }}>
-          <Text style={{ fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" }}>Property not found</Text>
-          <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" }}>This property may have been deleted.</Text>
+          <Text style={{ ...Typography.headline, color: Colors.text, textAlign: "center" }}>Property not found</Text>
+          <Text style={{ ...Typography.footnote, color: Colors.textSecondary, textAlign: "center" }}>This property may have been deleted.</Text>
           <Pressable
             onPress={() => router.back()}
-            style={{ paddingHorizontal: 24, paddingVertical: 12, backgroundColor: Colors.accent, borderRadius: 12 }}
+            style={{ paddingHorizontal: 24, paddingVertical: 12, backgroundColor: Colors.accent, borderRadius: Radius.md }}
           >
-            <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse }}>Go Back</Text>
+            <Text style={{ ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse }}>Go Back</Text>
           </Pressable>
         </View>
       ) : (
@@ -778,15 +780,15 @@ export default function PropertyDetailScreen() {
                 style={({ pressed }) => [styles.addTaskBtn, { opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => router.push(`/add-property-task/${id}` as any)}
               >
-                <Ionicons name="add" size={18} color={Colors.textInverse} />
+                <Icon name="add" size={18} color={Colors.textInverse} />
                 <Text style={styles.addTaskBtnText}>Add Task</Text>
               </Pressable>
 
               {(tasks?.length ?? 0) === 0 && !loadingTasks ? (
                 scheduleTimedOut ? (
                   <View style={styles.emptyState}>
-                    <Ionicons name="alert-circle-outline" size={36} color={Colors.textTertiary} />
-                    <Text style={styles.emptyStateTitle}>Couldn't load your schedule</Text>
+                    <Icon name="alert-circle-outline" size={36} color={Colors.textTertiary} />
+                    <Text style={styles.emptyStateTitle}>Couldn&apos;t load your schedule</Text>
                     <Text style={styles.emptyStateText}>
                       This can happen if the server is busy. Tap below to try again.
                     </Text>
@@ -794,7 +796,7 @@ export default function PropertyDetailScreen() {
                       style={({ pressed }) => [styles.retryBtn, { opacity: pressed ? 0.8 : 1 }]}
                       onPress={handleRetrySchedule}
                     >
-                      <Ionicons name="refresh" size={16} color={Colors.home} />
+                      <Icon name="refresh" size={16} color={Colors.home} />
                       <Text style={styles.retryBtnText}>Try Again</Text>
                     </Pressable>
                   </View>
@@ -809,11 +811,11 @@ export default function PropertyDetailScreen() {
                 <Animated.View style={{ opacity: scheduleOpacity }}>
                   {insightText && (
                     <View style={styles.insightCard}>
-                      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
-                        <Ionicons name="bulb-outline" size={16} color={Colors.home} style={{ marginTop: 2 }} />
+                      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+                        <Icon name="bulb-outline" size={16} color={Colors.home} style={{ marginTop: 2 }} />
                         <Text style={styles.insightText}>{insightText}</Text>
                       </View>
-                      <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2, paddingLeft: 0 }}>
+                      <Text style={{ ...Typography.caption, color: Colors.textTertiary, marginTop: 2, paddingLeft: 0 }}>
                         Based on your property type and age
                       </Text>
                     </View>
@@ -821,7 +823,7 @@ export default function PropertyDetailScreen() {
 
                   {showEstimatedBanner && (
                     <View style={styles.estimatedBanner}>
-                      <Ionicons name="information-circle-outline" size={16} color={Colors.dueSoon} />
+                      <Icon name="information-circle-outline" size={16} color={Colors.dueSoon} />
                       <Text style={styles.estimatedBannerText}>
                         This schedule is estimated from your property details. Tap any task to log your last service date for more accurate due dates.
                       </Text>
@@ -879,7 +881,7 @@ export default function PropertyDetailScreen() {
               />
               {groupedHistory.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Ionicons name="document-outline" size={36} color={Colors.textTertiary} />
+                  <Icon name="document-outline" size={36} color={Colors.textTertiary} />
                   <Text style={styles.emptyStateTitle}>No service records yet</Text>
                   <Text style={styles.emptyStateText}>
                     Service history will appear here after you complete tasks
@@ -916,7 +918,7 @@ export default function PropertyDetailScreen() {
                         <ActivityIndicator size="small" color={Colors.home} />
                       ) : (
                         <>
-                          <Ionicons name="document-text-outline" size={16} color={Colors.home} />
+                          <Icon name="document-text-outline" size={16} color={Colors.home} />
                           <Text style={styles.exportBtnText}>Share PDF</Text>
                         </>
                       )}
@@ -930,7 +932,7 @@ export default function PropertyDetailScreen() {
                         <ActivityIndicator size="small" color={Colors.home} />
                       ) : (
                         <>
-                          <Ionicons name="download-outline" size={16} color={Colors.home} />
+                          <Icon name="download-outline" size={16} color={Colors.home} />
                           <Text style={styles.exportBtnText}>Export as CSV</Text>
                         </>
                       )}
@@ -974,7 +976,7 @@ export default function PropertyDetailScreen() {
                           {group.lastCost != null && (
                             <Text style={styles.historyGroupCardCost}>${group.lastCost.toFixed(2)}</Text>
                           )}
-                          <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+                          <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
                         </View>
                       </Pressable>
                     ))}
@@ -1082,17 +1084,17 @@ export default function PropertyDetailScreen() {
 
                 <Pressable
                   onPress={() => setCompleteDiy(!completeDiy)}
-                  style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 }}
                 >
                   <View style={{
-                    width: 24, height: 24, borderRadius: 6, borderWidth: 2,
+                    width: 24, height: 24, borderRadius: Radius.sm, borderWidth: 2,
                     borderColor: completeDiy ? Colors.home : Colors.border,
                     backgroundColor: completeDiy ? Colors.home : "transparent",
                     alignItems: "center", justifyContent: "center",
                   }}>
-                    {completeDiy && <Ionicons name="checkmark" size={16} color={Colors.textInverse} />}
+                    {completeDiy && <Icon name="checkmark" size={16} color={Colors.textInverse} />}
                   </View>
-                  <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text }}>
+                  <Text style={{ ...Typography.footnote, fontWeight: "500", color: Colors.text }}>
                     I did this myself
                   </Text>
                 </Pressable>
@@ -1115,7 +1117,7 @@ export default function PropertyDetailScreen() {
                   <ActivityIndicator size="small" color={Colors.textInverse} />
                 ) : (
                   <>
-                    <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
+                    <Icon name="checkmark" size={16} color={Colors.textInverse} />
                     <Text style={styles.sheetSaveText}>Mark as Done</Text>
                   </>
                 )}
@@ -1173,7 +1175,7 @@ function TaskSection({
         <Text style={[styles.sectionLabel, titleColor ? { color: titleColor } : {}]}>
           {title.toUpperCase()}
         </Text>
-        <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={14} color={Colors.textTertiary} />
+        <Icon name={expanded ? "chevron-up" : "chevron-down"} size={14} color={Colors.textTertiary} />
       </Pressable>
       {expanded && (
         <View style={styles.taskCard}>
@@ -1185,7 +1187,7 @@ function TaskSection({
                 ref={(node) => { registerRow?.(task.id, node); }}
                 collapsable={false}
                 pointerEvents="box-none"
-                style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
+                style={{ position: "relative", borderRadius: Radius.lg, overflow: "hidden" }}
               >
                 <TaskRow
                   task={task}
@@ -1268,13 +1270,13 @@ function TaskRow({
             const costLine = formatShopAndDiy(shopLow, shopHigh, diyLow, diyHigh);
             if (!costLine) return null;
             return (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
-                <Ionicons name="cash-outline" size={12} color={Colors.good} />
-                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+                <Icon name="cash-outline" size={12} color={Colors.good} />
+                <Text style={{ ...Typography.caption, color: Colors.good }}>
                   {costLine}
                 </Text>
                 {est.difficulty != null && (
-                  <Text style={{ fontSize: 10, fontFamily: "Inter_500Medium", color: est.difficulty === 1 ? Colors.good : est.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: est.difficulty === 1 ? Colors.goodMuted : est.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: "hidden" }}>
+                  <Text style={{ ...Typography.caption, fontWeight: "500", color: est.difficulty === 1 ? Colors.good : est.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: est.difficulty === 1 ? Colors.goodMuted : est.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
                     {est.difficulty === 1 ? "Easy DIY" : est.difficulty === 2 ? "Moderate" : "Pro"}
                   </Text>
                 )}
@@ -1283,9 +1285,9 @@ function TaskRow({
           }
           if (task.estimated_cost != null && task.estimated_cost > 0) {
             return (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
-                <Ionicons name="cash-outline" size={12} color={Colors.good} />
-                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+                <Icon name="cash-outline" size={12} color={Colors.good} />
+                <Text style={{ ...Typography.caption, color: Colors.good }}>
                   Est. ~${task.estimated_cost.toLocaleString()}
                 </Text>
               </View>
@@ -1294,7 +1296,7 @@ function TaskRow({
           return null;
         })()}
         {!isCompleted && task.last_completed_at != null && (
-          <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.vehicle, marginTop: 2 }}>
+          <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.vehicle, marginTop: 2 }}>
             Last completed {format(parseISO(task.last_completed_at), "MMM d, yyyy")}
           </Text>
         )}
@@ -1305,7 +1307,7 @@ function TaskRow({
         )}
       </View>
       {!isCompleted && (
-        <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+        <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
       )}
     </Pressable>
   );
@@ -1316,7 +1318,7 @@ function PropertySkeleton() {
     <View style={styles.skeletonContainer}>
       {[1, 2, 3, 4].map(i => (
         <View key={i} style={styles.skeletonCard}>
-          <View style={{ width: 4, height: 28, borderRadius: 2, backgroundColor: Colors.surface, flexShrink: 0 }} />
+          <View style={{ width: 4, height: 28, borderRadius: Radius.sm, backgroundColor: Colors.surface, flexShrink: 0 }} />
           <View style={{ flex: 1, gap: 8 }}>
             <View style={styles.skeletonLine} />
             <View style={[styles.skeletonLine, { width: "55%" }]} />
@@ -1332,7 +1334,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
@@ -1350,15 +1352,15 @@ const styles = StyleSheet.create({
     bottom: 10,
     right: 12,
     backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 14,
-    padding: 7,
+    borderRadius: Radius.lg,
+    padding: 8,
   },
   photoPlaceholder: {
     height: 100,
     marginHorizontal: 16,
-    marginTop: 10,
+    marginTop: 12,
     marginBottom: 2,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1.5,
     borderStyle: "dashed",
     borderColor: Colors.border,
@@ -1368,18 +1370,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   photoPlaceholderText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textTertiary,
   },
   backBtn: { width: 40, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  headerCenter: { flex: 1, gap: 3 },
-  propertyName: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.3 },
-  propertyMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  headerCenter: { flex: 1, gap: 4 },
+  propertyName: { ...Typography.title2, color: Colors.text },
+  propertyMeta: { ...Typography.footnote, color: Colors.textSecondary },
   deleteBtn: {
     width: 34,
     height: 34,
-    borderRadius: 9,
+    borderRadius: Radius.md,
     backgroundColor: Colors.overdueMuted,
     alignItems: "center",
     justifyContent: "center",
@@ -1389,9 +1390,9 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 16 },
 
   tabs: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: Colors.border },
-  tab: { flex: 1, paddingVertical: 10, alignItems: "center", position: "relative" as const },
-  tabText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
-  tabTextActive: { color: Colors.text, fontFamily: "Inter_600SemiBold" },
+  tab: { flex: 1, paddingVertical: 12, alignItems: "center", position: "relative" as const },
+  tabText: { ...Typography.footnote, fontWeight: "500", color: Colors.textTertiary },
+  tabTextActive: { fontWeight: "600", color: Colors.text },
   tabUnderline: {
     position: "absolute" as const,
     bottom: -1,
@@ -1399,7 +1400,7 @@ const styles = StyleSheet.create({
     right: "20%",
     height: 2,
     backgroundColor: Colors.accent,
-    borderRadius: 1,
+    borderRadius: Radius.sm,
   },
 
   tasksArea: { gap: 12 },
@@ -1409,10 +1410,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 48,
   },
-  addTaskBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  addTaskBtnText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
 
   taskSection: { gap: 0 },
   taskSectionHeader: {
@@ -1423,15 +1424,15 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   sectionLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },
   taskCard: {
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -1439,78 +1440,79 @@ const styles = StyleSheet.create({
   taskRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 16,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 16,
   },
   taskRowDivider: { borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle },
-  taskBar: { width: 4, height: 28, borderRadius: 2, flexShrink: 0 },
-  taskRowContent: { flex: 1, gap: 3 },
-  taskRowName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  taskRowNameDone: { fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontSize: 14 },
-  taskRowDue: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  taskBar: { width: 4, height: 28, borderRadius: Radius.sm, flexShrink: 0 },
+  taskRowContent: { flex: 1, gap: 4 },
+  taskRowName: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  taskRowNameDone: { ...Typography.footnote, color: Colors.textTertiary },
+  taskRowDue: { ...Typography.footnote, color: Colors.textSecondary },
   taskRowDueDone: { color: Colors.textTertiary },
   taskRowCompletedInfo: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
     marginTop: 4,
   },
 
   skeletonWrap: { alignItems: "center", gap: 16, paddingTop: 8 },
-  skeletonTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
-  skeletonSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
+  skeletonTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text, textAlign: "center" },
+  skeletonSubtitle: { ...Typography.footnote, color: Colors.textTertiary, textAlign: "center" },
   skeletonContainer: {
-    backgroundColor: Colors.card, borderRadius: 14, overflow: "hidden",
+    backgroundColor: Colors.card, borderRadius: Radius.lg, overflow: "hidden",
     borderWidth: 1, borderColor: Colors.border, width: "100%",
   },
   skeletonCard: {
-    flexDirection: "row", alignItems: "center", gap: 14,
-    paddingHorizontal: 16, paddingVertical: 14,
+    flexDirection: "row", alignItems: "center", gap: 16,
+    paddingHorizontal: 16, paddingVertical: 16,
     borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
   },
-  skeletonLine: { height: 14, borderRadius: 7, backgroundColor: Colors.surface, width: "80%" },
+  skeletonLine: { height: 14, borderRadius: Radius.sm, backgroundColor: Colors.surface, width: "80%" },
 
   insightCard: {
     flexDirection: "column", alignItems: "flex-start", gap: 4,
-    backgroundColor: Colors.homeMuted, borderRadius: 14,
-    padding: 14, borderWidth: 1, borderColor: Colors.home + "30",
+    backgroundColor: Colors.homeMuted, borderRadius: Radius.lg,
+    padding: 16, borderWidth: 1, borderColor: Colors.home + "30",
   },
   insightText: {
-    flex: 1, fontSize: 14, fontFamily: "Inter_500Medium",
-    color: Colors.text, lineHeight: 20,
+    ...Typography.footnote,
+    fontWeight: "500",
+    flex: 1,
+    color: Colors.text,
   },
 
   estimatedBanner: {
-    flexDirection: "row", alignItems: "flex-start", gap: 10,
-    backgroundColor: Colors.dueSoonMuted, borderRadius: 14,
-    padding: 14, borderWidth: 1, borderColor: Colors.dueSoon + "30",
+    flexDirection: "row", alignItems: "flex-start", gap: 12,
+    backgroundColor: Colors.dueSoonMuted, borderRadius: Radius.lg,
+    padding: 16, borderWidth: 1, borderColor: Colors.dueSoon + "30",
   },
   estimatedBannerText: {
-    flex: 1, fontSize: 13, fontFamily: "Inter_400Regular",
-    color: Colors.textSecondary, lineHeight: 19,
+    ...Typography.footnote,
+    flex: 1,
+    color: Colors.textSecondary,
   },
 
   emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
-  emptyStateTitle: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  emptyStateTitle: { ...Typography.subheadline, fontWeight: "500", color: Colors.textSecondary },
   retryBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     backgroundColor: Colors.homeMuted,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderWidth: 1,
     borderColor: Colors.home + "30",
     marginTop: 8,
   },
-  retryBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.home },
+  retryBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.home },
 
   emptyStateText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textTertiary,
     textAlign: "center",
     paddingHorizontal: 20,
@@ -1519,22 +1521,22 @@ const styles = StyleSheet.create({
   historySummaryBar: {
     flexDirection: "row",
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 16,
     alignItems: "center",
     justifyContent: "space-around",
   },
-  historySummaryStat: { alignItems: "center", gap: 3 },
-  historySummaryValue: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
-  historySummaryLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  historySummaryStat: { alignItems: "center", gap: 4 },
+  historySummaryValue: { ...Typography.title2, color: Colors.text },
+  historySummaryLabel: { ...Typography.caption, color: Colors.textSecondary },
   historySummaryDivider: { width: 1, height: 36, backgroundColor: Colors.border },
 
   exportBtnRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: 10,
+    gap: 12,
   },
   exportBtn: {
     flexDirection: "row",
@@ -1542,7 +1544,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     backgroundColor: Colors.homeMuted,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingVertical: 12,
     borderWidth: 1,
     borderColor: Colors.home + "30",
@@ -1551,29 +1553,29 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  exportBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.home },
+  exportBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.home },
 
-  historyGroupList: { gap: 10 },
+  historyGroupList: { gap: 12 },
   historyGroupCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 16,
     minHeight: 44,
     gap: 12,
   },
-  historyGroupCardLeft: { flex: 1, gap: 3 },
-  historyGroupCardName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 21 },
-  historyGroupCardMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  historyGroupCardProvider: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  historyGroupCardLeft: { flex: 1, gap: 4 },
+  historyGroupCardName: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  historyGroupCardMeta: { ...Typography.footnote, color: Colors.textSecondary },
+  historyGroupCardProvider: { ...Typography.footnote, color: Colors.textTertiary },
   historyGroupCardFooter: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
-  historyGroupCardCount: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  historyGroupCardTotal: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.home },
-  historyGroupCardRight: { alignItems: "flex-end", gap: 6, flexShrink: 0 },
-  historyGroupCardCost: { fontSize: 17, fontFamily: "Inter_700Bold", color: Colors.home },
+  historyGroupCardCount: { ...Typography.caption, color: Colors.textTertiary },
+  historyGroupCardTotal: { ...Typography.caption, fontWeight: "500", color: Colors.home },
+  historyGroupCardRight: { alignItems: "flex-end", gap: 8, flexShrink: 0 },
+  historyGroupCardCost: { ...Typography.headline, fontWeight: "700", color: Colors.home },
 
   sheetOverlay: { flex: 1, justifyContent: "flex-end" },
   sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
@@ -1591,42 +1593,38 @@ const styles = StyleSheet.create({
   sheetHandle: {
     width: 36,
     height: 4,
-    borderRadius: 2,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.border,
     alignSelf: "center",
     marginBottom: 16,
   },
   sheetTitle: {
-    fontSize: 17,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.headline,
     color: Colors.text,
     marginBottom: 20,
     textAlign: "center",
   },
   sheetScroll: { maxHeight: 400 },
   sheetFields: { gap: 16 },
-  sheetField: { gap: 6 },
+  sheetField: { gap: 8 },
   sheetFieldLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },
   sheetFieldOptional: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     textTransform: "none",
-    letterSpacing: 0,
   },
   sheetInput: {
+    ...Typography.subheadline,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    borderRadius: Radius.md,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -1636,52 +1634,52 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
   },
   dateStepBtn: { width: 44, height: 46, alignItems: "center", justifyContent: "center" },
   dateStepValue: {
+    ...Typography.subheadline,
+    fontWeight: "500",
     flex: 1,
     textAlign: "center",
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
     color: Colors.text,
   },
-  dateQuickRow: { flexDirection: "row", gap: 8, marginTop: 6 },
+  dateQuickRow: { flexDirection: "row", gap: 8, marginTop: 8 },
   dateQuickBtn: {
     flex: 1,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: "center",
   },
   dateQuickBtnActive: { backgroundColor: Colors.homeMuted, borderColor: Colors.home },
-  dateQuickText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  dateQuickTextActive: { color: Colors.home, fontFamily: "Inter_600SemiBold" },
-  sheetActions: { flexDirection: "row", gap: 10, marginTop: 24 },
+  dateQuickText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
+  dateQuickTextActive: { fontWeight: "600", color: Colors.home },
+  sheetActions: { flexDirection: "row", gap: 12, marginTop: 24 },
   sheetCancelBtn: {
     flex: 1,
-    paddingVertical: 13,
-    borderRadius: 13,
+    paddingVertical: 12,
+    borderRadius: Radius.md,
     alignItems: "center",
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  sheetCancelText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  sheetCancelText: { ...Typography.subheadline, fontWeight: "500", color: Colors.textSecondary },
   sheetSaveBtn: {
     flex: 2,
-    paddingVertical: 13,
-    borderRadius: 13,
+    paddingVertical: 12,
+    borderRadius: Radius.md,
     backgroundColor: Colors.home,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 6,
+    gap: 8,
   },
-  sheetSaveText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  sheetSaveText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
 });

@@ -18,8 +18,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -591,7 +593,7 @@ export default function FamilyMemberDetailScreen() {
     <View style={[styles.container, { backgroundColor: Colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + webTopPad + 16 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
-          <Ionicons name="chevron-back" size={24} color={Colors.text} />
+          <Icon name="chevron-back" size={24} color={Colors.text} />
         </Pressable>
         <View style={styles.headerTextBlock}>
           <Text style={styles.headerTitle} numberOfLines={1}>{memberName}</Text>
@@ -605,13 +607,13 @@ export default function FamilyMemberDetailScreen() {
             onPress={handleDeleteMember}
             hitSlop={4}
           >
-            <Ionicons name="trash-outline" size={16} color={Colors.overdue} />
+            <Icon name="trash-outline" size={16} color={Colors.overdue} />
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.addApptBtn, { opacity: pressed ? 0.8 : 1 }]}
             onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/add-appointment?familyMemberId=${encodeURIComponent(id!)}` as any); }}
           >
-            <Ionicons name="add" size={20} color={Colors.textInverse} />
+            <Icon name="add" size={20} color={Colors.textInverse} />
           </Pressable>
         </View>
       </View>
@@ -624,7 +626,7 @@ export default function FamilyMemberDetailScreen() {
             <S anim={skeletonAnim} w={80} h={13} r={4} />
           </View>
           {[0, 1, 2].map(i => (
-            <View key={i} style={{ backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 10 }}>
+            <View key={i} style={{ backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 16, gap: 12 }}>
               <Row>
                 <Col flex={1} gap={6}>
                   <S anim={skeletonAnim} w="70%" h={14} r={5} />
@@ -653,7 +655,7 @@ export default function FamilyMemberDetailScreen() {
                   <Image source={{ uri: member.photo_url }} style={styles.avatar} />
                   {uploadingPhoto && (
                     <View style={styles.avatarOverlay}>
-                      <ActivityIndicator color="#fff" size="small" />
+                      <ActivityIndicator color={Colors.white} size="small" />
                     </View>
                   )}
                 </>
@@ -662,12 +664,12 @@ export default function FamilyMemberDetailScreen() {
                   {uploadingPhoto ? (
                     <ActivityIndicator color={Colors.textTertiary} size="small" />
                   ) : (
-                    <Ionicons name={isPet ? "paw-outline" : "person-outline"} size={28} color={Colors.textTertiary} />
+                    <Icon name={isPet ? "paw-outline" : "person-outline"} size={28} color={Colors.textTertiary} />
                   )}
                 </View>
               )}
               <View style={styles.avatarCameraBtn}>
-                <Ionicons name="camera-outline" size={10} color="#fff" />
+                <Icon name="camera-outline" size={10} color={Colors.white} />
               </View>
             </Pressable>
           </View>
@@ -722,7 +724,7 @@ export default function FamilyMemberDetailScreen() {
                     style={({ pressed }) => [styles.emptyBtn, { opacity: pressed ? 0.8 : 1 }]}
                     onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/add-appointment?familyMemberId=${encodeURIComponent(id!)}` as any); }}
                   >
-                    <Ionicons name="add" size={16} color={Colors.textInverse} />
+                    <Icon name="add" size={16} color={Colors.textInverse} />
                     <Text style={styles.emptyBtnText}>Add Appointment</Text>
                   </Pressable>
                 </View>
@@ -748,7 +750,7 @@ export default function FamilyMemberDetailScreen() {
                         ref={(node) => { registerItemRow(appt.id, node); }}
                         collapsable={false}
                         pointerEvents="box-none"
-                        style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
+                        style={{ position: "relative", borderRadius: Radius.lg, overflow: "hidden" }}
                       >
                         <Pressable
                           style={({ pressed }) => [styles.taskRow, { opacity: pressed ? 0.85 : 1 }]}
@@ -759,7 +761,7 @@ export default function FamilyMemberDetailScreen() {
                           <View style={styles.taskInfo}>
                             <Text style={styles.taskTitle} numberOfLines={1}>{appt.appointment_type}</Text>
                             {appt.provider_name && (
-                              <Text numberOfLines={1} style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 }}>
+                              <Text numberOfLines={1} style={{ ...Typography.caption, color: Colors.textSecondary, marginTop: 2 }}>
                                 {appt.provider_name}
                               </Text>
                             )}
@@ -774,13 +776,13 @@ export default function FamilyMemberDetailScreen() {
                           <View style={styles.apptExpanded}>
                             {appt.notes ? (
                               <View style={styles.expandedRow}>
-                                <Ionicons name="document-text-outline" size={14} color={Colors.textSecondary} />
+                                <Icon name="document-text-outline" size={14} color={Colors.textSecondary} />
                                 <Text style={styles.expandedNotes}>{appt.notes}</Text>
                               </View>
                             ) : null}
                             {(appt.interval_type || appt.interval_months) ? (
                               <View style={styles.expandedRow}>
-                                <Ionicons name="repeat-outline" size={14} color={Colors.textSecondary} />
+                                <Icon name="repeat-outline" size={14} color={Colors.textSecondary} />
                                 <Text style={styles.expandedText}>
                                   {appt.interval_type === "weekly" ? "Every week"
                                     : appt.interval_type === "biweekly" ? "Every 2 weeks"
@@ -798,14 +800,14 @@ export default function FamilyMemberDetailScreen() {
                                 style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.7 : 1 }]}
                                 onPress={() => handleDeleteAppointment(appt.id)}
                               >
-                                <Ionicons name="trash-outline" size={13} color={Colors.overdue} />
+                                <Icon name="trash-outline" size={13} color={Colors.overdue} />
                                 <Text style={styles.deleteBtnText}>Delete</Text>
                               </Pressable>
                               <Pressable
                                 style={({ pressed }) => [styles.markCompleteBtn, { opacity: pressed ? 0.85 : 1 }]}
                                 onPress={() => handleOpenMarkComplete(appt)}
                               >
-                                <Ionicons name="checkmark-circle" size={14} color={Colors.textInverse} />
+                                <Icon name="checkmark-circle" size={14} color={Colors.textInverse} />
                                 <Text style={styles.markCompleteBtnText}>Mark as Done</Text>
                               </Pressable>
                             </View>
@@ -831,7 +833,7 @@ export default function FamilyMemberDetailScreen() {
                     style={({ pressed }) => [styles.emptyBtn, { opacity: pressed ? 0.8 : 1 }]}
                     onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-medication"); }}
                   >
-                    <Ionicons name="add" size={16} color={Colors.textInverse} />
+                    <Icon name="add" size={16} color={Colors.textInverse} />
                     <Text style={styles.emptyBtnText}>Add Medication</Text>
                   </Pressable>
                 </View>
@@ -843,7 +845,7 @@ export default function FamilyMemberDetailScreen() {
                       ref={(node) => { registerItemRow(med.id, node); }}
                       collapsable={false}
                       pointerEvents="box-none"
-                      style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}
+                      style={{ position: "relative", borderRadius: Radius.lg, overflow: "hidden" }}
                     >
                       <Pressable
                         style={({ pressed }) => [styles.taskRow, { opacity: pressed ? 0.85 : 1 }]}
@@ -874,7 +876,7 @@ export default function FamilyMemberDetailScreen() {
                         >
                           {todayCountFor(med.id) > 0 ? (
                             <>
-                              <Ionicons name="checkmark" size={14} color={Colors.textInverse} />
+                              <Icon name="checkmark" size={14} color={Colors.textInverse} />
                               <Text style={styles.takenBtnTextActive}>{todayCountFor(med.id)}</Text>
                             </>
                           ) : (
@@ -994,17 +996,17 @@ export default function FamilyMemberDetailScreen() {
 
                 <Pressable
                   onPress={() => setCompleteDiy(!completeDiy)}
-                  style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 }}
                 >
                   <View style={{
-                    width: 24, height: 24, borderRadius: 6, borderWidth: 2,
+                    width: 24, height: 24, borderRadius: Radius.sm, borderWidth: 2,
                     borderColor: completeDiy ? Colors.health : Colors.border,
                     backgroundColor: completeDiy ? Colors.health : "transparent",
                     alignItems: "center", justifyContent: "center",
                   }}>
-                    {completeDiy && <Ionicons name="checkmark" size={16} color={Colors.textInverse} />}
+                    {completeDiy && <Icon name="checkmark" size={16} color={Colors.textInverse} />}
                   </View>
-                  <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text }}>
+                  <Text style={{ ...Typography.footnote, fontWeight: "500", color: Colors.text }}>
                     At-home / no provider
                   </Text>
                 </Pressable>
@@ -1027,7 +1029,7 @@ export default function FamilyMemberDetailScreen() {
                   <ActivityIndicator size="small" color={Colors.textInverse} />
                 ) : (
                   <>
-                    <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
+                    <Icon name="checkmark" size={16} color={Colors.textInverse} />
                     <Text style={styles.sheetSaveText}>Mark as Done</Text>
                   </>
                 )}
@@ -1068,17 +1070,17 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 10,
+    gap: 12,
   },
   backBtn: { width: 40, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   headerTextBlock: { flex: 1, gap: 2 },
-  headerTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
-  headerMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textTransform: "capitalize" },
+  headerTitle: { ...Typography.title2, color: Colors.text },
+  headerMeta: { ...Typography.footnote, color: Colors.textSecondary, textTransform: "capitalize" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   deleteMemberBtn: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.overdueMuted,
     alignItems: "center",
     justifyContent: "center",
@@ -1086,7 +1088,7 @@ const styles = StyleSheet.create({
   addApptBtn: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.health,
     alignItems: "center",
     justifyContent: "center",
@@ -1098,16 +1100,16 @@ const styles = StyleSheet.create({
   summaryBar: {
     flexDirection: "row",
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 16,
     alignItems: "center",
     justifyContent: "space-around",
   },
-  summaryStat: { alignItems: "center", gap: 3 },
-  summaryValue: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
-  summaryLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  summaryStat: { alignItems: "center", gap: 4 },
+  summaryValue: { ...Typography.title2, color: Colors.text },
+  summaryLabel: { ...Typography.caption, color: Colors.textSecondary, textAlign: "center" },
   summaryDivider: { width: 1, height: 36, backgroundColor: Colors.border },
 
   tabs: {
@@ -1117,19 +1119,19 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: "center",
     borderBottomWidth: 2,
     borderBottomColor: "transparent",
     marginBottom: -1,
   },
   tabActive: { borderBottomColor: Colors.accent },
-  tabText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  tabTextActive: { color: Colors.text, fontFamily: "Inter_600SemiBold" },
+  tabText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
+  tabTextActive: { fontWeight: "600", color: Colors.text },
 
   sectionLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textTertiary,
     letterSpacing: 1.5,
     textTransform: "uppercase",
@@ -1137,7 +1139,7 @@ const styles = StyleSheet.create({
 
   listCard: {
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -1146,49 +1148,49 @@ const styles = StyleSheet.create({
   taskRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 14,
+    gap: 12,
+    paddingVertical: 16,
     paddingRight: 16,
   },
-  taskBar: { width: 4, height: 28, borderRadius: 2, flexShrink: 0 },
+  taskBar: { width: 4, height: 28, borderRadius: Radius.sm, flexShrink: 0 },
   taskInfo: { flex: 1, gap: 2 },
-  taskTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 19 },
-  taskSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 17 },
-  taskDue: { fontSize: 12, fontFamily: "Inter_500Medium", flexShrink: 0 },
+  taskTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  taskSub: { ...Typography.footnote, color: Colors.textSecondary },
+  taskDue: { ...Typography.caption, fontWeight: "500", flexShrink: 0 },
   rowDivider: { height: 1, backgroundColor: Colors.borderSubtle },
 
   apptExpanded: {
     paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingBottom: 16,
     paddingTop: 4,
-    gap: 10,
+    gap: 12,
   },
   expandedRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  expandedText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 },
-  expandedNotes: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1, lineHeight: 20, fontStyle: "italic" },
-  expandedEmpty: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, fontStyle: "italic" },
+  expandedText: { ...Typography.footnote, color: Colors.textSecondary, flex: 1 },
+  expandedNotes: { ...Typography.footnote, color: Colors.textSecondary, flex: 1, fontStyle: "italic" },
+  expandedEmpty: { ...Typography.footnote, color: Colors.textTertiary, fontStyle: "italic" },
   expandedActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8, paddingTop: 4 },
   deleteBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
+    paddingVertical: 8,
+    borderRadius: Radius.md,
     backgroundColor: Colors.overdueMuted,
     minHeight: 44,
     justifyContent: "center",
   },
-  deleteBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue },
+  deleteBtnText: { ...Typography.footnote, fontWeight: "500", color: Colors.overdue },
 
-  reminderDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  reminderDot: { width: 8, height: 8, borderRadius: Radius.pill, flexShrink: 0 },
 
   avatarSection: { alignItems: "center", paddingTop: 4, paddingBottom: 8 },
   avatarWrap: { position: "relative" },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: Colors.card },
+  avatar: { width: 72, height: 72, borderRadius: Radius.pill, backgroundColor: Colors.card },
   avatarOverlay: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 36,
+    borderRadius: Radius.xl,
     backgroundColor: "rgba(0,0,0,0.35)",
     alignItems: "center",
     justifyContent: "center",
@@ -1196,7 +1198,7 @@ const styles = StyleSheet.create({
   avatarPlaceholder: {
     width: 72,
     height: 72,
-    borderRadius: 36,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.card,
     borderWidth: 1.5,
     borderStyle: "dashed",
@@ -1210,7 +1212,7 @@ const styles = StyleSheet.create({
     right: 0,
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.accent,
     alignItems: "center",
     justifyContent: "center",
@@ -1218,33 +1220,33 @@ const styles = StyleSheet.create({
     borderColor: Colors.background,
   },
 
-  emptyState: { alignItems: "center", paddingVertical: 40, gap: 10 },
-  emptyTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 20 },
+  emptyState: { alignItems: "center", paddingVertical: 40, gap: 12 },
+  emptyTitle: { ...Typography.headline, color: Colors.text },
+  emptyText: { ...Typography.footnote, color: Colors.textSecondary, textAlign: "center" },
   emptyBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     backgroundColor: Colors.health,
-    borderRadius: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    borderRadius: Radius.md,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     marginTop: 4,
   },
   markCompleteBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.health,
     minHeight: 44,
     justifyContent: "center",
   },
   markCompleteBtnText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.footnote,
+    fontWeight: "600",
     color: Colors.textInverse,
   },
   sheetOverlay: { flex: 1, justifyContent: "flex-end" },
@@ -1263,76 +1265,72 @@ const styles = StyleSheet.create({
   sheetHandle: {
     width: 36,
     height: 4,
-    borderRadius: 2,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.border,
     alignSelf: "center",
     marginBottom: 16,
   },
   sheetTitle: {
-    fontSize: 17,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.headline,
     color: Colors.text,
     marginBottom: 20,
     textAlign: "center",
   },
   sheetScroll: { maxHeight: 400 },
   sheetFields: { gap: 16 },
-  sheetField: { gap: 6 },
+  sheetField: { gap: 8 },
   sheetFieldLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },
   sheetFieldOptional: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     textTransform: "none",
-    letterSpacing: 0,
   },
   sheetInput: {
+    ...Typography.subheadline,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    borderRadius: Radius.md,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   sheetInputMultiline: { minHeight: 64, textAlignVertical: "top" },
-  sheetActions: { flexDirection: "row", gap: 10, marginTop: 24 },
+  sheetActions: { flexDirection: "row", gap: 12, marginTop: 24 },
   sheetCancelBtn: {
     flex: 1,
-    paddingVertical: 13,
-    borderRadius: 13,
+    paddingVertical: 12,
+    borderRadius: Radius.md,
     alignItems: "center",
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  sheetCancelText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  sheetCancelText: { ...Typography.subheadline, fontWeight: "500", color: Colors.textSecondary },
   sheetSaveBtn: {
     flex: 2,
-    paddingVertical: 13,
-    borderRadius: 13,
+    paddingVertical: 12,
+    borderRadius: Radius.md,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 8,
     backgroundColor: Colors.health,
   },
-  sheetSaveText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  sheetSaveText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
   takenBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -1345,43 +1343,43 @@ const styles = StyleSheet.create({
     borderColor: Colors.health,
   },
   takenBtnText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.footnote,
+    fontWeight: "600",
     color: Colors.textSecondary,
   },
   takenBtnTextActive: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.footnote,
+    fontWeight: "600",
     color: Colors.textInverse,
   },
   medExpanded: {
     paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingBottom: 16,
     paddingTop: 4,
     gap: 8,
   },
   medExpandedLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },
   medDotRow: {
     flexDirection: "row",
-    gap: 6,
+    gap: 8,
     alignItems: "center",
   },
   medDot: {
     width: 14,
     height: 14,
-    borderRadius: 7,
+    borderRadius: Radius.pill,
   },
   medStreakText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.text,
     marginTop: 4,
   },
-  emptyBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  emptyBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
 });
