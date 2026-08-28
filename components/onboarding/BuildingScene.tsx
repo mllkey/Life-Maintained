@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon, MciIcon, type IconName, type MciName } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
@@ -62,8 +64,8 @@ export function getInvokeStatus(error: unknown): number | undefined {
 }
 
 function VerticalIcon({ lib, icon, size, color }: { lib: IconLib; icon: string; size: number; color: string }) {
-  if (lib === "mci") return <MaterialCommunityIcons name={icon as keyof typeof MaterialCommunityIcons.glyphMap} size={size} color={color} />;
-  return <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
+  if (lib === "mci") return <MciIcon name={icon as MciName} size={size} color={color} />;
+  return <Icon name={icon as IconName} size={size} color={color} />;
 }
 
 function armChip(sv: SharedValue<number>, kind: ChipAnim, delay: number) {
@@ -422,7 +424,7 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
           </Animated.Text>
 
           <Animated.View style={[styles.readyBadge, readyStyle]}>
-            <Ionicons name="checkmark-circle" size={16} color={Colors.good} />
+            <Icon name="checkmark-circle" size={16} color={Colors.good} />
             <Text style={styles.readyText}>Ready</Text>
           </Animated.View>
         </View>
@@ -444,30 +446,30 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background, gap: 28 },
-  progressBar: { height: 3, borderRadius: 2, backgroundColor: Colors.border, overflow: "hidden" },
-  progressFill: { height: 3, borderRadius: 2 },
-  headerSection: { paddingHorizontal: 20, gap: 14, alignItems: "center" },
+  container: { flex: 1, backgroundColor: Colors.background, gap: 32 },
+  progressBar: { height: 3, borderRadius: Radius.sm, backgroundColor: Colors.border, overflow: "hidden" },
+  progressFill: { height: 3, borderRadius: Radius.sm },
+  headerSection: { paddingHorizontal: 20, gap: 16, alignItems: "center" },
   titleWrap: { position: "relative" },
-  title: { fontSize: 21, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary, lineHeight: 27, textAlign: "center" },
-  subtitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 27, minHeight: 27, textAlign: "center" },
-  statusCaption: { position: "absolute", top: 0, left: 20, right: 20, fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 27, minHeight: 27, textAlign: "center" },
+  title: { ...Typography.title2, fontWeight: "600", color: Colors.textSecondary, textAlign: "center" },
+  subtitle: { ...Typography.title3, fontWeight: "700", color: Colors.text, minHeight: 27, textAlign: "center" },
+  statusCaption: { ...Typography.title3, fontWeight: "700", position: "absolute", top: 0, left: 20, right: 20, color: Colors.text, minHeight: 27, textAlign: "center" },
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20, justifyContent: "center" },
-  chip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: Colors.card, borderRadius: 999, borderWidth: 1, borderColor: Colors.border },
-  chipText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  chip: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: Colors.card, borderRadius: Radius.pill, borderWidth: 1, borderColor: Colors.border },
+  chipText: { ...Typography.caption, fontWeight: "500", color: Colors.textSecondary },
   stage: { flex: 1, alignItems: "center", justifyContent: "center", position: "relative" },
-  docGlow: { position: "absolute", width: 140, height: 140, borderRadius: 70 },
-  halo: { position: "absolute", width: 200, height: 200, borderRadius: 100 },
+  docGlow: { position: "absolute", width: 140, height: 140, borderRadius: Radius.pill },
+  halo: { position: "absolute", width: 200, height: 200, borderRadius: Radius.pill },
   orbit: { position: "absolute", width: 0, height: 0, alignItems: "center", justifyContent: "center" },
-  orbitDot: { position: "absolute", width: 5, height: 5, borderRadius: 2.5, opacity: 0.5 },
-  doc: { width: 88, height: 88, borderRadius: 20, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, alignItems: "center", justifyContent: "center" },
-  particle: { position: "absolute", width: 6, height: 6, borderRadius: 3 },
-  readyBadge: { position: "absolute", bottom: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: Colors.card, borderRadius: 999, borderWidth: 1, borderColor: Colors.border },
-  readyText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  orbitDot: { position: "absolute", width: 5, height: 5, borderRadius: Radius.sm, opacity: 0.5 },
+  doc: { width: 88, height: 88, borderRadius: Radius.lg, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, alignItems: "center", justifyContent: "center" },
+  particle: { position: "absolute", width: 6, height: 6, borderRadius: Radius.pill },
+  readyBadge: { position: "absolute", bottom: 40, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: Colors.card, borderRadius: Radius.pill, borderWidth: 1, borderColor: Colors.border },
+  readyText: { ...Typography.footnote, fontWeight: "600", color: Colors.text },
   errorButtons: { paddingHorizontal: 20, gap: 12, marginTop: 20 },
-  cta: { borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" },
-  ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  cta: { borderRadius: Radius.lg, height: 52, alignItems: "center", justifyContent: "center" },
+  ctaText: { ...Typography.headline, color: Colors.textInverse },
   skip: { alignItems: "center", paddingVertical: 4 },
-  skipText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  inlineError: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue, lineHeight: 19, textAlign: "center" },
+  skipText: { ...Typography.footnote, color: Colors.textTertiary },
+  inlineError: { ...Typography.footnote, fontWeight: "500", color: Colors.overdue, textAlign: "center" },
 });

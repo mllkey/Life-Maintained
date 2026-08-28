@@ -2,9 +2,9 @@ export function redirectSystemPath({
   path,
   initial,
 }: { path: string; initial: boolean }) {
-  // Dev-only: the UI gallery is reached by deep link from the simulator proof.
-  // expo-router passes the full URL here (scheme://host?query), so match the segment, not a prefix.
-  // Every other link (including voice-log, handled by the Linking listener in _layout) still lands on the root.
-  if (__DEV__ && path.includes("ui-gallery")) return path;
+  // Dev-only: every deep link passes through so QA can open any screen directly
+  // (the redesign needs linkable routes, not just the UI gallery).
+  // Production is unchanged: outside __DEV__ every link still lands on the root.
+  if (__DEV__) return path;
   return "/";
 }

@@ -3,6 +3,8 @@ import { View, Text, Pressable, StyleSheet, Image } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 
 export default function VerifyScreen() {
   const insets = useSafeAreaInsets();
@@ -35,16 +37,16 @@ export default function VerifyScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { flex: 1, paddingHorizontal: 20, justifyContent: "center", gap: 16 },
-  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text },
-  body: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
+  title: { ...Typography.title2, color: Colors.text },
+  body: { ...Typography.footnote, color: Colors.textSecondary },
   button: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 48,
     alignItems: "center",
     justifyContent: "center",
     width: "100%",
     marginTop: 8,
   },
-  buttonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  buttonText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
 });

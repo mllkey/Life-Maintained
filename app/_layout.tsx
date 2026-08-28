@@ -29,7 +29,6 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { PostHogProvider } from "posthog-react-native";
 import { analyticsClient, capture } from "@/lib/analytics";
 import { supabase } from "@/lib/supabase";
-import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
 import { Colors } from "@/constants/colors";
 import NotifPermissionBanner from "@/components/NotifPermissionBanner";
 import { UndoToastHost } from "@/components/UndoToast";
@@ -639,18 +638,9 @@ function RootLayoutNav() {
 }
 
 function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-  });
-
   useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded, fontError]);
+    SplashScreen.hideAsync();
+  }, []);
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -676,8 +666,6 @@ function RootLayout() {
       }
     })();
   }, []);
-
-  if (!fontsLoaded && !fontError) return null;
 
   return (
     <ErrorBoundary onError={(error, componentStack) => {

@@ -14,8 +14,10 @@ import {
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 
@@ -78,7 +80,7 @@ export default function LoginScreen() {
               resizeMode="contain"
             />
             <Text style={styles.appName}>LifeMaintained</Text>
-            <Text style={styles.tagline}>The app that remembers so you don't have to.</Text>
+            <Text style={styles.tagline}>The app that remembers so you don&apos;t have to.</Text>
           </View>
 
           <View style={styles.form}>
@@ -86,7 +88,7 @@ export default function LoginScreen() {
 
             {error && (
               <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
+                <Icon name="alert-circle" size={16} color={Colors.overdue} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
@@ -94,7 +96,7 @@ export default function LoginScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <Icon name="mail-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={email}
@@ -113,7 +115,7 @@ export default function LoginScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <Icon name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   value={password}
@@ -127,7 +129,7 @@ export default function LoginScreen() {
                   onSubmitEditing={handleSignIn}
                 />
                 <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                  <Ionicons
+                  <Icon
                     name={showPassword ? "eye-off-outline" : "eye-outline"}
                     size={18}
                     color={Colors.textTertiary}
@@ -184,20 +186,16 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 24, gap: 32 },
   header: { alignItems: "center", gap: 8 },
   appName: {
-    fontSize: 28,
-    fontFamily: "Inter_700Bold",
+    ...Typography.largeTitle,
     color: Colors.text,
-    letterSpacing: -0.5,
   },
   tagline: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
   },
   form: { gap: 16 },
   formTitle: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
+    ...Typography.title2,
     color: Colors.text,
     marginBottom: 4,
   },
@@ -206,54 +204,52 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     backgroundColor: Colors.overdueMuted,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.overdue + "30",
   },
   errorText: {
+    ...Typography.footnote,
     flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
     color: Colors.overdue,
   },
-  inputGroup: { gap: 6 },
+  inputGroup: { gap: 8 },
   label: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.textSecondary,
   },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     height: 52,
   },
-  inputIcon: { marginRight: 10 },
+  inputIcon: { marginRight: 12 },
   input: {
+    ...Typography.subheadline,
     flex: 1,
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
   },
   eyeButton: { padding: 4 },
   forgotLink: { alignSelf: "flex-end", paddingVertical: 2 },
-  forgotLinkText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
+  forgotLinkText: { ...Typography.footnote, fontWeight: "500", color: Colors.accent },
   primaryButton: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 54,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,
   },
   primaryButtonText: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.subheadline,
+    fontWeight: "600",
     color: Colors.textInverse,
   },
   divider: {
@@ -263,12 +259,11 @@ const styles = StyleSheet.create({
   },
   dividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
   dividerText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textTertiary,
   },
   secondaryButton: {
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 54,
     alignItems: "center",
     justifyContent: "center",
@@ -277,8 +272,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
   },
   secondaryButtonText: {
-    fontSize: 16,
-    fontFamily: "Inter_500Medium",
+    ...Typography.subheadline,
+    fontWeight: "500",
     color: Colors.text,
   },
 });

@@ -3,8 +3,10 @@ import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { setPendingIntent } from "@/lib/onboardingIntent";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon, type IconName } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
@@ -84,9 +86,9 @@ function vehicleHeroSentence(t: VehicleTaskRow, displayName: string): string {
 
 const CONFIG: Record<Vertical, {
   tint: string;
-  heroBadgeIcon: keyof typeof Ionicons.glyphMap;
+  heroBadgeIcon: IconName;
   coverageNoun: (n: number) => string;
-  bridge: { icon: keyof typeof Ionicons.glyphMap; tint: string; text: string };
+  bridge: { icon: IconName; tint: string; text: string };
   secondaries: SecondaryKind[];
   infoText: string | null;
   nameFallback: string;
@@ -136,7 +138,7 @@ const CONFIG: Record<Vertical, {
   },
 };
 
-const SECONDARY_META: Record<SecondaryKind, { label: string; icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
+const SECONDARY_META: Record<SecondaryKind, { label: string; icon: IconName; tint: string }> = {
   "add-vehicle": { label: "Add a vehicle next", icon: "car-outline", tint: Colors.vehicle },
   "add-home": { label: "Add home next", icon: "home-outline", tint: Colors.home },
   "add-another-vehicle": { label: "Add another vehicle", icon: "car-outline", tint: Colors.vehicle },
@@ -399,7 +401,7 @@ export default function PlanRevealScreen() {
         {hasItems && (
           <Animated.View style={[styles.coverageBlock, coverageStyle]}>
             <View style={styles.coverageIcon}>
-              <Ionicons name="shield-checkmark" size={20} color={Colors.good} />
+              <Icon name="shield-checkmark" size={20} color={Colors.good} />
             </View>
             <Text style={styles.coverageTitle}>{assetName} is covered</Text>
             <Text style={styles.coverageSub}>
@@ -414,7 +416,7 @@ export default function PlanRevealScreen() {
             <Animated.View style={[styles.heroCard, heroStyle, { borderColor: cfg.tint + "40" }]}>
               <View style={styles.heroBadgeRow}>
                 <View style={[styles.heroBadgeIcon, { backgroundColor: cfg.tint + "26" }]}>
-                  <Ionicons name={cfg.heroBadgeIcon} size={15} color={cfg.tint} />
+                  <Icon name={cfg.heroBadgeIcon} size={15} color={cfg.tint} />
                 </View>
                 <Text style={[styles.heroBadgeText, { color: cfg.tint }]}>Added to your plan</Text>
               </View>
@@ -422,12 +424,12 @@ export default function PlanRevealScreen() {
               {heroSentence ? <Text style={styles.heroSentence}>{heroSentence}</Text> : null}
               <View style={styles.heroMetaRow}>
                 <View style={styles.heroMetaPill}>
-                  <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} />
+                  <Icon name="calendar-outline" size={14} color={Colors.textSecondary} />
                   <Text style={styles.heroMetaText}>{heroItem.dueLabel}</Text>
                 </View>
                 {heroItem.costStr ? (
                   <View style={[styles.heroMetaPill, styles.heroCostPill]}>
-                    <Ionicons name="cash-outline" size={14} color={Colors.good} />
+                    <Icon name="cash-outline" size={14} color={Colors.good} />
                     <Text style={styles.heroCostText}>{heroItem.costStr}</Text>
                   </View>
                 ) : null}
@@ -439,7 +441,7 @@ export default function PlanRevealScreen() {
                 <Text style={styles.supportingLabel}>Also ready</Text>
                 {supportingItems.map((item, i) => (
                   <Animated.View key={item.name + i} style={[styles.supportCard, i === 0 ? supportOneStyle : supportTwoStyle]}>
-                    <View style={{ flex: 1, gap: 3 }}>
+                    <View style={{ flex: 1, gap: 4 }}>
                       <Text style={styles.taskName}>{item.name}</Text>
                       <Text style={styles.taskMeta}>{item.dueLabel}</Text>
                     </View>
@@ -450,7 +452,7 @@ export default function PlanRevealScreen() {
             ) : null}
 
             <Animated.View style={[styles.bridgeBox, bridgeStyle]}>
-              <Ionicons name={cfg.bridge.icon} size={15} color={cfg.bridge.tint} />
+              <Icon name={cfg.bridge.icon} size={15} color={cfg.bridge.tint} />
               <Text style={styles.bridgeText}>{cfg.bridge.text}</Text>
             </Animated.View>
           </View>
@@ -472,7 +474,7 @@ export default function PlanRevealScreen() {
 
         {hasItems && cfg.infoText ? (
           <View style={styles.infoBox}>
-            <Ionicons name="information-circle-outline" size={16} color={Colors.textTertiary} />
+            <Icon name="information-circle-outline" size={16} color={Colors.textTertiary} />
             <Text style={styles.infoText}>{cfg.infoText}</Text>
           </View>
         ) : null}
@@ -483,7 +485,7 @@ export default function PlanRevealScreen() {
           const meta = SECONDARY_META[kind];
           return (
             <Pressable key={kind} onPress={() => handleSecondary(kind)} style={styles.secondary}>
-              <Ionicons name={meta.icon} size={16} color={meta.tint} />
+              <Icon name={meta.icon} size={16} color={meta.tint} />
               <Text style={[styles.secondaryText, { color: meta.tint }]}>{meta.label}</Text>
             </Pressable>
           );
@@ -500,41 +502,41 @@ export default function PlanRevealScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   scroll: { paddingHorizontal: 20, gap: 24 },
-  progressBar: { height: 3, borderRadius: 2, backgroundColor: Colors.border, overflow: "hidden" },
-  progressFill: { height: 3, borderRadius: 2, backgroundColor: Colors.good },
-  header: { alignItems: "center", gap: 10 },
-  title: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text },
-  subtitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
-  coverageBlock: { backgroundColor: Colors.card, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: Colors.goodMuted, gap: 8, alignItems: "flex-start" },
-  coverageIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: Colors.goodMuted, marginBottom: 2 },
-  coverageTitle: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5, lineHeight: 32 },
-  coverageSub: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
+  progressBar: { height: 3, borderRadius: Radius.sm, backgroundColor: Colors.border, overflow: "hidden" },
+  progressFill: { height: 3, borderRadius: Radius.sm, backgroundColor: Colors.good },
+  header: { alignItems: "center", gap: 12 },
+  title: { ...Typography.title2, color: Colors.text },
+  subtitle: { ...Typography.subheadline, color: Colors.textSecondary, textAlign: "center" },
+  coverageBlock: { backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 20, borderWidth: 1, borderColor: Colors.goodMuted, gap: 8, alignItems: "flex-start" },
+  coverageIcon: { width: 40, height: 40, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: Colors.goodMuted, marginBottom: 2 },
+  coverageTitle: { ...Typography.title2, color: Colors.text },
+  coverageSub: { ...Typography.subheadline, color: Colors.textSecondary },
   tasksSection: { gap: 12 },
-  sectionLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
-  heroCard: { backgroundColor: Colors.card, borderRadius: 22, padding: 18, borderWidth: 1, gap: 12 },
+  sectionLabel: { ...Typography.footnote, fontWeight: "600", color: Colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
+  heroCard: { backgroundColor: Colors.card, borderRadius: Radius.xl, padding: 20, borderWidth: 1, gap: 12 },
   heroBadgeRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  heroBadgeIcon: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  heroBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
-  heroName: { fontSize: 23, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 29 },
-  heroSentence: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
+  heroBadgeIcon: { width: 26, height: 26, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" },
+  heroBadgeText: { ...Typography.caption, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
+  heroName: { ...Typography.title2, color: Colors.text },
+  heroSentence: { ...Typography.subheadline, color: Colors.textSecondary },
   heroMetaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  heroMetaPill: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: Colors.surface },
+  heroMetaPill: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: Radius.pill, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: Colors.surface },
   heroCostPill: { backgroundColor: Colors.goodMuted },
-  heroMetaText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  heroCostText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.good },
-  supportingSection: { gap: 9, marginTop: 2 },
-  supportingLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.5 },
-  supportCard: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.border },
-  taskName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  taskMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  taskCost: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.good },
-  bridgeBox: { flexDirection: "row", gap: 8, alignItems: "center", backgroundColor: Colors.surface, borderRadius: 14, padding: 12 },
-  bridgeText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary, lineHeight: 19 },
-  infoBox: { flexDirection: "row", gap: 8, backgroundColor: Colors.surface, borderRadius: 10, padding: 12, alignItems: "center" },
-  infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, lineHeight: 19 },
-  cta: { backgroundColor: Colors.accent, borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" },
-  ctaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  heroMetaText: { ...Typography.caption, fontWeight: "500", color: Colors.textSecondary },
+  heroCostText: { ...Typography.caption, fontWeight: "600", color: Colors.good },
+  supportingSection: { gap: 8, marginTop: 2 },
+  supportingLabel: { ...Typography.caption, fontWeight: "600", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.5 },
+  supportCard: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 16, borderWidth: 1, borderColor: Colors.border },
+  taskName: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  taskMeta: { ...Typography.footnote, color: Colors.textSecondary },
+  taskCost: { ...Typography.footnote, fontWeight: "600", color: Colors.good },
+  bridgeBox: { flexDirection: "row", gap: 8, alignItems: "center", backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: 12 },
+  bridgeText: { ...Typography.footnote, fontWeight: "500", flex: 1, color: Colors.textSecondary },
+  infoBox: { flexDirection: "row", gap: 8, backgroundColor: Colors.surface, borderRadius: Radius.md, padding: 12, alignItems: "center" },
+  infoText: { ...Typography.footnote, flex: 1, color: Colors.textTertiary },
+  cta: { backgroundColor: Colors.accent, borderRadius: Radius.lg, height: 52, alignItems: "center", justifyContent: "center" },
+  ctaText: { ...Typography.headline, color: Colors.textInverse },
   secondary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
-  secondaryText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.vehicle },
-  inlineError: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue, lineHeight: 19, textAlign: "center" },
+  secondaryText: { ...Typography.subheadline, fontWeight: "500", color: Colors.vehicle },
+  inlineError: { ...Typography.footnote, fontWeight: "500", color: Colors.overdue, textAlign: "center" },
 });

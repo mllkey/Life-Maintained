@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import * as Haptics from "expo-haptics";
 
@@ -136,7 +138,7 @@ export default function ResetPasswordScreen() {
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.content, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 40 }]}>
           <Pressable onPress={handleBack} disabled={isLoading} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={22} color={Colors.text} />
+            <Icon name="arrow-back" size={22} color={Colors.text} />
           </Pressable>
           <View style={styles.formContainer}>
             <Text style={styles.title}>Enter your code</Text>
@@ -144,7 +146,7 @@ export default function ResetPasswordScreen() {
 
             {error && (
               <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
+                <Icon name="alert-circle" size={16} color={Colors.overdue} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
@@ -152,8 +154,8 @@ export default function ResetPasswordScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>6-Digit Code</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="keypad-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
-                <TextInput style={[styles.input, { letterSpacing: 8, fontFamily: "Inter_600SemiBold" }]} value={code} onChangeText={(t) => setCode(t.replace(/[^0-9]/g, "").slice(0, 6))} placeholder="123456" placeholderTextColor={Colors.textTertiary} keyboardType="number-pad" textContentType="oneTimeCode" autoComplete="one-time-code" maxLength={6} autoFocus returnKeyType="next" />
+                <Icon name="keypad-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <TextInput style={[styles.input, { fontWeight: "600", letterSpacing: 8 }]} value={code} onChangeText={(t) => setCode(t.replace(/[^0-9]/g, "").slice(0, 6))} placeholder="123456" placeholderTextColor={Colors.textTertiary} keyboardType="number-pad" textContentType="oneTimeCode" autoComplete="one-time-code" maxLength={6} autoFocus returnKeyType="next" />
               </View>
               <Pressable onPress={handleResend} disabled={resendIn > 0 || isResending} style={styles.resendRow}>
                 <Text style={[styles.resendText, resendIn === 0 && !isResending && styles.resendActive]}>
@@ -165,10 +167,10 @@ export default function ResetPasswordScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>New Password</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <Icon name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
                 <TextInput style={[styles.input, { flex: 1 }]} value={password} onChangeText={setPassword} placeholder="Min. 8 characters, with uppercase and number" placeholderTextColor={Colors.textTertiary} secureTextEntry={!showPassword} textContentType="newPassword" returnKeyType="next" />
                 <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                  <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={18} color={Colors.textTertiary} />
+                  <Icon name={showPassword ? "eye-off-outline" : "eye-outline"} size={18} color={Colors.textTertiary} />
                 </Pressable>
               </View>
             </View>
@@ -176,10 +178,10 @@ export default function ResetPasswordScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Confirm New Password</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <Icon name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
                 <TextInput style={[styles.input, { flex: 1 }]} value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirm password" placeholderTextColor={Colors.textTertiary} secureTextEntry={!showConfirmPassword} textContentType="newPassword" returnKeyType="done" onSubmitEditing={handleUpdate} />
                 <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeButton}>
-                  <Ionicons name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} size={18} color={Colors.textTertiary} />
+                  <Icon name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} size={18} color={Colors.textTertiary} />
                 </Pressable>
               </View>
             </View>
@@ -199,19 +201,19 @@ const styles = StyleSheet.create({
   content: { flex: 1, paddingHorizontal: 20 },
   backButton: { width: 40, height: 40, justifyContent: "center", marginBottom: 8 },
   formContainer: { gap: 20 },
-  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text },
-  subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: Colors.overdue + "30" },
-  errorText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.overdue },
-  inputGroup: { gap: 6 },
-  label: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  inputWrapper: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 20, height: 52 },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
+  title: { ...Typography.title2, color: Colors.text },
+  subtitle: { ...Typography.footnote, color: Colors.textSecondary },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: Radius.md, padding: 12, borderWidth: 1, borderColor: Colors.overdue + "30" },
+  errorText: { ...Typography.footnote, flex: 1, color: Colors.overdue },
+  inputGroup: { gap: 8 },
+  label: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
+  inputWrapper: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 20, height: 52 },
+  inputIcon: { marginRight: 12 },
+  input: { ...Typography.subheadline, flex: 1, color: Colors.text },
   eyeButton: { padding: 4 },
-  resendRow: { paddingVertical: 6, alignSelf: "flex-start" },
-  resendText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
+  resendRow: { paddingVertical: 8, alignSelf: "flex-start" },
+  resendText: { ...Typography.footnote, fontWeight: "500", color: Colors.textTertiary },
   resendActive: { color: Colors.accent },
-  primaryButton: { backgroundColor: Colors.accent, borderRadius: 14, height: 48, alignItems: "center", justifyContent: "center" },
-  primaryButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  primaryButton: { backgroundColor: Colors.accent, borderRadius: Radius.lg, height: 48, alignItems: "center", justifyContent: "center" },
+  primaryButtonText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
 });

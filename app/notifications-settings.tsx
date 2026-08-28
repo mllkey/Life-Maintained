@@ -12,8 +12,10 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -236,7 +238,7 @@ export default function NotificationsSettingsScreen() {
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Pressable onPress={() => router.back()} style={styles.closeBtn}>
-          <Ionicons name="close" size={22} color={Colors.text} />
+          <Icon name="close" size={22} color={Colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Notifications</Text>
         <View style={{ width: 36 }} />
@@ -294,7 +296,7 @@ export default function NotificationsSettingsScreen() {
                 keyboardType="numbers-and-punctuation"
               />
             </View>
-            <Ionicons name="arrow-forward" size={16} color={Colors.textTertiary} style={{ marginTop: 22 }} />
+            <Icon name="arrow-forward" size={16} color={Colors.textTertiary} style={{ marginTop: 24 }} />
             <View style={styles.quietField}>
               <Text style={styles.quietLabel}>End</Text>
               <TextInput
@@ -329,7 +331,7 @@ export default function NotificationsSettingsScreen() {
               />
             </View>
             {budgetSaved ? (
-              <Ionicons name="checkmark-circle" size={24} color={Colors.good} style={{ marginRight: 6 }} />
+              <Icon name="checkmark-circle" size={24} color={Colors.good} style={{ marginRight: 8 }} />
             ) : (
               <View style={{ width: 30 }} />
             )}
@@ -339,7 +341,7 @@ export default function NotificationsSettingsScreen() {
 
         {vehicles && vehicles.length > 0 && (
           <Section title="Mute Vehicles">
-            <Text style={styles.sectionHint}>Muted vehicles won't send any reminders</Text>
+            <Text style={styles.sectionHint}>Muted vehicles won&apos;t send any reminders</Text>
             {vehicles.map(v => (
               <ToggleRow
                 key={v.id}
@@ -356,7 +358,7 @@ export default function NotificationsSettingsScreen() {
 
         {properties && properties.length > 0 && (
           <Section title="Mute Properties">
-            <Text style={styles.sectionHint}>Muted properties won't send any reminders</Text>
+            <Text style={styles.sectionHint}>Muted properties won&apos;t send any reminders</Text>
             {properties.map(p => (
               <ToggleRow
                 key={p.id}
@@ -417,60 +419,59 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
+  headerTitle: { ...Typography.title2, color: Colors.text },
   scroll: { paddingHorizontal: 20, paddingTop: 20, gap: 24 },
-  section: { gap: 10 },
-  sectionTitle: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 1.5 },
-  sectionContent: { backgroundColor: Colors.card, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: Colors.border, gap: 0 },
-  sectionHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, paddingHorizontal: 2 },
+  section: { gap: 12 },
+  sectionTitle: { ...Typography.caption, fontWeight: "600", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 1.5 },
+  sectionContent: { backgroundColor: Colors.card, borderRadius: Radius.lg, overflow: "hidden", borderWidth: 1, borderColor: Colors.border, gap: 0 },
+  sectionHint: { ...Typography.caption, color: Colors.textTertiary, paddingHorizontal: 2 },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
+    padding: 16,
     gap: 12,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
   toggleInfo: { flex: 1 },
-  toggleLabel: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
-  toggleSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  toggle: { width: 48, height: 28, borderRadius: 14, backgroundColor: Colors.border, justifyContent: "center", paddingHorizontal: 2 },
+  toggleLabel: { ...Typography.subheadline, fontWeight: "500", color: Colors.text },
+  toggleSub: { ...Typography.caption, color: Colors.textSecondary },
+  toggle: { width: 48, height: 28, borderRadius: Radius.lg, backgroundColor: Colors.border, justifyContent: "center", paddingHorizontal: 2 },
   toggleOn: {},
-  toggleThumb: { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.text, alignSelf: "flex-start" },
+  toggleThumb: { width: 24, height: 24, borderRadius: Radius.pill, backgroundColor: Colors.text, alignSelf: "flex-start" },
   toggleThumbOn: { alignSelf: "flex-end" },
   advanceRow: { flexDirection: "row", gap: 8, padding: 12 },
-  advanceOption: { flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 10, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  advanceOption: { flex: 1, alignItems: "center", paddingVertical: 12, borderRadius: Radius.md, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
   advanceOptionActive: { backgroundColor: Colors.accentLight, borderColor: Colors.accent },
-  advanceOptionText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  advanceOptionTextActive: { color: Colors.accent, fontFamily: "Inter_600SemiBold" },
+  advanceOptionText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
+  advanceOptionTextActive: { fontWeight: "600", color: Colors.accent },
   quietRow: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12 },
   quietField: { flex: 1, gap: 4 },
-  quietLabel: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  quietLabel: { ...Typography.caption, fontWeight: "500", color: Colors.textSecondary },
   quietInput: {
+    ...Typography.subheadline,
     backgroundColor: Colors.surface,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
+    paddingVertical: 12,
     color: Colors.text,
     textAlign: "center",
   },
-  quietHint: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, paddingHorizontal: 14, paddingBottom: 10 },
-  budgetRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 },
+  quietHint: { ...Typography.caption, color: Colors.textTertiary, paddingHorizontal: 16, paddingBottom: 12 },
+  budgetRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12 },
   budgetInputWrapper: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.surface,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 12,
   },
-  budgetCurrency: { fontSize: 16, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  budgetInput: { flex: 1, paddingVertical: 10, fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text, paddingLeft: 4 },
-  budgetHint: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, paddingHorizontal: 14, paddingBottom: 10 },
+  budgetCurrency: { ...Typography.subheadline, fontWeight: "500", color: Colors.textSecondary },
+  budgetInput: { ...Typography.subheadline, flex: 1, paddingVertical: 12, color: Colors.text, paddingLeft: 4 },
+  budgetHint: { ...Typography.caption, color: Colors.textTertiary, paddingHorizontal: 16, paddingBottom: 12 },
 });

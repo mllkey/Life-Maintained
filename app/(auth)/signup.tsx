@@ -13,8 +13,10 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 
@@ -90,7 +92,7 @@ export default function SignUpScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={22} color={Colors.text} />
+            <Icon name="arrow-back" size={22} color={Colors.text} />
           </Pressable>
 
           <View style={styles.header}>
@@ -100,14 +102,14 @@ export default function SignUpScreen() {
               resizeMode="contain"
             />
             <Text style={styles.appName}>LifeMaintained</Text>
-            <Text style={styles.tagline}>The app that remembers so you don't have to.</Text>
+            <Text style={styles.tagline}>The app that remembers so you don&apos;t have to.</Text>
           </View>
 
           <View style={styles.form}>
             <Text style={styles.formTitle}>Create account</Text>
             {error && (
               <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
+                <Icon name="alert-circle" size={16} color={Colors.overdue} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
@@ -115,7 +117,7 @@ export default function SignUpScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <Icon name="mail-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={email}
@@ -134,7 +136,7 @@ export default function SignUpScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <Icon name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   value={password}
@@ -146,7 +148,7 @@ export default function SignUpScreen() {
                   returnKeyType="next"
                 />
                 <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                  <Ionicons
+                  <Icon
                     name={showPassword ? "eye-off-outline" : "eye-outline"}
                     size={18}
                     color={Colors.textTertiary}
@@ -158,7 +160,7 @@ export default function SignUpScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Confirm Password</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
+                <Icon name="lock-closed-outline" size={18} color={Colors.textTertiary} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   value={confirmPassword}
@@ -171,7 +173,7 @@ export default function SignUpScreen() {
                   onSubmitEditing={handleSignUp}
                 />
                 <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeButton}>
-                  <Ionicons
+                  <Icon
                     name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
                     size={18}
                     color={Colors.textTertiary}
@@ -219,48 +221,48 @@ export default function SignUpScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scroll: { paddingHorizontal: 20, gap: 28 },
+  scroll: { paddingHorizontal: 20, gap: 32 },
   backButton: { width: 40, height: 40, justifyContent: "center" },
   header: { alignItems: "center", gap: 8 },
-  appName: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5, textAlign: "center" },
-  tagline: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
-  formTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text },
+  appName: { ...Typography.largeTitle, color: Colors.text, textAlign: "center" },
+  tagline: { ...Typography.footnote, color: Colors.textSecondary, textAlign: "center" },
+  formTitle: { ...Typography.title2, color: Colors.text },
   form: { gap: 16 },
   errorBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     backgroundColor: Colors.overdueMuted,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.overdue + "30",
   },
-  errorText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.overdue },
-  inputGroup: { gap: 6 },
-  label: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  errorText: { ...Typography.footnote, flex: 1, color: Colors.overdue },
+  inputGroup: { gap: 8 },
+  label: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 20,
     height: 52,
   },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
+  inputIcon: { marginRight: 12 },
+  input: { ...Typography.subheadline, flex: 1, color: Colors.text },
   eyeButton: { padding: 4 },
   primaryButton: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 48,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,
   },
-  primaryButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  primaryButtonText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
   legalRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -269,18 +271,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   legalText: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
-    lineHeight: 18,
   },
   legalLink: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    ...Typography.caption,
+    fontWeight: "500",
     color: Colors.accent,
-    lineHeight: 18,
   },
-  loginRow: { flexDirection: "row", justifyContent: "center", gap: 6 },
-  loginText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  loginLink: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.accent },
+  loginRow: { flexDirection: "row", justifyContent: "center", gap: 8 },
+  loginText: { ...Typography.footnote, color: Colors.textSecondary },
+  loginLink: { ...Typography.footnote, fontWeight: "600", color: Colors.accent },
 });

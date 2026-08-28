@@ -2,8 +2,10 @@ import React, { useEffect, useState } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon, type IconName } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import * as Haptics from "expo-haptics";
 import { primeHaptics } from "@/lib/haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -25,7 +27,7 @@ type VerticalId = "vehicle" | "home" | "health";
 
 type VerticalOption = {
   id: VerticalId;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: IconName;
   title: string;
   badge: string | null;
   subtitle: string;
@@ -215,7 +217,7 @@ export default function OnboardingStartScreen() {
           onPress={() => handleSelect("vehicle")}
           style={[styles.orb, styles.vehicleOrb, selected === "vehicle" && { borderColor: VERTICALS[0].color, shadowColor: VERTICALS[0].color, shadowOpacity: 0.35 }, vehicleOrbStyle]}
         >
-          <Ionicons name="car-sport-outline" size={30} color={Colors.accent} />
+          <Icon name="car-sport-outline" size={30} color={Colors.accent} />
           <Text style={styles.orbText}>Vehicle</Text>
         </AnimatedPressable>
 
@@ -225,7 +227,7 @@ export default function OnboardingStartScreen() {
           onPress={() => handleSelect("home")}
           style={[styles.orb, styles.homeOrb, selected === "home" && { borderColor: VERTICALS[1].color, shadowColor: VERTICALS[1].color, shadowOpacity: 0.35 }, homeOrbStyle]}
         >
-          <Ionicons name="home-outline" size={30} color={Colors.home} />
+          <Icon name="home-outline" size={30} color={Colors.home} />
           <Text style={styles.orbText}>Home</Text>
         </AnimatedPressable>
 
@@ -235,7 +237,7 @@ export default function OnboardingStartScreen() {
           onPress={() => handleSelect("health")}
           style={[styles.orb, styles.healthOrb, selected === "health" && { borderColor: VERTICALS[2].color, shadowColor: VERTICALS[2].color, shadowOpacity: 0.35 }, healthOrbStyle]}
         >
-          <Ionicons name="heart-outline" size={30} color={Colors.health} />
+          <Icon name="heart-outline" size={30} color={Colors.health} />
           <Text style={styles.orbText}>Health</Text>
         </AnimatedPressable>
       </View>
@@ -243,7 +245,7 @@ export default function OnboardingStartScreen() {
       <Animated.View style={[styles.focusCard, ctaStyle]}>
         <View style={styles.focusHeader}>
           <View style={[styles.focusIcon, { backgroundColor: `${selectedOption.color}20` }]}>
-            <Ionicons name={selectedOption.icon} size={22} color={selectedOption.color} />
+            <Icon name={selectedOption.icon} size={22} color={selectedOption.color} />
           </View>
           <View style={styles.focusTextWrap}>
             <View style={styles.focusTitleRow}>
@@ -285,42 +287,38 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
     paddingHorizontal: 20,
-    gap: 22,
+    gap: 24,
   },
   progressBar: {
     height: 3,
-    borderRadius: 2,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.border,
     overflow: "hidden",
   },
   progressFill: {
     height: 3,
-    borderRadius: 2,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.accent,
   },
   header: {
-    gap: 10,
-    paddingTop: 6,
+    gap: 12,
+    paddingTop: 8,
   },
   kicker: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.footnote,
+    fontWeight: "600",
     color: Colors.accent,
     letterSpacing: 0.4,
     textTransform: "uppercase",
   },
   title: {
-    fontSize: 30,
-    fontFamily: "Inter_700Bold",
+    ...Typography.largeTitle,
     color: Colors.text,
-    lineHeight: 36,
-    letterSpacing: -0.4,
   },
   thesis: {
-    fontSize: 16,
-    fontFamily: "Inter_500Medium",
+    ...Typography.subheadline,
+    fontWeight: "500",
     color: Colors.textSecondary,
-    lineHeight: 23,
   },
   orbitStage: {
     flex: 1,
@@ -332,7 +330,7 @@ const styles = StyleSheet.create({
   orbitHalo: {
     width: 196,
     height: 196,
-    borderRadius: 98,
+    borderRadius: Radius.pill,
     borderWidth: 1,
     borderColor: Colors.border,
     opacity: 0.6,
@@ -341,18 +339,18 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 116,
     height: 116,
-    borderRadius: 28,
+    borderRadius: Radius.xl,
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
+    // No drop shadow. shadowRadius/Offset stay so the selected-vertical tinted
+    // glow (shadowColor + shadowOpacity set inline) still has geometry to draw.
+    shadowOpacity: 0,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 12 },
-    elevation: 6,
   },
   vehicleOrb: {
     left: "50%",
@@ -373,13 +371,13 @@ const styles = StyleSheet.create({
     marginTop: -58,
   },
   orbText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.footnote,
+    fontWeight: "600",
     color: Colors.text,
   },
   focusCard: {
     backgroundColor: Colors.card,
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     padding: 16,
     gap: 12,
     borderWidth: 1,
@@ -393,7 +391,7 @@ const styles = StyleSheet.create({
   focusIcon: {
     width: 46,
     height: 46,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -407,43 +405,39 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   focusTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
+    ...Typography.headline,
+    fontWeight: "700",
     color: Colors.text,
   },
   focusSubtitle: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
   },
   focusCopy: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textTertiary,
-    lineHeight: 20,
   },
   badge: {
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 7,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
   },
   badgeText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
   },
   actions: {
     gap: 12,
   },
   cta: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 52,
     alignItems: "center",
     justifyContent: "center",
   },
   ctaText: {
-    fontSize: 17,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.headline,
     color: Colors.textInverse,
   },
   skip: {
@@ -451,15 +445,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   skipText: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textTertiary,
   },
   inlineError: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.overdue,
-    lineHeight: 19,
     textAlign: "center",
   },
 });

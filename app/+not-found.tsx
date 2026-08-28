@@ -2,16 +2,18 @@ import { Stack } from "expo-router";
 import { StyleSheet, Text, View, Pressable } from "react-native";
 import { router } from "expo-router";
 import { Colors } from "@/constants/colors";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 
 export default function NotFoundScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.container}>
-        <Ionicons name="alert-circle-outline" size={48} color={Colors.textTertiary} />
+        <Icon name="alert-circle-outline" size={48} color={Colors.textTertiary} />
         <Text style={styles.title}>Page not found</Text>
-        <Text style={styles.body}>This screen doesn't exist or the link is broken.</Text>
+        <Text style={styles.body}>This screen doesn&apos;t exist or the link is broken.</Text>
         <Pressable
           style={({ pressed }) => [styles.button, { opacity: pressed ? 0.85 : 1 }]}
           onPress={() => router.replace("/")}
@@ -33,20 +35,19 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
+    ...Typography.title3,
+    fontWeight: "700",
     color: Colors.text,
     marginTop: 8,
   },
   body: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
     textAlign: "center",
   },
   button: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 48,
     paddingHorizontal: 32,
     alignItems: "center",
@@ -54,8 +55,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.subheadline,
+    fontWeight: "600",
     color: Colors.textInverse,
   },
 });

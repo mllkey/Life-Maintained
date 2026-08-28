@@ -2,8 +2,9 @@ import React from "react";
 import { View, Text, ScrollView, StyleSheet, Pressable } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
 import { TERMS_OF_SERVICE_EFFECTIVE_DATE } from "@/lib/legalDates";
 
 const SECTIONS = [
@@ -80,11 +81,11 @@ export default function TermsOfServiceScreen() {
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Pressable onPress={() => router.back()} style={styles.closeBtn}>
-          <Ionicons name="close" size={22} color={Colors.text} />
+          <Icon name="close" size={22} color={Colors.text} />
         </Pressable>
         <View style={{ flex: 1, alignItems: "center" }}>
           <Text style={styles.headerTitle}>Terms of Service</Text>
-          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginBottom: 16 }}>
+          <Text style={{ ...Typography.caption, color: Colors.textTertiary, marginBottom: 16 }}>
             {`Effective Date: ${TERMS_OF_SERVICE_EFFECTIVE_DATE}`}
           </Text>
         </View>
@@ -121,10 +122,10 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  headerTitle: { ...Typography.headline, color: Colors.text },
   scroll: { paddingHorizontal: 20, paddingTop: 20, gap: 20 },
-  intro: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 24 },
+  intro: { ...Typography.subheadline, color: Colors.textSecondary },
   section: { gap: 8 },
-  sectionTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  sectionBody: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
+  sectionTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  sectionBody: { ...Typography.footnote, color: Colors.textSecondary },
 });
