@@ -17,8 +17,10 @@ import {
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon, MciIcon, type MciName } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { capture } from "@/lib/analytics";
@@ -535,12 +537,12 @@ function CopyFromVehicleModal({
                 disabled={!!copying}
               >
                 <View style={copyStyles.vehicleIcon}>
-                  <Ionicons name="car-outline" size={20} color={Colors.accent} />
+                  <Icon name="car-outline" size={20} color={Colors.accent} />
                 </View>
                 <Text style={copyStyles.vehicleLabel} numberOfLines={1}>{label}</Text>
                 {isCopying
                   ? <ActivityIndicator size="small" color={Colors.accent} />
-                  : <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
+                  : <Icon name="chevron-forward" size={16} color={Colors.textSecondary} />
                 }
               </Pressable>
             );
@@ -568,27 +570,27 @@ const copyStyles = StyleSheet.create({
     paddingTop: 12, paddingHorizontal: 20,
   },
   handle: {
-    width: 40, height: 4, borderRadius: 2,
+    width: 40, height: 4, borderRadius: Radius.sm,
     backgroundColor: Colors.border,
     alignSelf: "center", marginBottom: 16,
   },
-  title: { fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.text, marginBottom: 6 },
-  subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginBottom: 20 },
+  title: { ...Typography.headline, fontWeight: "700", color: Colors.text, marginBottom: 8 },
+  subtitle: { ...Typography.footnote, color: Colors.textSecondary, marginBottom: 20 },
   vehicleRow: {
-    flexDirection: "row", alignItems: "center", gap: 14,
-    paddingVertical: 14,
+    flexDirection: "row", alignItems: "center", gap: 16,
+    paddingVertical: 16,
     borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
   },
   vehicleIcon: {
-    width: 38, height: 38, borderRadius: 10,
+    width: 38, height: 38, borderRadius: Radius.md,
     backgroundColor: Colors.accentLight,
     alignItems: "center", justifyContent: "center",
   },
-  vehicleLabel: { flex: 1, fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
+  vehicleLabel: { ...Typography.subheadline, fontWeight: "500", flex: 1, color: Colors.text },
   skipBtn: {
-    marginTop: 16, paddingVertical: 14, alignItems: "center",
+    marginTop: 16, paddingVertical: 16, alignItems: "center",
   },
-  skipText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  skipText: { ...Typography.subheadline, fontWeight: "500", color: Colors.textSecondary },
 });
 
 export default function AddVehicleScreen() {
@@ -1268,15 +1270,15 @@ export default function AddVehicleScreen() {
             <View style={{ width: 44 }} />
           ) : (
             <Pressable onPress={() => router.back()} style={styles.closeBtn} hitSlop={8}>
-              <Ionicons name="close" size={22} color={Colors.text} />
+              <Icon name="close" size={22} color={Colors.text} />
             </Pressable>
           )}
           <Text style={styles.title}>{isOnboarding ? "Tell us about your vehicle" : "Add Vehicle"}</Text>
           <View style={{ width: 44 }} />
         </View>
         {isOnboarding && (
-          <View style={{ height: 3, borderRadius: 2, backgroundColor: Colors.border, overflow: "hidden", marginHorizontal: 20, marginBottom: 4 }}>
-            <View style={{ height: 3, borderRadius: 2, backgroundColor: Colors.accent, width: "50%" }} />
+          <View style={{ height: 3, borderRadius: Radius.sm, backgroundColor: Colors.border, overflow: "hidden", marginHorizontal: 20, marginBottom: 4 }}>
+            <View style={{ height: 3, borderRadius: Radius.sm, backgroundColor: Colors.accent, width: "50%" }} />
           </View>
         )}
 
@@ -1329,13 +1331,13 @@ export default function AddVehicleScreen() {
 
                   {vinError && (
                     <View style={styles.alertBox}>
-                      <Ionicons name="alert-circle-outline" size={14} color={Colors.overdue} />
+                      <Icon name="alert-circle-outline" size={14} color={Colors.overdue} />
                       <Text style={styles.alertText}>{vinError}</Text>
                     </View>
                   )}
                   {vinSuccess && (
                     <View style={styles.successBox}>
-                      <Ionicons name="checkmark-circle" size={14} color={Colors.good} />
+                      <Icon name="checkmark-circle" size={14} color={Colors.good} />
                       <Text style={styles.successText}>{vinSuccess}</Text>
                     </View>
                   )}
@@ -1354,14 +1356,14 @@ export default function AddVehicleScreen() {
                   style={{ height: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginTop: 8, marginBottom: 8 }}
                 >
                   <View>
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 15, color: "#8E93A1" }}>Vehicle type</Text>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 17, color: Colors.text, marginTop: 2 }}>
+                    <Text style={{ ...Typography.subheadline, color: Colors.textSecondary }}>Vehicle type</Text>
+                    <Text style={{ ...Typography.headline, color: Colors.text, marginTop: 2 }}>
                       {({ car: "Car", motorcycle: "Motorcycle", rv: "RV", atv: "ATV", utv: "UTV", snowmobile: "Snowmobile", boat: "Boat", dump_truck: "Dump Truck", semi_truck: "Semi Truck" } as Record<string, string>)[vehicleType] ?? "Car"}
                     </Text>
                   </View>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 15, color: "#E8943A" }}>Change</Text>
-                    <Ionicons name="chevron-forward" size={18} color="#E8943A" />
+                    <Text style={{ ...Typography.subheadline, fontWeight: "600", color: Colors.accent }}>Change</Text>
+                    <Icon name="chevron-forward" size={18} color={Colors.accent} />
                   </View>
                 </Pressable>
 
@@ -1437,7 +1439,7 @@ export default function AddVehicleScreen() {
                       keyboardType="numeric"
                       returnKeyType="done"
                     />
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 4 }}>
+                    <Text style={{ ...Typography.caption, color: Colors.textTertiary, marginTop: 4 }}>
                       Enter your current odometer reading.
                     </Text>
                   </View>
@@ -1460,7 +1462,7 @@ export default function AddVehicleScreen() {
                         const n = parseInt(avgMilesPerMonth, 10);
                         const invalid = !Number.isInteger(n) || n < 1 || n > 10000;
                         return invalid ? (
-                          <Text accessibilityLiveRegion="polite" style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#FF6B6B", marginTop: 4 }}>
+                          <Text accessibilityLiveRegion="polite" style={{ ...Typography.footnote, color: Colors.overdue, marginTop: 4 }}>
                             Must be 1–10000
                           </Text>
                         ) : null;
@@ -1484,7 +1486,7 @@ export default function AddVehicleScreen() {
                         keyboardType="decimal-pad"
                         returnKeyType="done"
                       />
-                      <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 4 }}>
+                      <Text style={{ ...Typography.caption, color: Colors.textTertiary, marginTop: 4 }}>
                         Use the hour-meter reading for this asset. You can update it later.
                       </Text>
                     </View>
@@ -1504,7 +1506,7 @@ export default function AddVehicleScreen() {
                         const n = parseInt(avgMilesPerMonth, 10);
                         const invalid = !Number.isInteger(n) || n < 1 || n > 10000;
                         return invalid ? (
-                          <Text accessibilityLiveRegion="polite" style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#FF6B6B", marginTop: 4 }}>
+                          <Text accessibilityLiveRegion="polite" style={{ ...Typography.footnote, color: Colors.overdue, marginTop: 4 }}>
                             Must be 1–10000
                           </Text>
                         ) : null;
@@ -1534,8 +1536,8 @@ export default function AddVehicleScreen() {
                             onboardingSheetStyle,
                           ]}
                         >
-                          <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: "#2A3042", marginBottom: 10 }} />
-                          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 17, color: Colors.text, textAlign: "center", marginBottom: 8 }}>
+                          <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: Radius.sm, backgroundColor: Colors.border, marginBottom: 12 }} />
+                          <Text style={{ ...Typography.headline, color: Colors.text, textAlign: "center", marginBottom: 8 }}>
                             Vehicle type
                           </Text>
                           {([
@@ -1573,13 +1575,13 @@ export default function AddVehicleScreen() {
                                   setOnboardingTypeSheetVisible(false);
                                   Haptics.selectionAsync().catch(() => {});
                                 }}
-                                style={({ pressed }) => [{ height: 56, flexDirection: "row", alignItems: "center", paddingHorizontal: 20, gap: 14, backgroundColor: pressed ? "#141A26" : "transparent" }]}
+                                style={({ pressed }) => [{ height: 56, flexDirection: "row", alignItems: "center", paddingHorizontal: 20, gap: 16, backgroundColor: pressed ? Colors.surface : "transparent" }]}
                               >
-                                <Ionicons name={t.icon} size={24} color={isSelected ? "#E8943A" : Colors.textSecondary} />
-                                <Text style={{ flex: 1, fontFamily: isSelected ? "Inter_600SemiBold" : "Inter_400Regular", fontSize: 17, color: isSelected ? "#E8943A" : Colors.text }}>
+                                <MciIcon name={t.icon as MciName} size={24} color={isSelected ? Colors.accent : Colors.textSecondary} />
+                                <Text style={{ ...Typography.body, flex: 1, fontWeight: isSelected ? "600" : "400", color: isSelected ? Colors.accent : Colors.text }}>
                                   {t.label}
                                 </Text>
-                                {isSelected && <Ionicons name="checkmark" size={20} color="#E8943A" />}
+                                {isSelected && <Icon name="checkmark" size={20} color={Colors.accent} />}
                               </Pressable>
                             );
                           })}
@@ -1630,13 +1632,13 @@ export default function AddVehicleScreen() {
 
             {vinError && (
               <View style={styles.alertBox}>
-                <Ionicons name="alert-circle-outline" size={14} color={Colors.overdue} />
+                <Icon name="alert-circle-outline" size={14} color={Colors.overdue} />
                 <Text style={styles.alertText}>{vinError}</Text>
               </View>
             )}
             {vinSuccess && (
               <View style={styles.successBox}>
-                <Ionicons name="checkmark-circle" size={14} color={Colors.good} />
+                <Icon name="checkmark-circle" size={14} color={Colors.good} />
                 <Text style={styles.successText}>{vinSuccess}</Text>
               </View>
             )}
@@ -1662,8 +1664,8 @@ export default function AddVehicleScreen() {
                       Haptics.selectionAsync();
                     }}
                   >
-                    <MaterialCommunityIcons name={t.icon as any} size={22} color={isSelected ? Colors.accent : Colors.textSecondary} />
-                    <Text style={[styles.typeCardLabel, isSelected && styles.typeCardLabelSelected, { fontSize: 11 }]}>
+                    <MciIcon name={t.icon as any} size={22} color={isSelected ? Colors.accent : Colors.textSecondary} />
+                    <Text style={[styles.typeCardLabel, isSelected && styles.typeCardLabelSelected, { ...Typography.caption }]}>
                       {t.label}
                     </Text>
                   </Pressable>
@@ -1677,8 +1679,8 @@ export default function AddVehicleScreen() {
                     style={[styles.typeCard, isMoreSelected && styles.typeCardSelected, { width: "auto", minWidth: 80, paddingHorizontal: 12 }]}
                     onPress={() => { setMoreTypeSheetVisible(true); Haptics.selectionAsync(); }}
                   >
-                    <MaterialCommunityIcons name="dots-horizontal" size={22} color={isMoreSelected ? Colors.accent : Colors.textSecondary} />
-                    <Text style={[styles.typeCardLabel, isMoreSelected && styles.typeCardLabelSelected, { fontSize: 11 }]}>
+                    <MciIcon name="dots-horizontal" size={22} color={isMoreSelected ? Colors.accent : Colors.textSecondary} />
+                    <Text style={[styles.typeCardLabel, isMoreSelected && styles.typeCardLabelSelected, { ...Typography.caption }]}>
                       More
                     </Text>
                   </Pressable>
@@ -1924,7 +1926,7 @@ export default function AddVehicleScreen() {
                 ) : (
                   <>
                     <View style={styles.scheduleBadge}>
-                      <Ionicons name="checkmark-circle" size={14} color={Colors.good} />
+                      <Icon name="checkmark-circle" size={14} color={Colors.good} />
                       <Text style={styles.scheduleBadgeText}>Manufacturer schedule available</Text>
                     </View>
                     <Text style={styles.scheduleTaskCount}>
@@ -1956,7 +1958,7 @@ export default function AddVehicleScreen() {
                   placeholder="Type your model name"
                   placeholderTextColor={Colors.textTertiary}
                 />
-                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.dueSoon, marginTop: 4 }}>
+                <Text style={{ ...Typography.caption, color: Colors.dueSoon, marginTop: 4 }}>
                   Model list unavailable — type your model manually
                 </Text>
               </View>
@@ -2058,7 +2060,7 @@ export default function AddVehicleScreen() {
                   keyboardType="numeric"
                   returnKeyType="next"
                 />
-                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 4 }}>
+                <Text style={{ ...Typography.caption, color: Colors.textTertiary, marginTop: 4 }}>
                   Enter your current odometer reading. You can update this later, but it cannot be lowered.
                 </Text>
               </View>
@@ -2091,7 +2093,7 @@ export default function AddVehicleScreen() {
                   keyboardType="decimal-pad"
                   returnKeyType="done"
                 />
-                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#5A6480", marginTop: 4 }}>
+                <Text style={{ ...Typography.caption, color: Colors.textTertiary, marginTop: 4 }}>
                   Hour-meter reading for this equipment. You can update later; it cannot be lowered.
                 </Text>
               </View>
@@ -2185,16 +2187,16 @@ export default function AddVehicleScreen() {
             )}
 
             {error && (
-              <View style={{ backgroundColor: "rgba(255,69,58,0.15)", borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
-                <Ionicons name="alert-circle" size={18} color="#FF453A" />
-                <Text style={{ flex: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: "#FF453A", lineHeight: 20 }}>{error}</Text>
+              <View style={{ backgroundColor: "rgba(255,69,58,0.15)", borderRadius: Radius.md, padding: 16, flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+                <Icon name="alert-circle" size={18} color={Colors.overdue} />
+                <Text style={{ ...Typography.footnote, fontWeight: "500", flex: 1, color: Colors.overdue }}>{error}</Text>
               </View>
             )}
 
       <Pressable
         style={({ pressed }) => [{
-          backgroundColor: "#E8943A",
-          borderRadius: 14,
+          backgroundColor: Colors.accent,
+          borderRadius: Radius.lg,
           height: 52,
           alignItems: "center",
           justifyContent: "center",
@@ -2206,7 +2208,7 @@ export default function AddVehicleScreen() {
       >
         {isLoading
           ? <ActivityIndicator size="small" color={Colors.textInverse} />
-          : <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.textInverse }}>Add Vehicle</Text>}
+          : <Text style={{ ...Typography.subheadline, fontWeight: "700", color: Colors.textInverse }}>Add Vehicle</Text>}
       </Pressable>
         </ScrollView>
       </View>
@@ -2266,7 +2268,7 @@ export default function AddVehicleScreen() {
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
               {VEHICLE_TYPE_GROUPS.slice(1).map((group, gi) => (
                 <View key={group.label}>
-                  <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, paddingHorizontal: 20, paddingTop: gi === 0 ? 14 : 8, paddingBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  <Text style={{ ...Typography.caption, fontWeight: "600", color: Colors.textTertiary, paddingHorizontal: 20, paddingTop: gi === 0 ? 14 : 8, paddingBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>
                     {group.label}
                   </Text>
                   {group.types.map(t => {
@@ -2274,7 +2276,7 @@ export default function AddVehicleScreen() {
                     return (
                       <Pressable
                         key={t.value}
-                        style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 13, gap: 14, backgroundColor: pressed ? Colors.surface : "transparent" }]}
+                        style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 12, gap: 16, backgroundColor: pressed ? Colors.surface : "transparent" }]}
                         onPress={() => {
                           if (t.value === "trailer") {
                             setVehicleType((trailerSubtype === "dump_scissor" || trailerSubtype === "dump_hydraulic") ? "dump_trailer" : "trailer");
@@ -2287,11 +2289,11 @@ export default function AddVehicleScreen() {
                           Haptics.selectionAsync();
                         }}
                       >
-                        <MaterialCommunityIcons name={t.icon as any} size={22} color={isSelected ? Colors.accent : Colors.textSecondary} />
-                        <Text style={{ flex: 1, fontSize: 15, fontFamily: isSelected ? "Inter_600SemiBold" : "Inter_400Regular", color: isSelected ? Colors.accent : Colors.text }}>
+                        <MciIcon name={t.icon as any} size={22} color={isSelected ? Colors.accent : Colors.textSecondary} />
+                        <Text style={{ ...Typography.subheadline, flex: 1, fontWeight: isSelected ? "600" : "400", color: isSelected ? Colors.accent : Colors.text }}>
                           {t.label}
                         </Text>
-                        {isSelected && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+                        {isSelected && <Icon name="checkmark" size={18} color={Colors.accent} />}
                       </Pressable>
                     );
                   })}
@@ -2382,7 +2384,7 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
               <Pressable onPress={handleDone} hitSlop={8}>
-                <Text style={[styles.modalCancelText, { color: Colors.accent, fontFamily: "Inter_600SemiBold" }]}>Done</Text>
+                <Text style={[styles.modalCancelText, { fontWeight: "600", color: Colors.accent }]}>Done</Text>
               </Pressable>
             </View>
           </View>
@@ -2426,7 +2428,7 @@ function YearPickerModal({ visible, selectedYear, onSelect, onClose, insets }: {
                   <Text style={[styles.listRowText, (isSelected || isHighlighted) && styles.listRowTextSelected]}>
                     {yr}
                   </Text>
-                  {(isSelected || isHighlighted) && <Ionicons name="checkmark" size={18} color={Colors.vehicle} />}
+                  {(isSelected || isHighlighted) && <Icon name="checkmark" size={18} color={Colors.vehicle} />}
                 </Pressable>
               );
             }}
@@ -2452,7 +2454,7 @@ function MakeRow({ mk, onSelect }: { mk: string; onSelect: (m: string) => void }
       onPress={() => onSelect(mk)}
     >
       <Text style={styles.listRowText}>{mk}</Text>
-      <Ionicons name="chevron-forward" size={14} color={Colors.textTertiary} />
+      <Icon name="chevron-forward" size={14} color={Colors.textTertiary} />
     </Pressable>
   );
 }
@@ -2481,8 +2483,8 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
       onPress={() => onSelect(search.trim())}
     >
       <View style={styles.listRowCustomContent}>
-        <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
-        <Text style={styles.listRowCustomText}>Use "{search.trim()}"</Text>
+        <Icon name="add-circle-outline" size={18} color={Colors.accent} />
+        <Text style={styles.listRowCustomText}>Use &quot;{search.trim()}&quot;</Text>
       </View>
       <Text style={styles.listRowCustomSub}>Custom make</Text>
     </Pressable>
@@ -2495,8 +2497,8 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
   );
 
   const oldVehicleBanner = showOldVehicleBanner ? (
-    <View style={{ backgroundColor: Colors.card, borderRadius: 10, padding: 12, marginHorizontal: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
-      <Ionicons name="information-circle-outline" size={16} color={Colors.textTertiary} />
+    <View style={{ backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12, marginHorizontal: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <Icon name="information-circle-outline" size={16} color={Colors.textTertiary} />
       <Text style={[styles.modelHint, { fontStyle: "normal", textAlign: "left", paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0, flex: 1 }]}>
         Some makes may not have model data for older vehicles. You can always type a custom make.
       </Text>
@@ -2516,7 +2518,7 @@ function MakePickerModal({ visible, search, onSearchChange, filteredMakes, showC
             </Pressable>
           </View>
           <View style={styles.searchWrap}>
-            <Ionicons name="search-outline" size={16} color={Colors.textTertiary} />
+            <Icon name="search-outline" size={16} color={Colors.textTertiary} />
             <TextInput
               style={styles.searchInput}
               value={search}
@@ -2598,7 +2600,7 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
             </Pressable>
           </View>
           <View style={styles.searchWrap}>
-            <Ionicons name="search-outline" size={16} color={Colors.textTertiary} />
+            <Icon name="search-outline" size={16} color={Colors.textTertiary} />
             <TextInput
               style={styles.searchInput}
               value={search}
@@ -2613,7 +2615,7 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
 
           {isMotorcycle && yearAndMakeSet ? (
             <View style={styles.motoVariantTip}>
-              <Ionicons name="bulb-outline" size={14} color={Colors.accent} />
+              <Icon name="bulb-outline" size={14} color={Colors.accent} />
               <Text style={styles.motoVariantTipText}>
                 Type your exact variant — e.g. Panigale V4, not just Panigale — for the most accurate plan.
               </Text>
@@ -2627,7 +2629,7 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
             </View>
           ) : !yearAndMakeSet ? (
             <View style={styles.listEmpty}>
-              <Ionicons name="information-circle-outline" size={28} color={Colors.textTertiary} />
+              <Icon name="information-circle-outline" size={28} color={Colors.textTertiary} />
               <Text style={[styles.listEmptyText, { marginTop: 8 }]}>
                 Select a year and make first to see available models
               </Text>
@@ -2637,8 +2639,8 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
                   onPress={() => onSelect(search.trim())}
                 >
                   <View style={styles.listRowCustomContent}>
-                    <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
-                    <Text style={styles.listRowCustomText}>Use "{search.trim()}"</Text>
+                    <Icon name="add-circle-outline" size={18} color={Colors.accent} />
+                    <Text style={styles.listRowCustomText}>Use &quot;{search.trim()}&quot;</Text>
                   </View>
                 </Pressable>
               )}
@@ -2655,7 +2657,7 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
               ListHeaderComponent={
                 filteredModels.length > 0 ? (
                   <Text style={styles.modelHint}>
-                    Don't see your model? Type it in the search bar above.
+                    Don&apos;t see your model? Type it in the search bar above.
                   </Text>
                 ) : null
               }
@@ -2670,7 +2672,7 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
                   onPress={() => onSelect(mdl)}
                 >
                   <Text style={styles.listRowText}>{mdl}</Text>
-                  <Ionicons name="chevron-forward" size={14} color={Colors.textTertiary} />
+                  <Icon name="chevron-forward" size={14} color={Colors.textTertiary} />
                 </Pressable>
               )}
               ListFooterComponent={showCustomModel ? (
@@ -2679,8 +2681,8 @@ function ModelPickerModal({ visible, search, onSearchChange, filteredModels, sho
                   onPress={() => onSelect(search.trim())}
                 >
                   <View style={styles.listRowCustomContent}>
-                    <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
-                    <Text style={styles.listRowCustomText}>Use "{search.trim()}"</Text>
+                    <Icon name="add-circle-outline" size={18} color={Colors.accent} />
+                    <Text style={styles.listRowCustomText}>Use &quot;{search.trim()}&quot;</Text>
                   </View>
                   <Text style={styles.listRowCustomSub}>Custom model</Text>
                 </Pressable>
@@ -2729,7 +2731,7 @@ function PickerField({ label, value, placeholder, onPress }: {
         <Text style={[styles.pickerBtnText, !value && styles.pickerBtnPlaceholder]} numberOfLines={1}>
           {value || placeholder}
         </Text>
-        <Ionicons name="chevron-down" size={16} color={Colors.textTertiary} />
+        <Icon name="chevron-down" size={16} color={Colors.textTertiary} />
       </Pressable>
     </View>
   );
@@ -2763,7 +2765,7 @@ function ModelPickerField({ label, value, isLoadingModels, hasModels, yearAndMak
         </Text>
         {isLoadingModels && yearAndMakeSet
           ? <ActivityIndicator size="small" color={Colors.textTertiary} />
-          : <Ionicons name="chevron-down" size={16} color={Colors.textTertiary} />}
+          : <Icon name="chevron-down" size={16} color={Colors.textTertiary} />}
       </Pressable>
     </View>
   );
@@ -2783,18 +2785,18 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   closeBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  title: { ...Typography.headline, color: Colors.text },
   saveBtn: {
     backgroundColor: Colors.accent,
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
+    borderRadius: Radius.lg,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
     minWidth: 64,
     alignItems: "center",
     minHeight: 44,
     justifyContent: "center",
   },
-  saveBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  saveBtnText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
 
   scroll: { paddingHorizontal: 20, paddingTop: 24, gap: 20 },
 
@@ -2803,38 +2805,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     backgroundColor: Colors.overdueMuted,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     padding: 12,
   },
-  alertText: { flex: 1, fontSize: 13, color: Colors.overdue, fontFamily: "Inter_400Regular" },
+  alertText: { ...Typography.footnote, flex: 1, color: Colors.overdue },
   successBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     backgroundColor: Colors.goodMuted,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     padding: 12,
   },
-  successText: { flex: 1, fontSize: 13, color: Colors.good, fontFamily: "Inter_500Medium" },
+  successText: { ...Typography.footnote, fontWeight: "500", flex: 1, color: Colors.good },
 
-  vinRow: { flexDirection: "row", gap: 10, alignItems: "center" },
+  vinRow: { flexDirection: "row", gap: 12, alignItems: "center" },
   vinInput: {
+    ...Typography.subheadline,
     flex: 1,
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
     minHeight: 48,
-    letterSpacing: 1.5,
   },
   vinBtn: {
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 16,
@@ -2846,57 +2846,56 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent,
     borderColor: Colors.accent,
   },
-  vinBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary },
+  vinBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textSecondary },
   vinBtnTextActive: { color: Colors.textInverse },
-  vinHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 },
+  vinHint: { ...Typography.caption, color: Colors.textTertiary, marginTop: 2 },
 
-  typeScroll: { paddingRight: 4, gap: 10, flexDirection: "row" },
+  typeScroll: { paddingRight: 4, gap: 12, flexDirection: "row" },
   typeCard: {
     width: 72,
     height: 82,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.card,
     borderWidth: 1.5,
     borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
+    gap: 8,
   },
   typeCardSelected: {
     backgroundColor: Colors.accentLight,
     borderColor: Colors.accent,
   },
   typeCardLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    ...Typography.caption,
+    fontWeight: "500",
     color: Colors.textSecondary,
     textAlign: "center",
   },
-  typeCardLabelSelected: { color: Colors.accent, fontFamily: "Inter_600SemiBold" },
+  typeCardLabelSelected: { fontWeight: "600", color: Colors.accent },
 
-  fieldGroup: { gap: 10 },
+  fieldGroup: { gap: 12 },
   fieldGroupLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },
-  fieldGroupContent: { gap: 10 },
-  row: { flexDirection: "row", gap: 10 },
+  fieldGroupContent: { gap: 12 },
+  row: { flexDirection: "row", gap: 12 },
 
-  field: { gap: 5 },
-  fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  fieldHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 },
+  field: { gap: 4 },
+  fieldLabel: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
+  fieldHint: { ...Typography.caption, color: Colors.textTertiary, marginTop: 2 },
   fieldInput: {
+    ...Typography.subheadline,
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
     minHeight: 48,
   },
@@ -2906,61 +2905,61 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     minHeight: 48,
     gap: 8,
   },
-  pickerBtnText: { flex: 1, fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
-  pickerBtnPlaceholder: { color: Colors.textTertiary, fontSize: 14 },
+  pickerBtnText: { ...Typography.subheadline, flex: 1, color: Colors.text },
+  pickerBtnPlaceholder: { ...Typography.footnote, color: Colors.textTertiary },
 
-  scheduleRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  scheduleRow: { flexDirection: "row", alignItems: "center", gap: 12, flexWrap: "wrap" },
   scheduleBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     backgroundColor: Colors.goodMuted,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: Radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderWidth: 1,
     borderColor: Colors.good + "44",
   },
-  scheduleBadgeText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.good },
-  scheduleTaskCount: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  schedulePending: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  scheduleBadgeText: { ...Typography.footnote, fontWeight: "600", color: Colors.good },
+  scheduleTaskCount: { ...Typography.caption, color: Colors.textSecondary },
+  schedulePending: { ...Typography.footnote, color: Colors.textSecondary },
 
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: Radius.md,
+    padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
     minHeight: 64,
   },
-  toggleLabel: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
-  toggleSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  toggleLabel: { ...Typography.subheadline, fontWeight: "500", color: Colors.text },
+  toggleSub: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
   toggle: {
     width: 48,
     height: 28,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.border,
     justifyContent: "center",
     paddingHorizontal: 2,
   },
   toggleOn: { backgroundColor: Colors.accent },
-  toggleThumb: { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.text, alignSelf: "flex-start" },
+  toggleThumb: { width: 24, height: 24, borderRadius: Radius.pill, backgroundColor: Colors.text, alignSelf: "flex-start" },
   toggleThumbOn: { alignSelf: "flex-end" },
 
   segControl: {
     flexDirection: "row",
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.card,
@@ -2968,7 +2967,7 @@ const styles = StyleSheet.create({
   },
   segOption: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2976,13 +2975,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accentLight,
   },
   segOptionText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.textSecondary,
   },
   segOptionTextSelected: {
+    fontWeight: "600",
     color: Colors.accent,
-    fontFamily: "Inter_600SemiBold",
   },
 
   modalOverlay: {
@@ -3000,7 +2999,7 @@ const styles = StyleSheet.create({
   modalHandle: {
     width: 40,
     height: 4,
-    borderRadius: 2,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.border,
     alignSelf: "center",
     marginBottom: 12,
@@ -3010,45 +3009,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingBottom: 14,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  modalTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  modalTitle: { ...Typography.headline, color: Colors.text },
   modalCancelBtn: { minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
-  modalCancelText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.accent },
+  modalCancelText: { ...Typography.subheadline, fontWeight: "500", color: Colors.accent },
 
   searchWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     margin: 12,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 12,
     minHeight: 44,
   },
   searchInput: {
+    ...Typography.subheadline,
     flex: 1,
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
-    paddingVertical: 10,
+    paddingVertical: 12,
     minHeight: 44,
   },
   yearSearchWrap: {
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   yearSearchInput: {
+    ...Typography.subheadline,
     backgroundColor: Colors.surface,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
+    borderRadius: Radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -3056,14 +3053,13 @@ const styles = StyleSheet.create({
 
   makeSectionHeader: {
     paddingHorizontal: 20,
-    paddingTop: 14,
+    paddingTop: 16,
     paddingBottom: 4,
   },
   makeSectionHeaderText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textTertiary,
-    letterSpacing: 1.5,
   },
 
   listRow: {
@@ -3071,24 +3067,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 16,
     minHeight: 52,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   listRowSelected: { backgroundColor: Colors.vehicleMuted },
-  listRowText: { fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
-  listRowTextSelected: { fontFamily: "Inter_600SemiBold", color: Colors.vehicle },
+  listRowText: { ...Typography.subheadline, color: Colors.text },
+  listRowTextSelected: { fontWeight: "600", color: Colors.vehicle },
   listRowCustom: { backgroundColor: Colors.accentLight, borderBottomWidth: 0, marginTop: 4 },
   listRowCustomContent: { flexDirection: "row", alignItems: "center", gap: 8 },
-  listRowCustomText: { fontSize: 16, fontFamily: "Inter_500Medium", color: Colors.accent },
-  listRowCustomSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.accent },
+  listRowCustomText: { ...Typography.subheadline, fontWeight: "500", color: Colors.accent },
+  listRowCustomSub: { ...Typography.caption, color: Colors.accent },
   listEmpty: { paddingVertical: 32, alignItems: "center", paddingHorizontal: 24 },
-  listEmptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  listEmptyText: { ...Typography.footnote, color: Colors.textSecondary, textAlign: "center" },
   modelHint: {
-    fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
-    fontStyle: "italic", textAlign: "center",
-    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4,
+    ...Typography.caption,
+    color: Colors.textTertiary,
+    fontStyle: "italic",
+    textAlign: "center",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   motoVariantTip: {
     flexDirection: "row",
@@ -3097,38 +3097,35 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     marginBottom: 4,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     backgroundColor: Colors.accentLight,
-    borderRadius: 12,
+    borderRadius: Radius.md,
   },
   motoVariantTipText: {
+    ...Typography.caption,
     flex: 1,
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
     color: Colors.accent,
-    lineHeight: 17,
   },
   monthPickerWrap: {
     marginTop: 8,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    gap: 6,
+    gap: 8,
   },
   monthPickerLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     marginBottom: 4,
   },
   monthRow: {
     flexDirection: "row",
-    gap: 6,
+    gap: 8,
   },
   monthTile: {
     flex: 1,
     height: 44,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.surface,
     alignItems: "center",
     justifyContent: "center",
@@ -3144,13 +3141,13 @@ const styles = StyleSheet.create({
     borderColor: Colors.accent,
   },
   monthTileText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.textSecondary,
   },
   monthTileTextSelected: {
-    color: "#FFFFFF",
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
+    color: Colors.white,
   },
   presetRow: {
     flexDirection: "row",
@@ -3160,8 +3157,8 @@ const styles = StyleSheet.create({
   },
   presetChip: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingVertical: 8,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
@@ -3171,16 +3168,15 @@ const styles = StyleSheet.create({
     borderColor: Colors.accent,
   },
   presetChipText: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    ...Typography.caption,
+    fontWeight: "500",
     color: Colors.textSecondary,
   },
   presetChipTextActive: {
     color: Colors.accent,
   },
   monthRangeSummary: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     textAlign: "center",
     marginTop: 4,

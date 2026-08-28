@@ -19,9 +19,10 @@ import {
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon, MciIcon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { capture } from "@/lib/analytics";
@@ -375,7 +376,7 @@ export default function AddPropertyScreen() {
       <View style={[styles.container, { backgroundColor: Colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
           <Pressable onPress={() => router.back()} style={styles.closeBtn}>
-            <Ionicons name="close" size={22} color={Colors.text} />
+            <Icon name="close" size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.title}>{isOnboarding ? "Tell us about your home" : "Add Property"}</Text>
           <Pressable
@@ -396,7 +397,7 @@ export default function AddPropertyScreen() {
         >
           {error && (
             <View style={styles.errorBox}>
-              <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
+              <Icon name="alert-circle" size={16} color={Colors.overdue} />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
@@ -415,7 +416,7 @@ export default function AddPropertyScreen() {
                     style={[styles.typeCard, isSelected && styles.typeCardSelected]}
                     onPress={() => { setPropertyType(t.value); Haptics.selectionAsync(); }}
                   >
-                    <MaterialCommunityIcons
+                    <MciIcon
                       name={t.icon as any}
                       size={26}
                       color={isSelected ? Colors.home : Colors.textSecondary}
@@ -430,7 +431,7 @@ export default function AddPropertyScreen() {
           </FieldGroup>
 
           <FieldGroup label="Address">
-            <View style={{ gap: 5 }}>
+            <View style={{ gap: 4 }}>
               <Text style={styles.fieldLabel}>Street Address *</Text>
               <View style={{ position: "relative" }}>
                 <TextInput
@@ -460,7 +461,7 @@ export default function AddPropertyScreen() {
                         ]}
                         onPress={() => onSelectSuggestion(s)}
                       >
-                        <Ionicons name="location-outline" size={16} color={Colors.textTertiary} style={{ marginTop: 2 }} />
+                        <Icon name="location-outline" size={16} color={Colors.textTertiary} style={{ marginTop: 2 }} />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.suggestionMain} numberOfLines={1}>{s.mainText}</Text>
                           {!!s.secondaryText && (
@@ -506,7 +507,7 @@ export default function AddPropertyScreen() {
                   <Text style={[styles.statePickerText, !stateCode && { color: Colors.textTertiary }]}>
                     {stateCode || "State"}
                   </Text>
-                  <Ionicons name="chevron-down" size={14} color={Colors.textTertiary} />
+                  <Icon name="chevron-down" size={14} color={Colors.textTertiary} />
                 </Pressable>
               </Field>
             </View>
@@ -554,7 +555,7 @@ export default function AddPropertyScreen() {
                     <ActivityIndicator size="small" color={Colors.accent} style={styles.inputAdornment} />
                   )}
                   {!isLookingUpProperty && propertyAutoFilled && !!yearBuilt && (
-                    <Ionicons name="checkmark-circle" size={18} color="#34C759" style={styles.inputAdornment} />
+                    <Icon name="checkmark-circle" size={18} color={Colors.good} style={styles.inputAdornment} />
                   )}
                 </View>
               </Field>
@@ -573,7 +574,7 @@ export default function AddPropertyScreen() {
                     <ActivityIndicator size="small" color={Colors.accent} style={styles.inputAdornment} />
                   )}
                   {!isLookingUpProperty && propertyAutoFilled && !!sqft && (
-                    <Ionicons name="checkmark-circle" size={18} color="#34C759" style={styles.inputAdornment} />
+                    <Icon name="checkmark-circle" size={18} color={Colors.good} style={styles.inputAdornment} />
                   )}
                 </View>
               </Field>
@@ -641,7 +642,7 @@ function StatePickerModal({ visible, selected, onSelect, onClose, insets }: {
                 <Text style={styles.stateAbbr}>{item.abbr}</Text>
                 <Text style={styles.stateName}>{item.name}</Text>
                 {selected === item.abbr && (
-                  <Ionicons name="checkmark" size={16} color={Colors.home} />
+                  <Icon name="checkmark" size={16} color={Colors.home} />
                 )}
               </Pressable>
             )}
@@ -663,7 +664,7 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
 
 function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: object }) {
   return (
-    <View style={[{ gap: 5 }, style]}>
+    <View style={[{ gap: 4 }, style]}>
       <Text style={styles.fieldLabel}>{label}</Text>
       {children}
     </View>
@@ -682,14 +683,14 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  title: { ...Typography.headline, color: Colors.text },
   saveBtn: {
     backgroundColor: Colors.accent,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    borderRadius: Radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  saveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  saveBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
 
   scroll: { paddingHorizontal: 20, paddingTop: 24, gap: 20 },
   errorBox: {
@@ -697,31 +698,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     backgroundColor: Colors.overdueMuted,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     padding: 12,
   },
-  errorText: { flex: 1, fontSize: 13, color: Colors.overdue, fontFamily: "Inter_400Regular" },
+  errorText: { ...Typography.footnote, flex: 1, color: Colors.overdue },
 
-  fieldGroup: { gap: 10 },
+  fieldGroup: { gap: 12 },
   groupLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },
-  fieldGroupContent: { gap: 10 },
-  row: { flexDirection: "row", gap: 10 },
-  fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  fieldGroupContent: { gap: 12 },
+  row: { flexDirection: "row", gap: 12 },
+  fieldLabel: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
   input: {
+    ...Typography.subheadline,
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
   },
   inputRow: {
@@ -736,8 +736,7 @@ const styles = StyleSheet.create({
     right: 12,
   },
   rateLimitedText: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     marginTop: 4,
   },
@@ -747,14 +746,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   statePickerText: {
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
+    ...Typography.subheadline,
     color: Colors.text,
   },
 
   suggestionsCard: {
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -766,13 +764,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 100,
-    elevation: 8,
   },
   suggestionRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
-    paddingHorizontal: 14,
+    gap: 12,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     minHeight: 44,
   },
@@ -781,13 +778,12 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   suggestionMain: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
+    ...Typography.subheadline,
+    fontWeight: "500",
     color: Colors.text,
   },
   suggestionSub: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     marginTop: 1,
   },
@@ -795,10 +791,10 @@ const styles = StyleSheet.create({
   typeRow: { gap: 8, paddingVertical: 2 },
   typeCard: {
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
+    gap: 8,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.card,
     borderWidth: 1.5,
     borderColor: Colors.border,
@@ -809,14 +805,14 @@ const styles = StyleSheet.create({
     borderColor: Colors.home,
   },
   typeCardLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    ...Typography.caption,
+    fontWeight: "500",
     color: Colors.textSecondary,
     textAlign: "center",
   },
   typeCardLabelSelected: {
+    fontWeight: "600",
     color: Colors.home,
-    fontFamily: "Inter_600SemiBold",
   },
 
   modalOverlay: {
@@ -833,7 +829,7 @@ const styles = StyleSheet.create({
   modalHandle: {
     width: 36,
     height: 4,
-    borderRadius: 2,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.border,
     alignSelf: "center",
     marginBottom: 8,
@@ -847,28 +843,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  modalTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  modalCancel: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.accent },
+  modalTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  modalCancel: { ...Typography.subheadline, fontWeight: "500", color: Colors.accent },
   stateRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     gap: 12,
     minHeight: 44,
   },
   stateAbbr: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.subheadline,
+    fontWeight: "600",
     color: Colors.text,
     width: 32,
   },
   stateName: {
+    ...Typography.subheadline,
     flex: 1,
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
     color: Colors.textSecondary,
   },
 });

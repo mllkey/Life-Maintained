@@ -17,7 +17,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { View, Text, StyleSheet, Pressable, ScrollView, Modal } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
@@ -38,6 +37,9 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import { Colors } from "@/constants/colors";
+import { Icon, MciIcon, type IconName, type MciName } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { capture } from "@/lib/analytics";
@@ -270,9 +272,9 @@ function vehicleTitle(v: { nickname: string | null; year: number; make: string; 
 // ---------------------------------------------------------------------------
 function SceneIcon({ lib, icon, size, color }: { lib: "ion" | "mci"; icon: string; size: number; color: string }) {
   if (lib === "mci") {
-    return <MaterialCommunityIcons name={icon as keyof typeof MaterialCommunityIcons.glyphMap} size={size} color={color} />;
+    return <MciIcon name={icon as MciName} size={size} color={color} />;
   }
-  return <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
+  return <Icon name={icon as IconName} size={size} color={color} />;
 }
 
 function armChip(sv: SharedValue<number>, kind: ChipAnim, delay: number) {
@@ -571,7 +573,7 @@ function MappingScene({
           ))}
 
           <Animated.View style={[styles.doc, docStyle]}>
-            <Ionicons name="document-text-outline" size={40} color={Colors.accent} />
+            <Icon name="document-text-outline" size={40} color={Colors.accent} />
           </Animated.View>
 
           <Animated.Text style={[styles.statusCaption, subtitleStyle]} numberOfLines={2}>
@@ -579,7 +581,7 @@ function MappingScene({
           </Animated.Text>
 
           <Animated.View style={[styles.readyBadge, readyStyle]}>
-            <Ionicons name="checkmark-circle" size={16} color={Colors.good} />
+            <Icon name="checkmark-circle" size={16} color={Colors.good} />
             <Text style={styles.readyText}>Ready</Text>
           </Animated.View>
         </View>
@@ -1224,7 +1226,7 @@ export default function ImportFleetScreen() {
           accessibilityRole="button"
           accessibilityLabel="Close import"
         >
-          <Ionicons name="close" size={24} color={Colors.text} />
+          <Icon name="close" size={24} color={Colors.text} />
         </Pressable>
       )}
       <Text style={styles.headerTitle}>Import fleet</Text>
@@ -1239,7 +1241,7 @@ export default function ImportFleetScreen() {
         {header}
         <View style={[styles.centered, { paddingBottom: insets.bottom + 24 }]}>
           <View style={styles.heroTile}>
-            <Ionicons name="cloud-upload-outline" size={40} color={Colors.accent} />
+            <Icon name="cloud-upload-outline" size={40} color={Colors.accent} />
           </View>
           <Text style={styles.gateTitle}>Fleet import comes with paid plans</Text>
           <Text style={styles.gateBody}>
@@ -1264,7 +1266,7 @@ export default function ImportFleetScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.heroTile}>
-            <Ionicons name="cloud-upload-outline" size={40} color={Colors.accent} />
+            <Icon name="cloud-upload-outline" size={40} color={Colors.accent} />
           </View>
           <Text style={styles.pickTitle}>Import your fleet</Text>
           <Text style={styles.pickBody}>
@@ -1284,7 +1286,7 @@ export default function ImportFleetScreen() {
                 const oversize = oversizeUris.has(f.uri);
                 return (
                   <View key={f.uri} style={[styles.fileChip, oversize ? styles.fileChipBad : null]}>
-                    <Ionicons name="document-text-outline" size={15} color={oversize ? Colors.overdue : Colors.accent} />
+                    <Icon name="document-text-outline" size={15} color={oversize ? Colors.overdue : Colors.accent} />
                     <Text style={styles.fileChipName} numberOfLines={1}>{f.name}</Text>
                     {f.size !== null ? <Text style={styles.fileChipSize}>{formatBytes(f.size)}</Text> : null}
                     <Pressable
@@ -1293,7 +1295,7 @@ export default function ImportFleetScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={`Remove ${f.name}`}
                     >
-                      <Ionicons name="close" size={15} color={Colors.textTertiary} />
+                      <Icon name="close" size={15} color={Colors.textTertiary} />
                     </Pressable>
                   </View>
                 );
@@ -1349,13 +1351,13 @@ export default function ImportFleetScreen() {
                 ) : (
                   <Text style={styles.capTitle}>Your garage is full for this plan. Deselect a few or upgrade.</Text>
                 )}
-                <View style={{ marginTop: 10 }}>
+                <View style={{ marginTop: 12 }}>
                   <PaidActionCTA label="See plans" variant="secondary" onPress={() => setShowPaywall(true)} />
                 </View>
               </View>
             )}
 
-            <View style={{ gap: 10, marginTop: 14 }}>
+            <View style={{ gap: 12, marginTop: 16 }}>
               {preview.vehicles.map((v) => {
                 const checked = selected.has(v.temp_id);
                 const parts: string[] = [];
@@ -1371,7 +1373,7 @@ export default function ImportFleetScreen() {
                     accessibilityState={{ checked }}
                     accessibilityLabel={vehicleTitle(v)}
                   >
-                    <Ionicons
+                    <Icon
                       name={checked ? "checkmark-circle" : "ellipse-outline"}
                       size={24}
                       color={checked ? Colors.accent : Colors.textTertiary}
@@ -1617,12 +1619,12 @@ function DoneCheck() {
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
     <Animated.View style={style}>
-      <Ionicons name="checkmark-circle" size={56} color={Colors.good} />
+      <Icon name="checkmark-circle" size={56} color={Colors.good} />
     </Animated.View>
   );
 }
 
-function PulsingTile({ icon }: { icon: React.ComponentProps<typeof Ionicons>["name"] }) {
+function PulsingTile({ icon }: { icon: IconName }) {
   const pulse = useSharedValue(0);
   useEffect(() => {
     pulse.value = withRepeat(
@@ -1642,7 +1644,7 @@ function PulsingTile({ icon }: { icon: React.ComponentProps<typeof Ionicons>["na
     <View style={styles.pulseWrap}>
       <Animated.View style={[styles.pulseHalo, halo]} />
       <Animated.View style={[styles.heroTile, tile]}>
-        <Ionicons name={icon} size={40} color={Colors.accent} />
+        <Icon name={icon} size={40} color={Colors.accent} />
       </Animated.View>
     </View>
   );
@@ -1655,32 +1657,32 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  headerTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  centered: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 20, gap: 14 },
+  headerTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 20, gap: 16 },
 
   heroTile: {
     width: 88,
     height: 88,
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
   },
   pulseWrap: { alignItems: "center", justifyContent: "center" },
   pulseHalo: { position: "absolute", width: 104, height: 104,
-               borderRadius: 52, backgroundColor: Colors.accent },
-  gateTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, textAlign: "center" },
-  gateBody: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 21 },
-  gateCtaWrap: { alignSelf: "stretch", marginTop: 6 },
+               borderRadius: Radius.pill, backgroundColor: Colors.accent },
+  gateTitle: { ...Typography.title2, color: Colors.text, textAlign: "center" },
+  gateBody: { ...Typography.subheadline, color: Colors.textSecondary, textAlign: "center" },
+  gateCtaWrap: { alignSelf: "stretch", marginTop: 8 },
 
   pickScroll: { paddingHorizontal: 20, paddingTop: 32, alignItems: "center", gap: 12 },
-  pickTitle: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text, textAlign: "center", marginTop: 6 },
-  pickBody: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 21 },
-  pickHint: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", lineHeight: 19 },
+  pickTitle: { ...Typography.title2, color: Colors.text, textAlign: "center", marginTop: 8 },
+  pickBody: { ...Typography.subheadline, color: Colors.textSecondary, textAlign: "center" },
+  pickHint: { ...Typography.footnote, color: Colors.textTertiary, textAlign: "center" },
   pickCtaWrap: { alignSelf: "stretch", marginTop: 8 },
 
   chipList: { alignSelf: "stretch", gap: 8, marginTop: 4 },
@@ -1688,58 +1690,58 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     minHeight: 44,
     backgroundColor: Colors.card,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   fileChipBad: { borderColor: Colors.overdue, backgroundColor: Colors.overdueMuted },
-  fileChipName: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text },
-  fileChipSize: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  inlineError: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.overdue, textAlign: "center", lineHeight: 19 },
+  fileChipName: { ...Typography.footnote, fontWeight: "500", flex: 1, color: Colors.text },
+  fileChipSize: { ...Typography.caption, color: Colors.textTertiary },
+  inlineError: { ...Typography.footnote, fontWeight: "500", color: Colors.overdue, textAlign: "center" },
 
-  summary: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, marginTop: 18, lineHeight: 29 },
+  summary: { ...Typography.title2, color: Colors.text, marginTop: 20 },
   capBanner: {
-    marginTop: 14,
-    padding: 14,
-    borderRadius: 14,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.accent,
   },
-  capTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 21 },
-  capSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 4, lineHeight: 19 },
+  capTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  capSub: { ...Typography.footnote, color: Colors.textSecondary, marginTop: 4 },
 
   vehicleCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    padding: 14,
+    padding: 16,
     minHeight: 44,
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  vehicleTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  vehicleMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 2 },
-  pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  pillText: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  vehicleTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  vehicleMeta: { ...Typography.footnote, color: Colors.textSecondary },
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 },
+  pill: { borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 4 },
+  pillText: { ...Typography.caption, fontWeight: "500" },
 
   disclosureCard: {
-    marginTop: 18,
-    padding: 14,
-    borderRadius: 14,
+    marginTop: 20,
+    padding: 16,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 6,
+    gap: 8,
   },
-  disclosureTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text, marginBottom: 2 },
-  disclosureRow: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 19 },
+  disclosureTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text, marginBottom: 2 },
+  disclosureRow: { ...Typography.footnote, color: Colors.textSecondary },
 
   bottomBar: {
     position: "absolute",
@@ -1748,50 +1750,50 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: 20,
     paddingTop: 12,
-    gap: 6,
+    gap: 8,
     backgroundColor: Colors.background,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
   tertiary: { alignItems: "center", justifyContent: "center", minHeight: 44 },
-  tertiaryText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  tertiaryText: { ...Typography.footnote, color: Colors.textTertiary },
 
-  statusTitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, textAlign: "center", lineHeight: 27 },
-  statusSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 20 },
-  doneTitle: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text, textAlign: "center" },
+  statusTitle: { ...Typography.title3, fontWeight: "700", color: Colors.text, textAlign: "center" },
+  statusSub: { ...Typography.footnote, color: Colors.textSecondary, textAlign: "center" },
+  doneTitle: { ...Typography.title2, color: Colors.text, textAlign: "center" },
 
-  undoWrap: { alignSelf: "stretch", gap: 10, marginTop: 4 },
-  undoPrompt: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary, textAlign: "center", lineHeight: 20 },
+  undoWrap: { alignSelf: "stretch", gap: 12, marginTop: 4 },
+  undoPrompt: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary, textAlign: "center" },
   destructive: {
     height: 52,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.overdue,
     alignItems: "center",
     justifyContent: "center",
   },
-  destructiveText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.white },
+  destructiveText: { ...Typography.headline, color: Colors.white },
 
   // scene
-  sceneRoot: { flex: 1, gap: 28, paddingTop: 40 },
-  sceneHeaderSection: { paddingHorizontal: 20, gap: 14, alignItems: "center" },
-  sceneTitle: { fontSize: 21, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary, lineHeight: 27, textAlign: "center" },
-  sceneFailSubtitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 27, textAlign: "center" },
+  sceneRoot: { flex: 1, gap: 32, paddingTop: 40 },
+  sceneHeaderSection: { paddingHorizontal: 20, gap: 16, alignItems: "center" },
+  sceneTitle: { ...Typography.title2, fontWeight: "600", color: Colors.textSecondary, textAlign: "center" },
+  sceneFailSubtitle: { ...Typography.title3, fontWeight: "700", color: Colors.text, textAlign: "center" },
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20, justifyContent: "center" },
-  chip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: Colors.card, borderRadius: 999, borderWidth: 1, borderColor: Colors.border },
-  chipText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  chip: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: Colors.card, borderRadius: Radius.pill, borderWidth: 1, borderColor: Colors.border },
+  chipText: { ...Typography.caption, fontWeight: "500", color: Colors.textSecondary },
   stage: { flex: 1, alignItems: "center", justifyContent: "center", position: "relative" },
-  docGlow: { position: "absolute", width: 140, height: 140, borderRadius: 70 },
-  halo: { position: "absolute", width: 200, height: 200, borderRadius: 100 },
+  docGlow: { position: "absolute", width: 140, height: 140, borderRadius: Radius.pill },
+  halo: { position: "absolute", width: 200, height: 200, borderRadius: Radius.pill },
   orbit: { position: "absolute", width: 0, height: 0, alignItems: "center", justifyContent: "center" },
-  orbitDot: { position: "absolute", width: 5, height: 5, borderRadius: 2.5, opacity: 0.5 },
-  doc: { width: 88, height: 88, borderRadius: 20, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, alignItems: "center", justifyContent: "center" },
-  particle: { position: "absolute", width: 6, height: 6, borderRadius: 3 },
-  statusCaption: { position: "absolute", top: 0, left: 20, right: 20, fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 27, minHeight: 27, textAlign: "center" },
-  readyBadge: { position: "absolute", bottom: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: Colors.card, borderRadius: 999, borderWidth: 1, borderColor: Colors.border },
-  readyText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  orbitDot: { position: "absolute", width: 5, height: 5, borderRadius: Radius.pill, opacity: 0.5 },
+  doc: { width: 88, height: 88, borderRadius: Radius.lg, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, alignItems: "center", justifyContent: "center" },
+  particle: { position: "absolute", width: 6, height: 6, borderRadius: Radius.pill },
+  statusCaption: { ...Typography.title3, fontWeight: "700", position: "absolute", top: 0, left: 20, right: 20, color: Colors.text, minHeight: 27, textAlign: "center" },
+  readyBadge: { position: "absolute", bottom: 40, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: Colors.card, borderRadius: Radius.pill, borderWidth: 1, borderColor: Colors.border },
+  readyText: { ...Typography.footnote, fontWeight: "600", color: Colors.text },
   errorButtons: { paddingHorizontal: 20, gap: 12, marginTop: 20 },
-  sceneCta: { borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center", backgroundColor: Colors.accent },
-  sceneCtaText: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  sceneCta: { borderRadius: Radius.lg, height: 52, alignItems: "center", justifyContent: "center", backgroundColor: Colors.accent },
+  sceneCtaText: { ...Typography.headline, color: Colors.textInverse },
   sceneSkip: { alignItems: "center", justifyContent: "center", minHeight: 44 },
-  sceneSkipText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  sceneSkipText: { ...Typography.footnote, color: Colors.textTertiary },
 });
