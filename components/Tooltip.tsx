@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useRef } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon, type IconName } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
@@ -29,7 +31,7 @@ export const TOOLTIP_IDS = {
 interface TooltipProps {
   id: string;
   message: string;
-  icon?: keyof typeof Ionicons.glyphMap;
+  icon?: IconName;
   delay?: number; // ms before showing (default 800)
 }
 
@@ -72,10 +74,10 @@ export default function Tooltip({ id, message, icon, delay = 800 }: TooltipProps
     <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(200)}>
       <Pressable onPress={dismiss} style={styles.container}>
         <View style={styles.iconWrap}>
-          <Ionicons name={icon ?? "bulb-outline"} size={18} color={Colors.accent} />
+          <Icon name={icon ?? "bulb-outline"} size={18} color={Colors.accent} />
         </View>
         <Text style={styles.message}>{message}</Text>
-        <Ionicons name="close" size={16} color={Colors.textTertiary} />
+        <Icon name="close" size={16} color={Colors.textTertiary} />
       </Pressable>
     </Animated.View>
   );
@@ -94,9 +96,9 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     backgroundColor: "rgba(232, 147, 58, 0.12)",
-    borderRadius: 12,
+    borderRadius: Radius.md,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
@@ -105,16 +107,13 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: Radius.pill,
     backgroundColor: "rgba(232, 147, 58, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
   message: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote, fontWeight: "500", flex: 1,
     color: Colors.text,
-    lineHeight: 19,
-  },
+    },
 });

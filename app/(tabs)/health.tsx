@@ -16,8 +16,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -482,7 +484,7 @@ export default function HealthScreen() {
     for (const a of (appointments ?? []).sort((x, y) => (x.next_due_date ?? "9999").localeCompare(y.next_due_date ?? "9999"))) {
       const memberName = (a as any).family_members?.name ?? "You";
       const status = statusLabel(a.next_due_date);
-      const statusColor = status === "Overdue" ? "#EF4444" : status === "Due soon" ? "#F59E0B" : "#22C55E";
+      const statusColor = status === "Overdue" ? Colors.overdue : status === "Due soon" ? Colors.needsAttention : Colors.good;
       apptRows += `<tr>
       <td>${a.appointment_type}</td>
       <td>${memberName}</td>
@@ -558,7 +560,7 @@ export default function HealthScreen() {
             accessibilityLabel="Export health summary"
             accessibilityRole="button"
           >
-            <Ionicons name="share-outline" size={22} color={Colors.text} />
+            <Icon name="share-outline" size={22} color={Colors.text} />
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.addHeaderBtn, { opacity: pressed ? 0.85 : 1 }]}
@@ -574,7 +576,7 @@ export default function HealthScreen() {
             accessibilityLabel="Add health item"
             accessibilityRole="button"
           >
-            <Ionicons name="add" size={18} color={Colors.textInverse} />
+            <Icon name="add" size={18} color={Colors.textInverse} />
             <Text style={styles.addHeaderBtnText}>Add</Text>
           </Pressable>
         </View>
@@ -588,7 +590,7 @@ export default function HealthScreen() {
         {isLoading ? (
           <View style={{ padding: 20, gap: 16 }}>
             {[0, 1, 2].map(i => (
-              <View key={i} style={{ backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 10 }}>
+              <View key={i} style={{ backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 16, gap: 12 }}>
                 <Row>
                   <S anim={skeletonAnim} w={36} h={36} r={18} />
                   <Col flex={1} gap={6}>
@@ -612,7 +614,7 @@ export default function HealthScreen() {
             />
             {hasNoMembers && (!appointments || appointments.length === 0) && (!medications || medications.length === 0) ? (
               <View style={styles.emptyWrap}>
-                <Ionicons name="heart-outline" size={48} color={Colors.healthMuted} />
+                <Icon name="heart-outline" size={48} color={Colors.healthMuted} />
                 <Text style={styles.emptyTitle}>Your health, organized</Text>
                 <Text style={styles.emptyText}>
                   Track appointments, medications, and preventive care for yourself and your family.
@@ -621,11 +623,11 @@ export default function HealthScreen() {
                   style={({ pressed }) => [styles.emptyBtn, { opacity: pressed ? 0.85 : 1 }]}
                   onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openAddPerson(); }}
                 >
-                  <Ionicons name="person-add-outline" size={18} color={Colors.textInverse} />
+                  <Icon name="person-add-outline" size={18} color={Colors.textInverse} />
                   <Text style={styles.emptyBtnText}>Add Yourself</Text>
                 </Pressable>
                 {profile?.subscription_tier === "free" && (
-                  <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", marginTop: 8 }}>
+                  <Text style={{ ...Typography.caption, color: Colors.textTertiary, textAlign: "center", marginTop: 8 }}>
                     Free plan includes limited tracking. Upgrade for more.
                   </Text>
                 )}
@@ -634,7 +636,7 @@ export default function HealthScreen() {
               <>
                 {insightText && (
                   <View style={styles.insightCard}>
-                    <Ionicons name="heart-outline" size={16} color={Colors.health} />
+                    <Icon name="heart-outline" size={16} color={Colors.health} />
                     <Text style={styles.insightText}>{insightText}</Text>
                   </View>
                 )}
@@ -667,7 +669,7 @@ export default function HealthScreen() {
                             {addingScreening === s.title ? (
                               <ActivityIndicator size="small" color={Colors.health} />
                             ) : (
-                              <Ionicons name="add-circle-outline" size={22} color={Colors.health} />
+                              <Icon name="add-circle-outline" size={22} color={Colors.health} />
                             )}
                           </Pressable>
                         </View>
@@ -771,7 +773,7 @@ export default function HealthScreen() {
                                   {schedulingMed === m.id ? (
                                     <ActivityIndicator size="small" color={Colors.health} />
                                   ) : (
-                                    <Ionicons name="notifications-outline" size={16} color={Colors.health} />
+                                    <Icon name="notifications-outline" size={16} color={Colors.health} />
                                   )}
                                 </Pressable>
                               )}
@@ -876,11 +878,11 @@ export default function HealthScreen() {
                               paddingVertical: 8,
                               paddingHorizontal: 12,
                               backgroundColor: Colors.surface,
-                              borderRadius: 8,
+                              borderRadius: Radius.sm,
                               opacity: pressed ? 0.7 : 1,
                             })}
                           >
-                            <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.text }}>
+                            <Text style={{ ...Typography.footnote, color: Colors.text }}>
                               {suggestion}
                             </Text>
                           </Pressable>
@@ -923,7 +925,7 @@ export default function HealthScreen() {
                   <ActivityIndicator size="small" color={Colors.textInverse} />
                 ) : (
                   <>
-                    <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
+                    <Icon name="checkmark" size={16} color={Colors.textInverse} />
                     <Text style={styles.sheetSaveText}>Mark as Done</Text>
                   </>
                 )}
@@ -953,7 +955,7 @@ function AppointmentCard({ appointment, onMarkComplete }: { appointment: any; on
       <View style={styles.apptInfo}>
         <Text style={styles.apptType}>{appointment.appointment_type}</Text>
         {appointment.provider_name && (
-          <Text numberOfLines={1} style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 }}>
+          <Text numberOfLines={1} style={{ ...Typography.caption, color: Colors.textSecondary, marginTop: 2 }}>
             {appointment.provider_name}
           </Text>
         )}
@@ -961,7 +963,7 @@ function AppointmentCard({ appointment, onMarkComplete }: { appointment: any; on
           <Text style={styles.apptMeta} numberOfLines={1}>{subParts.join(" · ")}</Text>
         )}
       </View>
-      <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+      <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
     </Pressable>
   );
 }
@@ -977,7 +979,7 @@ function SectionBlock({ title, titleColor, onAdd, children }: { title: string; t
             onPress={onAdd}
             hitSlop={8}
           >
-            <Ionicons name="add" size={18} color={Colors.textTertiary} />
+            <Icon name="add" size={18} color={Colors.textTertiary} />
           </Pressable>
         )}
       </View>
@@ -998,7 +1000,7 @@ function MemberCard({ member, overdue, upcoming, onPress }: { member: any; overd
       style={({ pressed }) => [styles.memberCard, { opacity: pressed ? 0.88 : 1 }]}
       onPress={onPress}
     >
-      <Ionicons name={isPet ? "paw-outline" : "person-outline"} size={18} color={Colors.health} />
+      <Icon name={isPet ? "paw-outline" : "person-outline"} size={18} color={Colors.health} />
       <View style={styles.memberInfo}>
         <View style={styles.memberTitleRow}>
           {statusDotColor && <View style={[styles.memberStatusDot, { backgroundColor: statusDotColor }]} />}
@@ -1007,7 +1009,7 @@ function MemberCard({ member, overdue, upcoming, onPress }: { member: any; overd
         <Text style={styles.memberMeta} numberOfLines={1}>{label}</Text>
       </View>
       <View style={styles.memberRight}>
-        <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+        <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
       </View>
     </Pressable>
   );
@@ -1022,61 +1024,58 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: Colors.background,
   },
-  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
+  title: { ...Typography.largeTitle, color: Colors.text },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 4 },
   addHeaderBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     backgroundColor: Colors.health,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: Radius.md,
   },
-  addHeaderBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  addHeaderBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
 
   content: { paddingHorizontal: 20, paddingTop: 8, gap: 20 },
 
   insightCard: {
-    flexDirection: "row", alignItems: "flex-start", gap: 10,
-    backgroundColor: Colors.healthMuted, borderRadius: 14,
-    padding: 14, borderWidth: 1, borderColor: Colors.health + "30",
+    flexDirection: "row", alignItems: "flex-start", gap: 12,
+    backgroundColor: Colors.healthMuted, borderRadius: Radius.lg,
+    padding: 16, borderWidth: 1, borderColor: Colors.health + "30",
   },
   insightText: {
-    flex: 1, fontSize: 14, fontFamily: "Inter_500Medium",
-    color: Colors.text, lineHeight: 20,
+    ...Typography.footnote,
+    fontWeight: "500",
+    flex: 1,
+    color: Colors.text,
   },
 
-  sectionBlock: { gap: 10 },
+  sectionBlock: { gap: 12 },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   sectionLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },
 
-  memberGrid: { gap: 10 },
+  memberGrid: { gap: 12 },
   memberCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 16,
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  memberInfo: { flex: 1, gap: 3 },
+  memberInfo: { flex: 1, gap: 4 },
   memberTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  memberName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  memberMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textTransform: "capitalize" },
-  memberRight: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
-  memberStatusDot: { width: 8, height: 8, borderRadius: 4 },
+  memberName: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  memberMeta: { ...Typography.footnote, color: Colors.textSecondary, textTransform: "capitalize" },
+  memberRight: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
+  memberStatusDot: { width: 8, height: 8, borderRadius: Radius.pill },
 
   apptList: { gap: 8 },
   apptCard: {
@@ -1084,15 +1083,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     backgroundColor: Colors.card,
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: Radius.lg,
+    padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  apptBar: { width: 4, height: 28, borderRadius: 2, flexShrink: 0 },
-  apptInfo: { flex: 1, gap: 3 },
-  apptType: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  apptMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  apptBar: { width: 4, height: 28, borderRadius: Radius.sm, flexShrink: 0 },
+  apptInfo: { flex: 1, gap: 4 },
+  apptType: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  apptMeta: { ...Typography.footnote, color: Colors.textSecondary },
 
   screeningList: { gap: 8 },
   screeningCard: {
@@ -1100,14 +1099,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     backgroundColor: Colors.card,
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: Radius.lg,
+    padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  screeningInfo: { flex: 1, gap: 3 },
-  screeningTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  screeningDesc: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  screeningInfo: { flex: 1, gap: 4 },
+  screeningTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  screeningDesc: { ...Typography.footnote, color: Colors.textSecondary },
   screeningAddBtn: { flexShrink: 0 },
 
   medList: { gap: 8 },
@@ -1116,39 +1115,41 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     backgroundColor: Colors.card,
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: Radius.lg,
+    padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  medInfo: { flex: 1, gap: 3 },
-  medName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  medMetaText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  medInfo: { flex: 1, gap: 4 },
+  medName: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  medMetaText: { ...Typography.footnote, color: Colors.textSecondary },
   medRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  reminderDot: { width: 8, height: 8, borderRadius: 4 },
+  reminderDot: { width: 8, height: 8, borderRadius: Radius.pill },
   notifBtn: {
     width: 34,
     height: 34,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.healthMuted,
     alignItems: "center",
     justifyContent: "center",
   },
 
   disclaimer: {
-    fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
-    textAlign: "center", paddingTop: 8,
+    ...Typography.caption,
+    color: Colors.textTertiary,
+    textAlign: "center",
+    paddingTop: 8,
   },
 
-  emptyWrap: { paddingTop: 60, alignItems: "center", gap: 12, paddingHorizontal: 30 },
-  emptyTitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 20 },
+  emptyWrap: { paddingTop: 60, alignItems: "center", gap: 12, paddingHorizontal: 32 },
+  emptyTitle: { ...Typography.title3, fontWeight: "700", color: Colors.text },
+  emptyText: { ...Typography.footnote, color: Colors.textSecondary, textAlign: "center" },
   emptyBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: Colors.health, borderRadius: 14,
-    paddingHorizontal: 22, paddingVertical: 13, marginTop: 8,
+    backgroundColor: Colors.health, borderRadius: Radius.lg,
+    paddingHorizontal: 24, paddingVertical: 12, marginTop: 8,
   },
-  emptyBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  emptyBtnText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
 
   sheetOverlay: { flex: 1, justifyContent: "flex-end" },
   sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
@@ -1158,55 +1159,71 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderColor: Colors.border,
   },
   sheetHandle: {
-    width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.border, alignSelf: "center", marginBottom: 16,
+    width: 36, height: 4, borderRadius: Radius.sm, backgroundColor: Colors.border, alignSelf: "center", marginBottom: 16,
   },
   sheetTitle: {
-    fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, marginBottom: 20, textAlign: "center",
+    ...Typography.headline,
+    color: Colors.text,
+    marginBottom: 20,
+    textAlign: "center",
   },
   sheetScroll: { maxHeight: 400 },
   sheetFields: { gap: 16 },
-  sheetField: { gap: 6 },
+  sheetField: { gap: 8 },
   sheetFieldLabel: {
-    fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary,
-    textTransform: "uppercase", letterSpacing: 1.5,
+    ...Typography.caption,
+    fontWeight: "600",
+    color: Colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
   },
   sheetFieldOptional: {
-    fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary,
-    textTransform: "none", letterSpacing: 0,
+    ...Typography.caption,
+    color: Colors.textTertiary,
+    textTransform: "none",
   },
   sheetInput: {
-    backgroundColor: Colors.surface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text,
-    borderWidth: 1, borderColor: Colors.border,
+    ...Typography.subheadline,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   sheetInputMultiline: { minHeight: 64, textAlignVertical: "top" },
   dateStepper: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: Colors.surface, borderRadius: 12,
+    backgroundColor: Colors.surface, borderRadius: Radius.md,
     borderWidth: 1, borderColor: Colors.border, overflow: "hidden",
   },
   dateStepBtn: { width: 44, height: 46, alignItems: "center", justifyContent: "center" },
   dateStepValue: {
-    flex: 1, textAlign: "center", fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text,
+    ...Typography.subheadline,
+    fontWeight: "500",
+    flex: 1,
+    textAlign: "center",
+    color: Colors.text,
   },
-  dateQuickRow: { flexDirection: "row", gap: 8, marginTop: 6 },
+  dateQuickRow: { flexDirection: "row", gap: 8, marginTop: 8 },
   dateQuickBtn: {
-    flex: 1, paddingVertical: 8, borderRadius: 10,
+    flex: 1, paddingVertical: 8, borderRadius: Radius.md,
     backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, alignItems: "center",
   },
   dateQuickBtnActive: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
-  dateQuickText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  dateQuickTextActive: { color: Colors.health, fontFamily: "Inter_600SemiBold" },
-  sheetActions: { flexDirection: "row", gap: 10, marginTop: 24 },
+  dateQuickText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
+  dateQuickTextActive: { fontWeight: "600", color: Colors.health },
+  sheetActions: { flexDirection: "row", gap: 12, marginTop: 24 },
   sheetCancelBtn: {
-    flex: 1, paddingVertical: 13, borderRadius: 13, alignItems: "center",
+    flex: 1, paddingVertical: 12, borderRadius: Radius.md, alignItems: "center",
     backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
   },
-  sheetCancelText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  sheetCancelText: { ...Typography.subheadline, fontWeight: "500", color: Colors.textSecondary },
   sheetSaveBtn: {
-    flex: 2, paddingVertical: 13, borderRadius: 13,
+    flex: 2, paddingVertical: 12, borderRadius: Radius.md,
     backgroundColor: Colors.health, alignItems: "center", justifyContent: "center",
-    flexDirection: "row", gap: 6,
+    flexDirection: "row", gap: 8,
   },
-  sheetSaveText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  sheetSaveText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
 });

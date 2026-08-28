@@ -7,8 +7,10 @@ import {
   type BottomSheetBackdropProps,
 } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 
 export type ReminderMomentHandle = {
   present: () => void;
@@ -54,11 +56,11 @@ export default forwardRef<ReminderMomentHandle, ReminderMomentProps>(function Re
   );
 
   const handleStyle = useMemo(
-    () => ({ backgroundColor: Colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24 }),
+    () => ({ backgroundColor: Colors.cardElevated, borderTopLeftRadius: 24, borderTopRightRadius: 24 }),
     [],
   );
   const handleIndicatorStyle = useMemo(() => ({ backgroundColor: Colors.border, width: 36, height: 4 }), []);
-  const backgroundStyle = useMemo(() => ({ backgroundColor: Colors.card }), []);
+  const backgroundStyle = useMemo(() => ({ backgroundColor: Colors.cardElevated }), []);
   const snapPoints = useMemo(() => ["44%"], []);
 
   return (
@@ -76,14 +78,14 @@ export default forwardRef<ReminderMomentHandle, ReminderMomentProps>(function Re
     >
       <BottomSheetView style={[styles.content, { paddingBottom: 24 + insets.bottom }]}>
         <View style={[styles.iconWrap, { backgroundColor: ringBg, borderColor: ringBorder }]}>
-          <Ionicons name="shield-checkmark-outline" size={26} color={accent} />
+          <Icon name="shield-checkmark-outline" size={26} color={accent} />
         </View>
         <Text style={[styles.eyebrow, { color: accent }]}>FLAGGED FOR YOU</Text>
         <Text style={styles.title} numberOfLines={2}>{title}</Text>
         <Text style={styles.statusLine}>{statusLine}</Text>
         {costLine ? (
           <View style={styles.costRow}>
-            <Ionicons name="cash-outline" size={14} color={Colors.good} />
+            <Icon name="cash-outline" size={14} color={Colors.good} />
             <Text style={styles.costText}>Typical {costLine}</Text>
           </View>
         ) : null}
@@ -95,7 +97,7 @@ export default forwardRef<ReminderMomentHandle, ReminderMomentProps>(function Re
             accessibilityRole="button"
             accessibilityLabel="Mark as done"
           >
-            <Ionicons name="checkmark" size={18} color={Colors.textInverse} />
+            <Icon name="checkmark" size={18} color={Colors.textInverse} />
             <Text style={styles.primaryText}>Mark as Done</Text>
           </Pressable>
           <Pressable
@@ -113,11 +115,11 @@ export default forwardRef<ReminderMomentHandle, ReminderMomentProps>(function Re
 });
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, paddingTop: 4, alignItems: "center", gap: 6 },
+  content: { paddingHorizontal: 20, paddingTop: 4, alignItems: "center", gap: 8 },
   iconWrap: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.accentLight,
     borderWidth: 1,
     borderColor: Colors.accentMuted,
@@ -126,28 +128,26 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   eyebrow: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.accent,
+    ...Typography.caption, fontWeight: "600", color: Colors.accent,
     letterSpacing: 1.5,
     textTransform: "uppercase",
   },
-  title: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, textAlign: "center" },
-  statusLine: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.overdue, textAlign: "center" },
-  costRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
-  costText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.good },
-  costCaption: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  actions: { width: "100%", gap: 10, marginTop: 16 },
+  title: { ...Typography.title2, color: Colors.text, textAlign: "center" },
+  statusLine: { ...Typography.footnote, fontWeight: "500", color: Colors.overdue, textAlign: "center" },
+  costRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  costText: { ...Typography.footnote, fontWeight: "500", color: Colors.good },
+  costCaption: { ...Typography.caption, color: Colors.textTertiary },
+  actions: { width: "100%", gap: 12, marginTop: 16 },
   primaryBtn: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 50,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
   },
-  primaryText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  primaryText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
   secondaryBtn: { height: 44, alignItems: "center", justifyContent: "center" },
-  secondaryText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  secondaryText: { ...Typography.subheadline, fontWeight: "500", color: Colors.textSecondary },
 });

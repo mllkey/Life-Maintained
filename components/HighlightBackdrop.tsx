@@ -1,5 +1,6 @@
 import React from "react";
 import { View } from "react-native";
+import { Radius } from "@/constants/radius";
 
 /**
  * Static, accessibility-friendly highlight backdrop.
@@ -20,7 +21,7 @@ export function HighlightBackdrop({ color, visible }: { color: string; visible: 
         left: 0,
         right: 0,
         bottom: 0,
-        borderRadius: 14,
+        borderRadius: Radius.lg,
         backgroundColor: color,
         zIndex: 1,
       }}

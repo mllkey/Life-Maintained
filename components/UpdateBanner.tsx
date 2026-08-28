@@ -2,8 +2,10 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import * as Haptics from "expo-haptics";
 
 const VERSION_KEY = "@last_seen_app_version";
@@ -55,7 +57,7 @@ export default function UpdateBanner({ message, actionLabel, onAction, onDismiss
   return (
     <View style={styles.banner}>
       <View style={styles.iconWrap}>
-        <Ionicons name="sparkles-outline" size={18} color={Colors.good} />
+        <Icon name="sparkles-outline" size={18} color={Colors.good} />
       </View>
       <View style={styles.textWrap}>
         <Text style={styles.message}>{message}</Text>
@@ -70,7 +72,7 @@ export default function UpdateBanner({ message, actionLabel, onAction, onDismiss
         )}
       </View>
       <Pressable onPress={handleDismiss} hitSlop={12} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Dismiss">
-        <Ionicons name="close" size={18} color={Colors.textTertiary} />
+        <Icon name="close" size={18} color={Colors.textTertiary} />
       </Pressable>
     </View>
   );
@@ -80,11 +82,11 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: Colors.card,
-    borderRadius: 14,
+    backgroundColor: Colors.cardElevated,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.good + "44",
-    padding: 14,
+    padding: 16,
     gap: 12,
     marginHorizontal: 16,
     marginTop: 8,
@@ -93,7 +95,7 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 34,
     height: 34,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.goodMuted,
     alignItems: "center",
     justifyContent: "center",
@@ -102,27 +104,22 @@ const styles = StyleSheet.create({
   },
   textWrap: {
     flex: 1,
-    gap: 6,
+    gap: 8,
   },
   message: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: Colors.textSecondary,
-    lineHeight: 18,
-  },
+    ...Typography.footnote, color: Colors.textSecondary,
+    },
   actionBtn: {
     alignSelf: "flex-start",
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingVertical: 8,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.good,
     minHeight: 30,
     justifyContent: "center",
   },
   actionBtnText: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#fff",
+    ...Typography.caption, fontWeight: "600", color: Colors.white,
   },
   closeBtn: {
     width: 28,

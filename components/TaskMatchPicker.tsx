@@ -8,9 +8,11 @@ import {
   type BottomSheetBackdropProps,
 } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import type { MatchCandidate } from "@/lib/serviceMatcher";
 
 /**
@@ -154,7 +156,7 @@ export default forwardRef<TaskMatchPickerHandle, TaskMatchPickerProps>(function 
     >
       <BottomSheetView style={[styles.content, { paddingBottom: 24 + insets.bottom }]}>
         <View style={styles.iconWrap}>
-          <Ionicons name={isAttach ? "link-outline" : "git-compare-outline"} size={26} color={Colors.accent} />
+          <Icon name={isAttach ? "link-outline" : "git-compare-outline"} size={26} color={Colors.accent} />
         </View>
         <Text style={styles.eyebrow}>{isAttach ? "ATTACH TO A TASK" : "CONFIRM THE MATCH"}</Text>
         <Text style={styles.title} numberOfLines={2}>{serviceName}</Text>
@@ -189,7 +191,7 @@ export default forwardRef<TaskMatchPickerHandle, TaskMatchPickerProps>(function 
                 {working ? (
                   <ActivityIndicator size="small" color={Colors.accent} />
                 ) : (
-                  <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+                  <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
                 )}
               </Pressable>
             );
@@ -198,7 +200,7 @@ export default forwardRef<TaskMatchPickerHandle, TaskMatchPickerProps>(function 
 
         {errorText ? (
           <View style={styles.errorBox}>
-            <Ionicons name="alert-circle" size={15} color={Colors.needsAttention} style={styles.errorIcon} />
+            <Icon name="alert-circle" size={15} color={Colors.needsAttention} style={styles.errorIcon} />
             <Text style={styles.errorText}>{errorText}</Text>
           </View>
         ) : null}
@@ -243,7 +245,7 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 52,
     height: 52,
-    borderRadius: 26,
+    borderRadius: Radius.pill,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
@@ -252,23 +254,20 @@ const styles = StyleSheet.create({
     borderColor: Colors.accentMuted,
   },
   eyebrow: {
-    fontSize: 11,
-    fontFamily: "Inter_700Bold",
+    ...Typography.caption,
+    fontWeight: "700",
     color: Colors.accent,
-    letterSpacing: 1.5,
     textAlign: "center",
     marginTop: 12,
   },
   title: {
-    fontSize: 19,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.title3,
     color: Colors.text,
     textAlign: "center",
-    marginTop: 6,
+    marginTop: 8,
   },
   subtitle: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
     textAlign: "center",
     marginTop: 4,
@@ -278,48 +277,46 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     minHeight: 54,
     backgroundColor: Colors.surface,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   rowWorking: { borderColor: Colors.accent },
   rowText: { flex: 1 },
-  rowName: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
-  rowTag: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 2 },
+  rowName: { ...Typography.subheadline, fontWeight: "500", color: Colors.text },
+  rowTag: { ...Typography.caption, color: Colors.textTertiary, marginTop: 2 },
   errorBox: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 7,
+    gap: 8,
     marginTop: 12,
     backgroundColor: Colors.needsAttentionMuted,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 8,
   },
   errorIcon: { flexShrink: 0, marginTop: 1 },
   errorText: {
+    ...Typography.caption,
     flex: 1,
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
-    lineHeight: 17,
   },
   actions: { marginTop: 16, gap: 4 },
   primaryBtn: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 50,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
   },
-  primaryText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  primaryText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
   secondaryBtn: { height: 44, alignItems: "center", justifyContent: "center" },
-  secondaryText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  secondaryText: { ...Typography.subheadline, fontWeight: "500", color: Colors.textSecondary },
 });

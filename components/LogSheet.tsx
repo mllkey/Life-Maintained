@@ -13,10 +13,12 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { router, type Href } from "expo-router";
@@ -215,21 +217,21 @@ function VoiceOrb({ amplitudeRef, isRecording, phase, firstOpen = false }: OrbPr
       {/* Outer glow layer */}
       <Reanimated.View style={[{
         position: "absolute",
-        width: 160, height: 160, borderRadius: 80,
+        width: 160, height: 160, borderRadius: Radius.pill,
         backgroundColor: Colors.accent,
       }, outerStyle]} />
 
       {/* Mid glow layer */}
       <Reanimated.View style={[{
         position: "absolute",
-        width: 110, height: 110, borderRadius: 55,
+        width: 110, height: 110, borderRadius: Radius.pill,
         backgroundColor: Colors.accent, opacity: 0.16,
       }, midStyle]} />
 
       {/* Inner core — decorative only */}
       <Reanimated.View style={[{
         position: "absolute",
-        width: 72, height: 72, borderRadius: 36,
+        width: 72, height: 72, borderRadius: Radius.pill,
         backgroundColor: Colors.accent, opacity: 0.88,
       }, coreStyle]} />
     </View>
@@ -514,7 +516,7 @@ function ConfirmCard({
     return (
       <View style={styles.confirmCard}>
         <View style={styles.confirmMatchedRow}>
-          <Ionicons name="checkmark-circle" size={20} color={Colors.good} />
+          <Icon name="checkmark-circle" size={20} color={Colors.good} />
           <View style={{ flex: 1 }}>
             <Text style={styles.confirmMatchedText} numberOfLines={1}>{match.taskName}</Text>
             <Text style={styles.confirmMatchedSub} numberOfLines={1}>{formatNextDue(match)}</Text>
@@ -552,7 +554,7 @@ function ConfirmCard({
                 <Text style={styles.confirmPickerRowText} numberOfLines={1}>{t.name}</Text>
                 {pickingId === t.id
                   ? <ActivityIndicator size="small" color={Colors.textTertiary} />
-                  : <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />}
+                  : <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />}
               </Pressable>
             ))}
           </View>
@@ -570,12 +572,12 @@ function ConfirmCard({
     <View style={styles.confirmCard}>
       <View style={styles.confirmCardHeader}>
         <View style={[styles.confirmCatIcon, { backgroundColor: catColor + "22" }]}>
-          <Ionicons name={catIcon as any} size={15} color={catColor} />
+          <Icon name={catIcon as any} size={15} color={catColor} />
         </View>
         <Text style={styles.confirmAssetName} numberOfLines={1}>{item.asset_name || "Unknown"}</Text>
         {item.confidence === "low" && (
           <View style={styles.confirmLowBadge}>
-            <Ionicons name="alert-circle-outline" size={11} color={Colors.dueSoon} />
+            <Icon name="alert-circle-outline" size={11} color={Colors.dueSoon} />
             <Text style={styles.confirmLowBadgeText}>Please verify</Text>
           </View>
         )}
@@ -614,7 +616,7 @@ function ConfirmCard({
           onPress={handleSave}
           disabled={saving || !vehicleReady}
         >
-          {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.confirmSaveBtnText}>Save</Text>}
+          {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.confirmSaveBtnText}>Save</Text>}
         </Pressable>
       </View>
     </View>
@@ -921,7 +923,7 @@ export function LogSheet({
             {/* Close button */}
             <View style={styles.recordingTopBar}>
               <Pressable onPress={handleClose} hitSlop={12} style={styles.recordingCloseBtn}>
-                <Ionicons name="close" size={22} color={Colors.textTertiary} />
+                <Icon name="close" size={22} color={Colors.textTertiary} />
               </Pressable>
             </View>
 
@@ -940,7 +942,7 @@ export function LogSheet({
             ) : voiceCapHit ? (
               <MountRise style={styles.voiceCapBlock}>
                 <View style={styles.voiceCapIconTile}>
-                  <Ionicons name="mic-off-outline" size={40} color={Colors.accent} />
+                  <Icon name="mic-off-outline" size={40} color={Colors.accent} />
                 </View>
                 <Text style={styles.voiceCapTitle}>{voiceCapTitleFor(profile)}</Text>
                 <Text style={styles.voiceCapBody}>{voiceCapBodyFor(profile)}</Text>
@@ -1008,16 +1010,16 @@ export function LogSheet({
                         accessibilityLabel="Start recording"
                         accessibilityRole="button"
                       >
-                        <Ionicons
+                        <Icon
                           name={phase === "idle" ? "mic" : "stop"}
                           size={24}
-                          color="#fff"
+                          color={Colors.white}
                         />
                       </Pressable>
                       <Text style={[
                         styles.recordingStatus,
                         { marginTop: 12 },
-                        phase === "recording" && { color: "#fff" },
+                        phase === "recording" && { color: Colors.white },
                       ]}>
                         {phase === "idle" ? "Tap to record" : "Recording..."}
                       </Text>
@@ -1052,11 +1054,11 @@ export function LogSheet({
 
                 <View style={styles.sheetHeader}>
                   <View style={styles.sheetIconWrap}>
-                    <Ionicons name="mic-outline" size={17} color={Colors.accent} />
+                    <Icon name="mic-outline" size={17} color={Colors.accent} />
                   </View>
                   <Text style={styles.sheetTitle}>Log Maintenance</Text>
                   <Pressable onPress={handleClose} hitSlop={10} style={styles.sheetCloseBtn}>
-                    <Ionicons name="close" size={20} color={Colors.textTertiary} />
+                    <Icon name="close" size={20} color={Colors.textTertiary} />
                   </Pressable>
                 </View>
 
@@ -1064,13 +1066,13 @@ export function LogSheet({
                   <View style={{ gap: 12 }}>
                     {phase === "error" && (
                       <View style={styles.sheetErrorBanner}>
-                        <Ionicons name="alert-circle-outline" size={14} color={Colors.overdue} />
+                        <Icon name="alert-circle-outline" size={14} color={Colors.overdue} />
                         <Text style={styles.sheetErrorText}>{errorMsg}</Text>
                       </View>
                     )}
                     {errorMsg !== "" && phase === "type" && (
                       <View style={styles.sheetErrorBanner}>
-                        <Ionicons name="alert-circle-outline" size={14} color={Colors.overdue} />
+                        <Icon name="alert-circle-outline" size={14} color={Colors.overdue} />
                         <Text style={styles.sheetErrorText}>{errorMsg}</Text>
                       </View>
                     )}
@@ -1096,7 +1098,7 @@ export function LogSheet({
                       accessibilityLabel="Process voice entry"
                       accessibilityRole="button"
                     >
-                      <Ionicons name="sparkles-outline" size={15} color="#fff" />
+                      <Icon name="sparkles-outline" size={15} color={Colors.white} />
                       <Text style={styles.sheetProcessBtnText}>Process</Text>
                     </Pressable>
                   </View>
@@ -1148,7 +1150,7 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 18,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.surface,
   },
   recordingCenter: {
@@ -1157,8 +1159,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   recordingStatus: {
-    fontSize: 18,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.headline,
     color: Colors.textSecondary,
     textAlign: "center",
   },
@@ -1169,7 +1170,7 @@ const styles = StyleSheet.create({
   recordingBtn: {
     width: 72,
     height: 72,
-    borderRadius: 36,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.accent,
     alignItems: "center",
     justifyContent: "center",
@@ -1177,26 +1178,24 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 12,
-    elevation: 8,
   },
   recordingBtnStop: {
     backgroundColor: Colors.overdue,
     shadowColor: Colors.overdue,
   },
   typeInsteadText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
   },
   transcribingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     paddingVertical: 20,
   },
   transcribingText: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
+    ...Typography.subheadline,
+    fontWeight: "500",
     color: Colors.textSecondary,
   },
 
@@ -1210,22 +1209,19 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.cardElevated,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     paddingHorizontal: 20,
     paddingTop: 12,
     gap: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
   },
   sheetHandleBar: {
     width: 36,
     height: 4,
-    borderRadius: 2,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.border,
     alignSelf: "center",
     marginBottom: 4,
@@ -1233,20 +1229,20 @@ const styles = StyleSheet.create({
   sheetHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
   sheetIconWrap: {
     width: 32,
     height: 32,
-    borderRadius: 9,
+    borderRadius: Radius.md,
     backgroundColor: Colors.accentMuted,
     alignItems: "center",
     justifyContent: "center",
   },
   sheetTitle: {
+    ...Typography.subheadline,
+    fontWeight: "600",
     flex: 1,
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
     color: Colors.text,
   },
   sheetCloseBtn: {
@@ -1256,21 +1252,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sheetTextInput: {
+    ...Typography.footnote,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
     minHeight: 96,
     textAlignVertical: "top",
   },
   sheetHint: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     textAlign: "center",
     marginTop: 8,
@@ -1279,26 +1273,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
+    gap: 8,
     backgroundColor: Colors.accent,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     height: 46,
   },
   sheetProcessBtnText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#fff",
+    ...Typography.subheadline,
+    fontWeight: "600",
+    color: Colors.white,
   },
   sheetProcessing: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 12,
     paddingVertical: 24,
   },
   sheetProcessingText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.textSecondary,
   },
   sheetErrorBanner: {
@@ -1306,29 +1300,27 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 8,
     backgroundColor: Colors.overdueMuted,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderWidth: 1,
     borderColor: "rgba(255,69,58,0.25)",
   },
   sheetErrorText: {
+    ...Typography.footnote,
     flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
     color: Colors.overdue,
-    lineHeight: 18,
   },
 
   // Confirm card
   confirmCard: {
     backgroundColor: Colors.surface,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 14,
+    padding: 16,
     gap: 12,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   confirmCardHeader: {
     flexDirection: "row",
@@ -1338,15 +1330,15 @@ const styles = StyleSheet.create({
   confirmCatIcon: {
     width: 28,
     height: 28,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   confirmAssetName: {
+    ...Typography.footnote,
+    fontWeight: "600",
     flex: 1,
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
     color: Colors.text,
   },
   confirmLowBadge: {
@@ -1354,13 +1346,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     backgroundColor: Colors.dueSoonMuted,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
   },
   confirmLowBadgeText: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.dueSoon,
   },
   confirmFields: {
@@ -1368,13 +1360,13 @@ const styles = StyleSheet.create({
   },
   confirmActions: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
     paddingTop: 2,
   },
   confirmDiscardBtn: {
     flex: 1,
     height: 40,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.surface,
@@ -1382,41 +1374,40 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   confirmDiscardText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.textSecondary,
   },
   confirmSaveBtn: {
     flex: 2,
     height: 40,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.accent,
   },
   confirmSaveBtnText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#fff",
+    ...Typography.footnote,
+    fontWeight: "600",
+    color: Colors.white,
   },
-  confirmMatchedRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 },
-  confirmMatchedText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  confirmMatchedSub: { fontSize: 12.5, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 1 },
-  confirmWrongTaskBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, minWidth: 76, alignItems: "center" },
-  confirmWrongTaskText: { fontSize: 12.5, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  confirmPickerTitle: { fontSize: 13.5, fontFamily: "Inter_600SemiBold", color: Colors.text, marginBottom: 10 },
-  confirmPickerLoading: { paddingVertical: 20, alignItems: "center", gap: 10 },
-  confirmPickerErrorText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  confirmPickerRetry: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
-  confirmPickerRetryText: { fontSize: 12.5, fontFamily: "Inter_500Medium", color: Colors.text },
-  confirmPickerList: { gap: 6 },
-  confirmPickerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background },
-  confirmPickerRowText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.text, flex: 1 },
-  confirmJustLogBtn: { marginTop: 10, paddingVertical: 11, borderRadius: 10, alignItems: "center" },
-  confirmJustLogText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  confirmMatchedRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 },
+  confirmMatchedText: { ...Typography.footnote, fontWeight: "600", color: Colors.text },
+  confirmMatchedSub: { ...Typography.footnote, color: Colors.textSecondary, marginTop: 1 },
+  confirmWrongTaskBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border, minWidth: 76, alignItems: "center" },
+  confirmWrongTaskText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
+  confirmPickerTitle: { ...Typography.footnote, fontWeight: "600", color: Colors.text, marginBottom: 12 },
+  confirmPickerLoading: { paddingVertical: 20, alignItems: "center", gap: 12 },
+  confirmPickerErrorText: { ...Typography.footnote, color: Colors.textSecondary },
+  confirmPickerRetry: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border },
+  confirmPickerRetryText: { ...Typography.footnote, fontWeight: "500", color: Colors.text },
+  confirmPickerList: { gap: 8 },
+  confirmPickerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, paddingHorizontal: 12, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background },
+  confirmPickerRowText: { ...Typography.footnote, fontWeight: "500", color: Colors.text, flex: 1 },
+  confirmJustLogBtn: { marginTop: 12, paddingVertical: 12, borderRadius: Radius.md, alignItems: "center" },
+  confirmJustLogText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
   confirmCardError: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.overdue,
   },
 
@@ -1428,9 +1419,9 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   fieldLabel: {
+    ...Typography.caption,
+    fontWeight: "500",
     width: 66,
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
     color: Colors.textSecondary,
     flexShrink: 0,
   },
@@ -1440,22 +1431,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     backgroundColor: Colors.card,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 9,
+    paddingHorizontal: 8,
     height: 36,
   },
   fieldInput: {
+    ...Typography.footnote,
     flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
     height: 36,
   },
   fieldAffix: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     flexShrink: 0,
   },
@@ -1473,53 +1462,50 @@ const styles = StyleSheet.create({
   voiceCapIconTile: {
     width: 88,
     height: 88,
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
   },
   voiceCapTitle: {
+    ...Typography.title2,
+    fontWeight: "600",
     marginTop: 20,
-    fontSize: 22,
-    fontFamily: "Inter_600SemiBold",
     color: Colors.text,
     textAlign: "center",
   },
   voiceCapBody: {
+    ...Typography.subheadline,
     marginTop: 8,
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
     color: Colors.textSecondary,
     textAlign: "center",
-    lineHeight: 21,
     paddingHorizontal: 12,
   },
   voiceCapBtn: {
     marginTop: 20,
     alignSelf: "stretch",
     height: 44,
-    paddingHorizontal: 22,
-    borderRadius: 22,
+    paddingHorizontal: 24,
+    borderRadius: Radius.xl,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.accent,
   },
   voiceCapBtnText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#fff",
+    ...Typography.subheadline,
+    fontWeight: "600",
+    color: Colors.white,
   },
   firstOpenCaption: {
-    marginTop: 18,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
+    marginTop: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     alignSelf: "center",
   },
   firstOpenCaptionText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.textSecondary,
-    letterSpacing: 0.2,
   },
 });
 

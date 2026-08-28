@@ -2,11 +2,11 @@ import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs, router } from "expo-router";
 import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
-import { SymbolView } from "expo-symbols";
 import { Platform, Pressable, StyleSheet, useColorScheme, View } from "react-native";
 import React, { useState, useEffect } from "react";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Radius } from "@/constants/radius";
+import { Icon as UiIcon } from "@/components/ui/Icon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/context/AuthContext";
@@ -76,60 +76,35 @@ function ClassicTabLayout() {
         name="index"
         options={{
           title: "Dashboard",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="square.grid.2x2.fill" tintColor={color} size={22} />
-            ) : (
-              <Ionicons name="grid" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color }) => <UiIcon name="grid" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="vehicles"
         options={{
           title: "Vehicles",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="car.fill" tintColor={color} size={22} />
-            ) : (
-              <Ionicons name="car" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color }) => <UiIcon name="car" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="home-tab"
         options={{
           title: "Home",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="house.fill" tintColor={color} size={22} />
-            ) : (
-              <Ionicons name="home" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color }) => <UiIcon name="home" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="health"
         options={{
           title: "Health",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="heart.fill" tintColor={color} size={22} />
-            ) : (
-              <Ionicons name="heart" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color }) => <UiIcon name="heart" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: "Settings",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="gearshape" tintColor={color} size={22} />
-            ) : (
-              <Ionicons name="settings" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color }) => <UiIcon name="settings" size={22} color={color} />,
         }}
       />
     </Tabs>
@@ -175,7 +150,7 @@ export default function TabLayout() {
         accessibilityLabel="Record voice maintenance log"
         accessibilityRole="button"
       >
-        <Ionicons name="mic-outline" size={22} color="#fff" />
+        <UiIcon name="mic" size={22} color={Colors.white} />
       </Pressable>
 
       <LogSheet
@@ -192,14 +167,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.accent,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.30,
-    shadowRadius: 8,
-    elevation: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
   },
 });

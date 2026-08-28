@@ -1,8 +1,10 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, Text, StyleSheet, Pressable, View } from "react-native";
 import { router } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Radius } from "@/constants/radius";
+import { Typography } from "@/constants/typography";
+import { Icon } from "@/components/ui/Icon";
 import { useAuth } from "@/context/AuthContext";
 import { isInTrial, trialDaysRemaining } from "@/lib/subscription";
 import * as Haptics from "expo-haptics";
@@ -48,7 +50,7 @@ export default function TrialBanner() {
         }}
       >
         <View style={styles.left}>
-          <Ionicons name="time-outline" size={16} color={Colors.accent} />
+          <Icon name="time-outline" size={16} color={Colors.accent} />
           <Text style={styles.text}>
             <Text style={styles.bold}>{daysLeft} day{daysLeft !== 1 ? "s" : ""}</Text>
             {" left in your free trial"}
@@ -56,7 +58,7 @@ export default function TrialBanner() {
         </View>
         <View style={styles.cta}>
           <Text style={styles.ctaText}>Upgrade</Text>
-          <Ionicons name="chevron-forward" size={12} color={Colors.accent} />
+          <Icon name="chevron-forward" size={12} color={Colors.accent} />
         </View>
       </Pressable>
     </Animated.View>
@@ -67,7 +69,7 @@ const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
     marginBottom: 8,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     overflow: "hidden",
   },
   inner: {
@@ -75,15 +77,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Colors.accentLight,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: Radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderWidth: 1,
     borderColor: Colors.accentMuted,
   },
   left: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
-  text: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  bold: { fontFamily: "Inter_600SemiBold", color: Colors.accent },
+  text: { ...Typography.footnote, color: Colors.textSecondary },
+  bold: { fontWeight: "600", color: Colors.accent },
   cta: { flexDirection: "row", alignItems: "center", gap: 2 },
-  ctaText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.accent },
+  ctaText: { ...Typography.footnote, fontWeight: "600", color: Colors.accent },
 });

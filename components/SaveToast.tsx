@@ -1,7 +1,9 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, Pressable, Text, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 
 interface SaveToastProps {
   visible: boolean;
@@ -41,10 +43,10 @@ export function SaveToast({ visible, message = "Saved!", subtitle, isError = fal
           only the Pressable can claim a touch; everything else passes through. */}
       <View style={styles.inner} pointerEvents={hasAction ? "box-none" : "auto"}>
         <View style={styles.body} pointerEvents={hasAction ? "none" : "auto"}>
-          <Ionicons
+          <Icon
             name={isError ? "alert-circle" : "checkmark-circle"}
             size={18}
-            color={isError ? Colors.overdue : "#34C759"}
+            color={isError ? Colors.overdue : Colors.good}
           />
           <View style={styles.textBlock}>
             <Text style={[styles.text, isError && { color: Colors.overdue }]}>{message}</Text>
@@ -78,17 +80,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    paddingHorizontal: 18,
+    backgroundColor: Colors.cardElevated,
+    borderRadius: Radius.lg,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
   },
   body: {
     flexDirection: "row",
@@ -100,14 +97,10 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   text: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.text,
+    ...Typography.subheadline, fontWeight: "600", color: Colors.text,
   },
   subtitle: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: Colors.textSecondary,
+    ...Typography.footnote, color: Colors.textSecondary,
     marginTop: 1,
   },
   actionBtn: {
@@ -116,12 +109,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 12,
     marginRight: -8,
-    borderRadius: 10,
+    borderRadius: Radius.md,
   },
   actionBtnPressed: { opacity: 0.6 },
   actionText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.accent,
+    ...Typography.subheadline, fontWeight: "600", color: Colors.accent,
   },
 });

@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import { Pressable, Text, Alert, ActivityIndicator, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { SaveToast } from "@/components/SaveToast";
 import { capture } from "@/lib/analytics";
 import {
@@ -169,7 +171,7 @@ export default function ReceiptScanButton({ assetType, assetId, onScanComplete, 
         accessibilityRole="button"
         accessibilityLabel="Scan a receipt"
       >
-        <Ionicons name="scan-outline" size={18} color={Colors.textInverse} />
+        <Icon name="scan-outline" size={18} color={Colors.textInverse} />
         <Text style={styles.buttonText}>Scan Receipt</Text>
       </Pressable>
       <SaveToast visible={toastVisible} message={toastMessage} subtitle={toastSubtitle ?? undefined} isError={toastIsError} />
@@ -184,11 +186,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     backgroundColor: Colors.accent,
-    paddingVertical: 14,
-    borderRadius: 14,
+    paddingVertical: 16,
+    borderRadius: Radius.lg,
     marginVertical: 8,
   },
-  buttonText: { color: Colors.textInverse, fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  buttonText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
   scanningContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -196,5 +198,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 8,
   },
-  scanningText: { color: Colors.accent, fontSize: 14, fontFamily: "Inter_500Medium" },
+  scanningText: { ...Typography.footnote, fontWeight: "500", color: Colors.accent },
 });

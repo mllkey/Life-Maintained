@@ -10,8 +10,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -214,17 +216,17 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
           <View style={styles.content}>
         <View style={styles.titleRow}>
           <View style={styles.titleIconWrap}>
-            <Ionicons name="scan-outline" size={22} color={Colors.accent} />
+            <Icon name="scan-outline" size={22} color={Colors.accent} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>You're out of scans this month</Text>
+            <Text style={styles.title}>You&apos;re out of scans this month</Text>
             <Text style={styles.subtitle}>Pick up where you left off — credits never expire</Text>
           </View>
         </View>
 
         {purchaseError ? (
           <View style={styles.errorCard}>
-            <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
+            <Icon name="alert-circle" size={16} color={Colors.overdue} />
             <Text style={styles.errorText}>{purchaseError}</Text>
           </View>
         ) : null}
@@ -265,7 +267,7 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
                 </View>
               )}
               <View style={styles.packLeft}>
-                <Ionicons name="receipt-outline" size={20} color={pack.popular ? Colors.accent : Colors.textSecondary} />
+                <Icon name="receipt-outline" size={20} color={pack.popular ? Colors.accent : Colors.textSecondary} />
                 <Text style={[styles.packTitle, pack.popular && { color: Colors.text }]}>{pack.title}</Text>
               </View>
               <View style={styles.packRight}>
@@ -291,8 +293,8 @@ export default forwardRef<ScanPackModalHandle, ScanPackModalProps>(function Scan
             accessibilityRole="button"
             accessibilityLabel="Retry loading prices"
           >
-            <Ionicons name="refresh" size={14} color={Colors.textSecondary} />
-            <Text style={styles.retryText}>Couldn't load pricing — tap to retry</Text>
+            <Icon name="refresh" size={14} color={Colors.textSecondary} />
+            <Text style={styles.retryText}>Couldn&apos;t load pricing — tap to retry</Text>
           </Pressable>
         ) : null}
 
@@ -325,7 +327,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     width: 36,
     height: 4,
-    borderRadius: 2,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.border,
     marginTop: 8,
     marginBottom: 4,
@@ -344,21 +346,21 @@ const styles = StyleSheet.create({
   titleIconWrap: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     backgroundColor: Colors.accentLight,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: Colors.accentMuted,
   },
-  title: { fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.text },
-  subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  title: { ...Typography.headline, fontWeight: "700", color: Colors.text },
+  subtitle: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
   packCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Colors.surface,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -373,16 +375,16 @@ const styles = StyleSheet.create({
     top: -8,
     right: 14,
     backgroundColor: Colors.accent,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  bestValueText: { fontSize: 10, fontFamily: "Inter_700Bold", color: Colors.background },
-  packLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
-  packTitle: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary, flex: 1 },
+  bestValueText: { ...Typography.caption, fontWeight: "700", color: Colors.background },
+  packLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  packTitle: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary, flex: 1 },
   packRight: { minWidth: 52, alignItems: "flex-end" },
-  packPrice: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.text },
-  packPerScan: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textTertiary, marginTop: 2 },
+  packPrice: { ...Typography.subheadline, fontWeight: "700", color: Colors.text },
+  packPerScan: { ...Typography.caption, fontWeight: "500", color: Colors.textTertiary, marginTop: 2 },
   errorCard: {
     flexDirection: "row",
     gap: 8,
@@ -390,45 +392,43 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.overdue,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   errorText: {
+    ...Typography.footnote,
+    fontWeight: "500",
     flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
     color: Colors.overdue,
-    lineHeight: 18,
   },
   processingCard: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
     alignItems: "center",
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.accentMuted,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   processingText: {
+    ...Typography.footnote,
+    fontWeight: "600",
     flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
     color: Colors.text,
-    lineHeight: 18,
   },
   retryRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   retryText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.textSecondary,
   },
 });

@@ -1,7 +1,9 @@
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
+import { Radius } from "@/constants/radius";
+import { Typography } from "@/constants/typography";
+import { Icon, type IconName } from "@/components/ui/Icon";
 
 export default function LoadErrorState({
   onRetry,
@@ -13,12 +15,12 @@ export default function LoadErrorState({
   onRetry: () => void;
   title?: string;
   body?: string;
-  icon?: keyof typeof Ionicons.glyphMap;
+  icon?: IconName;
   retryAccessibilityLabel?: string;
 }) {
   return (
     <View style={styles.errorWrap}>
-      <Ionicons name={icon} size={34} color={Colors.textSecondary} />
+      <Icon name={icon} size={34} color={Colors.textSecondary} />
       <Text style={styles.errorTitle}>{title}</Text>
       <Text style={styles.errorBody}>{body}</Text>
       <Pressable
@@ -27,7 +29,7 @@ export default function LoadErrorState({
         accessibilityRole="button"
         accessibilityLabel={retryAccessibilityLabel}
       >
-        <Ionicons name="refresh" size={16} color={Colors.textInverse} />
+        <Icon name="refresh" size={16} color={Colors.textInverse} />
         <Text style={styles.errorRetryText}>Try again</Text>
       </Pressable>
     </View>
@@ -36,8 +38,8 @@ export default function LoadErrorState({
 
 const styles = StyleSheet.create({
   errorWrap: { flex: 1, paddingTop: 80, paddingHorizontal: 24, alignItems: "center", gap: 12 },
-  errorTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
-  errorBody: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 20, maxWidth: 300 },
-  errorRetry: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: Colors.accent, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, marginTop: 4 },
-  errorRetryText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  errorTitle: { ...Typography.headline, color: Colors.text, textAlign: "center" },
+  errorBody: { ...Typography.footnote, color: Colors.textSecondary, textAlign: "center", maxWidth: 300 },
+  errorRetry: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.accent, paddingHorizontal: 20, paddingVertical: 12, borderRadius: Radius.md, marginTop: 4 },
+  errorRetryText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
 });

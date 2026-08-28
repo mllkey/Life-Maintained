@@ -13,8 +13,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { SaveToast } from "@/components/SaveToast";
@@ -633,7 +635,7 @@ export default function SettingsScreen() {
                 <Text style={styles.manageSubSub}>Cancel or change plan in iOS Settings</Text>
               </View>
               <View style={styles.manageSubPill} pointerEvents="none">
-                <Ionicons name="open-outline" size={16} color={Colors.accent} />
+                <Icon name="open-outline" size={16} color={Colors.accent} />
                 <Text style={styles.manageSubPillText}>Manage</Text>
               </View>
             </Pressable>
@@ -662,7 +664,7 @@ export default function SettingsScreen() {
               <View style={styles.groupCard}>
                 <View style={styles.scansRow}>
                   <View style={styles.scansIconWrap}>
-                    <Ionicons name="receipt-outline" size={18} color={Colors.accent} />
+                    <Icon name="receipt-outline" size={18} color={Colors.accent} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.scansLabel}>Receipt scans</Text>
@@ -713,13 +715,13 @@ export default function SettingsScreen() {
               accessibilityLabel="Import vehicles from a file"
             >
               <View style={styles.scansIconWrap}>
-                <Ionicons name="arrow-down-circle-outline" size={18} color={Colors.accent} />
+                <Icon name="arrow-down-circle-outline" size={18} color={Colors.accent} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.scansLabel}>Import vehicles</Text>
                 <Text style={styles.scansSub}>Bring in a fleet from a CSV or Excel file</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+              <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
             </Pressable>
           </View>
 
@@ -743,7 +745,7 @@ export default function SettingsScreen() {
           >
             <View style={styles.budgetContent}>
               <Text style={styles.budgetHint}>
-                We'll notify you when upcoming maintenance costs in a given month exceed this amount.
+                We&apos;ll notify you when upcoming maintenance costs in a given month exceed this amount.
               </Text>
               <View style={styles.budgetInputRow}>
                 <View style={styles.budgetInputWrap}>
@@ -777,7 +779,7 @@ export default function SettingsScreen() {
           >
             {(predVehicles?.length ?? 0) === 0 ? (
               <View style={styles.predEmpty}>
-                <Ionicons name="car-outline" size={28} color={Colors.textTertiary} />
+                <Icon name="car-outline" size={28} color={Colors.textTertiary} />
                 <Text style={styles.predEmptyText}>Add a vehicle to see service predictions.</Text>
               </View>
             ) : (
@@ -801,7 +803,7 @@ export default function SettingsScreen() {
                         ]}
                         onPress={() => { setSelectedVehicleId(pv.id); Haptics.selectionAsync(); }}
                       >
-                        <Ionicons
+                        <Icon
                           name="car-outline"
                           size={13}
                           color={isSelected ? Colors.vehicle : Colors.textTertiary}
@@ -816,7 +818,7 @@ export default function SettingsScreen() {
 
                 {selectedVehicle?.average_miles_per_month && (
                   <View style={styles.vehicleMeta}>
-                    <Ionicons name="speedometer-outline" size={13} color={Colors.textTertiary} />
+                    <Icon name="speedometer-outline" size={13} color={Colors.textTertiary} />
                     <Text style={styles.vehicleMetaText}>
                       {selectedVehicle.mileage != null ? `${(projectedMileage(selectedVehicle) ?? selectedVehicle.mileage).toLocaleString()} mi est. now · ` : ""}
                       {selectedVehicle.average_miles_per_month.toLocaleString()} mi/mo avg
@@ -828,7 +830,7 @@ export default function SettingsScreen() {
                   <ActivityIndicator color={Colors.accent} style={{ paddingVertical: 20 }} />
                 ) : !predTasks || predTasks.length === 0 ? (
                   <View style={styles.predEmpty}>
-                    <Ionicons name="construct-outline" size={26} color={Colors.textTertiary} />
+                    <Icon name="construct-outline" size={26} color={Colors.textTertiary} />
                     <Text style={styles.predEmptyText}>No maintenance tasks found for this vehicle.</Text>
                   </View>
                 ) : (
@@ -863,7 +865,7 @@ export default function SettingsScreen() {
                             setPredSheetData({ name: pt.name, vehicleLabel, intervalLabel, dueLabel: dateLabel, dueColor: color, costLabel });
                           }}
                         >
-                          <View style={{ flex: 2, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <View style={{ flex: 2, flexDirection: "row", alignItems: "center", gap: 8 }}>
                             <View style={[styles.tableDot, { backgroundColor: color }]} />
                             <Text style={styles.tableCellMain} numberOfLines={1}>{pt.name}</Text>
                           </View>
@@ -877,9 +879,9 @@ export default function SettingsScreen() {
                     })}
 
                     <View style={styles.tableNote}>
-                      <Ionicons name="information-circle-outline" size={13} color={Colors.textTertiary} />
+                      <Icon name="information-circle-outline" size={13} color={Colors.textTertiary} />
                       <Text style={styles.tableNoteText}>
-                        Dates are calculated from your vehicle's current mileage and average monthly driving distance.
+                        Dates are calculated from your vehicle&apos;s current mileage and average monthly driving distance.
                       </Text>
                     </View>
                   </>
@@ -902,13 +904,13 @@ export default function SettingsScreen() {
           >
             <View style={styles.actionBtnRow}>
               <View style={styles.actionBtnIconWrap}>
-                <Ionicons name="flash-outline" size={18} color={Colors.accent} />
+                <Icon name="flash-outline" size={18} color={Colors.accent} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.actionBtnTitle}>Quick Log with Action Button</Text>
                 <Text style={styles.actionBtnSub}>iPhone 15 Pro or newer? Instantly open voice logging.</Text>
               </View>
-              <Ionicons
+              <Icon
                 name={actionButtonExpanded ? "chevron-up" : "chevron-down"}
                 size={16}
                 color={Colors.textTertiary}
@@ -936,7 +938,7 @@ export default function SettingsScreen() {
                   </View>
                 ))}
                 <View style={styles.actionBtnUrlBox}>
-                  <Ionicons name="link-outline" size={13} color={Colors.accent} />
+                  <Icon name="link-outline" size={13} color={Colors.accent} />
                   <Text style={styles.actionBtnUrl}>lifemaintained://voice-log</Text>
                 </View>
               </View>
@@ -991,7 +993,7 @@ export default function SettingsScreen() {
                 marginTop: 16,
               })}
             >
-              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary }}>
+              <Text style={{ ...Typography.footnote, color: Colors.textTertiary }}>
                 Reset Tutorial Tooltips (Dev Only)
               </Text>
             </Pressable>
@@ -1015,7 +1017,7 @@ export default function SettingsScreen() {
                 <ActivityIndicator size="small" color={Colors.textInverse} />
               ) : (
                 <>
-                  <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
+                  <Icon name="checkmark" size={16} color={Colors.textInverse} />
                   <Text style={styles.saveBtnText}>Save Changes</Text>
                 </>
               )}
@@ -1080,7 +1082,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: Colors.background,
   },
-  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
+  title: { ...Typography.largeTitle, color: Colors.text },
   content: { paddingHorizontal: 20, paddingTop: 8, gap: 16 },
   maxWidth: {
     maxWidth: 768,
@@ -1090,8 +1092,8 @@ const styles = StyleSheet.create({
   },
 
   sectionLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 1.5,
@@ -1102,7 +1104,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -1110,22 +1112,22 @@ const styles = StyleSheet.create({
   },
   bannerPressed: { opacity: 0.9 },
   bannerText: { flex: 1 },
-  bannerTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  bannerSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  bannerTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  bannerSub: { ...Typography.footnote, color: Colors.textSecondary, marginTop: 2 },
   bannerBtn: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
-    paddingHorizontal: 14,
+    borderRadius: Radius.lg,
+    paddingHorizontal: 16,
     height: 28,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  bannerBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  bannerBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
 
   groupCard: {
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -1137,23 +1139,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 14,
-    gap: 10,
+    paddingVertical: 16,
+    gap: 12,
   },
-  accountEmail: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.text },
-  accountTierLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.accent },
+  accountEmail: { ...Typography.subheadline, flex: 1, color: Colors.text },
+  accountTierLabel: { ...Typography.caption, fontWeight: "600", color: Colors.accent },
 
   signOutRow: {
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 16,
     minHeight: 48,
     justifyContent: "center",
   },
-  signOutText: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.overdue },
+  signOutText: { ...Typography.subheadline, color: Colors.overdue },
 
   sectionCard: {
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -1169,13 +1171,13 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   toggleRowInfo: { flex: 1 },
-  toggleRowLabel: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
-  toggleRowSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
-  toggleHitArea: { padding: 5 },
+  toggleRowLabel: { ...Typography.subheadline, fontWeight: "500", color: Colors.text },
+  toggleRowSub: { ...Typography.footnote, color: Colors.textSecondary, marginTop: 2 },
+  toggleHitArea: { padding: 4 },
   toggle: {
     width: 50,
     height: 30,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.border,
     justifyContent: "center",
     paddingHorizontal: 2,
@@ -1184,23 +1186,23 @@ const styles = StyleSheet.create({
   toggleOn: { backgroundColor: Colors.accent },
   toggleDisabled: { opacity: 1 },
   toggleLoading: { opacity: 0.82 },
-  toggleThumb: { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.text, alignSelf: "flex-start" },
+  toggleThumb: { width: 26, height: 26, borderRadius: Radius.pill, backgroundColor: Colors.text, alignSelf: "flex-start" },
   toggleThumbOn: { alignSelf: "flex-end" },
   toggleThumbLoading: { opacity: 0.72 },
 
   deleteAccountBtn: { alignItems: "center", paddingVertical: 12, minHeight: 44, justifyContent: "center" },
-  deleteAccountText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.overdue },
+  deleteAccountText: { ...Typography.footnote, color: Colors.overdue },
 
   rowDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: -16, marginVertical: 0 },
 
-  budgetContent: { gap: 10 },
-  budgetHint: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 19 },
-  budgetInputRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  budgetContent: { gap: 12 },
+  budgetHint: { ...Typography.footnote, color: Colors.textSecondary },
+  budgetInputRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   budgetInputWrap: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 12,
@@ -1208,28 +1210,27 @@ const styles = StyleSheet.create({
     maxWidth: 160,
     height: 46,
   },
-  budgetCurrency: { fontSize: 18, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  budgetCurrency: { ...Typography.body, fontWeight: "500", color: Colors.textSecondary },
   budgetInput: {
+    ...Typography.body,
     flex: 1,
-    paddingVertical: 10,
-    fontSize: 18,
-    fontFamily: "Inter_400Regular",
+    paddingVertical: 12,
     color: Colors.text,
     paddingLeft: 4,
     minHeight: 44,
   },
-  budgetLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  budgetSaved: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.good },
+  budgetLabel: { ...Typography.footnote, color: Colors.textTertiary },
+  budgetSaved: { ...Typography.caption, color: Colors.good },
 
   chipScrollWrap: { marginHorizontal: -16, marginBottom: 12 },
   chipScroll: { paddingHorizontal: 16, gap: 8 },
   vehicleChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -1239,27 +1240,25 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.vehicleMuted,
     borderColor: Colors.vehicle + "66",
   },
-  vehicleChipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
-  vehicleChipTextSelected: { color: Colors.vehicle, fontFamily: "Inter_600SemiBold" },
+  vehicleChipText: { ...Typography.footnote, fontWeight: "500", color: Colors.textTertiary },
+  vehicleChipTextSelected: { fontWeight: "600", color: Colors.vehicle },
   vehicleMeta: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     marginBottom: 12,
     paddingHorizontal: 4,
   },
-  vehicleMetaText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  vehicleMetaText: { ...Typography.caption, color: Colors.textTertiary },
   predEmpty: {
     alignItems: "center",
-    paddingVertical: 28,
-    gap: 10,
+    paddingVertical: 32,
+    gap: 12,
   },
   predEmptyText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
     textAlign: "center",
-    lineHeight: 18,
   },
 
   tableHeader: {
@@ -1272,25 +1271,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     backgroundColor: Colors.surface,
   },
-  tableCol: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.6, flex: 1 },
+  tableCol: { ...Typography.caption, fontWeight: "600", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.6, flex: 1 },
   tableColRight: { textAlign: "right" },
   tableRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 11,
+    paddingVertical: 12,
     marginHorizontal: -16,
     paddingHorizontal: 20,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
   tableRowAlt: { backgroundColor: Colors.surface + "80" },
-  tableDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
-  tableCellMain: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.text, flex: 1 },
-  tableCell: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  tableDot: { width: 6, height: 6, borderRadius: Radius.pill, flexShrink: 0 },
+  tableCellMain: { ...Typography.footnote, fontWeight: "500", color: Colors.text, flex: 1 },
+  tableCell: { ...Typography.caption, flex: 1, color: Colors.textSecondary },
   tableCellRight: { textAlign: "right" },
   tableNote: {
     flexDirection: "row",
-    gap: 6,
+    gap: 8,
     marginTop: 12,
     marginHorizontal: -16,
     paddingHorizontal: 20,
@@ -1299,58 +1298,58 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
     alignItems: "flex-start",
   },
-  tableNoteText: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, lineHeight: 16 },
+  tableNoteText: { ...Typography.caption, flex: 1, color: Colors.textTertiary },
 
   legalRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   legalBtn: { paddingVertical: 8, paddingHorizontal: 4, minHeight: 44, justifyContent: "center" },
-  legalBtnText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  legalBtnText: { ...Typography.footnote, color: Colors.textTertiary },
   scansRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 },
   scansIconWrap: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.accentLight,
     borderWidth: 1,
     borderColor: Colors.accentMuted,
     alignItems: "center",
     justifyContent: "center",
   },
-  scansLabel: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
-  scansSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  scansLabel: { ...Typography.subheadline, fontWeight: "500", color: Colors.text },
+  scansSub: { ...Typography.footnote, color: Colors.textSecondary, marginTop: 2 },
   scansCtaWrap: { paddingTop: 8 },
   manageSubCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 16,
   },
   manageSubText: { flex: 1 },
-  manageSubTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  manageSubSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  manageSubTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  manageSubSub: { ...Typography.footnote, color: Colors.textSecondary, marginTop: 2 },
   manageSubPill: {
     height: 40,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    borderRadius: Radius.md,
+    paddingHorizontal: 16,
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 8,
   },
   manageSubPillText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.footnote,
+    fontWeight: "600",
     color: Colors.accent,
   },
-  legalDot: { fontSize: 13, color: Colors.textTertiary },
-  version: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
+  legalDot: { ...Typography.footnote, color: Colors.textTertiary },
+  version: { ...Typography.caption, color: Colors.textTertiary, textAlign: "center" },
 
   saveBar: {
     position: "absolute",
@@ -1372,22 +1371,22 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     width: "100%",
   },
-  saveBarHint: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  saveBarHint: { ...Typography.footnote, color: Colors.textSecondary },
   saveBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 8,
     backgroundColor: Colors.accent,
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
+    borderRadius: Radius.md,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     minHeight: 44,
   },
-  saveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  saveBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
 
   actionBtnCard: {
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.accent + "33",
     marginBottom: 12,
@@ -1402,31 +1401,30 @@ const styles = StyleSheet.create({
   actionBtnIconWrap: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.accent + "18",
     alignItems: "center",
     justifyContent: "center",
   },
   actionBtnTitle: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.footnote,
+    fontWeight: "600",
     color: Colors.text,
     marginBottom: 2,
   },
   actionBtnSub: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textSecondary,
   },
   actionBtnSteps: {
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     padding: 16,
-    gap: 10,
+    gap: 12,
   },
   actionBtnStepHeader: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -1435,43 +1433,40 @@ const styles = StyleSheet.create({
   actionBtnStep: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
+    gap: 12,
   },
   actionBtnStepNum: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.accent + "22",
     alignItems: "center",
     justifyContent: "center",
     marginTop: 1,
   },
   actionBtnStepNumText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.accent,
   },
   actionBtnStepText: {
+    ...Typography.footnote,
     flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
-    lineHeight: 19,
   },
   actionBtnUrlBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     backgroundColor: Colors.surface,
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     marginTop: 4,
   },
   actionBtnUrl: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    ...Typography.caption,
+    fontWeight: "500",
     color: Colors.accent,
-    letterSpacing: 0.3,
   },
 });

@@ -102,6 +102,16 @@ export const IONICON_TO_SF = {
   "medkit-outline": "cross.case",
   "construct": "wrench.and.screwdriver.fill",
   "construct-outline": "wrench.and.screwdriver",
+  // P2(a) sweep: names reached through IconName-typed props on swept components
+  "compass-outline": "safari",
+  "create-outline": "square.and.pencil",
+  "people-outline": "person.2",
+  "folder-open-outline": "folder",
+  "wallet-outline": "wallet.pass",
+  "layers-outline": "square.stack",
+  "business-outline": "building.2",
+  "storefront-outline": "storefront",
+  "sunny-outline": "sun.max",
 } as const satisfies Partial<Record<IonName, SFSymbol>>;
 
 export type IconName = keyof typeof IONICON_TO_SF;

@@ -8,11 +8,13 @@
 
 import React, { useState } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon, type IconName } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { showUndoToast, type UndoResult } from "@/components/UndoToast";
 
-type Ionicon = React.ComponentProps<typeof Ionicons>["name"];
+type Ionicon = IconName;
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -120,13 +122,13 @@ export default function DeveloperTestUndoToast() {
               accessibilityLabel={r.label}
             >
               <View style={[styles.iconWrap, { backgroundColor: `${r.accent}1A`, borderColor: `${r.accent}33` }]}>
-                <Ionicons name={r.icon} size={18} color={r.accent} />
+                <Icon name={r.icon} size={18} color={r.accent} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowLabel}>{r.label}</Text>
                 <Text style={styles.rowSub}>{r.sub}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={Colors.textSecondary} />
+              <Icon name="chevron-forward" size={18} color={Colors.textSecondary} />
             </Pressable>
           </React.Fragment>
         ))}
@@ -141,20 +143,18 @@ export default function DeveloperTestUndoToast() {
 
 const styles = StyleSheet.create({
   sectionLabel: {
-    fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary,
+    ...Typography.footnote, fontWeight: "600", color: Colors.textSecondary,
     textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, marginLeft: 4,
   },
   groupCard: {
-    backgroundColor: Colors.card, borderRadius: 14, borderWidth: 1,
+    backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1,
     borderColor: Colors.border, overflow: "hidden",
   },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
-  iconWrap: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  rowLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  rowSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 16 },
+  iconWrap: { width: 32, height: 32, borderRadius: Radius.md, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  rowLabel: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  rowSub: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
   divider: { height: 1, backgroundColor: Colors.border, marginLeft: 60 },
   hint: {
-    marginTop: 8, paddingHorizontal: 4, fontSize: 11, fontFamily: "Inter_400Regular",
-    color: Colors.textSecondary, lineHeight: 16,
-  },
+    ...Typography.caption, marginTop: 8, paddingHorizontal: 4, color: Colors.textSecondary, },
 });

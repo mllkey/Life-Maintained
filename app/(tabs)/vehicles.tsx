@@ -14,8 +14,10 @@ import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon, MciIcon, type IconName } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
@@ -130,7 +132,7 @@ export default function VehiclesScreen() {
         <Text style={styles.title}>Vehicles</Text>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Pressable
-            style={({ pressed }) => [{ padding: 8, borderRadius: 10, borderWidth: 1,
+            style={({ pressed }) => [{ padding: 8, borderRadius: Radius.md, borderWidth: 1,
               borderColor: Colors.border, backgroundColor: Colors.card,
               opacity: pressed ? 0.85 : 1 }]}
             hitSlop={6}
@@ -139,17 +141,17 @@ export default function VehiclesScreen() {
             accessibilityRole="button"
             accessibilityLabel="Import vehicles from a file"
           >
-            <Ionicons name="arrow-down-circle-outline" size={18} color={Colors.text} />
+            <Icon name="arrow-down-circle-outline" size={18} color={Colors.text} />
           </Pressable>
           <Pressable
             style={({ pressed }) => [{
               flexDirection: "row",
               alignItems: "center",
-              gap: 5,
-              backgroundColor: "#E8943A",
-              paddingHorizontal: 14,
+              gap: 4,
+              backgroundColor: Colors.accent,
+              paddingHorizontal: 16,
               paddingVertical: 8,
-              borderRadius: 10,
+              borderRadius: Radius.md,
               opacity: pressed ? 0.85 : 1,
             }]}
             onPress={() => {
@@ -159,8 +161,8 @@ export default function VehiclesScreen() {
             accessibilityLabel="Add a new vehicle"
             accessibilityRole="button"
           >
-            <Ionicons name="add" size={18} color={Colors.textInverse} />
-            <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.textInverse }}>Vehicle</Text>
+            <Icon name="add" size={18} color={Colors.textInverse} />
+            <Text style={{ ...Typography.footnote, fontWeight: "600", color: Colors.textInverse }}>Vehicle</Text>
           </Pressable>
         </View>
       </View>
@@ -257,11 +259,11 @@ export default function VehiclesScreen() {
                 }}
               >
                 {v.photo_url ? (
-                  <Image source={{ uri: v.photo_url }} style={{ width: 36, height: 36, borderRadius: 10 }} resizeMode="cover" />
+                  <Image source={{ uri: v.photo_url }} style={{ width: 36, height: 36, borderRadius: Radius.md }} resizeMode="cover" />
                 ) : icon.family === "ionicons" ? (
-                  <Ionicons name={icon.name} size={18} color={Colors.vehicle} />
+                  <Icon name={icon.name as IconName} size={18} color={Colors.vehicle} />
                 ) : (
-                  <MaterialCommunityIcons name={icon.name} size={18} color={Colors.vehicle} />
+                  <MciIcon name={icon.name} size={18} color={Colors.vehicle} />
                 )}
                 <View style={styles.vehicleInfo}>
                   <View style={styles.vehicleTitleRow}>
@@ -269,7 +271,7 @@ export default function VehiclesScreen() {
                     <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
                   </View>
                   {v.nickname && title ? (
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#8B93A8" }} numberOfLines={1}>
+                    <Text style={{ ...Typography.caption, color: Colors.textSecondary }} numberOfLines={1}>
                       {title}
                     </Text>
                   ) : null}
@@ -283,13 +285,13 @@ export default function VehiclesScreen() {
                   ) : null}
                   {isLocked && (
                     <View style={styles.lockedRow}>
-                      <Ionicons name="lock-closed" size={11} color={Colors.textTertiary} />
+                      <Icon name="lock-closed" size={11} color={Colors.textTertiary} />
                       <Text style={styles.lockedText}>Upgrade to access</Text>
                     </View>
                   )}
                 </View>
                 <View style={styles.cardRight}>
-                  <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+                  <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
                 </View>
               </Pressable>
             );
@@ -350,8 +352,10 @@ function EmptyVehicles({ onAddPress, onImportPress }: { onAddPress: () => void; 
         accessibilityRole="button"
         accessibilityLabel="Import vehicles from a spreadsheet"
       >
-        <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular",
-          color: Colors.textSecondary }}>or import from a spreadsheet</Text>
+        <Text style={{
+          ...Typography.footnote,
+          color: Colors.textSecondary,
+        }}>or import from a spreadsheet</Text>
       </Pressable>
     </View>
   );
@@ -366,34 +370,29 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: Colors.background,
   },
-  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  addText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.accent },
-  content: { paddingHorizontal: 20, paddingTop: 8, gap: 10 },
+  title: { ...Typography.largeTitle, color: Colors.text },
+  addText: { ...Typography.subheadline, fontWeight: "500", color: Colors.accent },
+  content: { paddingHorizontal: 20, paddingTop: 8, gap: 12 },
 
   vehicleCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  vehicleInfo: { flex: 1, gap: 3, minWidth: 0 },
+  vehicleInfo: { flex: 1, gap: 4, minWidth: 0 },
   vehicleTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  vehicleTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  vehicleMeta: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  vehicleTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  vehicleMeta: { ...Typography.footnote, color: Colors.textSecondary },
   cardRight: { alignItems: "flex-end", gap: 4, flexShrink: 0 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusDot: { width: 8, height: 8, borderRadius: Radius.pill },
   lockedRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
-  lockedText: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  lockedText: { ...Typography.caption, color: Colors.textTertiary },
 
-  emptyWrap: { flex: 1, paddingTop: 60, alignItems: "center", gap: 10 },
-  emptyTitle: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  emptyLink: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.accent },
+  emptyWrap: { flex: 1, paddingTop: 60, alignItems: "center", gap: 12 },
+  emptyTitle: { ...Typography.subheadline, color: Colors.textSecondary },
+  emptyLink: { ...Typography.subheadline, fontWeight: "500", color: Colors.accent },
 
 });

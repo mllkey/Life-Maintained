@@ -8,8 +8,10 @@ import React, { useEffect, useState, useCallback } from "react";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import * as Notifications from "expo-notifications";
 import * as Haptics from "expo-haptics";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon, type IconName } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 
@@ -217,7 +219,7 @@ export default function DeveloperTestNotifications() {
   const buttons: Array<{
     kind: NotifTaskKind;
     label: string;
-    icon: keyof typeof Ionicons.glyphMap;
+    icon: IconName;
     accent: string;
     seedEntry: SeedEntry | null;
     fire: () => Promise<void>;
@@ -308,7 +310,7 @@ export default function DeveloperTestNotifications() {
                   disabled={disabled}
                 >
                   <View style={[styles.iconWrap, { backgroundColor: `${b.accent}1A`, borderColor: `${b.accent}33` }]}>
-                    <Ionicons name={b.icon} size={18} color={b.accent} />
+                    <Icon name={b.icon} size={18} color={b.accent} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowLabel}>{b.label}</Text>
@@ -321,7 +323,7 @@ export default function DeveloperTestNotifications() {
                   {firingKind === b.kind ? (
                     <ActivityIndicator size="small" color={b.accent} />
                   ) : (
-                    <Ionicons name="chevron-forward" size={18} color={Colors.textSecondary} />
+                    <Icon name="chevron-forward" size={18} color={Colors.textSecondary} />
                   )}
                 </Pressable>
               </React.Fragment>
@@ -331,7 +333,7 @@ export default function DeveloperTestNotifications() {
       </View>
       {inlineError ? (
         <View style={styles.errorCard}>
-          <Ionicons name="alert-circle" size={16} color={Colors.overdue} />
+          <Icon name="alert-circle" size={16} color={Colors.overdue} />
           <Text style={styles.errorText}>{inlineError}</Text>
         </View>
       ) : null}
@@ -345,8 +347,8 @@ export default function DeveloperTestNotifications() {
 
 const styles = StyleSheet.create({
   sectionLabel: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.footnote,
+    fontWeight: "600",
     color: Colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -355,7 +357,7 @@ const styles = StyleSheet.create({
   },
   groupCard: {
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -363,54 +365,51 @@ const styles = StyleSheet.create({
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
-  loadingText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  loadingText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 16,
   },
   iconWrap: {
     width: 32,
     height: 32,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
-  rowLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  rowSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  rowLabel: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  rowSub: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
   divider: { height: 1, backgroundColor: Colors.border, marginLeft: 60 },
   errorCard: {
-    marginTop: 10,
+    marginTop: 12,
     flexDirection: "row",
     gap: 8,
     alignItems: "flex-start",
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.overdue,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   errorText: {
+    ...Typography.caption,
+    fontWeight: "500",
     flex: 1,
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
     color: Colors.overdue,
-    lineHeight: 17,
   },
   hint: {
+    ...Typography.caption,
     marginTop: 8,
     paddingHorizontal: 4,
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
     color: Colors.textSecondary,
-    lineHeight: 16,
   },
 });

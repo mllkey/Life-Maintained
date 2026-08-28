@@ -1,7 +1,9 @@
 import React from "react";
 import { Pressable, Text, StyleSheet, ActivityIndicator, View, Platform } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Radius } from "@/constants/radius";
+import { Typography } from "@/constants/typography";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import * as Haptics from "expo-haptics";
 
 type Variant = "primary" | "secondary";
@@ -12,7 +14,7 @@ interface PaidActionCTAProps {
   variant?: Variant;
   loading?: boolean;
   disabled?: boolean;
-  icon?: keyof typeof Ionicons.glyphMap;
+  icon?: IconName;
   testID?: string;
   accessibilityLabel?: string;
   fullWidth?: boolean;
@@ -64,7 +66,7 @@ export function PaidActionCTA({
       ) : (
         <View style={styles.row}>
           {icon ? (
-            <Ionicons
+            <Icon
               name={icon}
               size={16}
               color={isPrimary ? Colors.textInverse : Colors.accent}
@@ -81,10 +83,10 @@ export function PaidActionCTA({
 const styles = StyleSheet.create({
   base: {
     height: 52,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
   },
   fullWidth: { alignSelf: "stretch" },
   hugContent: { alignSelf: "flex-start" },
@@ -96,6 +98,6 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   icon: { marginTop: Platform.OS === "ios" ? 0 : 1 },
-  primaryText: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.textInverse },
-  secondaryText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.accent },
+  primaryText: { ...Typography.subheadline, fontWeight: "700", color: Colors.textInverse },
+  secondaryText: { ...Typography.subheadline, fontWeight: "600", color: Colors.accent },
 });

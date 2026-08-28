@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { View, Text, Pressable, Platform, Modal, StyleSheet } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Colors } from "@/constants/colors";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { format, parseISO } from "date-fns";
 
 interface DatePickerProps {
@@ -75,25 +77,23 @@ export default function DatePicker({ value, onChange, maximumDate, minimumDate, 
 
 const styles = StyleSheet.create({
   label: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.textSecondary,
-    marginBottom: 6,
+    ...Typography.caption, fontWeight: "600", color: Colors.textSecondary,
+    marginBottom: 8,
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },
   field: {
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
     minHeight: 48,
   },
-  fieldText: { fontSize: 16, fontFamily: "Inter_400Regular", color: Colors.text },
+  fieldText: { ...Typography.subheadline, color: Colors.text },
   modalRoot: { flex: 1, justifyContent: "flex-end" },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
   pickerContainer: {
@@ -110,5 +110,5 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  doneBtn: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.accent },
+  doneBtn: { ...Typography.subheadline, fontWeight: "600", color: Colors.accent },
 });

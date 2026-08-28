@@ -16,11 +16,13 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { upsertPushToken, resolveAuthUserId } from "@/lib/notificationScheduler";
 import { loadNotifPrefs, saveNotifPrefs } from "@/lib/notificationPrefs";
 import { supabase } from "@/lib/supabase";
@@ -230,13 +232,13 @@ export default function NotifPermissionBanner({ userId, onDismiss }: Props) {
           >
             <View style={styles.iconRow}>
               <View style={[styles.iconTile, { backgroundColor: Colors.vehicleMuted }]}>
-                <Ionicons name="car" size={22} color={Colors.vehicle} />
+                <Icon name="car" size={22} color={Colors.vehicle} />
               </View>
               <View style={[styles.iconTile, { backgroundColor: Colors.homeMuted }]}>
-                <Ionicons name="home" size={22} color={Colors.home} />
+                <Icon name="home" size={22} color={Colors.home} />
               </View>
               <View style={[styles.iconTile, { backgroundColor: Colors.healthMuted }]}>
-                <Ionicons name="heart" size={22} color={Colors.health} />
+                <Icon name="heart" size={22} color={Colors.health} />
               </View>
             </View>
 
@@ -294,74 +296,66 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 340,
     maxHeight: "85%",
-    backgroundColor: Colors.card,
-    borderRadius: 24,
+    backgroundColor: Colors.cardElevated,
+    borderRadius: Radius.xl,
     borderWidth: 1,
     borderColor: Colors.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    elevation: 12,
   },
   cardContent: {
     alignItems: "center",
     paddingHorizontal: 24,
-    paddingTop: 28,
+    paddingTop: 32,
     paddingBottom: 16,
   },
   iconRow: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 18,
+    gap: 12,
+    marginBottom: 20,
   },
   iconTile: {
     width: 44,
     height: 44,
-    borderRadius: 13,
+    borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
   title: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
+    ...Typography.title2,
     color: Colors.text,
     textAlign: "center",
     marginBottom: 8,
   },
   body: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
     textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 22,
+    marginBottom: 24,
   },
   primaryBtn: {
     alignSelf: "stretch",
     minHeight: 52,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.accent,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 16,
   },
   primaryBtnText: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.subheadline,
+    fontWeight: "600",
     color: Colors.textInverse,
     textAlign: "center",
   },
   secondaryBtn: {
     alignSelf: "stretch",
     alignItems: "center",
-    paddingVertical: 14,
+    paddingVertical: 16,
     marginTop: 4,
   },
   secondaryBtnText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.textSecondary,
   },
 });

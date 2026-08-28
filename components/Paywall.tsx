@@ -12,8 +12,10 @@ import {
   KeyboardAvoidingView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon, type IconName } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { capture as captureAnalytics } from "@/lib/analytics";
@@ -47,7 +49,7 @@ function savingsPctFor(monthlyStr: string, annualStr: string): number {
 
 const TIER_CONFIG: Record<TierKey, {
   label: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: IconName;
   color: string;
   rcOffering: string;
   annualPrice: string;
@@ -698,11 +700,11 @@ export default function Paywall({
       <View style={[styles.webFallback, { paddingTop: topPad + 16, paddingBottom: botPad + 16 }]}>
         {canDismiss && (
           <Pressable style={styles.closeBtn} onPress={onDismiss}>
-            <Ionicons name="close" size={22} color={Colors.text} />
+            <Icon name="close" size={22} color={Colors.text} />
           </Pressable>
         )}
         <View style={styles.webFallbackInner}>
-          <Ionicons name="phone-portrait-outline" size={48} color={Colors.accent} />
+          <Icon name="phone-portrait-outline" size={48} color={Colors.accent} />
           <Text style={styles.webFallbackTitle}>Subscribe on Mobile</Text>
           <Text style={styles.webFallbackSub}>
             Download LifeMaintained on iOS or Android to start your free trial.
@@ -727,7 +729,7 @@ export default function Paywall({
             hitSlop={8}
             testID="paywall-close"
           >
-            <Ionicons name="close" size={22} color={Colors.text} />
+            <Icon name="close" size={22} color={Colors.text} />
           </Pressable>
         ) : (
           <View style={styles.closeBtn} />
@@ -746,9 +748,9 @@ export default function Paywall({
       ) : offeringsError ? (
         <View style={styles.offeringsErrorContainer}>
           <View style={styles.offeringsErrorIcon}>
-            <Ionicons name="cloud-offline-outline" size={30} color={Colors.accent} />
+            <Icon name="cloud-offline-outline" size={30} color={Colors.accent} />
           </View>
-          <Text style={styles.offeringsErrorTitle}>Couldn't load plans</Text>
+          <Text style={styles.offeringsErrorTitle}>Couldn&apos;t load plans</Text>
           <Text style={styles.offeringsErrorText}>
             Check your connection and try again.
           </Text>
@@ -811,7 +813,7 @@ export default function Paywall({
                       styles.tierIconWrap,
                       { backgroundColor: cfg.color + "1A", borderColor: cfg.color + "33" },
                     ]}>
-                      <Ionicons name={cfg.icon} size={22} color={cfg.color} />
+                      <Icon name={cfg.icon} size={22} color={cfg.color} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.tierName, { color: selected ? cfg.color : Colors.text }]}>
@@ -862,7 +864,7 @@ export default function Paywall({
               inlineError.feedback === "warning" && styles.inlineWarningCard,
             ]}>
               <View style={styles.inlineErrorIcon}>
-                <Ionicons
+                <Icon
                   name={inlineError.feedback === "warning" ? "time-outline" : "alert-circle"}
                   size={18}
                   color={inlineError.feedback === "warning" ? Colors.accent : Colors.overdue}
@@ -966,7 +968,7 @@ export default function Paywall({
               </View>
               {promoMessage && (
                 <View style={styles.promoFeedback}>
-                  <Ionicons
+                  <Icon
                     name={promoStatus === "success" ? "checkmark-circle" : "alert-circle"}
                     size={14}
                     color={promoStatus === "success" ? Colors.good : Colors.overdue}
@@ -1000,21 +1002,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 14,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   closeBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   headerCenter: { flex: 1, alignItems: "center", gap: 4 },
-  headerTitle: { fontSize: 24, fontFamily: "Inter_700Bold", color: Colors.text },
-  headerSubtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  headerTitle: { ...Typography.title2, color: Colors.text },
+  headerSubtitle: { ...Typography.footnote, color: Colors.textSecondary, textAlign: "center" },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
   scroll: { paddingHorizontal: 20, paddingTop: 20, gap: 16 },
 
   // Billing toggle — segmented control
   billingToggle: {
     flexDirection: "row",
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -1028,46 +1030,46 @@ const styles = StyleSheet.create({
   },
   billingActive: { backgroundColor: Colors.accent },
   billingOptionContent: { flexDirection: "row", alignItems: "center" },
-  billingLabel: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  billingLabelActive: { color: Colors.textInverse, fontFamily: "Inter_600SemiBold" },
-  saveText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.accent },
+  billingLabel: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
+  billingLabelActive: { fontWeight: "600", color: Colors.textInverse },
+  saveText: { ...Typography.caption, fontWeight: "600", color: Colors.accent },
   saveTextActive: { color: Colors.textInverse },
 
   // Tier cards
   tierWrapper: { gap: 4 },
-  tierWrapperPopular: { marginTop: 10 },
+  tierWrapperPopular: { marginTop: 12 },
   popularPillBadge: {
     position: "absolute",
     top: -10,
     right: 16,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     zIndex: 2,
   },
   popularPillBadgeText: {
-    fontSize: 10,
-    fontFamily: "Inter_700Bold",
+    ...Typography.caption,
+    fontWeight: "700",
     color: Colors.textInverse,
     letterSpacing: 0.4,
     textTransform: "uppercase",
   },
   popularLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     paddingLeft: 2,
   },
   tierIconWrap: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   tierCard: {
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -1077,157 +1079,147 @@ const styles = StyleSheet.create({
   tierCardPopular: {
     padding: 20,
     borderWidth: 1.5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 6,
+    backgroundColor: Colors.cardElevated,
   },
   tierTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  tierName: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 4 },
-  tierPrice: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, lineHeight: 26 },
-  tierPriceSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  tierName: { ...Typography.headline, fontWeight: "700", marginBottom: 4 },
+  tierPrice: { ...Typography.title2, color: Colors.text },
+  tierPriceSub: { ...Typography.footnote, color: Colors.textSecondary, marginTop: 2 },
   radioOuter: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: Radius.pill,
     borderWidth: 2,
     borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,
   },
-  radioInner: { width: 10, height: 10, borderRadius: 5 },
-  tierFeatures: { gap: 6 },
+  radioInner: { width: 10, height: 10, borderRadius: Radius.pill },
+  tierFeatures: { gap: 8 },
   featureRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  featureBullet: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, width: 10 },
-  featureText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, flex: 1 },
+  featureBullet: { ...Typography.footnote, color: Colors.textSecondary, width: 10 },
+  featureText: { ...Typography.footnote, color: Colors.textSecondary, flex: 1 },
 
   scanLimitsBox: {
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     gap: 2,
   },
   scanLimitsTitle: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.text,
     marginBottom: 2,
   },
   scanLimitsText: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textSecondary,
   },
 
   trialCalloutText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
     textAlign: "center",
   },
   ctaBtn: {
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 52,
     alignItems: "center",
     justifyContent: "center",
   },
-  ctaBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.textInverse },
+  ctaBtnText: { ...Typography.subheadline, fontWeight: "700", color: Colors.textInverse },
   legalText: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     textAlign: "center",
     marginTop: -8,
   },
   skipBtn: { alignItems: "center", paddingVertical: 4 },
-  skipText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  skipText: { ...Typography.footnote, color: Colors.textSecondary },
   restoreBtn: { alignItems: "center", paddingVertical: 8 },
-  restoreText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  restoreText: { ...Typography.footnote, color: Colors.textTertiary },
   promoToggle: { alignItems: "center", paddingVertical: 4 },
-  promoToggleText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  promoToggleText: { ...Typography.subheadline, fontWeight: "500", color: Colors.textSecondary },
   promoSection: { gap: 8, marginTop: -4 },
   promoRow: { flexDirection: "row", gap: 8 },
   promoInput: {
+    ...Typography.subheadline,
     flex: 1,
     backgroundColor: Colors.surface,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
   },
   promoApplyBtn: {
     backgroundColor: Colors.accent,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     paddingHorizontal: 16,
     justifyContent: "center",
     minWidth: 64,
     alignItems: "center",
   },
-  promoApplyText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.background },
-  promoFeedback: { flexDirection: "row", alignItems: "center", gap: 6 },
-  promoFeedbackText: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  promoApplyText: { ...Typography.subheadline, fontWeight: "600", color: Colors.background },
+  promoFeedback: { flexDirection: "row", alignItems: "center", gap: 8 },
+  promoFeedbackText: { ...Typography.footnote },
   webFallback: { flex: 1, backgroundColor: Colors.background, position: "relative" },
   webFallbackInner: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 },
-  webFallbackTitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text },
-  webFallbackSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center", lineHeight: 22 },
+  webFallbackTitle: { ...Typography.title3, fontWeight: "700", color: Colors.text },
+  webFallbackSub: { ...Typography.footnote, color: Colors.textSecondary, textAlign: "center" },
 
   inlineErrorCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
+    gap: 12,
     backgroundColor: Colors.surface,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.overdue,
-    padding: 14,
+    padding: 16,
   },
   inlineWarningCard: { borderColor: Colors.accent },
   inlineErrorIcon: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: Radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.card,
   },
-  inlineErrorTextBlock: { flex: 1, gap: 3 },
-  inlineErrorTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: Colors.text },
+  inlineErrorTextBlock: { flex: 1, gap: 4 },
+  inlineErrorTitle: { ...Typography.footnote, fontWeight: "700", color: Colors.text },
   inlineErrorMessage: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
-    lineHeight: 18,
   },
   inlineErrorAction: {
     alignSelf: "center",
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  inlineErrorActionText: { fontSize: 13, fontFamily: "Inter_700Bold", color: Colors.accent },
+  inlineErrorActionText: { ...Typography.footnote, fontWeight: "700", color: Colors.accent },
 
   offeringsErrorContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 32,
-    gap: 14,
+    gap: 16,
   },
   offeringsErrorIcon: {
     width: 64,
     height: 64,
-    borderRadius: 32,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
@@ -1235,24 +1227,21 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   offeringsErrorTitle: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
+    ...Typography.title2,
     color: Colors.text,
     textAlign: "center",
   },
   offeringsErrorText: {
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
+    ...Typography.subheadline,
     color: Colors.textSecondary,
     textAlign: "center",
-    lineHeight: 22,
   },
   offeringsRetryBtn: {
     marginTop: 8,
     backgroundColor: Colors.accent,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     paddingHorizontal: 20,
-    paddingVertical: 13,
+    paddingVertical: 12,
   },
-  offeringsRetryText: { fontSize: 15, fontFamily: "Inter_700Bold", color: Colors.textInverse },
+  offeringsRetryText: { ...Typography.subheadline, fontWeight: "700", color: Colors.textInverse },
 });

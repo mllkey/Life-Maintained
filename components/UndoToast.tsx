@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 
 export type UndoResult = { ok: true } | { ok: false; message: string };
 
@@ -164,10 +166,10 @@ export function UndoToastHost() {
   return (
     <Animated.View pointerEvents="box-none" style={[styles.wrap, { bottom: insets.bottom + 24 }, animStyle]}>
       <View style={styles.card}>
-        <Ionicons
+        <Icon
           name={showingResult && !resultOk ? "alert-circle" : "checkmark-circle"}
           size={18}
-          color={showingResult && !resultOk ? Colors.overdue : "#34C759"}
+          color={showingResult && !resultOk ? Colors.overdue : Colors.good}
         />
         <View style={styles.textCol}>
           <Text style={[styles.title, showingResult && !resultOk ? styles.titleWarn : null]} numberOfLines={2}>
@@ -200,16 +202,14 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row", alignItems: "center", gap: 8,
     width: "100%", maxWidth: 560, alignSelf: "center",
-    backgroundColor: Colors.card, borderColor: Colors.border, borderWidth: 1,
-    borderRadius: 20, paddingVertical: 12, paddingHorizontal: 18,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8,
-    elevation: 8,
+    backgroundColor: Colors.cardElevated, borderColor: Colors.border, borderWidth: 1,
+    borderRadius: Radius.lg, paddingVertical: 12, paddingHorizontal: 20,
   },
   textCol: { flex: 1, flexShrink: 1 },
-  title: { color: Colors.text, fontFamily: "Inter_600SemiBold", fontSize: 15 },
+  title: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
   titleWarn: { color: Colors.overdue },
-  subtitle: { color: Colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13, marginTop: 1 },
-  undoBtn: { minWidth: 64, minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 12, borderRadius: 10 },
+  subtitle: { ...Typography.footnote, color: Colors.textSecondary, marginTop: 1 },
+  undoBtn: { minWidth: 64, minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 12, borderRadius: Radius.md },
   undoBtnPressed: { opacity: 0.6 },
-  undoText: { color: Colors.accent, fontFamily: "Inter_600SemiBold", fontSize: 15 },
+  undoText: { ...Typography.subheadline, fontWeight: "600", color: Colors.accent },
 });

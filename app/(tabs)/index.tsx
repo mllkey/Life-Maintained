@@ -21,8 +21,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { LinearGradient } from "expo-linear-gradient";
@@ -571,7 +573,7 @@ export default function DashboardScreen() {
         ) : (hasDashboardError || isOfflineNoData) ? (
           <View style={styles.dashboardErrorCard}>
             <View style={styles.dashboardErrorIcon}>
-              <Ionicons name="cloud-offline-outline" size={28} color={Colors.overdue} />
+              <Icon name="cloud-offline-outline" size={28} color={Colors.overdue} />
             </View>
             <Text style={styles.dashboardErrorTitle}>We couldn’t refresh your dashboard</Text>
             <Text style={styles.dashboardErrorBody}>
@@ -609,10 +611,10 @@ export default function DashboardScreen() {
             <TrialBanner />
             {!budgetDismissed && !!budgetThreshold && budgetThreshold > 0 && monthlyCost > budgetThreshold && (
               <Pressable onPress={dismissBudgetBanner} style={styles.budgetBanner} accessibilityRole="button" accessibilityLabel="Dismiss budget alert">
-                <Ionicons name="warning-outline" size={15} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
+                <Icon name="warning-outline" size={15} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
                 <Text style={styles.budgetBannerText} numberOfLines={3}>
                   {"Heads up: $"}{monthlyCost.toFixed(0)}{" estimated in maintenance this month (your alert is set to $"}{budgetThreshold.toFixed(0)}{")"}</Text>
-                <Ionicons name="close" size={14} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
+                <Icon name="close" size={14} color={Colors.dueSoon} style={{ flexShrink: 0, marginTop: 1 }} />
               </Pressable>
             )}
             {/* type bridge: this is only undefined pre-load, which the loading skeleton gates; on fetch error the dashboard renders its error card instead of this one, so an empty list never shows on error */}
@@ -712,9 +714,9 @@ function UsageInputRow({
   const isSaved = saved[fk] ?? false;
   const err = errors[fk];
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: 8 }}>
       {mode === "both" && (
-        <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textTertiary }}>{label}</Text>
+        <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.textTertiary }}>{label}</Text>
       )}
       <View style={styles.qmInputRow}>
         <TextInput
@@ -737,9 +739,9 @@ function UsageInputRow({
           disabled={isSaving}
         >
           {isSaved ? (
-            <Ionicons name="checkmark" size={14} color="#fff" />
+            <Icon name="checkmark" size={14} color={Colors.white} />
           ) : isSaving ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={Colors.white} />
           ) : (
             <Text style={styles.qmSaveBtnText}>Save</Text>
           )}
@@ -966,7 +968,7 @@ function QuickMileageCard({ vehicles, userId }: { vehicles: MileageVehicle[]; us
               : `${staleCount} vehicle${staleCount !== 1 ? "s" : ""} need updating`}
           </Text>
         </View>
-        <Ionicons
+        <Icon
           name={expanded ? "chevron-up" : "chevron-down"}
           size={16}
           color={Colors.textTertiary}
@@ -1005,7 +1007,7 @@ function DashboardSkeleton() {
       </Row>
 
       <Row gap={10} align="flex-start">
-        <View style={[styles.panelCard, { flex: 5, gap: 10 }]}>
+        <View style={[styles.panelCard, { flex: 5, gap: 12 }]}>
           <Row gap={8}>
             <S anim={anim} w={70} h={13} r={5} />
             <S anim={anim} w={28} h={22} r={7} ml={4} />
@@ -1022,7 +1024,7 @@ function DashboardSkeleton() {
           ))}
         </View>
 
-        <View style={[styles.panelCard, { flex: 3, gap: 6 }]}>
+        <View style={[styles.panelCard, { flex: 3, gap: 8 }]}>
           <S anim={anim} w={55} h={13} r={5} />
           <S anim={anim} w={64} h={22} r={6} mt={2} />
           <S anim={anim} w={44} h={11} r={4} />
@@ -1132,17 +1134,17 @@ function YourMonthAheadCard({
         <View style={styles.monthAheadTopRow}>
           <View style={styles.monthAheadIconStack}>
             <View style={[styles.monthAheadIcon, { backgroundColor: CAT.vehicles.muted, marginRight: -8 }]}>
-              <Ionicons name={CAT.vehicles.icon} size={15} color={CAT.vehicles.color} />
+              <Icon name={CAT.vehicles.icon} size={15} color={CAT.vehicles.color} />
             </View>
             <View style={[styles.monthAheadIcon, { backgroundColor: CAT.properties.muted, marginRight: -8 }]}>
-              <Ionicons name={CAT.properties.icon} size={15} color={CAT.properties.color} />
+              <Icon name={CAT.properties.icon} size={15} color={CAT.properties.color} />
             </View>
             <View style={[styles.monthAheadIcon, { backgroundColor: CAT.health.muted }]}>
-              <Ionicons name={CAT.health.icon} size={15} color={CAT.health.color} />
+              <Icon name={CAT.health.icon} size={15} color={CAT.health.color} />
             </View>
           </View>
           <Text style={styles.monthAheadEyebrow}>YOUR MONTH AHEAD</Text>
-          <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={18} color={Colors.textTertiary} />
+          <Icon name={expanded ? "chevron-up" : "chevron-down"} size={18} color={Colors.textTertiary} />
         </View>
 
         <Text style={styles.monthAheadTitle}>Everything coming up, in one place</Text>
@@ -1165,7 +1167,7 @@ function YourMonthAheadCard({
                   onPress={() => handlePress(item)}
                 >
                   <View style={[styles.monthAheadDetailIcon, { backgroundColor: cat.muted }]}>
-                    <Ionicons name={cat.icon} size={14} color={cat.color} />
+                    <Icon name={cat.icon} size={14} color={cat.color} />
                   </View>
                   <View style={styles.monthAheadDetailText}>
                     <Text style={styles.monthAheadDetailTitle} numberOfLines={1}>{item.title}</Text>
@@ -1189,20 +1191,20 @@ function YourMonthAheadCard({
         <View style={styles.monthAheadTopRow}>
           <View style={styles.monthAheadIconStack}>
             <View style={[styles.monthAheadIcon, { backgroundColor: CAT.vehicles.muted, marginRight: -8 }]}>
-              <Ionicons name={CAT.vehicles.icon} size={15} color={CAT.vehicles.color} />
+              <Icon name={CAT.vehicles.icon} size={15} color={CAT.vehicles.color} />
             </View>
             <View style={[styles.monthAheadIcon, { backgroundColor: CAT.properties.muted, marginRight: -8 }]}>
-              <Ionicons name={CAT.properties.icon} size={15} color={CAT.properties.color} />
+              <Icon name={CAT.properties.icon} size={15} color={CAT.properties.color} />
             </View>
             <View style={[styles.monthAheadIcon, { backgroundColor: CAT.health.muted }]}>
-              <Ionicons name={CAT.health.icon} size={15} color={CAT.health.color} />
+              <Icon name={CAT.health.icon} size={15} color={CAT.health.color} />
             </View>
           </View>
           <Text style={styles.monthAheadEyebrow}>YOUR MONTH AHEAD</Text>
         </View>
-        <Text style={styles.monthAheadTitle}>You're all caught up</Text>
+        <Text style={styles.monthAheadTitle}>You&apos;re all caught up</Text>
         <Text style={styles.monthAheadNarrative}>
-          Nothing due this month across vehicles, home, or health. We'll let you know the moment something needs attention.
+          Nothing due this month across vehicles, home, or health. We&apos;ll let you know the moment something needs attention.
         </Text>
       </View>
     );
@@ -1265,11 +1267,11 @@ function YourMonthAheadCard({
         <View style={styles.monthAheadTopRow}>
           <View style={styles.monthAheadIconStack}>
             <View style={[styles.singleVerticalIcon, { backgroundColor: activeIconBg }]}>
-              <Ionicons name={activeIconName} size={15} color={activeIconColor} />
+              <Icon name={activeIconName} size={15} color={activeIconColor} />
             </View>
           </View>
           <Text style={styles.monthAheadEyebrow}>YOUR MONTH AHEAD</Text>
-          <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={18} color={Colors.textTertiary} />
+          <Icon name={expanded ? "chevron-up" : "chevron-down"} size={18} color={Colors.textTertiary} />
         </View>
 
         <Text style={styles.monthAheadTitle}>Everything coming up</Text>
@@ -1292,7 +1294,7 @@ function YourMonthAheadCard({
                   onPress={() => handlePress(item)}
                 >
                   <View style={[styles.monthAheadDetailIcon, { backgroundColor: cat.muted }]}>
-                    <Ionicons name={cat.icon} size={14} color={cat.color} />
+                    <Icon name={cat.icon} size={14} color={cat.color} />
                   </View>
                   <View style={styles.monthAheadDetailText}>
                     <Text style={styles.monthAheadDetailTitle} numberOfLines={1}>{item.title}</Text>
@@ -1316,10 +1318,10 @@ function YourMonthAheadCard({
             accessibilityLabel="Add next vertical"
           >
             <View style={[styles.crossSellIcon, { backgroundColor: crossSellIconBg }]}>
-              <Ionicons name={crossSellIconName} size={15} color={crossSellIconColor} />
+              <Icon name={crossSellIconName} size={15} color={crossSellIconColor} />
             </View>
             <Text style={styles.crossSellText}>{crossSellCopy}</Text>
-            <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+            <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
           </Pressable>
           <Pressable
             style={styles.crossSellDismiss}
@@ -1328,7 +1330,7 @@ function YourMonthAheadCard({
             accessibilityRole="button"
             accessibilityLabel="Dismiss cross-sell"
           >
-            <Ionicons name="close" size={16} color={Colors.textTertiary} />
+            <Icon name="close" size={16} color={Colors.textTertiary} />
           </Pressable>
         </View>
       )}
@@ -1419,16 +1421,16 @@ function HealthScoreCard({ score, overdue, dueSoon, onTrack }: { score: number; 
           />
         </Svg>
         <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ fontSize: 28, fontFamily: "Inter_700Bold", color: scoreColor, lineHeight: 34 }}>
-            {score}<Text style={{ fontSize: 13 }}>%</Text>
+          <Text style={{ ...Typography.largeTitle, color: scoreColor }}>
+            {score}<Text style={{ ...Typography.footnote }}>%</Text>
           </Text>
         </View>
       </View>
       <Text style={styles.scoreTitle}>Maintenance Score</Text>
       <Text style={styles.scoreMessage}>{message}</Text>
       {score === 100 && (
-        <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.good, marginTop: 2 }}>
-          You're all caught up!
+        <Text style={{ ...Typography.footnote, fontWeight: "500", color: Colors.good, marginTop: 2 }}>
+          You&apos;re all caught up!
         </Text>
       )}
       <Text style={styles.scoreDetail}>{score === 100 ? `${onTrack} on track` : [`${onTrack} on track`, dueSoon > 0 ? `${dueSoon} due soon` : null, overdue > 0 ? `${overdue} overdue` : null].filter(Boolean).join(" · ")}</Text>
@@ -1524,12 +1526,12 @@ function WelcomeView() {
             const orbitOffset = [styles.welcomeOrbitIcon0, styles.welcomeOrbitIcon1, styles.welcomeOrbitIcon2][index];
             return (
               <View key={card.key} style={[styles.welcomeOrbitIcon, orbitOffset, { backgroundColor: card.muted }]}>
-                <Ionicons name={card.icon} size={18} color={card.color} />
+                <Icon name={card.icon} size={18} color={card.color} />
               </View>
             );
           })}
           <View style={styles.welcomeCenterMark}>
-            <Ionicons name="sparkles" size={24} color={Colors.accent} />
+            <Icon name="sparkles" size={24} color={Colors.accent} />
           </View>
         </View>
         <Text style={styles.welcomeTitle}>Your maintenance command center</Text>
@@ -1546,7 +1548,7 @@ function WelcomeView() {
             accessibilityLabel={card.title}
           >
             <View style={[styles.emptyVisionIcon, { backgroundColor: card.muted }]}>
-              <Ionicons name={card.icon} size={22} color={card.color} />
+              <Icon name={card.icon} size={22} color={card.color} />
             </View>
             <View style={styles.emptyVisionText}>
               <Text style={styles.emptyVisionTitle}>{card.title}</Text>
@@ -1557,7 +1559,7 @@ function WelcomeView() {
                 ))}
               </View>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+            <Icon name="chevron-forward" size={18} color={Colors.textTertiary} />
           </Pressable>
         ))}
       </View>
@@ -1568,152 +1570,132 @@ function WelcomeView() {
 const styles = StyleSheet.create({
   monthAheadCard: {
     backgroundColor: Colors.card,
-    borderRadius: 20,
-    padding: 18,
+    borderRadius: Radius.lg,
+    padding: 20,
     borderWidth: 1,
     borderColor: Colors.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 16,
-    elevation: 4,
   },
-  monthAheadTopRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  monthAheadTopRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
   monthAheadIconStack: { flexDirection: "row", alignItems: "center" },
-  monthAheadIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.borderSubtle },
-  monthAheadEyebrow: { flex: 1, fontSize: 11, fontFamily: "Inter_700Bold", color: Colors.textTertiary, letterSpacing: 1.4 },
-  monthAheadTitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.25, lineHeight: 25, marginBottom: 8 },
-  monthAheadNarrative: { fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 22 },
-  monthAheadMetaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14 },
-  monthAheadMeta: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.textTertiary },
-  monthAheadDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.textTertiary, opacity: 0.7 },
-  monthAheadDetails: { marginTop: 14, borderTopWidth: 1, borderTopColor: Colors.borderSubtle, paddingTop: 8, gap: 2 },
-  monthAheadDetailRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9 },
-  monthAheadDetailIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  monthAheadIcon: { width: 28, height: 28, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.borderSubtle },
+  monthAheadEyebrow: { ...Typography.caption, fontWeight: "700", flex: 1, color: Colors.textTertiary },
+  monthAheadTitle: { ...Typography.title3, fontWeight: "700", color: Colors.text, marginBottom: 8 },
+  monthAheadNarrative: { ...Typography.subheadline, color: Colors.textSecondary },
+  monthAheadMetaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16 },
+  monthAheadMeta: { ...Typography.caption, fontWeight: "600", color: Colors.textTertiary },
+  monthAheadDot: { width: 4, height: 4, borderRadius: Radius.pill, backgroundColor: Colors.textTertiary, opacity: 0.7 },
+  monthAheadDetails: { marginTop: 16, borderTopWidth: 1, borderTopColor: Colors.borderSubtle, paddingTop: 8, gap: 2 },
+  monthAheadDetailRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 },
+  monthAheadDetailIcon: { width: 28, height: 28, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" },
   monthAheadDetailText: { flex: 1, gap: 1 },
-  monthAheadDetailTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  monthAheadDetailSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
-  monthAheadDue: { fontSize: 12, fontFamily: "Inter_600SemiBold", flexShrink: 0 },
-  singleVerticalIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.borderSubtle },
-  crossSellDivider: { height: 1, backgroundColor: Colors.borderSubtle, marginTop: 14, marginBottom: 12 },
-  crossSellRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4, paddingRight: 36 },
-  crossSellIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  crossSellText: { flex: 1, flexShrink: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary, lineHeight: 20 },
+  monthAheadDetailTitle: { ...Typography.footnote, fontWeight: "600", color: Colors.text },
+  monthAheadDetailSub: { ...Typography.caption, color: Colors.textTertiary },
+  monthAheadDue: { ...Typography.caption, fontWeight: "600", flexShrink: 0 },
+  singleVerticalIcon: { width: 28, height: 28, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.borderSubtle },
+  crossSellDivider: { height: 1, backgroundColor: Colors.borderSubtle, marginTop: 16, marginBottom: 12 },
+  crossSellRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4, paddingRight: 40 },
+  crossSellIcon: { width: 28, height: 28, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" },
+  crossSellText: { ...Typography.footnote, fontWeight: "500", flex: 1, flexShrink: 1, color: Colors.textSecondary },
   crossSellDismiss: { position: "absolute", top: 12, right: 12, padding: 4, zIndex: 2 },
 
   dashboardErrorCard: {
     alignItems: "center",
     backgroundColor: Colors.card,
-    borderRadius: 24,
+    borderRadius: Radius.xl,
     paddingHorizontal: 24,
-    paddingVertical: 28,
+    paddingVertical: 32,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 16,
-    elevation: 4,
+    gap: 12,
   },
   dashboardErrorIcon: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: Radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.overdueMuted,
     marginBottom: 4,
   },
   dashboardErrorTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
+    ...Typography.headline,
+    fontWeight: "700",
     color: Colors.text,
     textAlign: "center",
-    letterSpacing: -0.2,
   },
   dashboardErrorBody: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    ...Typography.footnote,
     color: Colors.textSecondary,
     textAlign: "center",
-    lineHeight: 20,
   },
   dashboardErrorBtn: {
-    marginTop: 10,
+    marginTop: 12,
     backgroundColor: Colors.accent,
-    borderRadius: 999,
-    paddingHorizontal: 22,
-    paddingVertical: 11,
+    borderRadius: Radius.pill,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   dashboardErrorBtnText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.subheadline,
+    fontWeight: "600",
     color: Colors.background,
-    letterSpacing: -0.1,
   },
 
-  welcomeHero: { alignItems: "center", backgroundColor: Colors.card, borderRadius: 24, paddingHorizontal: 20, paddingVertical: 24, borderWidth: 1, borderColor: Colors.border, gap: 12 },
-  welcomeOrbit: { width: 112, height: 112, borderRadius: 56, alignItems: "center", justifyContent: "center", marginBottom: 2 },
-  welcomeCenterMark: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(232,147,58,0.14)", borderWidth: 1, borderColor: "rgba(232,147,58,0.32)" },
-  welcomeOrbitIcon: { position: "absolute", width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.borderSubtle },
+  welcomeHero: { alignItems: "center", backgroundColor: Colors.card, borderRadius: Radius.xl, paddingHorizontal: 20, paddingVertical: 24, borderWidth: 1, borderColor: Colors.border, gap: 12 },
+  welcomeOrbit: { width: 112, height: 112, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", marginBottom: 2 },
+  welcomeCenterMark: { width: 54, height: 54, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(232,147,58,0.14)", borderWidth: 1, borderColor: "rgba(232,147,58,0.32)" },
+  welcomeOrbitIcon: { position: "absolute", width: 38, height: 38, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Colors.borderSubtle },
   welcomeOrbitIcon0: { top: 0, left: 37 },
   welcomeOrbitIcon1: { right: 2, bottom: 18 },
   welcomeOrbitIcon2: { left: 2, bottom: 18 },
   emptyCardsStack: { gap: 12 },
-  emptyVisionCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.card, borderRadius: 18, padding: 15, borderWidth: 1 },
-  emptyVisionIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  emptyVisionText: { flex: 1, gap: 5 },
-  emptyVisionTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.1 },
-  emptyVisionBody: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 18 },
-  emptyVisionChips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 3 },
-  emptyVisionChip: { overflow: "hidden", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  emptyVisionCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 16, borderWidth: 1 },
+  emptyVisionIcon: { width: 44, height: 44, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  emptyVisionText: { flex: 1, gap: 4 },
+  emptyVisionTitle: { ...Typography.subheadline, fontWeight: "700", color: Colors.text },
+  emptyVisionBody: { ...Typography.footnote, color: Colors.textSecondary },
+  emptyVisionChips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  emptyVisionChip: { ...Typography.caption, fontWeight: "600", overflow: "hidden", borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 4 },
 
   headerGradient: { paddingBottom: 20 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", paddingHorizontal: 20, paddingTop: 16 },
-  headerTitle: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.text, letterSpacing: -0.5 },
-  statusBadges: { flexDirection: "column", gap: 6, alignItems: "flex-end" },
-  badge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10 },
-  badgeDot: { width: 6, height: 6, borderRadius: 3 },
-  badgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  headerTitle: { ...Typography.largeTitle, color: Colors.text },
+  statusBadges: { flexDirection: "column", gap: 8, alignItems: "flex-end" },
+  badge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.md },
+  badgeDot: { width: 6, height: 6, borderRadius: Radius.pill },
+  badgeText: { ...Typography.caption, fontWeight: "600" },
   content: { paddingHorizontal: 20, paddingTop: 4, gap: 24 },
   budgetBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
     backgroundColor: "rgba(255, 214, 10, 0.10)",
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: "rgba(255, 214, 10, 0.30)",
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   budgetBannerText: {
+    ...Typography.footnote,
+    fontWeight: "500",
     flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
     color: Colors.dueSoon,
-    lineHeight: 18,
   },
 
   panelCard: {
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  panelEmpty: { alignItems: "center", paddingVertical: 16, gap: 6 },
-  panelEmptyText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  panelEmpty: { alignItems: "center", paddingVertical: 16, gap: 8 },
+  panelEmptyText: { ...Typography.caption, color: Colors.textSecondary },
 
   sectionLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.textTertiary,
     letterSpacing: 1.5,
     textTransform: "uppercase",
@@ -1723,42 +1705,37 @@ const styles = StyleSheet.create({
   sectionDivider: { height: 1, backgroundColor: Colors.borderSubtle, width: "100%" },
 
   taskList: { gap: 0 },
-  taskRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14 },
+  taskRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 16 },
   taskRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle },
-  taskBar: { width: 4, height: 28, borderRadius: 2, flexShrink: 0 },
+  taskBar: { width: 4, height: 28, borderRadius: Radius.sm, flexShrink: 0 },
   taskInfo: { flex: 1, gap: 2 },
-  taskTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text, lineHeight: 19 },
-  taskSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 17 },
-  taskDue: { fontSize: 12, fontFamily: "Inter_500Medium", flexShrink: 0 },
+  taskTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  taskSub: { ...Typography.footnote, color: Colors.textSecondary },
+  taskDue: { ...Typography.caption, fontWeight: "500", flexShrink: 0 },
 
   seeAllRow: { paddingVertical: 12, alignItems: "center" },
-  seeAllText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.accent },
+  seeAllText: { ...Typography.footnote, fontWeight: "500", color: Colors.accent },
 
-  headerSummary: { fontSize: 13, fontFamily: "Inter_400Regular", fontWeight: "300" as const, color: Colors.textTertiary, marginTop: 4 },
+  headerSummary: { ...Typography.footnote, color: Colors.textTertiary, marginTop: 4 },
 
-  section: { gap: 10 },
+  section: { gap: 12 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  sectionTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  screeningCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.border },
-  screeningBar: { width: 4, height: 28, borderRadius: 2, backgroundColor: Colors.health, flexShrink: 0 },
+  sectionTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  screeningCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 16, borderWidth: 1, borderColor: Colors.border },
+  screeningBar: { width: 4, height: 28, borderRadius: Radius.sm, backgroundColor: Colors.health, flexShrink: 0 },
   screeningContent: { flex: 1, gap: 2 },
-  screeningTitle: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
-  screeningDesc: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
+  screeningTitle: { ...Typography.subheadline, fontWeight: "500", color: Colors.text },
+  screeningDesc: { ...Typography.caption, color: Colors.textSecondary },
 
   welcomeWrap: { gap: 16 },
-  welcomeTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  welcomeBody: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, lineHeight: 20 },
-  emptyCardIcon: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  welcomeTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  welcomeBody: { ...Typography.footnote, color: Colors.textSecondary },
+  emptyCardIcon: { width: 44, height: 44, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" },
 
   qmCard: {
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
   qmCardHeader: {
     flexDirection: "row",
@@ -1775,23 +1752,20 @@ const styles = StyleSheet.create({
   qmIconWrap: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.accentMuted,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   qmCardTitle: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.subheadline,
+    fontWeight: "600",
     color: Colors.text,
-    lineHeight: 19,
   },
   qmCardSub: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textSecondary,
-    lineHeight: 16,
     marginTop: 1,
   },
   qmVehicleList: {
@@ -1801,8 +1775,8 @@ const styles = StyleSheet.create({
   qmVehicleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
+    gap: 12,
+    paddingHorizontal: 16,
     paddingVertical: 12,
   },
   qmVehicleRowBorder: {
@@ -1815,54 +1789,49 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   qmVehicleName: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.text,
-    lineHeight: 17,
   },
   qmVehicleAge: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 15,
+    ...Typography.caption,
   },
   qmInputRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 8,
     flexShrink: 0,
   },
   qmInput: {
+    ...Typography.footnote,
+    fontWeight: "500",
     width: 82,
     height: 34,
     backgroundColor: Colors.surface,
-    borderRadius: 9,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 9,
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    paddingHorizontal: 8,
     color: Colors.text,
     textAlign: "right",
   },
   qmSaveBtn: {
     height: 34,
-    paddingHorizontal: 13,
-    borderRadius: 9,
+    paddingHorizontal: 12,
+    borderRadius: Radius.md,
     backgroundColor: Colors.accent,
     alignItems: "center",
     justifyContent: "center",
     minWidth: 52,
   },
   qmSaveBtnText: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#fff",
+    ...Typography.caption,
+    fontWeight: "600",
+    color: Colors.white,
   },
   qmError: {
-    fontSize: 10,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.overdue,
-    lineHeight: 14,
   },
 
   sheetOverlay: {
@@ -1873,22 +1842,19 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.cardElevated,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     paddingHorizontal: 20,
     paddingTop: 12,
     gap: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
   },
   sheetHandleBar: {
     width: 36,
     height: 4,
-    borderRadius: 2,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.border,
     alignSelf: "center",
     marginBottom: 4,
@@ -1896,20 +1862,20 @@ const styles = StyleSheet.create({
   sheetHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
   sheetIconWrap: {
     width: 32,
     height: 32,
-    borderRadius: 9,
+    borderRadius: Radius.md,
     backgroundColor: Colors.accentMuted,
     alignItems: "center",
     justifyContent: "center",
   },
   sheetTitle: {
+    ...Typography.subheadline,
+    fontWeight: "600",
     flex: 1,
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
     color: Colors.text,
   },
   sheetCloseBtn: {
@@ -1919,14 +1885,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sheetTextInput: {
+    ...Typography.footnote,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
     minHeight: 96,
     textAlignVertical: "top",
@@ -1935,26 +1900,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
+    gap: 8,
     backgroundColor: Colors.accent,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     height: 46,
   },
   sheetProcessBtnText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#fff",
+    ...Typography.subheadline,
+    fontWeight: "600",
+    color: Colors.white,
   },
   sheetProcessing: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 12,
     paddingVertical: 24,
   },
   sheetProcessingText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.textSecondary,
   },
   sheetErrorBanner: {
@@ -1962,28 +1927,26 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 8,
     backgroundColor: Colors.dueSoonMuted,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderWidth: 1,
     borderColor: "rgba(255,193,0,0.25)",
   },
   sheetErrorText: {
+    ...Typography.footnote,
     flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
     color: Colors.dueSoon,
-    lineHeight: 18,
   },
 
   confirmCard: {
     backgroundColor: Colors.surface,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 14,
+    padding: 16,
     gap: 12,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   confirmCardHeader: {
     flexDirection: "row",
@@ -1993,15 +1956,15 @@ const styles = StyleSheet.create({
   confirmCatIcon: {
     width: 28,
     height: 28,
-    borderRadius: 8,
+    borderRadius: Radius.pill,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   confirmAssetName: {
+    ...Typography.footnote,
+    fontWeight: "600",
     flex: 1,
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
     color: Colors.text,
   },
   confirmLowBadge: {
@@ -2009,13 +1972,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     backgroundColor: Colors.dueSoonMuted,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
   },
   confirmLowBadgeText: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    ...Typography.caption,
+    fontWeight: "600",
     color: Colors.dueSoon,
   },
   confirmFields: {
@@ -2023,13 +1986,13 @@ const styles = StyleSheet.create({
   },
   confirmActions: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
     paddingTop: 2,
   },
   confirmDiscardBtn: {
     flex: 1,
     height: 40,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.surface,
@@ -2037,26 +2000,25 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   confirmDiscardText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    ...Typography.footnote,
+    fontWeight: "500",
     color: Colors.textSecondary,
   },
   confirmSaveBtn: {
     flex: 2,
     height: 40,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.accent,
   },
   confirmSaveBtnText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#fff",
+    ...Typography.footnote,
+    fontWeight: "600",
+    color: Colors.white,
   },
   confirmCardError: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.overdue,
   },
 
@@ -2067,9 +2029,9 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   fieldLabel: {
+    ...Typography.caption,
+    fontWeight: "500",
     width: 66,
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
     color: Colors.textSecondary,
     flexShrink: 0,
   },
@@ -2079,22 +2041,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     backgroundColor: Colors.card,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 9,
+    paddingHorizontal: 8,
     height: 36,
   },
   fieldInput: {
+    ...Typography.footnote,
     flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
     color: Colors.text,
     height: 36,
   },
   fieldAffix: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    ...Typography.caption,
     color: Colors.textTertiary,
     flexShrink: 0,
   },
@@ -2102,29 +2062,29 @@ const styles = StyleSheet.create({
   scoreHero: {
     alignItems: "center",
     paddingVertical: 16,
-    gap: 6,
+    gap: 8,
   },
-  scoreTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.text, textAlign: "center" },
-  scoreMessage: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
-  scoreDetail: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center" },
+  scoreTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text, textAlign: "center" },
+  scoreMessage: { ...Typography.footnote, color: Colors.textSecondary, textAlign: "center" },
+  scoreDetail: { ...Typography.caption, color: Colors.textTertiary, textAlign: "center" },
 
-  spendingTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
-  spendingThisMonth: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  spendingAmount: { fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.text },
-  spendingEmpty: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textTertiary, textAlign: "center", paddingVertical: 12 },
+  spendingTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  spendingThisMonth: { ...Typography.footnote, color: Colors.textSecondary },
+  spendingAmount: { ...Typography.headline, fontWeight: "700", color: Colors.text },
+  spendingEmpty: { ...Typography.footnote, color: Colors.textTertiary, textAlign: "center", paddingVertical: 12 },
   spendingBars: { gap: 8 },
-  spendingBarRow: { gap: 3 },
-  spendingBarTrack: { height: 16, backgroundColor: Colors.borderSubtle, borderRadius: 3, overflow: "hidden" },
-  spendingBarFill: { height: 16, backgroundColor: Colors.accent, borderRadius: 3 },
-  spendingBarLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: Colors.textTertiary },
+  spendingBarRow: { gap: 4 },
+  spendingBarTrack: { height: 16, backgroundColor: Colors.borderSubtle, borderRadius: Radius.sm, overflow: "hidden" },
+  spendingBarFill: { height: 16, backgroundColor: Colors.accent, borderRadius: Radius.sm },
+  spendingBarLabel: { ...Typography.caption, color: Colors.textTertiary },
 
   catCard: {
     flex: 1,
     backgroundColor: Colors.card,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 14,
+    padding: 16,
     alignItems: "center",
   },
 

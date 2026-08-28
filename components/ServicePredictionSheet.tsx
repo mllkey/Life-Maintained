@@ -7,9 +7,11 @@ import {
   type BottomSheetBackdropProps,
 } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 
 export type ServicePredictionSheetHandle = {
   present: () => void;
@@ -55,11 +57,11 @@ export default forwardRef<ServicePredictionSheetHandle, ServicePredictionSheetPr
   );
 
   const handleStyle = useMemo(
-    () => ({ backgroundColor: Colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24 }),
+    () => ({ backgroundColor: Colors.cardElevated, borderTopLeftRadius: 24, borderTopRightRadius: 24 }),
     [],
   );
   const handleIndicatorStyle = useMemo(() => ({ backgroundColor: Colors.border, width: 36, height: 4 }), []);
-  const backgroundStyle = useMemo(() => ({ backgroundColor: Colors.card }), []);
+  const backgroundStyle = useMemo(() => ({ backgroundColor: Colors.cardElevated }), []);
 
   const handleLog = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -87,7 +89,7 @@ export default forwardRef<ServicePredictionSheetHandle, ServicePredictionSheetPr
         {data ? (
           <>
             <View style={styles.iconWrap}>
-              <Ionicons name="construct-outline" size={22} color={Colors.vehicle} />
+              <Icon name="construct-outline" size={22} color={Colors.vehicle} />
             </View>
             <Text style={styles.title}>{data.name}</Text>
             <Text style={styles.vehicle}>{data.vehicleLabel}</Text>
@@ -121,7 +123,7 @@ export default forwardRef<ServicePredictionSheetHandle, ServicePredictionSheetPr
                 accessibilityRole="button"
                 accessibilityLabel="Log this service"
               >
-                <Ionicons name="add" size={18} color={Colors.textInverse} />
+                <Icon name="add" size={18} color={Colors.textInverse} />
                 <Text style={styles.primaryText}>Log this service</Text>
               </Pressable>
               <Pressable
@@ -141,11 +143,11 @@ export default forwardRef<ServicePredictionSheetHandle, ServicePredictionSheetPr
 });
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, paddingTop: 4, alignItems: "center", gap: 6 },
+  content: { paddingHorizontal: 20, paddingTop: 4, alignItems: "center", gap: 8 },
   iconWrap: {
     width: 48,
     height: 48,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -153,34 +155,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 4,
   },
-  title: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text, textAlign: "center", lineHeight: 26 },
-  vehicle: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textTertiary, textAlign: "center" },
+  title: { ...Typography.title3, fontWeight: "700", color: Colors.text, textAlign: "center", lineHeight: 26 },
+  vehicle: { ...Typography.footnote, fontWeight: "500", color: Colors.textTertiary, textAlign: "center" },
   stats: {
     width: "100%",
-    marginTop: 14,
+    marginTop: 16,
     backgroundColor: Colors.surface,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 16,
   },
   statRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", height: 46 },
   statDivider: { height: 1, backgroundColor: Colors.border },
-  statLabel: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  statValue: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  statPending: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textTertiary },
-  caption: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textTertiary, marginTop: 6 },
-  actions: { width: "100%", gap: 6, marginTop: 14 },
+  statLabel: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
+  statValue: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
+  statPending: { ...Typography.footnote, fontWeight: "500", color: Colors.textTertiary },
+  caption: { ...Typography.caption, color: Colors.textTertiary, marginTop: 8 },
+  actions: { width: "100%", gap: 8, marginTop: 16 },
   primaryBtn: {
     backgroundColor: Colors.vehicle,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     height: 50,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 8,
   },
-  primaryText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: Colors.textInverse },
+  primaryText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
   secondaryBtn: { height: 44, alignItems: "center", justifyContent: "center" },
-  secondaryText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  secondaryText: { ...Typography.subheadline, fontWeight: "500", color: Colors.textSecondary },
 });

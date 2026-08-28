@@ -10,9 +10,11 @@ import {
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather } from "@expo/vector-icons";
 import { queryClient } from "@/lib/query-client";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/ui/Icon";
+import { Typography } from "@/constants/typography";
+import { Radius } from "@/constants/radius";
 
 export type ErrorFallbackProps = {
   error: Error;
@@ -78,7 +80,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
             },
           ]}
         >
-          <Feather name="alert-circle" size={20} color={theme.text} />
+          <Icon name="alert-circle" size={20} color={theme.text} />
         </Pressable>
       ) : null}
 
@@ -148,7 +150,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                     { opacity: pressed ? 0.6 : 1 },
                   ]}
                 >
-                  <Feather name="x" size={24} color={theme.text} />
+                  <Icon name="close" size={24} color={theme.text} />
                 </Pressable>
               </View>
 
@@ -170,6 +172,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                     style={[
                       styles.errorText,
                       {
+                        fontWeight: "400",
                         color: theme.text,
                         fontFamily: monoFont,
                       },
@@ -205,20 +208,16 @@ const styles = StyleSheet.create({
     maxWidth: 600,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "700",
+    ...Typography.largeTitle,
     textAlign: "center",
-    lineHeight: 40,
   },
   message: {
-    fontSize: 16,
+    ...Typography.subheadline,
     textAlign: "center",
-    lineHeight: 24,
   },
   errorHint: {
-    fontSize: 12,
+    ...Typography.caption,
     textAlign: "center",
-    lineHeight: 18,
     opacity: 0.5,
     maxWidth: 320,
   },
@@ -227,7 +226,7 @@ const styles = StyleSheet.create({
     right: 16,
     width: 44,
     height: 44,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -235,22 +234,14 @@ const styles = StyleSheet.create({
   },
   button: {
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     paddingHorizontal: 24,
     minWidth: 200,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   buttonText: {
+    ...Typography.subheadline,
     fontWeight: "600",
     textAlign: "center",
-    fontSize: 16,
   },
   modalOverlay: {
     flex: 1,
@@ -273,8 +264,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: "600",
+    ...Typography.title3,
   },
   closeButton: {
     width: 44,
@@ -290,13 +280,12 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     width: "100%",
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     overflow: "hidden",
     padding: 16,
   },
   errorText: {
-    fontSize: 12,
-    lineHeight: 18,
+    ...Typography.caption,
     width: "100%",
   },
 });
