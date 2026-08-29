@@ -1564,14 +1564,14 @@ export default function AddVehicleScreen() {
                             // fell back to the same box. They render through MCI, which the
                             // full type grid already uses, so each reads as its own vehicle.
                             { value: "car", label: "Car", lib: "ion" as const, icon: "car-outline" as const },
-                            { value: "motorcycle", label: "Motorcycle", lib: "ion" as const, icon: "bicycle-outline" as const },
+                            { value: "motorcycle", label: "Motorcycle", lib: "mci" as const, icon: "motorbike" as const },
                             { value: "rv", label: "RV", lib: "mci" as const, icon: "rv-truck" as const },
                             { value: "atv", label: "ATV", lib: "mci" as const, icon: "atv" as const },
                             { value: "utv", label: "UTV", lib: "mci" as const, icon: "golf-cart" as const },
                             { value: "snowmobile", label: "Snowmobile", lib: "ion" as const, icon: "snow-outline" as const },
                             { value: "boat", label: "Boat", lib: "ion" as const, icon: "boat-outline" as const },
                             { value: "dump_truck", label: "Dump Truck", lib: "mci" as const, icon: "dump-truck" as const },
-                            { value: "semi_truck", label: "Semi Truck", lib: "mci" as const, icon: "truck-trailer" as const },
+                            { value: "semi_truck", label: "Semi Truck", lib: "mci" as const, icon: "truck-cargo-container" as const },
                           ]).map((t) => {
                             const isSelected = vehicleType === t.value;
                             return (

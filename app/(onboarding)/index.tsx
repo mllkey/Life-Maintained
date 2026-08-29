@@ -345,9 +345,9 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   orbitStage: {
-    height: 280,
-    minHeight: 280,
+    flexGrow: 1,
     flexShrink: 0,
+    minHeight: 280,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",

@@ -374,7 +374,7 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
   const chipIcon1Style = useAnimatedStyle(() => chipIconStyle(chip1Anim, chipIcon1.value));
   const chipIcon2Style = useAnimatedStyle(() => chipIconStyle(chip2Anim, chipIcon2.value));
   const docStyle = useAnimatedStyle(() => ({ opacity: docOpacity.value, transform: [{ scale: docScale.value }] }));
-  const docGlowStyle = useAnimatedStyle(() => ({ opacity: interpolate(docGlow.value, [0, 1], [0, 0.35]), transform: [{ scale: interpolate(docGlow.value, [0, 1], [0.8, 1.4]) }] }));
+  const docGlowStyle = useAnimatedStyle(() => ({ opacity: interpolate(docGlow.value, [0, 1], [0, 0.8]), transform: [{ scale: interpolate(docGlow.value, [0, 1], [0.8, 1.4]) }] }));
   const readyStyle = useAnimatedStyle(() => ({ opacity: readyOpacity.value }));
   const haloStyle = useAnimatedStyle(() => ({ opacity: interpolate(haloPulse.value, [0, 1], [0.25, 0.55]), transform: [{ scale: interpolate(haloPulse.value, [0, 1], [0.92, 1.12]) }] }));
   const orbitStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${orbitSpin.value * 360}deg` }] }));
