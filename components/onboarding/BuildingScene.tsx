@@ -28,7 +28,8 @@ import Animated, {
 } from "react-native-reanimated";
 
 const HALO_SIZE = 200;
-const MIN_SCENE_MS = 6000;
+const DOC_GLOW_SIZE = 160;
+const MIN_SCENE_MS = 7600;
 const MAX_WAIT_MS = 35000;
 const PARTICLE_COUNT = 12;
 const ORBIT_RADIUS = 96;
@@ -375,7 +376,7 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
   const docStyle = useAnimatedStyle(() => ({ opacity: docOpacity.value, transform: [{ scale: docScale.value }] }));
   const docGlowStyle = useAnimatedStyle(() => ({ opacity: interpolate(docGlow.value, [0, 1], [0, 0.35]), transform: [{ scale: interpolate(docGlow.value, [0, 1], [0.8, 1.4]) }] }));
   const readyStyle = useAnimatedStyle(() => ({ opacity: readyOpacity.value }));
-  const haloStyle = useAnimatedStyle(() => ({ opacity: interpolate(haloPulse.value, [0, 1], [0.10, 0.26]), transform: [{ scale: interpolate(haloPulse.value, [0, 1], [0.92, 1.12]) }] }));
+  const haloStyle = useAnimatedStyle(() => ({ opacity: interpolate(haloPulse.value, [0, 1], [0.25, 0.55]), transform: [{ scale: interpolate(haloPulse.value, [0, 1], [0.92, 1.12]) }] }));
   const orbitStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${orbitSpin.value * 360}deg` }] }));
 
   const chipStyles = [chip1Style, chip2Style, chip3Style];
@@ -432,7 +433,18 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
               <View key={i} style={[styles.orbitDot, { backgroundColor: config.tint, transform: [{ translateX: d.x }, { translateY: d.y }] }]} />
             ))}
           </Animated.View>
-          <Animated.View style={[styles.docGlow, { backgroundColor: config.tint }, docGlowStyle]} />
+          <Animated.View style={[styles.docGlow, docGlowStyle]} pointerEvents="none">
+            <Svg width={DOC_GLOW_SIZE} height={DOC_GLOW_SIZE}>
+              <Defs>
+                <RadialGradient id="docGlowGrad" cx="50%" cy="50%" r="50%">
+                  <Stop offset="0" stopColor={config.tint} stopOpacity={0.45} />
+                  <Stop offset="0.5" stopColor={config.tint} stopOpacity={0.15} />
+                  <Stop offset="1" stopColor={config.tint} stopOpacity={0} />
+                </RadialGradient>
+              </Defs>
+              <Circle cx={DOC_GLOW_SIZE / 2} cy={DOC_GLOW_SIZE / 2} r={DOC_GLOW_SIZE / 2} fill="url(#docGlowGrad)" />
+            </Svg>
+          </Animated.View>
 
           {particleProgress.map((p, i) => (
             <Particle key={i} progress={p} index={i} total={PARTICLE_COUNT} color={Colors.white} />
@@ -481,7 +493,7 @@ const styles = StyleSheet.create({
   chip: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: Colors.card, borderRadius: Radius.pill, borderWidth: 1, borderColor: Colors.border },
   chipText: { ...Typography.caption, fontWeight: "500", color: Colors.textSecondary },
   stage: { flex: 1, alignItems: "center", justifyContent: "center", position: "relative" },
-  docGlow: { position: "absolute", width: 140, height: 140, borderRadius: Radius.pill },
+  docGlow: { position: "absolute", width: DOC_GLOW_SIZE, height: DOC_GLOW_SIZE },
   halo: { position: "absolute", width: HALO_SIZE, height: HALO_SIZE },
   orbit: { position: "absolute", width: 0, height: 0, alignItems: "center", justifyContent: "center" },
   orbitDot: { position: "absolute", width: 5, height: 5, borderRadius: Radius.sm, opacity: 0.5 },

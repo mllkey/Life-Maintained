@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
@@ -209,7 +209,11 @@ export default function OnboardingStartScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 24 }]}>
+    <ScrollView
+      style={styles.scrollRoot}
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 24 }]}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.progressBar}>
         <View style={[styles.progressFill, { width: "25%" }]} />
       </View>
@@ -290,13 +294,17 @@ export default function OnboardingStartScreen() {
           <Text style={styles.skipText}>Finish later</Text>
         </Pressable>
       </Animated.View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollRoot: { flex: 1, backgroundColor: Colors.background },
   container: {
-    flex: 1,
+    flexGrow: 1,
+    // The content container must be pinned to the viewport width; without it the
+    // children size to their own content and the large title stops wrapping.
+    width: "100%",
     backgroundColor: Colors.background,
     paddingHorizontal: 20,
     gap: 24,
@@ -315,6 +323,10 @@ const styles = StyleSheet.create({
   header: {
     gap: 12,
     paddingTop: 8,
+    // flexGrow:1 on the scroll content container lays it out at viewport height, so
+    // children shrink instead of the scroll view growing. Text blocks must keep
+    // their natural height or the large title clips at big text sizes.
+    flexShrink: 0,
   },
   kicker: {
     ...Typography.footnote,
@@ -333,8 +345,9 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   orbitStage: {
-    flex: 1,
+    height: 280,
     minHeight: 280,
+    flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -380,6 +393,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   focusCard: {
+    flexShrink: 0,
     backgroundColor: Colors.card,
     borderRadius: Radius.lg,
     padding: 16,
@@ -431,6 +445,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   actions: {
+    flexShrink: 0,
     gap: 12,
   },
   cta: {

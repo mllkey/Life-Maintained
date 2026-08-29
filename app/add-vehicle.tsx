@@ -1560,15 +1560,18 @@ export default function AddVehicleScreen() {
                             Vehicle type
                           </Text>
                           {([
-                            { value: "car", label: "Car", icon: "car-outline" as const },
-                            { value: "motorcycle", label: "Motorcycle", icon: "bicycle-outline" as const },
-                            { value: "rv", label: "RV", icon: "cube-outline" as const },
-                            { value: "atv", label: "ATV", icon: "cube-outline" as const },
-                            { value: "utv", label: "UTV", icon: "cube-outline" as const },
-                            { value: "snowmobile", label: "Snowmobile", icon: "snow-outline" as const },
-                            { value: "boat", label: "Boat", icon: "boat-outline" as const },
-                            { value: "dump_truck", label: "Dump Truck", icon: "cube-outline" as const },
-                            { value: "semi_truck", label: "Semi Truck", icon: "cube-outline" as const },
+                            // F3: the five heavy types had no distinct SF Symbol and all
+                            // fell back to the same box. They render through MCI, which the
+                            // full type grid already uses, so each reads as its own vehicle.
+                            { value: "car", label: "Car", lib: "ion" as const, icon: "car-outline" as const },
+                            { value: "motorcycle", label: "Motorcycle", lib: "ion" as const, icon: "bicycle-outline" as const },
+                            { value: "rv", label: "RV", lib: "mci" as const, icon: "rv-truck" as const },
+                            { value: "atv", label: "ATV", lib: "mci" as const, icon: "atv" as const },
+                            { value: "utv", label: "UTV", lib: "mci" as const, icon: "golf-cart" as const },
+                            { value: "snowmobile", label: "Snowmobile", lib: "ion" as const, icon: "snow-outline" as const },
+                            { value: "boat", label: "Boat", lib: "ion" as const, icon: "boat-outline" as const },
+                            { value: "dump_truck", label: "Dump Truck", lib: "mci" as const, icon: "dump-truck" as const },
+                            { value: "semi_truck", label: "Semi Truck", lib: "mci" as const, icon: "truck-trailer" as const },
                           ]).map((t) => {
                             const isSelected = vehicleType === t.value;
                             return (
@@ -1596,7 +1599,11 @@ export default function AddVehicleScreen() {
                                 }}
                                 style={({ pressed }) => [{ height: 56, flexDirection: "row", alignItems: "center", paddingHorizontal: 20, gap: 16, backgroundColor: pressed ? Colors.surface : "transparent" }]}
                               >
-                                <Icon name={t.icon} size={24} color={isSelected ? Colors.accent : Colors.textSecondary} />
+                                {t.lib === "mci" ? (
+                                  <MciIcon name={t.icon} size={24} color={isSelected ? Colors.accent : Colors.textSecondary} />
+                                ) : (
+                                  <Icon name={t.icon} size={24} color={isSelected ? Colors.accent : Colors.textSecondary} />
+                                )}
                                 <Text style={{ ...Typography.body, flex: 1, fontWeight: isSelected ? "600" : "400", color: isSelected ? Colors.accent : Colors.text }}>
                                   {t.label}
                                 </Text>
