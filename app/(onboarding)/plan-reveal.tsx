@@ -25,6 +25,11 @@ import Animated, {
 } from "react-native-reanimated";
 
 const MAX_POLL_ATTEMPTS = 15; // 15 * 2s = 30s max
+// E1c: after the first window the degraded block shows, but generation may still
+// land. Keep polling more slowly for another 120s before giving up for good.
+const EXTENDED_POLL_MS = 5000;
+const MAX_EXTENDED_ATTEMPTS = 24; // 24 * 5s = 120s
+const DEGRADED_FADE_MS = 200;
 
 type Vertical = "vehicle" | "home" | "health";
 type RevealItem = { name: string; dueLabel: string; costStr: string | null };
@@ -159,7 +164,11 @@ export default function PlanRevealScreen() {
 
   const { setOnboardingCompleted, user } = useAuth();
   const pollCount = useRef(0);
+  const extendedCount = useRef(0);
   const [pollTimedOut, setPollTimedOut] = useState(!assetId);
+  const [extendedGaveUp, setExtendedGaveUp] = useState(!assetId);
+  const sawDegraded = useRef(false);
+  const degradedOpacity = useSharedValue(1);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const skeletonAnim = usePulse();
   const revealHapticsFired = useRef(false);
@@ -276,14 +285,20 @@ export default function PlanRevealScreen() {
         }));
       return { items, count: countRes.count ?? 0, heroSentence: null };
     },
-    enabled: !!assetId && !pollTimedOut,
+    enabled: !!assetId && !extendedGaveUp,
     refetchInterval: (query) => {
       const hasData = (query.state.data?.items?.length ?? 0) > 0;
       if (hasData) return false;
       pollCount.current++;
       if (pollCount.current >= MAX_POLL_ATTEMPTS) {
+        // First window is spent: show the degraded block, but keep listening.
         setPollTimedOut(true);
-        return false;
+        extendedCount.current++;
+        if (extendedCount.current >= MAX_EXTENDED_ATTEMPTS) {
+          setExtendedGaveUp(true);
+          return false;
+        }
+        return EXTENDED_POLL_MS;
       }
       return 2000;
     },
@@ -345,8 +360,13 @@ export default function PlanRevealScreen() {
   }
 
   useEffect(() => {
+    if (pollTimedOut && !hasItems) sawDegraded.current = true;
+  }, [pollTimedOut, hasItems]);
+
+  useEffect(() => {
     if (!hasItems) {
       revealHapticsFired.current = false;
+      degradedOpacity.value = 1;
       coverageOpacity.value = 0; coverageY.value = 16;
       heroOpacity.value = 0; heroY.value = 16;
       supportOneOpacity.value = 0; supportOneY.value = 12;
@@ -355,15 +375,19 @@ export default function PlanRevealScreen() {
       return;
     }
     const ease = Easing.out(Easing.cubic);
-    coverageOpacity.value = withTiming(1, { duration: 340, easing: ease });
-    coverageY.value = withTiming(0, { duration: 340, easing: ease });
-    heroOpacity.value = withDelay(REVEAL_BEATS.hero, withTiming(1, { duration: 340, easing: ease }));
-    heroY.value = withDelay(REVEAL_BEATS.hero, withTiming(0, { duration: 340, easing: ease }));
-    supportOneOpacity.value = withDelay(REVEAL_BEATS.supportOne, withTiming(1, { duration: 280, easing: ease }));
-    supportOneY.value = withDelay(REVEAL_BEATS.supportOne, withTiming(0, { duration: 280, easing: ease }));
-    supportTwoOpacity.value = withDelay(REVEAL_BEATS.supportTwo, withTiming(1, { duration: 280, easing: ease }));
-    supportTwoY.value = withDelay(REVEAL_BEATS.supportTwo, withTiming(0, { duration: 280, easing: ease }));
-    bridgeOpacity.value = withDelay(REVEAL_BEATS.bridge, withTiming(1, { duration: 260, easing: Easing.out(Easing.ease) }));
+    // Late arrival: fade the degraded block out first, then run the cascade exactly
+    // as built, shifted by the fade. Fast path is unshifted (offset 0).
+    const offset = sawDegraded.current ? DEGRADED_FADE_MS : 0;
+    if (offset) degradedOpacity.value = withTiming(0, { duration: DEGRADED_FADE_MS });
+    coverageOpacity.value = withDelay(offset, withTiming(1, { duration: 340, easing: ease }));
+    coverageY.value = withDelay(offset, withTiming(0, { duration: 340, easing: ease }));
+    heroOpacity.value = withDelay(offset + REVEAL_BEATS.hero, withTiming(1, { duration: 340, easing: ease }));
+    heroY.value = withDelay(offset + REVEAL_BEATS.hero, withTiming(0, { duration: 340, easing: ease }));
+    supportOneOpacity.value = withDelay(offset + REVEAL_BEATS.supportOne, withTiming(1, { duration: 280, easing: ease }));
+    supportOneY.value = withDelay(offset + REVEAL_BEATS.supportOne, withTiming(0, { duration: 280, easing: ease }));
+    supportTwoOpacity.value = withDelay(offset + REVEAL_BEATS.supportTwo, withTiming(1, { duration: 280, easing: ease }));
+    supportTwoY.value = withDelay(offset + REVEAL_BEATS.supportTwo, withTiming(0, { duration: 280, easing: ease }));
+    bridgeOpacity.value = withDelay(offset + REVEAL_BEATS.bridge, withTiming(1, { duration: 260, easing: Easing.out(Easing.ease) }));
 
     if (revealHapticsFired.current) return;
     revealHapticsFired.current = true;
@@ -372,12 +396,13 @@ export default function PlanRevealScreen() {
         () => (i === 0
           ? Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
           : Haptics.selectionAsync().catch(() => {})),
-        ms,
+        offset + ms,
       ),
     );
     return () => timers.forEach(clearTimeout);
-  }, [hasItems, coverageOpacity, coverageY, heroOpacity, heroY, supportOneOpacity, supportOneY, supportTwoOpacity, supportTwoY, bridgeOpacity]);
+  }, [hasItems, degradedOpacity, coverageOpacity, coverageY, heroOpacity, heroY, supportOneOpacity, supportOneY, supportTwoOpacity, supportTwoY, bridgeOpacity]);
 
+  const degradedStyle = useAnimatedStyle(() => ({ opacity: degradedOpacity.value }));
   const coverageStyle = useAnimatedStyle(() => ({ opacity: coverageOpacity.value, transform: [{ translateY: coverageY.value }] }));
   const heroStyle = useAnimatedStyle(() => ({ opacity: heroOpacity.value, transform: [{ translateY: heroY.value }] }));
   const supportOneStyle = useAnimatedStyle(() => ({ opacity: supportOneOpacity.value, transform: [{ translateY: supportOneY.value }] }));
@@ -392,10 +417,10 @@ export default function PlanRevealScreen() {
         </View>
 
         {!hasItems && (
-          <View style={styles.header}>
+          <Animated.View style={[styles.header, degradedStyle]}>
             <Text style={styles.title}>{pollTimedOut ? cfg.savedTitle(assetName) : cfg.buildingTitle}</Text>
             <Text style={styles.subtitle}>{pollTimedOut ? cfg.stillGeneratingSub : cfg.waitingSub(assetName)}</Text>
-          </View>
+          </Animated.View>
         )}
 
         {hasItems && (
@@ -503,7 +528,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   scroll: { paddingHorizontal: 20, gap: 24 },
   progressBar: { height: 3, borderRadius: Radius.sm, backgroundColor: Colors.border, overflow: "hidden" },
-  progressFill: { height: 3, borderRadius: Radius.sm, backgroundColor: Colors.good },
+  progressFill: { height: 3, borderRadius: Radius.sm, backgroundColor: Colors.accent },
   header: { alignItems: "center", gap: 12 },
   title: { ...Typography.title2, color: Colors.text },
   subtitle: { ...Typography.subheadline, color: Colors.textSecondary, textAlign: "center" },

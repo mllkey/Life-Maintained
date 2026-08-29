@@ -11,6 +11,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import { useAuth, getOnboardingKey } from "@/context/AuthContext";
 import { capture } from "@/lib/analytics";
+import Svg, { Defs, RadialGradient, Stop, Circle } from "react-native-svg";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -26,8 +27,9 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 
+const HALO_SIZE = 200;
 const MIN_SCENE_MS = 6000;
-const MAX_WAIT_MS = 25000;
+const MAX_WAIT_MS = 35000;
 const PARTICLE_COUNT = 12;
 const ORBIT_RADIUS = 96;
 const ORBIT_DOTS = Array.from({ length: 8 }, (_, i) => {
@@ -272,8 +274,18 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
     particleProgress.forEach((p, i) => {
       p.value = withDelay(4700 + i * 100, withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic) }));
     });
-    docOpacity.value = withDelay(5300, withTiming(0.6, { duration: 500 }));
-    docScale.value = withDelay(5300, withTiming(0.85, { duration: 500 }));
+    // E2b: dim presence from 800ms so the circle is never empty, then the existing
+    // beat at 5300ms lifts it the rest of the way. One sequence per shared value —
+    // a second assignment would cancel the first. Scale rises with it because the
+    // doc card is scale 0 until the beat, which would hide a dim-but-present icon.
+    docOpacity.value = withDelay(800, withSequence(
+      withTiming(0.35, { duration: 400 }),
+      withDelay(4100, withTiming(0.6, { duration: 500 })),
+    ));
+    docScale.value = withDelay(800, withSequence(
+      withTiming(0.85, { duration: 400 }),
+      withDelay(4100, withTiming(0.85, { duration: 500 })),
+    ));
     return timers;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, swapSubtitle]);
@@ -403,7 +415,18 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
 
       {!failed && (
         <View style={styles.stage}>
-          <Animated.View style={[styles.halo, { backgroundColor: config.tint }, haloStyle]} />
+          <Animated.View style={[styles.halo, haloStyle]} pointerEvents="none">
+            <Svg width={HALO_SIZE} height={HALO_SIZE}>
+              <Defs>
+                <RadialGradient id="haloGrad" cx="50%" cy="50%" r="50%">
+                  <Stop offset="0" stopColor={config.tint} stopOpacity={0.30} />
+                  <Stop offset="0.5" stopColor={config.tint} stopOpacity={0.10} />
+                  <Stop offset="1" stopColor={config.tint} stopOpacity={0} />
+                </RadialGradient>
+              </Defs>
+              <Circle cx={HALO_SIZE / 2} cy={HALO_SIZE / 2} r={HALO_SIZE / 2} fill="url(#haloGrad)" />
+            </Svg>
+          </Animated.View>
           <Animated.View style={[styles.orbit, orbitStyle]}>
             {ORBIT_DOTS.map((d, i) => (
               <View key={i} style={[styles.orbitDot, { backgroundColor: config.tint, transform: [{ translateX: d.x }, { translateY: d.y }] }]} />
@@ -412,7 +435,7 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
           <Animated.View style={[styles.docGlow, { backgroundColor: config.tint }, docGlowStyle]} />
 
           {particleProgress.map((p, i) => (
-            <Particle key={i} progress={p} index={i} total={PARTICLE_COUNT} color={config.tint} />
+            <Particle key={i} progress={p} index={i} total={PARTICLE_COUNT} color={Colors.white} />
           ))}
 
           <Animated.View style={[styles.doc, docStyle]}>
@@ -459,7 +482,7 @@ const styles = StyleSheet.create({
   chipText: { ...Typography.caption, fontWeight: "500", color: Colors.textSecondary },
   stage: { flex: 1, alignItems: "center", justifyContent: "center", position: "relative" },
   docGlow: { position: "absolute", width: 140, height: 140, borderRadius: Radius.pill },
-  halo: { position: "absolute", width: 200, height: 200, borderRadius: Radius.pill },
+  halo: { position: "absolute", width: HALO_SIZE, height: HALO_SIZE },
   orbit: { position: "absolute", width: 0, height: 0, alignItems: "center", justifyContent: "center" },
   orbitDot: { position: "absolute", width: 5, height: 5, borderRadius: Radius.sm, opacity: 0.5 },
   doc: { width: 88, height: 88, borderRadius: Radius.lg, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, alignItems: "center", justifyContent: "center" },

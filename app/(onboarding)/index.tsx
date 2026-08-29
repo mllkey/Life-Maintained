@@ -84,8 +84,13 @@ function useOrbStyle(index: number, id: VerticalId, selected: VerticalId, entryP
     const isSelected = selected === id;
     const selectedX = 0;
     const selectedY = -22;
-    const recedeX = index === 0 ? -118 : index === 1 ? 118 : 0;
-    const recedeY = index === 0 ? 118 : index === 1 ? 118 : 138;
+    // E3c: whichever two orbs are unselected land at the symmetric bottom corners.
+    // Rank among the unselected (VERTICALS order) picks the corner, so the layout
+    // is the same shape for all three selections.
+    const selectedIndex = VERTICALS.findIndex(v => v.id === selected);
+    const unselectedRank = index < selectedIndex ? index : index - 1;
+    const recedeX = unselectedRank === 0 ? -118 : 118;
+    const recedeY = 118;
 
     const baseX = initialX + (orbitX - initialX) * entryProgress.value;
     const baseY = initialY + (orbitY - initialY) * entryProgress.value;
@@ -128,6 +133,14 @@ export default function OnboardingStartScreen() {
 
   useEffect(() => {
     capture("onboarding_step_viewed", { step: "start" });
+  }, []);
+
+  // E1a: pay the edge function's cold start now, while the user is still choosing.
+  // Fire-and-forget: no await, no UI, no error surface.
+  useEffect(() => {
+    const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    if (!base) return;
+    fetch(`${base}/functions/v1/generate-maintenance-schedule`, { method: "OPTIONS" }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -210,7 +223,6 @@ export default function OnboardingStartScreen() {
       </View>
 
       <View style={styles.orbitStage}>
-        <View style={styles.orbitHalo} />
         <AnimatedPressable
           accessibilityRole="button"
           accessibilityLabel="Choose vehicle"
@@ -327,19 +339,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
   },
-  orbitHalo: {
-    width: 196,
-    height: 196,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    opacity: 0.6,
-  },
   orb: {
     position: "absolute",
     width: 116,
     height: 116,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,

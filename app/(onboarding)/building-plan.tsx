@@ -28,13 +28,13 @@ export default function BuildingPlanScreen() {
     docIcon: { lib: "ion", icon: "document-text" },
     chips: [
       { lib: "mci", icon: "book-open-variant", label: "Factory manual", anim: "shimmer" },
-      { lib: "ion", icon: "location", label: "Local climate", anim: "bounce" },
+      { lib: "ion", icon: "calendar", label: "Seasonal intervals", anim: "bounce" },
       { lib: "ion", icon: "settings", label: "Mileage + wear", anim: "spin" },
     ],
     copy: {
       initial: "Reading the factory service manual",
       beat1: `Reading ${displayName}’s service manual`,
-      beat2: "Checking your local climate",
+      beat2: "Checking seasonal service intervals",
       beat3: "Building your personalized plan",
       slow: "Cross-checking the schedule — a few more seconds.",
       ready: "Your plan is ready.",

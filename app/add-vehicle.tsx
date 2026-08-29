@@ -646,6 +646,25 @@ export default function AddVehicleScreen() {
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+  const mountGateChecked = useRef(false);
+
+  // E6: limit before labor. On the onboarding path, run the SAME check the save
+  // path runs, once, as soon as the count resolves — so an at-limit user meets the
+  // paywall before touching a field instead of after filling the form. The
+  // save-time gate below stays as the backstop; other entry paths are unchanged.
+  useEffect(() => {
+    if (!isOnboarding || !user || mountGateChecked.current) return;
+    mountGateChecked.current = true;
+    (async () => {
+      try {
+        const { count } = await supabase
+          .from("vehicles")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id);
+        if ((count ?? 0) >= vehicleLimit(profile)) setShowPaywall(true);
+      } catch {}
+    })();
+  }, [isOnboarding, user, profile]);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [savedVehicleId, setSavedVehicleId] = useState<string | null>(null);
 
