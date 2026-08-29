@@ -23,6 +23,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { Icon } from "@/components/ui/Icon";
+import { Button } from "@/components/ui/Button";
+import { Divider } from "@/components/ui/Divider";
+import { usePressScale } from "@/components/ui/usePressScale";
+// Reanimated drives the one-shot reveal stagger; the RN Animated fade above owns a
+// different node, so the two coexist (G3).
+import Reanimated, { FadeIn, FadeInDown, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
+
+const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
 import { Typography } from "@/constants/typography";
 import { Radius } from "@/constants/radius";
 import { supabase } from "@/lib/supabase";
@@ -387,6 +395,20 @@ export default function VehicleDetailScreen() {
 
   const scheduleOpacity = useRef(new Animated.Value(0)).current;
 
+  // ---- GAP 7: the plan-ready reveal -------------------------------------------------
+  // One-shot per mount session. Armed BEFORE the first render that mounts reveal-eligible
+  // rows, so the stagger is never missed. Never fires on tab switches or refetches.
+  const mountStartedAt = useRef(Date.now()).current;
+  const reduceMotion = useReducedMotion();
+  const revealDecided = useRef(false);
+  const revealSnapshot = useRef<Set<string> | null>(null);
+  const revealConsumed = useRef<Set<string>>(new Set());
+  const generatedOnScreen = useRef(false);
+  const [revealActive, setRevealActive] = useState(false);
+  const revealHeadlineOpacity = useSharedValue(0);
+
+
+
   useFocusEffect(
     useCallback(() => {
       refetchSchedule();
@@ -546,6 +568,8 @@ export default function VehicleDetailScreen() {
 
   React.useEffect(() => {
     if (processedScheduleTasks.length > 0 && prevScheduleCountRef.current === 0) {
+      // This is also the reveal's success haptic (G2). It already fires on exactly the
+      // first-non-empty transition, so the reveal reuses it rather than stacking a second.
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     prevScheduleCountRef.current = processedScheduleTasks.length;
@@ -555,6 +579,53 @@ export default function VehicleDetailScreen() {
     () => processedScheduleTasks.filter(t => t.status === "completed").slice(0, 10),
     [processedScheduleTasks],
   );
+
+  // Freshness is computed exactly once, and only after created_at has resolved. The
+  // screen renders a skeleton until the vehicle query settles, so this decision always
+  // lands before the first render that mounts a task row.
+  const createdAt = vehicle?.created_at ?? null;
+  const vehicleResolved = !!vehicle;
+  if (!revealDecided.current && vehicleResolved) {
+    const fresh = createdAt != null
+      && Math.abs(mountStartedAt - new Date(createdAt).getTime()) <= 60000;
+    // (a) the vehicle is fresh and its schedule has arrived, or (b) generation just
+    // completed on-screen — either arms the reveal for the rows about to mount.
+    if ((fresh || generatedOnScreen.current) && processedScheduleTasks.length > 0) {
+      revealDecided.current = true;
+      revealSnapshot.current = new Set(
+        revealSnapshotIds(actionNeededTasks, upcomingTasks, completedTasks,
+          actionNeededExpanded, upcomingExpanded, completedExpanded),
+      );
+    } else if (!fresh && !generatedOnScreen.current) {
+      revealDecided.current = true;
+      revealSnapshot.current = new Set();
+    }
+  }
+  const revealArmed = (revealSnapshot.current?.size ?? 0) > 0;
+  // No extra row gate is needed: the screen renders a skeleton until the vehicle query
+  // resolves (see `isLoading` below), so no task row can commit before created_at is
+  // known and freshness has been decided in this same render pass.
+
+  React.useEffect(() => {
+    if (revealArmed && !revealActive) {
+      setRevealActive(true);
+      revealHeadlineOpacity.value = withTiming(1, { duration: 220 });
+    }
+  }, [revealArmed, revealActive, revealHeadlineOpacity]);
+
+  const revealHeadlineStyle = useAnimatedStyle(() => ({ opacity: revealHeadlineOpacity.value }));
+
+  /** One-shot per row id: returns the entering animation only on that row's first
+   *  committed mount, then marks it consumed for the rest of the mount session. */
+  const revealEnteringFor = useCallback((taskId: string, index: number) => {
+    if (!revealSnapshot.current?.has(taskId)) return undefined;
+    if (revealConsumed.current.has(taskId)) return undefined;
+    revealConsumed.current.add(taskId);
+    if (reduceMotion) return FadeIn.duration(180);
+    return FadeInDown.duration(180)
+      .delay(index * 40)
+      .withInitialValues({ opacity: 0, transform: [{ translateY: 6 }] });
+  }, [reduceMotion]);
 
   async function generateSchedule() {
     if (!vehicle || !user) return;
@@ -588,6 +659,10 @@ export default function VehicleDetailScreen() {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
       }
+      // GAP 7 trigger (b): generation finished while the user is on this screen. Arm
+      // before the refetch resolves so the reveal is decided ahead of the rows' mount.
+      generatedOnScreen.current = true;
+      revealDecided.current = false;
       await refetchSchedule();
       showToast("Schedule generated!");
     } catch {
@@ -1472,19 +1547,20 @@ export default function VehicleDetailScreen() {
                     <Text style={styles.vehicleFullName}>{vehicleName}</Text>
                     <Text style={styles.vehicleMeta}>{metaLine}</Text>
                   </View>
-                  <Pressable
-                    style={({ pressed }) => [styles.logServiceBtn, { opacity: pressed ? 0.85 : 1 }]}
+                  <Button
+                    variant="primary"
+                    icon="add"
+                    label="Log Service"
                     onPress={() => router.push(`/log-service/${id}` as any)}
-                  >
-                    <Text style={styles.logServiceBtnText}>Log Service</Text>
-                  </Pressable>
+                  />
                   {(tracksMiles || tracksHrs) && (
-                    <Pressable
-                      style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, alignSelf: "center" }]}
+                    <Button
+                      variant="tertiary"
+                      fullWidth={false}
+                      style={styles.updateUsageBtn}
+                      label={tracksHrs ? "Update hours →" : "Update mileage →"}
                       onPress={() => router.push(`/update-mileage/${id}` as any)}
-                    >
-                      <Text style={styles.updateMileageLink}>{tracksHrs ? "Update hours →" : "Update mileage →"}</Text>
-                    </Pressable>
+                    />
                   )}
                 </>
               );
@@ -1532,7 +1608,12 @@ export default function VehicleDetailScreen() {
                   </Pressable>
                 </View>
               ) : processedScheduleTasks.length > 0 && !processedScheduleTasks.some(t => t.last_completed_date != null) ? (
-                <Animated.View style={{ opacity: scheduleOpacity }}>
+                <Animated.View style={revealActive ? styles.revealOpaque : { opacity: scheduleOpacity }}>
+                  {revealActive && (
+                    <Reanimated.Text style={[styles.revealHeadline, revealHeadlineStyle]}>
+                      Your plan is ready.
+                    </Reanimated.Text>
+                  )}
                   {scheduleInsight && (
                     <Pressable
                       onPress={() => { if (insightTaskName) { setHighlightedTask(insightTaskName); setTimeout(() => setHighlightedTask(null), 2000); } }}
@@ -1570,6 +1651,7 @@ export default function VehicleDetailScreen() {
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
                       registerRow={registerTaskRow}
+                      revealEnteringFor={revealEnteringFor}
                     />
                   )}
                   <ScheduleSection
@@ -1586,6 +1668,7 @@ export default function VehicleDetailScreen() {
                     highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
                       registerRow={registerTaskRow}
+                      revealEnteringFor={revealEnteringFor}
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
@@ -1602,6 +1685,7 @@ export default function VehicleDetailScreen() {
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
                       registerRow={registerTaskRow}
+                      revealEnteringFor={revealEnteringFor}
                     />
                   )}
                   {Object.keys(costEstimates ?? {}).length > 0 && (
@@ -1629,19 +1713,23 @@ export default function VehicleDetailScreen() {
                     </Text>
                   </View>
                   {!generatingSchedule && (
-                    <Pressable
-                      onPress={() => { generateSchedule(); }}
-                      style={({ pressed }) => [{ marginTop: 16, marginHorizontal: 16, paddingVertical: 16, paddingHorizontal: 20, backgroundColor: Colors.accent, borderRadius: Radius.md, alignItems: 'center', opacity: pressed ? 0.85 : 1 }]}
-                      accessibilityRole="button"
+                    <Button
+                      variant="primary"
+                      label="Generate Schedule"
                       accessibilityLabel="Generate maintenance schedule"
-                    >
-                      <Text style={{ ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse }}>Generate Schedule</Text>
-                    </Pressable>
+                      onPress={() => { generateSchedule(); }}
+                      style={styles.generateScheduleBtn}
+                    />
                   )}
                   <ScheduleSkeleton />
                 </View>
               ) : (
-                <Animated.View style={{ opacity: scheduleOpacity }}>
+                <Animated.View style={revealActive ? styles.revealOpaque : { opacity: scheduleOpacity }}>
+                  {revealActive && (
+                    <Reanimated.Text style={[styles.revealHeadline, revealHeadlineStyle]}>
+                      Your plan is ready.
+                    </Reanimated.Text>
+                  )}
                   {actionNeededTasks.length > 0 && (
                     <ScheduleSection
                       title={`Action Needed (${actionNeededTasks.length})`}
@@ -1657,6 +1745,7 @@ export default function VehicleDetailScreen() {
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
                       registerRow={registerTaskRow}
+                      revealEnteringFor={revealEnteringFor}
                     />
                   )}
                   <ScheduleSection
@@ -1673,6 +1762,7 @@ export default function VehicleDetailScreen() {
                     highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
                       registerRow={registerTaskRow}
+                      revealEnteringFor={revealEnteringFor}
                   />
                   {completedTasks.length > 0 && (
                     <ScheduleSection
@@ -1689,6 +1779,7 @@ export default function VehicleDetailScreen() {
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
                       registerRow={registerTaskRow}
+                      revealEnteringFor={revealEnteringFor}
                     />
                   )}
                   {Object.keys(costEstimates ?? {}).length > 0 && (
@@ -1975,6 +2066,25 @@ function ScheduleSkeleton() {
   );
 }
 
+
+/** IDs, in render order, of the first 10 task rows that will actually be rendered in the
+ *  sections that are expanded right now. Rows hidden inside collapsed sections are never
+ *  snapshotted, so expanding later does not animate them. */
+function revealSnapshotIds(
+  actionNeeded: any[], upcoming: any[], completed: any[],
+  actionExpanded: boolean, upcomingExpanded: boolean, completedExpanded: boolean,
+): string[] {
+  const ids: string[] = [];
+  const push = (rows: any[], expanded: boolean) => {
+    if (!expanded) return;
+    for (const t of rows) { if (ids.length < 10) ids.push(t.id); }
+  };
+  push(actionNeeded, actionExpanded);
+  push(upcoming, upcomingExpanded);
+  push(completed, completedExpanded);
+  return ids.slice(0, 10);
+}
+
 function ScheduleSection({
   title,
   titleColor,
@@ -1990,6 +2100,7 @@ function ScheduleSection({
   highlightedTask,
   highlightedTaskId,
   registerRow,
+  revealEnteringFor,
 }: {
   title: string;
   titleColor?: string;
@@ -2005,11 +2116,13 @@ function ScheduleSection({
   highlightedTask?: string | null;
   highlightedTaskId?: string | null;
   registerRow?: (id: string, node: React.ElementRef<typeof View> | null) => void;
+  /** Returns the one-shot reveal animation for a row, or undefined. Consumable. */
+  revealEnteringFor?: (taskId: string, index: number) => any;
 }) {
   return (
-    <View style={styles.scheduleSection}>
+    <View style={styles.scheduleGroup}>
       <Pressable style={styles.scheduleSectionHeader} onPress={onToggle} hitSlop={6}>
-        <Text style={styles.scheduleSectionTitle}>
+        <Text style={[styles.scheduleSectionTitle, titleColor ? { color: titleColor } : null]}>
           {title.toUpperCase()}
         </Text>
         <Icon
@@ -2019,32 +2132,37 @@ function ScheduleSection({
         />
       </Pressable>
       {expanded && (
-        <View style={styles.scheduleSectionContent}>
+        <View>
+          <Divider inset={16} />
           {tasks.length === 0 && emptyMessage ? (
             <Text style={styles.scheduleSectionEmpty}>{emptyMessage}</Text>
           ) : (
             tasks.map((task, idx) => {
               const isDeepLink = task.id === highlightedTaskId;
+              const entering = revealEnteringFor?.(task.id, idx);
               return (
-                <View
-                  key={task.id}
-                  ref={(node) => { registerRow?.(task.id, node); }}
-                  collapsable={false}
-                  pointerEvents="box-none"
-                  style={{ position: "relative", borderRadius: Radius.lg, overflow: "hidden" }}
-                >
-                  <ScheduleTaskCard
-                    task={task}
-                    vehicle={vehicle}
-                    onMarkComplete={onMarkComplete}
-                    onEditTask={onEditTask}
-                    isLast={idx === tasks.length - 1}
-                    costEstimate={costEstimates?.[task.name.toLowerCase().trim()]}
-                    onShowDifficultyInfo={onShowDifficultyInfo}
-                    isHighlighted={task.name === highlightedTask}
-                  />
-                  <HighlightBackdrop color={Colors.vehicleMuted} visible={isDeepLink} />
-                </View>
+                <React.Fragment key={task.id}>
+                  {idx > 0 ? <Divider inset={16} /> : null}
+                  <View
+                    ref={(node) => { registerRow?.(task.id, node); }}
+                    collapsable={false}
+                    pointerEvents="box-none"
+                    style={{ position: "relative" }}
+                  >
+                    <Reanimated.View entering={entering}>
+                    <ScheduleTaskCard
+                      task={task}
+                      vehicle={vehicle}
+                      onMarkComplete={onMarkComplete}
+                      onEditTask={onEditTask}
+                      costEstimate={costEstimates?.[task.name.toLowerCase().trim()]}
+                      onShowDifficultyInfo={onShowDifficultyInfo}
+                      isHighlighted={task.name === highlightedTask}
+                    />
+                    <HighlightBackdrop color={Colors.vehicleMuted} visible={isDeepLink} />
+                    </Reanimated.View>
+                  </View>
+                </React.Fragment>
               );
             })
           )}
@@ -2054,20 +2172,21 @@ function ScheduleSection({
   );
 }
 
-function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, isLast, costEstimate, onShowDifficultyInfo, isHighlighted }: {
+function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, costEstimate, onShowDifficultyInfo, isHighlighted }: {
   task: any;
   vehicle: any;
   onMarkComplete: (task: any) => void;
   onEditTask: (task: any) => void;
-  isLast?: boolean;
   costEstimate?: any;
   onShowDifficultyInfo?: () => void;
   isHighlighted?: boolean;
 }) {
   const isCompleted = task.status === "completed";
   const [showCompletedInfo, setShowCompletedInfo] = useState(false);
+  const { animatedStyle, onPressIn, onPressOut } = usePressScale();
 
   function handlePress() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (isCompleted) {
       setShowCompletedInfo(true);
       setTimeout(() => setShowCompletedInfo(false), 2500);
@@ -2107,18 +2226,19 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, isLast, c
   }
 
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={handlePress}
-      style={({ pressed }) => [
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      style={[
         styles.scheduleCard,
-        !isLast && styles.scheduleCardBorder,
-        !isCompleted && pressed && { opacity: 0.7 },
-        isHighlighted && { backgroundColor: "rgba(255, 200, 50, 0.15)" },
+        { borderLeftColor: barColor, opacity: isCompleted ? 0.85 : 1 },
+        animatedStyle,
+        isHighlighted && styles.scheduleCardHighlighted,
       ]}
       accessibilityRole="button"
       accessibilityLabel={isCompleted ? `${task.name} — completed` : `${task.name} — tap to mark complete`}
     >
-      <View style={[styles.scheduleCardBar, { backgroundColor: barColor, opacity: isCompleted ? 0.5 : 1 }]} />
       <View style={styles.scheduleCardBody}>
         <Text
           style={[styles.scheduleCardName, isCompleted && styles.scheduleCardNameDone]}
@@ -2169,7 +2289,7 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, isLast, c
           </Text>
         )}
       </View>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -3206,15 +3326,15 @@ const styles = StyleSheet.create({
   },
   vehicleFullName: { ...Typography.title2, color: Colors.text },
   vehicleMeta: { ...Typography.footnote, color: Colors.textSecondary },
-  logServiceBtn: {
-    backgroundColor: Colors.accent,
-    borderRadius: Radius.lg,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
+  updateUsageBtn: { alignSelf: "center" },
+  revealOpaque: { opacity: 1 },
+  revealHeadline: {
+    ...Typography.title3,
+    color: Colors.text,
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
-  logServiceBtnText: { ...Typography.subheadline, fontWeight: "600", color: Colors.white },
-  updateMileageLink: { ...Typography.footnote, fontWeight: "500", color: Colors.accent },
+  generateScheduleBtn: { marginTop: 16, marginHorizontal: 16 },
   tabs: {
     flexDirection: "row",
     backgroundColor: Colors.background,
@@ -3297,21 +3417,23 @@ const styles = StyleSheet.create({
   historyGroupCardCost: { ...Typography.headline, fontWeight: "700", color: Colors.vehicle },
 
   scheduleContainer: { gap: 16 },
-  scheduleSection: { gap: 0 },
+  scheduleGroup: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.borderSubtle,
+    overflow: "hidden",
+  },
   scheduleSectionHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 4, paddingBottom: 8,
+    paddingHorizontal: 16, paddingVertical: 12,
   },
   scheduleSectionTitle: {
-    ...Typography.caption,
+    ...Typography.footnote,
     fontWeight: "600",
-    color: Colors.textTertiary,
+    color: Colors.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 1.5,
-  },
-  scheduleSectionContent: {
-    backgroundColor: Colors.card, borderRadius: Radius.lg,
-    borderWidth: 1, borderColor: Colors.border, overflow: "hidden",
+    letterSpacing: 0.4,
   },
   scheduleSectionEmpty: {
     ...Typography.footnote,
@@ -3321,18 +3443,14 @@ const styles = StyleSheet.create({
   },
   scheduleCard: {
     flexDirection: "row", alignItems: "center", gap: 16,
-    paddingHorizontal: 20, paddingVertical: 16,
+    paddingHorizontal: 16, paddingVertical: 12,
+    minHeight: 44,
+    borderLeftWidth: 4,
   },
-  scheduleCardBorder: {
-    borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
-  },
-  scheduleCardBar: {
-    width: 4, height: 28, borderRadius: Radius.sm, flexShrink: 0,
-  },
+  scheduleCardHighlighted: { backgroundColor: Colors.vehicleMuted },
   scheduleCardBody: { flex: 1, gap: 4 },
   scheduleCardName: {
-    ...Typography.subheadline,
-    fontWeight: "600",
+    ...Typography.headline,
     color: Colors.text,
   },
   scheduleCardNameDone: {
