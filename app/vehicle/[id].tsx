@@ -122,6 +122,11 @@ function nextUsageSortKey(
 
 // Human "Overdue by ..." line for the reminder-fired moment. Usage first
 // (matches the app's usage-forward bias for vehicles), then date.
+/** GAP-7 reveal is offered while the vehicle is this fresh at mount. */
+const REVEAL_FRESHNESS_MS = 180000;
+/** Rows begin entering this long after the headline starts, so the title lands first. */
+const REVEAL_ROWS_DELAY_MS = 260;
+
 function buildOverdueLine(task: any, vehicle: any): string {
   const cur = currentUsageValue(vehicle);
   const due = taskNextDueUsage(task, vehicle);
@@ -396,6 +401,10 @@ export default function VehicleDetailScreen() {
   const scheduleOpacity = useRef(new Animated.Value(0)).current;
 
   // ---- GAP 7: the plan-ready reveal -------------------------------------------------
+  // H1: a real user reads the plan-reveal copy before tapping through, and the building
+  // scene alone is ~10s, so the window has to outlast an unhurried pass.
+  // H2: the headline lands first, then the plan assembles beneath it — without the delay
+  // the stagger dissipates under the loading skeleton.
   // One-shot per mount session. Armed BEFORE the first render that mounts reveal-eligible
   // rows, so the stagger is never missed. Never fires on tab switches or refetches.
   const mountStartedAt = useRef(Date.now()).current;
@@ -587,7 +596,7 @@ export default function VehicleDetailScreen() {
   const vehicleResolved = !!vehicle;
   if (!revealDecided.current && vehicleResolved) {
     const fresh = createdAt != null
-      && Math.abs(mountStartedAt - new Date(createdAt).getTime()) <= 60000;
+      && Math.abs(mountStartedAt - new Date(createdAt).getTime()) <= REVEAL_FRESHNESS_MS;
     // (a) the vehicle is fresh and its schedule has arrived, or (b) generation just
     // completed on-screen — either arms the reveal for the rows about to mount.
     if ((fresh || generatedOnScreen.current) && processedScheduleTasks.length > 0) {
@@ -623,7 +632,7 @@ export default function VehicleDetailScreen() {
     revealConsumed.current.add(taskId);
     if (reduceMotion) return FadeIn.duration(180);
     return FadeInDown.duration(180)
-      .delay(index * 40)
+      .delay(REVEAL_ROWS_DELAY_MS + index * 40)
       .withInitialValues({ opacity: 0, transform: [{ translateY: 6 }] });
   }, [reduceMotion]);
 
