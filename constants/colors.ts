@@ -1,49 +1,49 @@
-const ORANGE = "#E8943A";
+const ORANGE = "#FF9F0A";
 const RED = "#FF453A";
 const YELLOW = "#FFD60A";
-const GREEN = "#32D74B";
-const BLUE = "#4A90D9";
+const GREEN = "#30D158";
+const BLUE = "#0A84FF";
 
 export const Colors = {
-  background: "#0C111B",
-  surface: "#131A2B",
-  card: "#1A2236",
-  cardElevated: "#212B42",
-  skeleton: "#2C2E42",
-  border: "#2A3550",
-  borderSubtle: "#1A2236",
+  background: "#000000",
+  surface: "#1C1C1E",
+  card: "#2C2C2E",
+  cardElevated: "#3A3A3C",
+  skeleton: "#2C2C2E",
+  border: "#48484A",
+  borderSubtle: "#38383A",
   shadow: "rgba(0, 0, 0, 0.12)",
 
-  text: "#F0F2F8",
-  textPrimary: "#0C111B",
-  textSecondary: "#8B93A8",
-  textTertiary: "#5A6480",
-  textInverse: "#0C111B",
+  text: "#FFFFFF",
+  textPrimary: "#FFFFFF",
+  textSecondary: "rgba(235, 235, 245, 0.60)",
+  textTertiary: "rgba(235, 235, 245, 0.30)",
+  textInverse: "#000000",
 
   accent: ORANGE,
-  accentMuted: "rgba(232, 147, 58, 0.15)",
-  accentLight: "rgba(232, 147, 58, 0.08)",
+  accentMuted: "rgba(255, 159, 10, 0.16)",
+  accentLight: "rgba(255, 159, 10, 0.08)",
 
   overdue: RED,
-  overdueMuted: "rgba(255, 69, 58, 0.15)",
+  overdueMuted: "rgba(255, 69, 58, 0.16)",
   dueSoon: YELLOW,
-  dueSoonMuted: "rgba(255, 214, 10, 0.15)",
-  needsAttention: "#FFB340",
-  needsAttentionMuted: "rgba(255, 179, 64, 0.15)",
+  dueSoonMuted: "rgba(255, 214, 10, 0.16)",
+  needsAttention: YELLOW,
+  needsAttentionMuted: "rgba(255, 214, 10, 0.16)",
   good: GREEN,
-  goodMuted: "rgba(50, 215, 75, 0.15)",
+  goodMuted: "rgba(48, 209, 88, 0.16)",
 
   blue: BLUE,
-  blueMuted: "rgba(74, 144, 217, 0.15)",
+  blueMuted: "rgba(10, 132, 255, 0.16)",
 
   vehicle: ORANGE,
-  vehicleMuted: "rgba(232, 147, 58, 0.15)",
+  vehicleMuted: "rgba(255, 159, 10, 0.16)",
   home: "#64D2FF",
-  homeMuted: "rgba(100, 210, 255, 0.15)",
-  health: "#FF6B9D",
-  healthMuted: "rgba(255, 107, 157, 0.15)",
+  homeMuted: "rgba(100, 210, 255, 0.16)",
+  health: "#FF375F",
+  healthMuted: "rgba(255, 55, 95, 0.16)",
 
-  tabBar: "rgba(12, 17, 27, 0.92)",
+  tabBar: "rgba(0, 0, 0, 0.92)",
 
   white: "#FFFFFF",
   black: "#000000",
