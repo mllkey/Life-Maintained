@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: Radius.md,
-    backgroundColor: Colors.overdueMuted,
+    backgroundColor: Colors.card,
     minHeight: 44,
     justifyContent: "center",
   },

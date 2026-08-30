@@ -118,13 +118,13 @@ export default function UiGallery() {
     return (
       <Screen title="Rows" trailing={back} testID="gallery-rows">
         <Section title="Vehicles" footer="Rows with a leading icon use a 56pt divider inset." dividerInset={56}>
-          <Row title="2019 Toyota 4Runner" subtitle="84,210 mi · updated 3 days ago" icon="car" iconColor={Colors.vehicle} onPress={NOOP} appearIndex={0} />
-          <Row title="2022 Honda Odyssey" subtitle="Oil change overdue" icon="car" iconColor={Colors.vehicle} value="2 due" onPress={NOOP} appearIndex={1} />
+          <Row title="2019 Toyota 4Runner" subtitle="84,210 mi · updated 3 days ago" icon="car" onPress={NOOP} appearIndex={0} />
+          <Row title="2022 Honda Odyssey" subtitle="Oil change overdue" icon="car" value="2 due" onPress={NOOP} appearIndex={1} />
           <Row title="Locked vehicle" subtitle="Upgrade to access" icon="lock-closed" iconColor={Colors.textTertiary} onPress={NOOP} disabled appearIndex={2} />
         </Section>
         <Section title="Settings" dividerInset={56}>
-          <Row title="Subscription" value="Personal" icon="person" iconBackground={Colors.accentMuted} onPress={NOOP} appearIndex={3} />
-          <Row title="Push notifications" icon="notifications-outline" iconBackground={Colors.homeMuted} iconColor={Colors.home} trailing={<Switch value onValueChange={NOOP} trackColor={{ true: Colors.accent }} />} appearIndex={4} />
+          <Row title="Subscription" value="Personal" icon="person" iconBackground={Colors.card} onPress={NOOP} appearIndex={3} />
+          <Row title="Push notifications" icon="notifications-outline" iconBackground={Colors.card} trailing={<Switch value onValueChange={NOOP} trackColor={{ true: Colors.accent }} />} appearIndex={4} />
           <Row title="Expand details" icon="chevron-down" iconColor={Colors.textSecondary} onPress={NOOP} chevron={false} appearIndex={5} />
         </Section>
         <Section title="Account">
@@ -149,8 +149,8 @@ export default function UiGallery() {
         </Card>
         <Card onPress={NOOP} accessibilityLabel="Open 2019 Toyota 4Runner">
           <View style={styles.cardRow}>
-            <View style={[styles.avatar, { backgroundColor: Colors.vehicleMuted }]}>
-              <Icon name="car" size={22} color={Colors.vehicle} weight="semibold" />
+            <View style={[styles.avatar, { backgroundColor: Colors.card }]}>
+              <Icon name="car" size={22} color={Colors.textSecondary} weight="semibold" />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text variant="headline" numberOfLines={1}>2019 Toyota 4Runner</Text>

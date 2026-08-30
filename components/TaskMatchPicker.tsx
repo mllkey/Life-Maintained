@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 8,
     marginTop: 12,
-    backgroundColor: Colors.needsAttentionMuted,
+    backgroundColor: Colors.card,
     borderRadius: Radius.md,
     paddingHorizontal: 12,
     paddingVertical: 8,

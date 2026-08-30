@@ -150,7 +150,7 @@ export default function HealthProfileScreen() {
           )}
 
           <View style={styles.infoBox}>
-            <Icon name="heart-outline" size={18} color={Colors.health} />
+            <Icon name="heart-outline" size={18} color={Colors.textSecondary} />
             <Text style={styles.infoText}>Used to surface personalized health screening recommendations on your dashboard.</Text>
           </View>
 
@@ -187,9 +187,9 @@ const styles = StyleSheet.create({
   saveBtn: { backgroundColor: Colors.accent, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 8 },
   saveBtnText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
   scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 24 },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: Radius.md, padding: 12 },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12 },
   errorText: { ...Typography.footnote, flex: 1, color: Colors.overdue },
-  infoBox: { flexDirection: "row", gap: 12, backgroundColor: Colors.healthMuted, borderRadius: Radius.md, padding: 16, alignItems: "flex-start" },
+  infoBox: { flexDirection: "row", gap: 12, backgroundColor: Colors.card, borderRadius: Radius.md, padding: 16, alignItems: "flex-start" },
   infoText: { ...Typography.footnote, flex: 1, color: Colors.textSecondary },
   section: { gap: 8 },
   sectionTitle: { ...Typography.caption, fontWeight: "600", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 1.5 },
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   inputInner: { ...Typography.subheadline, flex: 1, color: Colors.text },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: Radius.md, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
-  chipSelected: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
+  chipSelected: { backgroundColor: Colors.accentMuted, borderColor: Colors.accent },
   chipText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
-  chipTextSelected: { color: Colors.health },
+  chipTextSelected: { color: Colors.accent },
 });

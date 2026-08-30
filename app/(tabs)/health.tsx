@@ -641,7 +641,7 @@ export default function HealthScreen() {
               <>
                 {insightText && (
                   <View style={styles.insightCard}>
-                    <Icon name="heart-outline" size={16} color={Colors.health} />
+                    <Icon name="heart-outline" size={16} color={Colors.textSecondary} />
                     <Text style={styles.insightText}>{insightText}</Text>
                   </View>
                 )}
@@ -672,9 +672,9 @@ export default function HealthScreen() {
                             hitSlop={8}
                           >
                             {addingScreening === s.title ? (
-                              <ActivityIndicator size="small" color={Colors.health} />
+                              <ActivityIndicator size="small" color={Colors.accent} />
                             ) : (
-                              <Icon name="add-circle-outline" size={22} color={Colors.health} />
+                              <Icon name="add-circle-outline" size={22} color={Colors.accent} />
                             )}
                           </Pressable>
                         </View>
@@ -774,9 +774,9 @@ export default function HealthScreen() {
                                   disabled={schedulingMed === m.id}
                                 >
                                   {schedulingMed === m.id ? (
-                                    <ActivityIndicator size="small" color={Colors.health} />
+                                    <ActivityIndicator size="small" color={Colors.accent} />
                                   ) : (
-                                    <Icon name="notifications-outline" size={16} color={Colors.health} />
+                                    <Icon name="notifications-outline" size={16} color={Colors.accent} />
                                   )}
                                 </Pressable>
                               )}
@@ -982,7 +982,7 @@ function MemberCard({ member, overdue, upcoming, onPress }: { member: any; overd
   return (
     <Card padding={Spacing.lg} onPress={onPress} accessibilityLabel={member.name}>
       <View style={styles.memberRow}>
-      <Icon name={isPet ? "paw-outline" : "person-outline"} size={18} color={Colors.health} />
+      <Icon name={isPet ? "paw-outline" : "person-outline"} size={18} color={Colors.textSecondary} />
       <View style={styles.memberInfo}>
         <View style={styles.memberTitleRow}>
           {statusDotColor && <View style={[styles.memberStatusDot, { backgroundColor: statusDotColor }]} />}
@@ -1015,8 +1015,8 @@ const styles = StyleSheet.create({
 
   insightCard: {
     flexDirection: "row", alignItems: "flex-start", gap: 12,
-    backgroundColor: Colors.healthMuted, borderRadius: Radius.lg,
-    padding: 16, borderWidth: 1, borderColor: Colors.health + "30",
+    backgroundColor: Colors.card, borderRadius: Radius.lg,
+    padding: 16, borderWidth: 1, borderColor: Colors.border,
   },
   insightText: {
     ...Typography.footnote,
@@ -1073,7 +1073,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: Radius.md,
-    backgroundColor: Colors.healthMuted,
+    backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1155,9 +1155,9 @@ const styles = StyleSheet.create({
     flex: 1, paddingVertical: 8, borderRadius: Radius.md,
     backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, alignItems: "center",
   },
-  dateQuickBtnActive: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
+  dateQuickBtnActive: { backgroundColor: Colors.accentMuted, borderColor: Colors.accent },
   dateQuickText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
-  dateQuickTextActive: { fontWeight: "600", color: Colors.health },
+  dateQuickTextActive: { fontWeight: "600", color: Colors.accent },
   sheetActions: { flexDirection: "row", gap: 12, marginTop: 24 },
   sheetCancelBtn: {
     flex: 1, paddingVertical: 12, borderRadius: Radius.md, alignItems: "center",

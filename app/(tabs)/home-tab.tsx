@@ -209,7 +209,7 @@ export default function HomeTabScreen() {
                 }}
               >
                 <View style={styles.cardRow}>
-                <Icon name={icon as any} size={18} color={Colors.home} />
+                <Icon name={icon as any} size={18} color={Colors.textSecondary} />
 
                 <View style={styles.cardInfo}>
                   <View style={styles.cardTitleRow}>

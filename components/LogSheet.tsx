@@ -343,7 +343,7 @@ function ConfirmCard({
   });
 
   const catIcon = item.category === "vehicle" ? "car-outline" : item.category === "property" ? "home-outline" : "heart-outline";
-  const catColor = item.category === "vehicle" ? Colors.blue : item.category === "property" ? Colors.good : Colors.health;
+  const catColor = Colors.textSecondary;
 
   async function handleSave() {
     if (savingRef.current) return;
@@ -571,7 +571,7 @@ function ConfirmCard({
   return (
     <View style={styles.confirmCard}>
       <View style={styles.confirmCardHeader}>
-        <View style={[styles.confirmCatIcon, { backgroundColor: catColor + "22" }]}>
+        <View style={[styles.confirmCatIcon, { backgroundColor: Colors.card }]}>
           <Icon name={catIcon as any} size={15} color={catColor} />
         </View>
         <Text style={styles.confirmAssetName} numberOfLines={1}>{item.asset_name || "Unknown"}</Text>
@@ -1235,7 +1235,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accentMuted,
+    backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1299,7 +1299,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
-    backgroundColor: Colors.overdueMuted,
+    backgroundColor: Colors.card,
     borderRadius: Radius.md,
     paddingHorizontal: 12,
     paddingVertical: 12,
@@ -1345,7 +1345,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: Colors.dueSoonMuted,
+    backgroundColor: Colors.card,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: Radius.sm,

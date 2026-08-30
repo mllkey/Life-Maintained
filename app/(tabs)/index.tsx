@@ -558,7 +558,7 @@ export default function DashboardScreen() {
                 </View>
               )}
               {(dashboardItems?.filter(i => i.status === "due_soon").length ?? 0) > 0 && (
-                <View style={[styles.badge, { backgroundColor: Colors.dueSoonMuted }]}>
+                <View style={[styles.badge, { backgroundColor: Colors.card }]}>
                   <View style={[styles.badgeDot, { backgroundColor: Colors.dueSoon }]} />
                   <Text style={[styles.badgeText, { color: Colors.dueSoon }]}>
                     {dashboardItems!.filter(i => i.status === "due_soon").length} due soon
@@ -1133,14 +1133,14 @@ function YourMonthAheadCard({
       >
         <View style={styles.monthAheadTopRow}>
           <View style={styles.monthAheadIconStack}>
-            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.vehicles.muted, marginRight: -8 }]}>
-              <Icon name={CAT.vehicles.icon} size={15} color={CAT.vehicles.color} />
+            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.card, marginRight: -8 }]}>
+              <Icon name={CAT.vehicles.icon} size={15} color={Colors.textSecondary} />
             </View>
-            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.properties.muted, marginRight: -8 }]}>
-              <Icon name={CAT.properties.icon} size={15} color={CAT.properties.color} />
+            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.card, marginRight: -8 }]}>
+              <Icon name={CAT.properties.icon} size={15} color={Colors.textSecondary} />
             </View>
-            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.health.muted }]}>
-              <Icon name={CAT.health.icon} size={15} color={CAT.health.color} />
+            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.card }]}>
+              <Icon name={CAT.health.icon} size={15} color={Colors.textSecondary} />
             </View>
           </View>
           <Text style={styles.monthAheadEyebrow}>YOUR MONTH AHEAD</Text>
@@ -1166,8 +1166,8 @@ function YourMonthAheadCard({
                   style={({ pressed }) => [styles.monthAheadDetailRow, { opacity: pressed ? 0.72 : 1 }]}
                   onPress={() => handlePress(item)}
                 >
-                  <View style={[styles.monthAheadDetailIcon, { backgroundColor: cat.muted }]}>
-                    <Icon name={cat.icon} size={14} color={cat.color} />
+                  <View style={[styles.monthAheadDetailIcon, { backgroundColor: Colors.card }]}>
+                    <Icon name={cat.icon} size={14} color={Colors.textSecondary} />
                   </View>
                   <View style={styles.monthAheadDetailText}>
                     <Text style={styles.monthAheadDetailTitle} numberOfLines={1}>{item.title}</Text>
@@ -1190,14 +1190,14 @@ function YourMonthAheadCard({
       <View style={styles.monthAheadCard}>
         <View style={styles.monthAheadTopRow}>
           <View style={styles.monthAheadIconStack}>
-            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.vehicles.muted, marginRight: -8 }]}>
-              <Icon name={CAT.vehicles.icon} size={15} color={CAT.vehicles.color} />
+            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.card, marginRight: -8 }]}>
+              <Icon name={CAT.vehicles.icon} size={15} color={Colors.textSecondary} />
             </View>
-            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.properties.muted, marginRight: -8 }]}>
-              <Icon name={CAT.properties.icon} size={15} color={CAT.properties.color} />
+            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.card, marginRight: -8 }]}>
+              <Icon name={CAT.properties.icon} size={15} color={Colors.textSecondary} />
             </View>
-            <View style={[styles.monthAheadIcon, { backgroundColor: CAT.health.muted }]}>
-              <Icon name={CAT.health.icon} size={15} color={CAT.health.color} />
+            <View style={[styles.monthAheadIcon, { backgroundColor: Colors.card }]}>
+              <Icon name={CAT.health.icon} size={15} color={Colors.textSecondary} />
             </View>
           </View>
           <Text style={styles.monthAheadEyebrow}>YOUR MONTH AHEAD</Text>
@@ -1233,12 +1233,12 @@ function YourMonthAheadCard({
 
   const crossSellRoute = onlyVehicle ? CAT.properties.addRoute : CAT.vehicles.addRoute;
   const crossSellIconName: "home" | "car" = onlyVehicle ? "home" : "car";
-  const crossSellIconColor = onlyVehicle ? Colors.home : Colors.vehicle;
-  const crossSellIconBg = onlyVehicle ? Colors.homeMuted : Colors.vehicleMuted;
+  const crossSellIconColor = Colors.textSecondary;
+  const crossSellIconBg = Colors.card;
 
   const activeIconName: "car" | "home" | "heart" = activeCategory === "vehicles" ? "car" : activeCategory === "properties" ? "home" : "heart";
-  const activeIconColor = activeCategory === "vehicles" ? Colors.vehicle : activeCategory === "properties" ? Colors.home : Colors.health;
-  const activeIconBg = activeCategory === "vehicles" ? Colors.vehicleMuted : activeCategory === "properties" ? Colors.homeMuted : Colors.healthMuted;
+  const activeIconColor = Colors.textSecondary;
+  const activeIconBg = Colors.card;
 
   const narrative = verticalHero.length > 0
     ? `This month: ${joinNatural(verticalHero.map(monthAheadPhrase))}.`
@@ -1293,8 +1293,8 @@ function YourMonthAheadCard({
                   style={({ pressed }) => [styles.monthAheadDetailRow, { opacity: pressed ? 0.72 : 1 }]}
                   onPress={() => handlePress(item)}
                 >
-                  <View style={[styles.monthAheadDetailIcon, { backgroundColor: cat.muted }]}>
-                    <Icon name={cat.icon} size={14} color={cat.color} />
+                  <View style={[styles.monthAheadDetailIcon, { backgroundColor: Colors.card }]}>
+                    <Icon name={cat.icon} size={14} color={Colors.textSecondary} />
                   </View>
                   <View style={styles.monthAheadDetailText}>
                     <Text style={styles.monthAheadDetailTitle} numberOfLines={1}>{item.title}</Text>
@@ -1519,8 +1519,8 @@ function WelcomeView() {
           {cards.map((card, index) => {
             const orbitOffset = [styles.welcomeOrbitIcon0, styles.welcomeOrbitIcon1, styles.welcomeOrbitIcon2][index];
             return (
-              <View key={card.key} style={[styles.welcomeOrbitIcon, orbitOffset, { backgroundColor: card.muted }]}>
-                <Icon name={card.icon} size={18} color={card.color} />
+              <View key={card.key} style={[styles.welcomeOrbitIcon, orbitOffset, { backgroundColor: Colors.card }]}>
+                <Icon name={card.icon} size={18} color={Colors.textSecondary} />
               </View>
             );
           })}
@@ -1536,20 +1536,20 @@ function WelcomeView() {
         {cards.map(card => (
           <Pressable
             key={card.key}
-            style={({ pressed }) => [styles.emptyVisionCard, { borderColor: card.color + "44", opacity: pressed ? 0.86 : 1 }]}
+            style={({ pressed }) => [styles.emptyVisionCard, { borderColor: Colors.border, opacity: pressed ? 0.86 : 1 }]}
             onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(card.route); }}
             accessibilityRole="button"
             accessibilityLabel={card.title}
           >
-            <View style={[styles.emptyVisionIcon, { backgroundColor: card.muted }]}>
-              <Icon name={card.icon} size={22} color={card.color} />
+            <View style={[styles.emptyVisionIcon, { backgroundColor: Colors.card }]}>
+              <Icon name={card.icon} size={22} color={Colors.textSecondary} />
             </View>
             <View style={styles.emptyVisionText}>
               <Text style={styles.emptyVisionTitle}>{card.title}</Text>
               <Text style={styles.emptyVisionBody}>{card.body}</Text>
               <View style={styles.emptyVisionChips}>
                 {card.chips.map(chip => (
-                  <Text key={chip} style={[styles.emptyVisionChip, { color: card.color, backgroundColor: card.muted }]}>{chip}</Text>
+                  <Text key={chip} style={[styles.emptyVisionChip, { color: Colors.textSecondary, backgroundColor: Colors.card }]}>{chip}</Text>
                 ))}
               </View>
             </View>
@@ -1608,7 +1608,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Colors.overdueMuted,
+    backgroundColor: Colors.card,
     marginBottom: 4,
   },
   dashboardErrorTitle: {
@@ -1733,7 +1733,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accentMuted,
+    backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1848,7 +1848,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accentMuted,
+    backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1906,12 +1906,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
-    backgroundColor: Colors.dueSoonMuted,
+    backgroundColor: Colors.card,
     borderRadius: Radius.md,
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: "rgba(255,193,0,0.25)",
+    borderColor: Colors.border,
   },
   sheetErrorText: {
     ...Typography.footnote,
@@ -1951,7 +1951,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: Colors.dueSoonMuted,
+    backgroundColor: Colors.card,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: Radius.sm,

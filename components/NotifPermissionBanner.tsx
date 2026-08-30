@@ -231,14 +231,14 @@ export default function NotifPermissionBanner({ userId, onDismiss }: Props) {
             contentContainerStyle={styles.cardContent}
           >
             <View style={styles.iconRow}>
-              <View style={[styles.iconTile, { backgroundColor: Colors.vehicleMuted }]}>
-                <Icon name="car" size={22} color={Colors.vehicle} />
+              <View style={[styles.iconTile, { backgroundColor: Colors.card }]}>
+                <Icon name="car" size={22} color={Colors.textSecondary} />
               </View>
-              <View style={[styles.iconTile, { backgroundColor: Colors.homeMuted }]}>
-                <Icon name="home" size={22} color={Colors.home} />
+              <View style={[styles.iconTile, { backgroundColor: Colors.card }]}>
+                <Icon name="home" size={22} color={Colors.textSecondary} />
               </View>
-              <View style={[styles.iconTile, { backgroundColor: Colors.healthMuted }]}>
-                <Icon name="heart" size={22} color={Colors.health} />
+              <View style={[styles.iconTile, { backgroundColor: Colors.card }]}>
+                <Icon name="heart" size={22} color={Colors.textSecondary} />
               </View>
             </View>
 

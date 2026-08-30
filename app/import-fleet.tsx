@@ -1384,18 +1384,18 @@ export default function ImportFleetScreen() {
                       {(v.flags?.duplicate_existing || v.flags?.vin_invalid || v.flags?.merged_conflict) && (
                         <View style={styles.pillRow}>
                           {v.flags?.duplicate_existing ? (
-                            <View style={[styles.pill, { backgroundColor: Colors.dueSoonMuted }]}>
+                            <View style={[styles.pill, { backgroundColor: Colors.card }]}>
                               <Text style={[styles.pillText, { color: Colors.dueSoon }]}>Already in your garage</Text>
                             </View>
                           ) : null}
                           {v.flags?.vin_invalid ? (
-                            <View style={[styles.pill, { backgroundColor: Colors.overdueMuted }]}>
+                            <View style={[styles.pill, { backgroundColor: Colors.card }]}>
                               <Text style={[styles.pillText, { color: Colors.overdue }]}>Check VIN later</Text>
                             </View>
                           ) : null}
                           {v.flags?.merged_conflict ? (
-                            <View style={[styles.pill, { backgroundColor: Colors.blueMuted }]}>
-                              <Text style={[styles.pillText, { color: Colors.blue }]}>Merged from duplicate rows</Text>
+                            <View style={[styles.pill, { backgroundColor: Colors.card }]}>
+                              <Text style={[styles.pillText, { color: Colors.textSecondary }]}>Merged from duplicate rows</Text>
                             </View>
                           ) : null}
                         </View>
@@ -1697,7 +1697,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  fileChipBad: { borderColor: Colors.overdue, backgroundColor: Colors.overdueMuted },
+  fileChipBad: { borderColor: Colors.overdue, backgroundColor: Colors.card },
   fileChipName: { ...Typography.footnote, fontWeight: "500", flex: 1, color: Colors.text },
   fileChipSize: { ...Typography.caption, color: Colors.textTertiary },
   inlineError: { ...Typography.footnote, fontWeight: "500", color: Colors.overdue, textAlign: "center" },

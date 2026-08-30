@@ -812,7 +812,7 @@ export default function PropertyDetailScreen() {
                   {insightText && (
                     <View style={styles.insightCard}>
                       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-                        <Icon name="bulb-outline" size={16} color={Colors.home} style={{ marginTop: 2 }} />
+                        <Icon name="bulb-outline" size={16} color={Colors.textSecondary} style={{ marginTop: 2 }} />
                         <Text style={styles.insightText}>{insightText}</Text>
                       </View>
                       <Text style={{ ...Typography.caption, color: Colors.textTertiary, marginTop: 2, paddingLeft: 0 }}>
@@ -1088,8 +1088,8 @@ export default function PropertyDetailScreen() {
                 >
                   <View style={{
                     width: 24, height: 24, borderRadius: Radius.sm, borderWidth: 2,
-                    borderColor: completeDiy ? Colors.home : Colors.border,
-                    backgroundColor: completeDiy ? Colors.home : "transparent",
+                    borderColor: completeDiy ? Colors.accent : Colors.border,
+                    backgroundColor: completeDiy ? Colors.accent : "transparent",
                     alignItems: "center", justifyContent: "center",
                   }}>
                     {completeDiy && <Icon name="checkmark" size={16} color={Colors.textInverse} />}
@@ -1129,9 +1129,9 @@ export default function PropertyDetailScreen() {
 
       <ReminderMoment
         ref={reminderRef}
-        accent={Colors.home}
-        ringBg={Colors.homeMuted}
-        ringBorder={Colors.homeMuted}
+        accent={Colors.accent}
+        ringBg={Colors.accentLight}
+        ringBorder={Colors.accentMuted}
         title={reminderMoment?.title ?? ""}
         statusLine={reminderMoment?.statusLine ?? ""}
         costLine={reminderMoment?.costLine ?? null}
@@ -1195,7 +1195,7 @@ function TaskSection({
                   isLast={i === tasks.length - 1}
                   costEstimates={costEstimates}
                 />
-                <HighlightBackdrop color={Colors.homeMuted} visible={isDeepLink} />
+                <HighlightBackdrop color={Colors.accentMuted} visible={isDeepLink} />
               </View>
             );
           })}
@@ -1276,7 +1276,7 @@ function TaskRow({
                   {costLine}
                 </Text>
                 {est.difficulty != null && (
-                  <Text style={{ ...Typography.caption, fontWeight: "500", color: est.difficulty === 1 ? Colors.good : est.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: est.difficulty === 1 ? Colors.goodMuted : est.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
+                  <Text style={{ ...Typography.caption, fontWeight: "500", color: est.difficulty === 1 ? Colors.good : est.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: Colors.card, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
                     {est.difficulty === 1 ? "Easy DIY" : est.difficulty === 2 ? "Moderate" : "Pro"}
                   </Text>
                 )}
@@ -1296,7 +1296,7 @@ function TaskRow({
           return null;
         })()}
         {!isCompleted && task.last_completed_at != null && (
-          <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.vehicle, marginTop: 2 }}>
+          <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.textSecondary, marginTop: 2 }}>
             Last completed {format(parseISO(task.last_completed_at), "MMM d, yyyy")}
           </Text>
         )}
@@ -1381,7 +1381,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: Radius.md,
-    backgroundColor: Colors.overdueMuted,
+    backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1473,8 +1473,8 @@ const styles = StyleSheet.create({
 
   insightCard: {
     flexDirection: "column", alignItems: "flex-start", gap: 4,
-    backgroundColor: Colors.homeMuted, borderRadius: Radius.lg,
-    padding: 16, borderWidth: 1, borderColor: Colors.home + "30",
+    backgroundColor: Colors.card, borderRadius: Radius.lg,
+    padding: 16, borderWidth: 1, borderColor: Colors.border,
   },
   insightText: {
     ...Typography.footnote,
@@ -1485,8 +1485,8 @@ const styles = StyleSheet.create({
 
   estimatedBanner: {
     flexDirection: "row", alignItems: "flex-start", gap: 12,
-    backgroundColor: Colors.dueSoonMuted, borderRadius: Radius.lg,
-    padding: 16, borderWidth: 1, borderColor: Colors.dueSoon + "30",
+    backgroundColor: Colors.card, borderRadius: Radius.lg,
+    padding: 16, borderWidth: 1, borderColor: Colors.border,
   },
   estimatedBannerText: {
     ...Typography.footnote,
@@ -1573,9 +1573,9 @@ const styles = StyleSheet.create({
   historyGroupCardProvider: { ...Typography.footnote, color: Colors.textTertiary },
   historyGroupCardFooter: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   historyGroupCardCount: { ...Typography.caption, color: Colors.textTertiary },
-  historyGroupCardTotal: { ...Typography.caption, fontWeight: "500", color: Colors.home },
+  historyGroupCardTotal: { ...Typography.caption, fontWeight: "500", color: Colors.textSecondary },
   historyGroupCardRight: { alignItems: "flex-end", gap: 8, flexShrink: 0 },
-  historyGroupCardCost: { ...Typography.headline, fontWeight: "700", color: Colors.home },
+  historyGroupCardCost: { ...Typography.headline, fontWeight: "700", color: Colors.text },
 
   sheetOverlay: { flex: 1, justifyContent: "flex-end" },
   sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
@@ -1657,9 +1657,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     alignItems: "center",
   },
-  dateQuickBtnActive: { backgroundColor: Colors.homeMuted, borderColor: Colors.home },
+  dateQuickBtnActive: { backgroundColor: Colors.accentMuted, borderColor: Colors.accent },
   dateQuickText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
-  dateQuickTextActive: { fontWeight: "600", color: Colors.home },
+  dateQuickTextActive: { fontWeight: "600", color: Colors.accent },
   sheetActions: { flexDirection: "row", gap: 12, marginTop: 24 },
   sheetCancelBtn: {
     flex: 1,

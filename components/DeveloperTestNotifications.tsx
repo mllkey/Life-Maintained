@@ -228,7 +228,7 @@ export default function DeveloperTestNotifications() {
       kind: "vehicle_task",
       label: "Vehicle task",
       icon: "car-outline",
-      accent: Colors.vehicle ?? Colors.accent,
+      accent: Colors.accent,
       seedEntry: seed.vehicleTask,
       fire: () =>
         fireTest(
@@ -243,7 +243,7 @@ export default function DeveloperTestNotifications() {
       kind: "property_task",
       label: "Property task",
       icon: "home-outline",
-      accent: Colors.home ?? Colors.accent,
+      accent: Colors.accent,
       seedEntry: seed.propertyTask,
       fire: () =>
         fireTest(
@@ -258,7 +258,7 @@ export default function DeveloperTestNotifications() {
       kind: "health_appointment",
       label: "Family appointment",
       icon: "calendar-outline",
-      accent: Colors.health ?? Colors.accent,
+      accent: Colors.accent,
       seedEntry: seed.healthAppointment,
       fire: () =>
         fireTest(
@@ -273,7 +273,7 @@ export default function DeveloperTestNotifications() {
       kind: "medication",
       label: "Family medication",
       icon: "medkit-outline",
-      accent: Colors.health ?? Colors.accent,
+      accent: Colors.accent,
       seedEntry: seed.medication,
       fire: () =>
         fireTest(

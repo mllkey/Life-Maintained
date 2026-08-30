@@ -7,7 +7,7 @@ import { Radius } from "@/constants/radius";
  * Absolutely positioned; renders inside the row's relative-positioned wrapper.
  * No animation, no pulse — matches Apple Mail / iMessage / Reminders.
  *
- * `color` must be an rgba muted accent (e.g. Colors.vehicleMuted).
+ * `color` must be an rgba muted accent (e.g. Colors.accentMuted).
  */
 export function HighlightBackdrop({ color, visible }: { color: string; visible: boolean }) {
   if (!visible) return null;

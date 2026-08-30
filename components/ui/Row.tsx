@@ -46,7 +46,7 @@ export function Row({
   subtitle,
   value,
   icon,
-  iconColor = Colors.accent,
+  iconColor = Colors.textSecondary,
   iconBackground,
   trailing,
   onPress,

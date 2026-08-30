@@ -145,13 +145,13 @@ function buildOverdueLine(task: any, vehicle: any): string {
 }
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
-  engine:     { bg: Colors.blueMuted,      text: Colors.blue },
-  brakes:     { bg: Colors.overdueMuted,   text: Colors.overdue },
-  fluids:     { bg: Colors.accentMuted,    text: Colors.accent },
-  electrical: { bg: Colors.dueSoonMuted,   text: Colors.dueSoon },
-  tires:      { bg: Colors.surface,        text: Colors.textSecondary },
-  body:       { bg: Colors.goodMuted,      text: Colors.good },
-  drivetrain: { bg: Colors.vehicleMuted,   text: Colors.vehicle },
+  engine:     { bg: Colors.card,           text: Colors.textSecondary },
+  brakes:     { bg: Colors.card,           text: Colors.textSecondary },
+  fluids:     { bg: Colors.card,           text: Colors.textSecondary },
+  electrical: { bg: Colors.card,           text: Colors.textSecondary },
+  tires:      { bg: Colors.card,           text: Colors.textSecondary },
+  body:       { bg: Colors.card,           text: Colors.textSecondary },
+  drivetrain: { bg: Colors.card,           text: Colors.textSecondary },
 };
 
 const STATUS_BORDER: Record<string, string> = {
@@ -1639,7 +1639,7 @@ export default function VehicleDetailScreen() {
                       </Text>
                     </Pressable>
                   )}
-                  <View style={{ backgroundColor: Colors.dueSoonMuted, borderRadius: Radius.md, padding: 12, marginHorizontal: 16, marginTop: 8, marginBottom: 12, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
+                  <View style={{ backgroundColor: Colors.card, borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, padding: 12, marginHorizontal: 16, marginTop: 8, marginBottom: 12, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
                     <Icon name="information-circle-outline" size={18} color={Colors.dueSoon} style={{ marginTop: 1 }} />
                     <Text style={{ ...Typography.footnote, color: Colors.dueSoon, flex: 1 }}>
                       This schedule is estimated from your current usage. Tap any task to log your last service date for more accurate due dates.
@@ -1996,7 +1996,7 @@ export default function VehicleDetailScreen() {
               DIY Difficulty Levels
             </Text>
             <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
-              <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.good, backgroundColor: Colors.goodMuted, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
+              <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.good, backgroundColor: Colors.card, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
                 Easy DIY
               </Text>
               <Text style={{ ...Typography.footnote, color: Colors.textSecondary, flex: 1 }}>
@@ -2004,7 +2004,7 @@ export default function VehicleDetailScreen() {
               </Text>
             </View>
             <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
-              <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.dueSoon, backgroundColor: Colors.dueSoonMuted, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
+              <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.dueSoon, backgroundColor: Colors.card, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
                 Moderate
               </Text>
               <Text style={{ ...Typography.footnote, color: Colors.textSecondary, flex: 1 }}>
@@ -2012,7 +2012,7 @@ export default function VehicleDetailScreen() {
               </Text>
             </View>
             <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
-              <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.overdue, backgroundColor: Colors.overdueMuted, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
+              <Text style={{ ...Typography.caption, fontWeight: "500", color: Colors.overdue, backgroundColor: Colors.card, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
                 Pro Recommended
               </Text>
               <Text style={{ ...Typography.footnote, color: Colors.textSecondary, flex: 1 }}>
@@ -2168,7 +2168,7 @@ function ScheduleSection({
                       onShowDifficultyInfo={onShowDifficultyInfo}
                       isHighlighted={task.name === highlightedTask}
                     />
-                    <HighlightBackdrop color={Colors.vehicleMuted} visible={isDeepLink} />
+                    <HighlightBackdrop color={Colors.accentMuted} visible={isDeepLink} />
                     </Reanimated.View>
                   </View>
                 </React.Fragment>
@@ -2261,7 +2261,7 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, costEstim
           </Text>
         )}
         {!!lastServicedText && (
-          <Text style={{ ...Typography.caption, fontWeight: "600", color: Colors.vehicle, marginTop: 4 }}>
+          <Text style={{ ...Typography.caption, fontWeight: "600", color: Colors.textSecondary, marginTop: 4 }}>
             {lastServicedText}
           </Text>
         )}
@@ -2281,7 +2281,7 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, costEstim
             </Text>}
             {costEstimate.difficulty && (
               <>
-                <Text style={{ ...Typography.caption, fontWeight: "500", color: costEstimate.difficulty === 1 ? Colors.good : costEstimate.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: costEstimate.difficulty === 1 ? Colors.goodMuted : costEstimate.difficulty === 2 ? Colors.dueSoonMuted : Colors.overdueMuted, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
+                <Text style={{ ...Typography.caption, fontWeight: "500", color: costEstimate.difficulty === 1 ? Colors.good : costEstimate.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: Colors.card, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
                   {costEstimate.difficulty === 1 ? "Easy DIY" : costEstimate.difficulty === 2 ? "Moderate" : "Pro"}
                 </Text>
                 <Pressable onPress={() => onShowDifficultyInfo?.()} hitSlop={8}>
@@ -2585,7 +2585,7 @@ function EditTaskSheet({
                   flexDirection: "row" as const, alignItems: "center" as const,
                   justifyContent: "center" as const, gap: 8,
                   borderRadius: Radius.md, paddingVertical: 12, borderWidth: 1,
-                  borderColor: Colors.overdue + "40", backgroundColor: Colors.overdueMuted,
+                  borderColor: Colors.overdue + "40", backgroundColor: Colors.card,
                   opacity: pressed ? 0.8 : 1,
                 }]}
                 onPress={() => onDelete(task)}
@@ -3327,7 +3327,7 @@ const styles = StyleSheet.create({
   headerMileage: { ...Typography.subheadline, color: Colors.textTertiary },
   deleteVehicleBtn: {
     width: 34, height: 34, borderRadius: Radius.md,
-    backgroundColor: Colors.overdueMuted, alignItems: "center", justifyContent: "center",
+    backgroundColor: Colors.card, alignItems: "center", justifyContent: "center",
   },
   scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 12 },
   vehicleCard: {
@@ -3378,7 +3378,7 @@ const styles = StyleSheet.create({
   taskInterval: { ...Typography.caption, color: Colors.textTertiary },
   taskCost: { ...Typography.caption, color: Colors.textTertiary },
   completeBtn: {
-    width: 36, height: 36, borderRadius: Radius.md, backgroundColor: Colors.goodMuted,
+    width: 36, height: 36, borderRadius: Radius.md, backgroundColor: Colors.card,
     alignItems: "center", justifyContent: "center",
   },
   emptyTasks: { alignItems: "center", paddingVertical: 32, gap: 8 },
@@ -3421,9 +3421,9 @@ const styles = StyleSheet.create({
   historyGroupCardProvider: { ...Typography.footnote, color: Colors.textTertiary },
   historyGroupCardFooter: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   historyGroupCardCount: { ...Typography.caption, color: Colors.textTertiary },
-  historyGroupCardTotal: { ...Typography.caption, fontWeight: "500", color: Colors.vehicle },
+  historyGroupCardTotal: { ...Typography.caption, fontWeight: "500", color: Colors.textSecondary },
   historyGroupCardRight: { alignItems: "flex-end", gap: 8, flexShrink: 0 },
-  historyGroupCardCost: { ...Typography.headline, fontWeight: "700", color: Colors.vehicle },
+  historyGroupCardCost: { ...Typography.headline, fontWeight: "700", color: Colors.text },
 
   scheduleContainer: { gap: 16 },
   scheduleGroup: {
@@ -3456,7 +3456,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderLeftWidth: 4,
   },
-  scheduleCardHighlighted: { backgroundColor: Colors.vehicleMuted },
+  scheduleCardHighlighted: { backgroundColor: Colors.accentMuted },
   scheduleCardBody: { flex: 1, gap: 4 },
   scheduleCardName: {
     ...Typography.headline,

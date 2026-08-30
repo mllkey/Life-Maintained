@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Colors.accentLight,
+    backgroundColor: Colors.card,
     borderRadius: Radius.md,
     paddingHorizontal: 16,
     paddingVertical: 12,

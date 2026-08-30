@@ -697,7 +697,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: Colors.overdueMuted,
+    backgroundColor: Colors.card,
     borderRadius: Radius.md,
     padding: 12,
   },

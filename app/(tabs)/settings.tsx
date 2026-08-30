@@ -656,7 +656,7 @@ export default function SettingsScreen() {
               <Section title="Scans">
                 <View style={styles.scansRow}>
                   <View style={styles.scansIconWrap}>
-                    <Icon name="receipt-outline" size={18} color={Colors.accent} />
+                    <Icon name="receipt-outline" size={18} color={Colors.textSecondary} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.scansLabel}>Receipt scans</Text>
@@ -699,7 +699,7 @@ export default function SettingsScreen() {
           <Section title="Your Data" dividerInset={56}>
             <UiRow
               icon="arrow-down-circle-outline"
-              iconBackground={Colors.accentMuted}
+              iconBackground={Colors.card}
               title="Import vehicles"
               subtitle="Bring in a fleet from a CSV or Excel file"
               accessibilityLabel="Import vehicles from a file"
@@ -788,7 +788,7 @@ export default function SettingsScreen() {
                         <Icon
                           name="car-outline"
                           size={13}
-                          color={isSelected ? Colors.vehicle : Colors.textTertiary}
+                          color={isSelected ? Colors.accent : Colors.textTertiary}
                         />
                         <Text style={[styles.vehicleChipText, isSelected && styles.vehicleChipTextSelected]}>
                           {chipLabel}
@@ -1117,11 +1117,11 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   vehicleChipSelected: {
-    backgroundColor: Colors.vehicleMuted,
-    borderColor: Colors.vehicle + "66",
+    backgroundColor: Colors.accentMuted,
+    borderColor: Colors.accent,
   },
   vehicleChipText: { ...Typography.footnote, fontWeight: "500", color: Colors.textTertiary },
-  vehicleChipTextSelected: { fontWeight: "600", color: Colors.vehicle },
+  vehicleChipTextSelected: { fontWeight: "600", color: Colors.accent },
   vehicleMeta: {
     flexDirection: "row",
     alignItems: "center",
@@ -1188,9 +1188,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accentLight,
+    backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.accentMuted,
+    borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
   },

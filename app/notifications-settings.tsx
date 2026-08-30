@@ -349,7 +349,7 @@ export default function NotificationsSettingsScreen() {
                 sublabel={v.nickname ? `${v.year} ${v.make} ${v.model}` : undefined}
                 value={prefs.mutedVehicles.includes(v.id)}
                 onToggle={() => toggleMutedVehicle(v.id)}
-                color={Colors.vehicle}
+                color={Colors.textSecondary}
                 inverted
               />
             ))}
@@ -366,7 +366,7 @@ export default function NotificationsSettingsScreen() {
                 sublabel={p.nickname ? p.address ?? undefined : undefined}
                 value={prefs.mutedProperties.includes(p.id)}
                 onToggle={() => toggleMutedProperty(p.id)}
-                color={Colors.home}
+                color={Colors.textSecondary}
                 inverted
               />
             ))}

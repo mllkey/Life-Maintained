@@ -203,7 +203,7 @@ export default function AddFamilyMemberScreen() {
                     }}
                   >
                     {r === "Myself" && (
-                      <Icon name="person-circle-outline" size={14} color={relationship === r ? Colors.health : Colors.textSecondary} />
+                      <Icon name="person-circle-outline" size={14} color={relationship === r ? Colors.accent : Colors.textSecondary} />
                     )}
                     <Text style={[styles.chipText, relationship === r && styles.chipTextSelected]}>{r}</Text>
                   </Pressable>
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
   saveBtn: { backgroundColor: Colors.accent, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 8 },
   saveBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
   scroll: { paddingHorizontal: 20, paddingTop: 24, gap: 20 },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: Radius.md, padding: 12 },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12 },
   errorText: { ...Typography.footnote, flex: 1, color: Colors.overdue },
   section: { gap: 8 },
   sectionTitle: { ...Typography.caption, fontWeight: "600", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 1.5 },
@@ -276,11 +276,11 @@ const styles = StyleSheet.create({
   input: { ...Typography.subheadline, backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 16, paddingVertical: 12, color: Colors.text },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.md, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
-  chipSelected: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
+  chipSelected: { backgroundColor: Colors.accentMuted, borderColor: Colors.accent },
   chipMyself: { flexDirection: "row", alignItems: "center", gap: 4, borderStyle: "dashed" },
   chipMyselfSelected: { borderStyle: "solid" },
   chipText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
-  chipTextSelected: { color: Colors.health },
+  chipTextSelected: { color: Colors.accent },
   inputWrapper: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 16, height: 52 },
   inputIcon: { marginRight: 12 },
   inputInner: { ...Typography.subheadline, flex: 1, color: Colors.text },

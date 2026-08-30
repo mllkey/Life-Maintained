@@ -107,12 +107,12 @@ export default function AddMedicationScreen() {
               <Text style={styles.sectionTitle}>Who takes this?</Text>
               <View style={styles.memberGrid}>
                 <Pressable style={[styles.chip, familyMemberId === null && styles.chipSelected]} onPress={() => { setFamilyMemberId(null); Haptics.selectionAsync(); }}>
-                  <Icon name="person-outline" size={14} color={familyMemberId === null ? Colors.health : Colors.textSecondary} />
+                  <Icon name="person-outline" size={14} color={familyMemberId === null ? Colors.accent : Colors.textSecondary} />
                   <Text style={[styles.chipText, familyMemberId === null && styles.chipTextSelected]}>Me</Text>
                 </Pressable>
                 {familyMembers.map(fm => (
                   <Pressable key={fm.id} style={[styles.chip, familyMemberId === fm.id && styles.chipSelected]} onPress={() => { setFamilyMemberId(fm.id); Haptics.selectionAsync(); }}>
-                    <Icon name={fm.member_type === "pet" ? "paw-outline" : "person-outline"} size={14} color={familyMemberId === fm.id ? Colors.health : Colors.textSecondary} />
+                    <Icon name={fm.member_type === "pet" ? "paw-outline" : "person-outline"} size={14} color={familyMemberId === fm.id ? Colors.accent : Colors.textSecondary} />
                     <Text style={[styles.chipText, familyMemberId === fm.id && styles.chipTextSelected]}>{fm.name}</Text>
                   </Pressable>
                 ))}
@@ -163,21 +163,21 @@ const styles = StyleSheet.create({
   saveBtn: { backgroundColor: Colors.accent, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 8 },
   saveBtnText: { ...Typography.footnote, fontWeight: "600", color: Colors.textInverse },
   scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 20 },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: Radius.md, padding: 12 },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12 },
   errorText: { ...Typography.footnote, flex: 1, color: Colors.overdue },
   section: { gap: 8 },
   sectionTitle: { ...Typography.caption, fontWeight: "600", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 1.5 },
   input: { ...Typography.subheadline, backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 16, paddingVertical: 12, color: Colors.text },
   memberGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: Radius.md, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
-  chipSelected: { backgroundColor: Colors.healthMuted, borderColor: Colors.health },
+  chipSelected: { backgroundColor: Colors.accentMuted, borderColor: Colors.accent },
   chipText: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },
-  chipTextSelected: { color: Colors.health },
+  chipTextSelected: { color: Colors.accent },
   toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 16, borderWidth: 1, borderColor: Colors.border },
   toggleLabel: { ...Typography.subheadline, fontWeight: "500", color: Colors.text },
   toggleSub: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
   toggle: { width: 48, height: 28, borderRadius: Radius.lg, backgroundColor: Colors.border, justifyContent: "center", paddingHorizontal: 2 },
-  toggleOn: { backgroundColor: Colors.health },
+  toggleOn: { backgroundColor: Colors.accent },
   toggleThumb: { width: 24, height: 24, borderRadius: Radius.pill, backgroundColor: Colors.text, alignSelf: "flex-start" },
   toggleThumbOn: { alignSelf: "flex-end" },
 });

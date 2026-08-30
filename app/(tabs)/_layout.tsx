@@ -15,7 +15,7 @@ import { takePendingIntent } from "@/lib/onboardingIntent";
 
 function NativeTabLayout() {
   return (
-    <NativeTabs>
+    <NativeTabs tintColor={Colors.accent}>
       <NativeTabs.Trigger name="index">
         <Icon sf={{ default: "square.grid.2x2", selected: "square.grid.2x2.fill" }} />
         <Label>Dashboard</Label>

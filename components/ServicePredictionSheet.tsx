@@ -89,7 +89,7 @@ export default forwardRef<ServicePredictionSheetHandle, ServicePredictionSheetPr
         {data ? (
           <>
             <View style={styles.iconWrap}>
-              <Icon name="construct-outline" size={22} color={Colors.vehicle} />
+              <Icon name="construct-outline" size={22} color={Colors.textSecondary} />
             </View>
             <Text style={styles.title}>{data.name}</Text>
             <Text style={styles.vehicle}>{data.vehicleLabel}</Text>

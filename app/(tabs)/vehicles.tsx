@@ -267,9 +267,9 @@ export default function VehiclesScreen() {
                 {v.photo_url ? (
                   <Image source={{ uri: v.photo_url }} style={{ width: 36, height: 36, borderRadius: Radius.md }} resizeMode="cover" />
                 ) : icon.family === "ionicons" ? (
-                  <Icon name={icon.name as IconName} size={18} color={Colors.vehicle} />
+                  <Icon name={icon.name as IconName} size={18} color={Colors.textSecondary} />
                 ) : (
-                  <MciIcon name={icon.name} size={18} color={Colors.vehicle} />
+                  <MciIcon name={icon.name} size={18} color={Colors.textSecondary} />
                 )}
                 <View style={styles.vehicleInfo}>
                   <View style={styles.vehicleTitleRow}>

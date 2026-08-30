@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: Radius.md,
-    backgroundColor: Colors.goodMuted,
+    backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,

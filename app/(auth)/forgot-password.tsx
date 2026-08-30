@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
   formContainer: { gap: 20 },
   title: { ...Typography.title2, color: Colors.text },
   subtitle: { ...Typography.footnote, color: Colors.textSecondary },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.overdueMuted, borderRadius: Radius.md, padding: 12, borderWidth: 1, borderColor: Colors.overdue + "30" },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12, borderWidth: 1, borderColor: Colors.overdue + "30" },
   errorText: { ...Typography.footnote, flex: 1, color: Colors.overdue },
   inputGroup: { gap: 8 },
   label: { ...Typography.footnote, fontWeight: "500", color: Colors.textSecondary },

@@ -814,7 +814,7 @@ export default function FamilyMemberDetailScreen() {
                           </View>
                         )}
 
-                        <HighlightBackdrop color={Colors.healthMuted} visible={appt.id === highlightedItemId} />
+                        <HighlightBackdrop color={Colors.accentMuted} visible={appt.id === highlightedItemId} />
                         {!isLast && <View style={styles.rowDivider} />}
                       </View>
                     );
@@ -852,7 +852,7 @@ export default function FamilyMemberDetailScreen() {
                         onPress={() => { setExpandedId(expandedId === med.id ? null : med.id); Haptics.selectionAsync(); }}
                         accessibilityRole="button"
                       >
-                        <View style={[styles.taskBar, { backgroundColor: Colors.health }]} />
+                        <View style={[styles.taskBar, { backgroundColor: Colors.border }]} />
                         <View style={styles.taskInfo}>
                           <Text style={styles.taskTitle}>{med.name}</Text>
                           <Text style={styles.taskSub} numberOfLines={1}>
@@ -907,7 +907,7 @@ export default function FamilyMemberDetailScreen() {
                           )}
                         </View>
                       )}
-                      <HighlightBackdrop color={Colors.healthMuted} visible={med.id === highlightedItemId} />
+                      <HighlightBackdrop color={Colors.accentMuted} visible={med.id === highlightedItemId} />
                       {idx < medications.length - 1 && <View style={styles.rowDivider} />}
                     </View>
                   ))}
@@ -1000,8 +1000,8 @@ export default function FamilyMemberDetailScreen() {
                 >
                   <View style={{
                     width: 24, height: 24, borderRadius: Radius.sm, borderWidth: 2,
-                    borderColor: completeDiy ? Colors.health : Colors.border,
-                    backgroundColor: completeDiy ? Colors.health : "transparent",
+                    borderColor: completeDiy ? Colors.accent : Colors.border,
+                    backgroundColor: completeDiy ? Colors.accent : "transparent",
                     alignItems: "center", justifyContent: "center",
                   }}>
                     {completeDiy && <Icon name="checkmark" size={16} color={Colors.textInverse} />}
@@ -1041,9 +1041,9 @@ export default function FamilyMemberDetailScreen() {
 
       <ReminderMoment
         ref={reminderRef}
-        accent={Colors.health}
-        ringBg={Colors.healthMuted}
-        ringBorder={Colors.healthMuted}
+        accent={Colors.accent}
+        ringBg={Colors.accentLight}
+        ringBorder={Colors.accentMuted}
         title={reminderMoment?.title ?? ""}
         statusLine={reminderMoment?.statusLine ?? ""}
         costLine={null}
@@ -1081,7 +1081,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: Radius.md,
-    backgroundColor: Colors.overdueMuted,
+    backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1177,7 +1177,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: Radius.md,
-    backgroundColor: Colors.overdueMuted,
+    backgroundColor: Colors.card,
     minHeight: 44,
     justifyContent: "center",
   },
