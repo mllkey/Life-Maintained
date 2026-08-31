@@ -55,7 +55,7 @@ const HEALTH_DISMISS_KEY = "@yma_crosssell_dismissed_health_only";
 
 const CAT = {
   vehicles: { color: Colors.vehicle, muted: Colors.vehicleMuted, icon: "car" as const, label: "Vehicles", desc: "Cars, trucks, motorcycles & more", addRoute: "/add-vehicle" as any, tab: "/(tabs)/vehicles" as any },
-  properties: { color: Colors.home, muted: Colors.homeMuted, icon: "home" as const, label: "Home", desc: "Home, HVAC, roof & appliances", addRoute: "/add-property" as any, tab: "/(tabs)/home-tab" as any },
+  properties: { color: Colors.home, muted: Colors.homeMuted, icon: "home" as const, label: "Properties", desc: "Home, HVAC, roof & appliances", addRoute: "/add-property" as any, tab: "/(tabs)/home-tab" as any },
   health: { color: Colors.health, muted: Colors.healthMuted, icon: "heart" as const, label: "Health", desc: "Appointments & medications", addRoute: "/add-appointment" as any, tab: "/(tabs)/health" as any },
 } as const;
 
@@ -163,7 +163,7 @@ function joinNatural(parts: string[]): string {
 
 function categoryLabel(category: DashboardItem["category"]): string {
   if (category === "vehicles") return "Vehicle";
-  if (category === "properties") return "Home";
+  if (category === "properties") return "Properties";
   return "Health";
 }
 
