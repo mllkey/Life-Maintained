@@ -176,6 +176,7 @@ export default function VehicleDetailScreen() {
   const [upcomingExpanded, setUpcomingExpanded] = useState(true);
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
+  const [pollEpoch, setPollEpoch] = useState(0);
   const [refreshingSchedule, setRefreshingSchedule] = useState(false);
   const [scheduleToast, setScheduleToast] = useState("");
   const [showScheduleToast, setShowScheduleToast] = useState(false);
@@ -464,7 +465,7 @@ export default function VehicleDetailScreen() {
     } else if (scheduleTasks && scheduleTasks.length > 0) {
       pollStartRef.current = null; // Reset for future use (e.g., schedule refresh)
     }
-  }, [loadingSchedule, scheduleTasks?.length, user, id, refetchSchedule]);
+  }, [loadingSchedule, scheduleTasks?.length, user, id, refetchSchedule, pollEpoch]);
 
   React.useEffect(() => {
     if (processedScheduleTasks.length > 0) {
@@ -662,6 +663,13 @@ export default function VehicleDetailScreen() {
           showToast("Couldn't build the schedule. Try again in a moment.", true);
           return;
         }
+        // 409: another invocation holds the generation lock — the schedule IS
+        // being built. Keep the building state, restart the 60s window, and let
+        // the interval deliver the rows. No success claim here.
+        pollStartRef.current = null;
+        setPollEpoch(v => v + 1);
+        showToast("Your schedule is already being built — it'll appear in a few seconds.");
+        return;
       }
       pollStartRef.current = null;
       if (pollIntervalRef.current) {
@@ -672,8 +680,17 @@ export default function VehicleDetailScreen() {
       // before the refetch resolves so the reveal is decided ahead of the rows' mount.
       generatedOnScreen.current = true;
       revealDecided.current = false;
-      await refetchSchedule();
-      showToast("Schedule generated!");
+      const fresh = await refetchSchedule();
+      if ((fresh.data?.length ?? 0) > 0) {
+        showToast("Schedule generated!");
+      } else {
+        // 200 but rows not visible yet — disarm the reveal, restart the window,
+        // and let the interval carry it home instead of claiming an absent plan.
+        generatedOnScreen.current = false;
+        pollStartRef.current = null;
+        setPollEpoch(v => v + 1);
+        showToast("Almost ready — your schedule will appear in a few seconds.");
+      }
     } catch {
       showToast("Couldn't build the schedule. Try again in a moment.", true);
     } finally {
