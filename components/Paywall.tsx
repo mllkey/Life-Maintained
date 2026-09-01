@@ -231,6 +231,8 @@ function probeProfileForTier(tier: TierKey | null): SubscriptionProfile {
     monthly_scan_count: 0,
     scan_count_reset_at: null,
     onboarding_completed: true,
+    terms_accepted_at: null,
+    terms_version: null,
   };
 }
 

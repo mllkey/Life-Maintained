@@ -12,6 +12,8 @@ export type Profile = {
   monthly_scan_count: number;
   scan_count_reset_at: string | null;
   onboarding_completed: boolean | null;
+  terms_accepted_at: string | null;
+  terms_version: string | null;
 };
 
 const PAID_TIERS = ["personal", "pro", "business"];

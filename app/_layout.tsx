@@ -34,6 +34,7 @@ import NotifPermissionBanner from "@/components/NotifPermissionBanner";
 import { UndoToastHost } from "@/components/UndoToast";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { checkAgingTransitions } from "@/lib/agingTransitions";
+import { needsTermsAcceptance } from "@/lib/legalDates";
 
 // Covers the entire sweep -> central rebuild -> crossing-banner pipeline.
 // Cold-start and foreground triggers share one run, so a later cancel-all
@@ -121,7 +122,7 @@ if (Platform.OS !== "web") {
 let lastActiveUpsertAt = 0;
 
 function RootLayoutNav() {
-  const { session, isLoading, onboardingCompleted, refreshProfile } = useAuth();
+  const { session, isLoading, profileLoaded, onboardingCompleted, profile, refreshProfile } = useAuth();
   const rootNavigationState = useRootNavigationState();
   const lastNotificationResponse = Notifications.useLastNotificationResponse();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -585,6 +586,17 @@ function RootLayoutNav() {
     pathnameRef.current = pathname;
   }, [pathname]);
 
+  // Terms gate, single navigation owner. Any signed-in session whose loaded profile is not on
+  // the current terms version lands on the review sheet from wherever it is (cold start,
+  // sign-in, reinstall without cache, background reconcile, version bump). app/index.tsx and
+  // app/(auth)/_layout.tsx hold instead of routing forward while this applies.
+  useEffect(() => {
+    if (isLoading || !session || !profileLoaded || !rootNavigationState?.key) return;
+    if (!needsTermsAcceptance(profile)) return;
+    if (pathname === "/accept-terms") return;
+    router.replace("/accept-terms");
+  }, [isLoading, session, profileLoaded, profile, pathname, rootNavigationState?.key]);
+
   useEffect(() => {
     return () => {
       if (unauthClearTimer.current !== null) {
@@ -629,6 +641,7 @@ function RootLayoutNav() {
           <Stack.Screen name="terms-of-service" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="privacy-policy" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="reset-password" options={{ headerShown: false, presentation: "fullScreenModal", gestureEnabled: false }} />
+          <Stack.Screen name="accept-terms" options={{ headerShown: false, presentation: "fullScreenModal", gestureEnabled: false }} />
         </Stack>
         {showBanner && <NotifPermissionBanner userId={session?.user?.id} />}
         <UndoToastHost />

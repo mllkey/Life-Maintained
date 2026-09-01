@@ -15,6 +15,7 @@ import type { Session, User } from "@supabase/supabase-js";
 import type { Profile } from "@/lib/subscription";
 import { checkAndResetScanCount } from "@/lib/subscription";
 import { identify as identifyUser, resetAnalytics } from "@/lib/analytics";
+import { TERMS_VERSION } from "@/lib/legalDates";
 
 interface AuthContextValue {
   session: Session | null;
@@ -23,7 +24,8 @@ interface AuthContextValue {
   profileLoaded: boolean;
   profile: Profile | null;
   refreshProfile: () => Promise<void>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null; data?: any }>;
+  acceptTerms: () => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, termsVersion: string) => Promise<{ error: Error | null; data?: any }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   onboardingCompleted: boolean;
@@ -33,7 +35,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const PROFILE_SELECT =
-  "onboarding_completed, subscription_tier, trial_started_at, trial_expires_at, subscription_expires_at, revenuecat_customer_id, push_token, monthly_scan_count, scan_count_reset_at";
+  "onboarding_completed, subscription_tier, trial_started_at, trial_expires_at, subscription_expires_at, revenuecat_customer_id, push_token, monthly_scan_count, scan_count_reset_at, terms_accepted_at, terms_version";
 
 export const getOnboardingKey = (userId: string) => `@onboarding_completed_${userId}`;
 const getProfileKey = (userId: string) => `@profile_snapshot_${userId}`;
@@ -104,6 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       push_token: p?.push_token ?? null,
       monthly_scan_count: p?.monthly_scan_count ?? 0,
       scan_count_reset_at: p?.scan_count_reset_at ?? null,
+      terms_accepted_at: p?.terms_accepted_at ?? null,
+      terms_version: p?.terms_version ?? null,
     }),
     []
   );
@@ -312,6 +316,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await hydrateFromSession(sessionRef.current, { showLoading: false, quiet: true });
   }, [hydrateFromSession]);
 
+  // Stamps acceptance through a server-side RPC so the timestamp is the database
+  // clock, never the device clock, then mirrors the result into local state and
+  // the profile cache so routing does not wait on a refetch.
+  const acceptTerms = useCallback(async (): Promise<{ error: Error | null }> => {
+    const userId = userIdRef.current;
+    if (!userId) return { error: new Error("No signed-in user") };
+
+    const { data, error } = await supabase.rpc("accept_current_terms", { p_version: TERMS_VERSION });
+    if (error) return { error: new Error(error.message) };
+
+    const acceptedAt = typeof data === "string" ? data : new Date().toISOString();
+    if (profile && profile.user_id === userId) {
+      const next: Profile = { ...profile, terms_accepted_at: acceptedAt, terms_version: TERMS_VERSION };
+      setProfile(next);
+      writeProfileCache(userId, next).catch(() => {});
+    }
+    return { error: null };
+  }, [profile, writeProfileCache]);
+
   useEffect(() => {
     mountedRef.current = true;
 
@@ -393,8 +416,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [applySignedOutState, hydrateFromSession]);
 
-  async function signUp(email: string, password: string) {
-    const { error, data } = await supabase.auth.signUp({ email, password });
+  async function signUp(email: string, password: string, termsVersion: string) {
+    const { error, data } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { terms_version: termsVersion } },
+    });
     return { error, data };
   }
 
@@ -432,13 +459,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profileLoaded,
       profile,
       refreshProfile,
+      acceptTerms,
       signUp,
       signIn,
       signOut,
       onboardingCompleted,
       setOnboardingCompleted,
     }),
-    [session, isLoading, profileLoaded, profile, refreshProfile, onboardingCompleted]
+    [session, isLoading, profileLoaded, profile, refreshProfile, onboardingCompleted, acceptTerms]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

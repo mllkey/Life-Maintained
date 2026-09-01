@@ -1027,6 +1027,8 @@ export type Database = {
           subscription_renewal_date: string | null
           subscription_start_date: string | null
           subscription_tier: string
+          terms_accepted_at: string | null
+          terms_version: string | null
           trial_end_date: string | null
           trial_expires_at: string | null
           trial_start_date: string | null
@@ -1057,6 +1059,8 @@ export type Database = {
           subscription_renewal_date?: string | null
           subscription_start_date?: string | null
           subscription_tier?: string
+          terms_accepted_at?: string | null
+          terms_version?: string | null
           trial_end_date?: string | null
           trial_expires_at?: string | null
           trial_start_date?: string | null
@@ -1087,6 +1091,8 @@ export type Database = {
           subscription_renewal_date?: string | null
           subscription_start_date?: string | null
           subscription_tier?: string
+          terms_accepted_at?: string | null
+          terms_version?: string | null
           trial_end_date?: string | null
           trial_expires_at?: string | null
           trial_start_date?: string | null
@@ -2283,6 +2289,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_current_terms: {
+        Args: { p_version: string }
+        Returns: string
+      }
       _lm_col_exists: {
         Args: { p_col: string; p_table: string }
         Returns: boolean

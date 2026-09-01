@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,8 @@ import { Typography } from "@/constants/typography";
 import { Radius } from "@/constants/radius";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
+import { LegalAgreementRow, type LegalAgreementRowHandle } from "@/components/LegalAgreementRow";
+import { TERMS_VERSION } from "@/lib/legalDates";
 
 export default function SignUpScreen() {
   const insets = useSafeAreaInsets();
@@ -31,8 +33,14 @@ export default function SignUpScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
+  const agreementRef = useRef<LegalAgreementRowHandle>(null);
 
   async function handleSignUp() {
+    if (!agreed) {
+      agreementRef.current?.nudge();
+      return;
+    }
     if (!email.trim() || !password || !confirmPassword) {
       setError("Please fill in all fields");
       return;
@@ -64,7 +72,7 @@ export default function SignUpScreen() {
     }
     setIsLoading(true);
     setError(null);
-    const { error, data } = await signUp(email.trim(), password);
+    const { error, data } = await signUp(email.trim(), password, TERMS_VERSION);
     if (error) {
       setIsLoading(false);
       setError(error.message?.toLowerCase().includes("already") ? "That email is already in use. Try signing in instead." : "Couldn't create your account. Please try again.");
@@ -182,10 +190,14 @@ export default function SignUpScreen() {
               </View>
             </View>
 
+            <LegalAgreementRow ref={agreementRef} checked={agreed} onToggle={() => setAgreed((v) => !v)} />
+
             <Pressable
-              style={({ pressed }) => [styles.primaryButton, { opacity: pressed ? 0.85 : 1 }]}
+              style={({ pressed }) => [styles.primaryButton, { opacity: agreed ? (pressed ? 0.85 : 1) : 0.4 }]}
               onPress={handleSignUp}
               disabled={isLoading}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !agreed || isLoading, busy: isLoading }}
             >
               {isLoading ? (
                 <ActivityIndicator color={Colors.textInverse} />
@@ -193,18 +205,6 @@ export default function SignUpScreen() {
                 <Text style={styles.primaryButtonText}>Create Account</Text>
               )}
             </Pressable>
-
-            <View style={styles.legalRow}>
-              <Text style={styles.legalText}>By creating an account, you agree to our </Text>
-              <Pressable onPress={() => router.push("/terms-of-service")} hitSlop={6}>
-                <Text style={styles.legalLink}>Terms of Service</Text>
-              </Pressable>
-              <Text style={styles.legalText}> and </Text>
-              <Pressable onPress={() => router.push("/privacy-policy")} hitSlop={6}>
-                <Text style={styles.legalLink}>Privacy Policy</Text>
-              </Pressable>
-              <Text style={styles.legalText}>.</Text>
-            </View>
 
             <View style={styles.loginRow}>
               <Text style={styles.loginText}>Already have an account?</Text>
@@ -263,22 +263,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   primaryButtonText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
-  legalRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 12,
-  },
-  legalText: {
-    ...Typography.caption,
-    color: Colors.textTertiary,
-  },
-  legalLink: {
-    ...Typography.caption,
-    fontWeight: "500",
-    color: Colors.accent,
-  },
   loginRow: { flexDirection: "row", justifyContent: "center", gap: 8 },
   loginText: { ...Typography.footnote, color: Colors.textSecondary },
   loginLink: { ...Typography.footnote, fontWeight: "600", color: Colors.accent },
