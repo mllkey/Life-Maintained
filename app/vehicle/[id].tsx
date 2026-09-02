@@ -2311,11 +2311,17 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, costEstim
             }}
             hitSlop={6}
             accessibilityRole="button"
-            accessibilityLabel="Cost estimate — upgrade to unlock"
-            style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, alignSelf: "flex-start", backgroundColor: Colors.vehicleMuted, paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.sm, opacity: pressed ? 0.7 : 1 }]}
+            accessibilityLabel="Shop and DIY cost estimates — upgrade to unlock"
+            style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap", opacity: pressed ? 0.7 : 1 }]}
           >
-            <Icon name="lock-closed" size={11} color={Colors.vehicle} />
-            <Text style={{ ...Typography.caption, fontWeight: "600", color: Colors.vehicle }}>Cost estimate</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: Colors.vehicleMuted, paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.sm }}>
+              <Text style={{ ...Typography.caption, fontWeight: "600", color: Colors.vehicle }}>Shop Cost Estimate:</Text>
+              <Icon name="lock-closed" size={11} color={Colors.vehicle} />
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: Colors.vehicleMuted, paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.sm }}>
+              <Text style={{ ...Typography.caption, fontWeight: "600", color: Colors.vehicle }}>DIY Cost Estimate:</Text>
+              <Icon name="lock-closed" size={11} color={Colors.vehicle} />
+            </View>
           </Pressable>
         )}
         {costEstimate && !isCompleted && (() => {
