@@ -39,6 +39,7 @@ import {
   hasBusiness,
   getLiveScanQuota,
   scanLimit,
+  hasActivePremium,
 } from "@/lib/subscription";
 import ScanPackModal, { type ScanPackModalHandle } from "@/components/ScanPackModal";
 import { PaidActionCTA } from "@/components/PaidActionCTA";
@@ -140,7 +141,7 @@ async function persistSettings(s: AppSettings) {
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { user, signOut } = useAuth();
+  const { user, signOut, profile: authProfile } = useAuth();
   const queryClient = useQueryClient();
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
@@ -176,12 +177,11 @@ export default function SettingsScreen() {
   });
 
   const scanPackModalRef = useRef<ScanPackModalHandle>(null);
-  const isPaidNonTrialUser =
-    hasPersonalOrAbove(profile) && profile?.subscription_tier !== "trial";
+  const settingsPremium = hasActivePremium(authProfile);
   const { data: scanQuota, isError: scanQuotaError } = useQuery({
     queryKey: ["scan-quota", user?.id, profile?.subscription_tier],
     queryFn: getLiveScanQuota,
-    enabled: !!user?.id && isPaidNonTrialUser,
+    enabled: !!user?.id && settingsPremium,
     staleTime: 30_000,
   });
   const scanQuotaLimit = scanQuota?.scans_limit ?? scanLimit(profile);
@@ -651,7 +651,7 @@ export default function SettingsScreen() {
             />
           </Section>
 
-          {isPaidNonTrialUser && (
+          {settingsPremium ? (
             <>
               <Section title="Scans">
                 <View style={styles.scansRow}>
@@ -694,6 +694,17 @@ export default function SettingsScreen() {
                 </View>
               </Section>
             </>
+          ) : (
+            <Section title="Scans">
+              <UiRow
+                icon="lock-closed"
+                iconBackground={Colors.card}
+                title="Receipt scans"
+                subtitle="Upgrade to scan receipts"
+                accessibilityLabel="Receipt scans — upgrade to unlock"
+                onPress={() => router.push("/subscription?vertical=scans&reason=feature_locked")}
+              />
+            </Section>
           )}
 
           <Section title="Your Data" dividerInset={56}>

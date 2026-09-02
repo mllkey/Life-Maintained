@@ -476,6 +476,11 @@ export default function PlanRevealScreen() {
               </View>
             ) : null}
 
+            {data?.items?.some((i) => !!i.costStr) ? (
+              <Text style={{ ...Typography.caption, color: Colors.textTertiary, textAlign: "center", marginTop: 4 }}>
+                Cost estimates included with your trial and paid plans.
+              </Text>
+            ) : null}
             <Animated.View style={[styles.bridgeBox, bridgeStyle]}>
               <Icon name={cfg.bridge.icon} size={15} color={cfg.bridge.tint} />
               <Text style={styles.bridgeText}>{cfg.bridge.text}</Text>

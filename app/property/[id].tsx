@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
+import { hasPersonalOrAbove } from "@/lib/subscription";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
@@ -81,7 +82,8 @@ export default function PropertyDetailScreen() {
   const { id, taskId, reminder, rid } = useLocalSearchParams<{ id: string; taskId?: string; reminder?: string; rid?: string }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const estimatesUnlocked = hasPersonalOrAbove(profile);
   const [activeTab, setActiveTab] = useState<"tasks" | "history">("tasks");
   const [actionNeededExpanded, setActionNeededExpanded] = useState(true);
   const { highlightedId: highlightedTaskId, scrollProps: highlightScrollProps, registerRow: registerTaskRow, dismissImmediately: dismissHighlight } = useDeepLinkHighlight(taskId);
@@ -221,7 +223,7 @@ export default function PropertyDetailScreen() {
   function handlePropertyRetry() { refetchProperty(); handleRetrySchedule(); refetchLogs(); }
 
   const { data: costEstimates } = useQuery({
-    queryKey: ["property_repair_costs", id, property?.property_type, scheduleTasks?.length ?? 0],
+    queryKey: ["property_repair_costs", id, property?.property_type, scheduleTasks?.length ?? 0, estimatesUnlocked],
     queryFn: async () => {
       if (!property || !scheduleTasks?.length) return {};
       const results: Record<string, any> = {};
@@ -239,7 +241,7 @@ export default function PropertyDetailScreen() {
       }
       return results;
     },
-    enabled: !!property && (scheduleTasks?.length ?? 0) > 0,
+    enabled: !!property && (scheduleTasks?.length ?? 0) > 0 && estimatesUnlocked,
   });
 
   costEstimatesRef.current = costEstimates;
@@ -839,6 +841,8 @@ export default function PropertyDetailScreen() {
                       tasks={actionNeededTasks}
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
+                      estimateLocked={!estimatesUnlocked}
+                      onEstimateLockPress={() => router.push("/subscription?vertical=property&reason=feature_locked")}
                       highlightedTaskId={highlightedTaskId}
                       registerRow={registerTaskRow}
                     />
@@ -852,6 +856,8 @@ export default function PropertyDetailScreen() {
                       tasks={goodTasks}
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
+                      estimateLocked={!estimatesUnlocked}
+                      onEstimateLockPress={() => router.push("/subscription?vertical=property&reason=feature_locked")}
                       highlightedTaskId={highlightedTaskId}
                       registerRow={registerTaskRow}
                     />
@@ -865,6 +871,8 @@ export default function PropertyDetailScreen() {
                       tasks={upcomingTasks}
                       onMarkComplete={handleOpenMarkComplete}
                       costEstimates={costEstimates}
+                      estimateLocked={!estimatesUnlocked}
+                      onEstimateLockPress={() => router.push("/subscription?vertical=property&reason=feature_locked")}
                       highlightedTaskId={highlightedTaskId}
                       registerRow={registerTaskRow}
                     />
@@ -1156,6 +1164,8 @@ function TaskSection({
   tasks,
   onMarkComplete,
   costEstimates,
+  estimateLocked,
+  onEstimateLockPress,
   highlightedTaskId,
   registerRow,
 }: {
@@ -1166,6 +1176,8 @@ function TaskSection({
   tasks: any[];
   onMarkComplete: (task: any) => void;
   costEstimates?: Record<string, any>;
+  estimateLocked?: boolean;
+  onEstimateLockPress?: () => void;
   highlightedTaskId?: string | null;
   registerRow?: (id: string, node: React.ElementRef<typeof View> | null) => void;
 }) {
@@ -1194,6 +1206,8 @@ function TaskSection({
                   onMarkComplete={onMarkComplete}
                   isLast={i === tasks.length - 1}
                   costEstimates={costEstimates}
+                  estimateLocked={estimateLocked}
+                  onEstimateLockPress={onEstimateLockPress}
                 />
                 <HighlightBackdrop color={Colors.accentMuted} visible={isDeepLink} />
               </View>
@@ -1210,11 +1224,15 @@ function TaskRow({
   onMarkComplete,
   isLast,
   costEstimates,
+  estimateLocked,
+  onEstimateLockPress,
 }: {
   task: any;
   onMarkComplete: (task: any) => void;
   isLast: boolean;
   costEstimates?: Record<string, any>;
+  estimateLocked?: boolean;
+  onEstimateLockPress?: () => void;
 }) {
   const status = getStatus(task.next_due_date, task.last_completed_at);
   const barColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : status === "upcoming" ? Colors.textSecondary : Colors.good;
@@ -1261,27 +1279,46 @@ function TaskRow({
         </Text>
         <Text style={[styles.taskRowDue, isCompleted && styles.taskRowDueDone]}>{dueText}</Text>
         {!isCompleted && (() => {
-          const est = costEstimates?.[task.task.toLowerCase().trim()];
-          if (est?.shop_low != null) {
-            const shopLow = Number(est.shop_low);
-            const shopHigh = Number(est.shop_high);
-            const diyLow = est.diy_low != null ? Number(est.diy_low) : null;
-            const diyHigh = est.diy_high != null ? Number(est.diy_high) : null;
-            const costLine = formatShopAndDiy(shopLow, shopHigh, diyLow, diyHigh);
-            if (!costLine) return null;
+          if (estimateLocked && !(task.estimated_cost != null && task.estimated_cost > 0)) {
             return (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-                <Icon name="cash-outline" size={12} color={Colors.good} />
-                <Text style={{ ...Typography.caption, color: Colors.good }}>
-                  {costLine}
-                </Text>
-                {est.difficulty != null && (
-                  <Text style={{ ...Typography.caption, fontWeight: "500", color: est.difficulty === 1 ? Colors.good : est.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: Colors.card, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
-                    {est.difficulty === 1 ? "Easy DIY" : est.difficulty === 2 ? "Moderate" : "Pro"}
-                  </Text>
-                )}
-              </View>
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  onEstimateLockPress?.();
+                }}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Cost estimate — upgrade to unlock"
+                style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, alignSelf: "flex-start", backgroundColor: Colors.card, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.sm, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Icon name="lock-closed" size={11} color={Colors.textTertiary} />
+                <Text style={{ ...Typography.caption, color: Colors.textTertiary }}>Cost estimate</Text>
+              </Pressable>
             );
+          }
+          if (!estimateLocked) {
+            const est = costEstimates?.[task.task.toLowerCase().trim()];
+            if (est?.shop_low != null) {
+              const shopLow = Number(est.shop_low);
+              const shopHigh = Number(est.shop_high);
+              const diyLow = est.diy_low != null ? Number(est.diy_low) : null;
+              const diyHigh = est.diy_high != null ? Number(est.diy_high) : null;
+              const costLine = formatShopAndDiy(shopLow, shopHigh, diyLow, diyHigh);
+              if (!costLine) return null;
+              return (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+                  <Icon name="cash-outline" size={12} color={Colors.good} />
+                  <Text style={{ ...Typography.caption, color: Colors.good }}>
+                    {costLine}
+                  </Text>
+                  {est.difficulty != null && (
+                    <Text style={{ ...Typography.caption, fontWeight: "500", color: est.difficulty === 1 ? Colors.good : est.difficulty === 2 ? Colors.dueSoon : Colors.overdue, backgroundColor: Colors.card, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm, overflow: "hidden" }}>
+                      {est.difficulty === 1 ? "Easy DIY" : est.difficulty === 2 ? "Moderate" : "Pro"}
+                    </Text>
+                  )}
+                </View>
+              );
+            }
           }
           if (task.estimated_cost != null && task.estimated_cost > 0) {
             return (

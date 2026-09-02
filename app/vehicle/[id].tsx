@@ -167,6 +167,7 @@ export default function VehicleDetailScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { profile, user } = useAuth();
+  const estimatesUnlocked = hasPersonalOrAbove(profile);
   const [activeTab, setActiveTab] = useState<"schedule" | "wallet" | "history">("schedule");
   const [isExporting, setIsExporting] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -264,7 +265,7 @@ export default function VehicleDetailScreen() {
   });
 
   const { data: costEstimates } = useQuery({
-    queryKey: ["repair_costs", id, vehicle?.make, scheduleTasks?.length ?? 0],
+    queryKey: ["repair_costs", id, vehicle?.make, scheduleTasks?.length ?? 0, estimatesUnlocked],
     queryFn: async () => {
       if (!vehicle || !scheduleTasks?.length) return {};
       const results: Record<string, any> = {};
@@ -323,7 +324,7 @@ export default function VehicleDetailScreen() {
 
       return results;
     },
-    enabled: !!vehicle?.make && !!scheduleTasks?.length,
+    enabled: !!vehicle?.make && !!scheduleTasks?.length && estimatesUnlocked,
     staleTime: 1000 * 60 * 60, // 1 hour
   });
 
@@ -1673,6 +1674,8 @@ export default function VehicleDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                       onEditTask={handleOpenEditTask}
                       costEstimates={costEstimates}
+                      estimateLocked={!estimatesUnlocked}
+                      onEstimateLockPress={() => router.push("/subscription?vertical=vehicle&reason=feature_locked")}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
@@ -1690,6 +1693,8 @@ export default function VehicleDetailScreen() {
                     onMarkComplete={handleOpenMarkComplete}
                     onEditTask={handleOpenEditTask}
                     costEstimates={costEstimates}
+                    estimateLocked={!estimatesUnlocked}
+                    onEstimateLockPress={() => router.push("/subscription?vertical=vehicle&reason=feature_locked")}
                     onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                     highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
@@ -1707,6 +1712,8 @@ export default function VehicleDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                       onEditTask={handleOpenEditTask}
                       costEstimates={costEstimates}
+                      estimateLocked={!estimatesUnlocked}
+                      onEstimateLockPress={() => router.push("/subscription?vertical=vehicle&reason=feature_locked")}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
@@ -1767,6 +1774,8 @@ export default function VehicleDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                       onEditTask={handleOpenEditTask}
                       costEstimates={costEstimates}
+                      estimateLocked={!estimatesUnlocked}
+                      onEstimateLockPress={() => router.push("/subscription?vertical=vehicle&reason=feature_locked")}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
@@ -1784,6 +1793,8 @@ export default function VehicleDetailScreen() {
                     onMarkComplete={handleOpenMarkComplete}
                     onEditTask={handleOpenEditTask}
                     costEstimates={costEstimates}
+                    estimateLocked={!estimatesUnlocked}
+                    onEstimateLockPress={() => router.push("/subscription?vertical=vehicle&reason=feature_locked")}
                     onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                     highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
@@ -1801,6 +1812,8 @@ export default function VehicleDetailScreen() {
                       onMarkComplete={handleOpenMarkComplete}
                       onEditTask={handleOpenEditTask}
                       costEstimates={costEstimates}
+                      estimateLocked={!estimatesUnlocked}
+                      onEstimateLockPress={() => router.push("/subscription?vertical=vehicle&reason=feature_locked")}
                       onShowDifficultyInfo={() => setShowDifficultyInfo(true)}
                       highlightedTask={highlightedTask}
                       highlightedTaskId={highlightedTaskId}
@@ -2122,6 +2135,8 @@ function ScheduleSection({
   onMarkComplete,
   onEditTask,
   costEstimates,
+  estimateLocked,
+  onEstimateLockPress,
   onShowDifficultyInfo,
   highlightedTask,
   highlightedTaskId,
@@ -2138,6 +2153,8 @@ function ScheduleSection({
   onMarkComplete: (task: any) => void;
   onEditTask: (task: any) => void;
   costEstimates?: Record<string, any>;
+  estimateLocked?: boolean;
+  onEstimateLockPress?: () => void;
   onShowDifficultyInfo?: () => void;
   highlightedTask?: string | null;
   highlightedTaskId?: string | null;
@@ -2182,6 +2199,8 @@ function ScheduleSection({
                       onMarkComplete={onMarkComplete}
                       onEditTask={onEditTask}
                       costEstimate={costEstimates?.[task.name.toLowerCase().trim()]}
+                      estimateLocked={estimateLocked}
+                      onEstimateLockPress={onEstimateLockPress}
                       onShowDifficultyInfo={onShowDifficultyInfo}
                       isHighlighted={task.name === highlightedTask}
                     />
@@ -2198,12 +2217,14 @@ function ScheduleSection({
   );
 }
 
-function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, costEstimate, onShowDifficultyInfo, isHighlighted }: {
+function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, costEstimate, onShowDifficultyInfo, isHighlighted, estimateLocked, onEstimateLockPress }: {
   task: any;
   vehicle: any;
   onMarkComplete: (task: any) => void;
   onEditTask: (task: any) => void;
   costEstimate?: any;
+  estimateLocked?: boolean;
+  onEstimateLockPress?: () => void;
   onShowDifficultyInfo?: () => void;
   isHighlighted?: boolean;
 }) {
@@ -2281,6 +2302,21 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, costEstim
           <Text style={{ ...Typography.caption, fontWeight: "600", color: Colors.textSecondary, marginTop: 4 }}>
             {lastServicedText}
           </Text>
+        )}
+        {estimateLocked && !isCompleted && (
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              onEstimateLockPress?.();
+            }}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Cost estimate — upgrade to unlock"
+            style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, alignSelf: "flex-start", backgroundColor: Colors.card, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.sm, opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Icon name="lock-closed" size={11} color={Colors.textTertiary} />
+            <Text style={{ ...Typography.caption, color: Colors.textTertiary }}>Cost estimate</Text>
+          </Pressable>
         )}
         {costEstimate && !isCompleted && (() => {
           const costLine = formatShopAndDiy(
