@@ -2312,10 +2312,10 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, costEstim
             hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel="Cost estimate — upgrade to unlock"
-            style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, alignSelf: "flex-start", backgroundColor: Colors.card, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.sm, opacity: pressed ? 0.7 : 1 }]}
+            style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, alignSelf: "flex-start", backgroundColor: Colors.vehicleMuted, paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.sm, opacity: pressed ? 0.7 : 1 }]}
           >
-            <Icon name="lock-closed" size={11} color={Colors.textTertiary} />
-            <Text style={{ ...Typography.caption, color: Colors.textTertiary }}>Cost estimate</Text>
+            <Icon name="lock-closed" size={11} color={Colors.vehicle} />
+            <Text style={{ ...Typography.caption, fontWeight: "600", color: Colors.vehicle }}>Cost estimate</Text>
           </Pressable>
         )}
         {costEstimate && !isCompleted && (() => {
