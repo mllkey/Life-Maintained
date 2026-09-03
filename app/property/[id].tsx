@@ -39,21 +39,31 @@ import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
 import { parseISO, isBefore, addDays, addMonths, format } from "date-fns";
 import { SaveToast } from "@/components/SaveToast";
+import { propertyTaskCalibrationState } from "@/lib/calibration";
+import { CalibrationEntryCard } from "@/components/CalibrationEntryCard";
+import CalibrationSheet, { type CalibrationSheetHandle } from "@/components/CalibrationSheet";
 import LoadErrorState from "@/components/LoadErrorState";
 import DatePicker from "@/components/DatePicker";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 import ReminderMoment, { type ReminderMomentHandle } from "@/components/ReminderMoment";
 
-function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): "overdue" | "due_soon" | "upcoming" | "good" {
+function getStatus(task: {
+  next_due_date: string | null;
+  last_completed_at: string | null;
+  last_completed_source?: string | null;
+  created_at?: string | null;
+}): "overdue" | "due_soon" | "upcoming" | "good" {
+  // Uncalibrated estimates carry no urgency; the Confirm-history card owns them.
+  if (propertyTaskCalibrationState(task) === "estimated") return "upcoming";
   const now = new Date();
   const soon = addDays(now, 30);
-  if (nextDueDate) {
-    const due = parseISO(nextDueDate);
+  if (task.next_due_date) {
+    const due = parseISO(task.next_due_date);
     if (isBefore(due, now)) return "overdue";
     if (isBefore(due, soon)) return "due_soon";
     return "upcoming";
   }
-  if (!lastCompletedAt) return "upcoming";
+  if (!task.last_completed_at) return "upcoming";
   return "good";
 }
 
@@ -90,6 +100,7 @@ export default function PropertyDetailScreen() {
 
   const [reminderMoment, setReminderMoment] = useState<{ task: any; title: string; statusLine: string; costLine: string | null } | null>(null);
   const reminderRef = useRef<ReminderMomentHandle>(null);
+  const calibrationRef = useRef<CalibrationSheetHandle>(null);
   const reminderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reminderFiredRef = useRef<string | null>(null);
   const costEstimatesRef = useRef<Record<string, any> | undefined>(undefined);
@@ -553,9 +564,9 @@ export default function PropertyDetailScreen() {
   // Insight card: pick the most urgent task
   const insightText = useMemo(() => {
     if (!tasks || tasks.length === 0) return null;
-    const overdue = tasks.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "overdue");
+    const overdue = tasks.filter(t => getStatus(t) === "overdue");
     if (overdue.length > 0) return `${overdue[0].task} is overdue — take care of it soon to avoid bigger issues.`;
-    const dueSoon = tasks.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "due_soon");
+    const dueSoon = tasks.filter(t => getStatus(t) === "due_soon");
     if (dueSoon.length > 0) return `${dueSoon[0].task} is coming up soon. Stay ahead of your maintenance.`;
     return null;
   }, [tasks]);
@@ -567,19 +578,24 @@ export default function PropertyDetailScreen() {
   }, [tasks]);
 
   const overdueTasks = useMemo(
-    () => tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "overdue") ?? [],
+    () => tasks?.filter(t => getStatus(t) === "overdue") ?? [],
     [tasks],
   );
   const dueSoonTasks = useMemo(
-    () => tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "due_soon") ?? [],
+    () => tasks?.filter(t => getStatus(t) === "due_soon") ?? [],
     [tasks],
   );
   const goodTasks = useMemo(
-    () => tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "good") ?? [],
+    () => tasks?.filter(t => getStatus(t) === "good") ?? [],
     [tasks],
   );
+  const estimatedTasks = useMemo(
+    () => tasks?.filter((t: any) => propertyTaskCalibrationState(t) === "estimated") ?? [],
+    [tasks],
+  );
+
   const upcomingTasks = useMemo(
-    () => tasks?.filter(t => getStatus(t.next_due_date, t.last_completed_at) === "upcoming") ?? [],
+    () => tasks?.filter(t => getStatus(t) === "upcoming") ?? [],
     [tasks],
   );
   const actionNeededTasks = useMemo(() => [...overdueTasks, ...dueSoonTasks], [overdueTasks, dueSoonTasks]);
@@ -596,7 +612,7 @@ export default function PropertyDetailScreen() {
     if (!tasks || tasks.length === 0) return;
     const task = tasks.find((t: any) => t.id === taskId);
     if (!task) return; // do NOT latch — task may arrive on next data update
-    if (getStatus(task.next_due_date, task.last_completed_at) !== "overdue") {
+    if (getStatus(task) !== "overdue") {
       reminderFiredRef.current = reminderFireKey;
       return;
     }
@@ -823,14 +839,20 @@ export default function PropertyDetailScreen() {
                     </View>
                   )}
 
-                  {showEstimatedBanner && (
+                  {estimatedTasks.length > 0 ? (
+                    <CalibrationEntryCard
+                      count={estimatedTasks.length}
+                      tint={Colors.home}
+                      onPress={() => calibrationRef.current?.present()}
+                    />
+                  ) : showEstimatedBanner ? (
                     <View style={styles.estimatedBanner}>
                       <Icon name="information-circle-outline" size={16} color={Colors.dueSoon} />
                       <Text style={styles.estimatedBannerText}>
                         This schedule is estimated from your property details. Tap any task to log your last service date for more accurate due dates.
                       </Text>
                     </View>
-                  )}
+                  ) : null}
 
                   {actionNeededTasks.length > 0 && (
                     <TaskSection
@@ -1152,6 +1174,24 @@ export default function PropertyDetailScreen() {
           if (reminderTimerRef.current) { clearTimeout(reminderTimerRef.current); reminderTimerRef.current = null; }
         }}
       />
+
+      <CalibrationSheet
+        ref={calibrationRef}
+        vertical="property"
+        tint={Colors.home}
+        tasks={estimatedTasks.map((t: any) => ({
+          id: t.id,
+          label: t.task,
+          intervalHint: t.interval ?? null,
+        }))}
+        onApplied={(result) => {
+          refetch();
+          queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard", user?.id] });
+          if (user?.id) scheduleMaintenanceNotifications(user.id).catch(() => {});
+          if (result.applied === 0) showToast("No updates applied");
+        }}
+      />
     </View>
   );
 }
@@ -1234,22 +1274,24 @@ function TaskRow({
   estimateLocked?: boolean;
   onEstimateLockPress?: () => void;
 }) {
-  const status = getStatus(task.next_due_date, task.last_completed_at);
+  const status = getStatus(task);
   const barColor = status === "overdue" ? Colors.overdue : status === "due_soon" ? Colors.dueSoon : status === "upcoming" ? Colors.textSecondary : Colors.good;
   const isCompleted = status === "good";
   const [showCompletedInfo, setShowCompletedInfo] = useState(false);
 
+  const calibState = propertyTaskCalibrationState(task);
+
   let dueText: string;
-  if (isCompleted && task.last_completed_at) {
-    const completed = new Date(task.last_completed_at).getTime();
-    const created = task.created_at ? new Date(task.created_at).getTime() : 0;
-    if (Math.abs(completed - created) < 60000) {
-      dueText = "Unknown — tap to log last service";
-    } else {
-      dueText = `Completed ${format(parseISO(task.last_completed_at), "MMM d, yyyy")}`;
-    }
+  if (calibState === "estimated") {
+    dueText = task.next_due_date
+      ? `Est. due ${format(parseISO(task.next_due_date), "MMM d, yyyy")}`
+      : "No date set";
+  } else if (isCompleted && task.last_completed_at) {
+    dueText = `Completed ${format(parseISO(task.last_completed_at), "MMM d, yyyy")}`;
   } else if (task.next_due_date) {
-    dueText = `Due ${format(parseISO(task.next_due_date), "MMM d, yyyy")}`;
+    dueText = calibState === "calibrated"
+      ? `Est. due ${format(parseISO(task.next_due_date), "MMM d, yyyy")}`
+      : `Due ${format(parseISO(task.next_due_date), "MMM d, yyyy")}`;
   } else {
     dueText = "No date set";
   }
@@ -1278,6 +1320,13 @@ function TaskRow({
           {task.task}
         </Text>
         <Text style={[styles.taskRowDue, isCompleted && styles.taskRowDueDone]}>{dueText}</Text>
+        {calibState === "estimated" ? (
+          <Pressable onPress={() => onMarkComplete(task)} hitSlop={6}>
+            <Text style={styles.taskRowConfirm}>
+              Confirm last service →
+            </Text>
+          </Pressable>
+        ) : null}
         {!isCompleted && (() => {
           if (estimateLocked && !(task.estimated_cost != null && task.estimated_cost > 0)) {
             return (
@@ -1493,6 +1542,7 @@ const styles = StyleSheet.create({
   taskRowName: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
   taskRowNameDone: { ...Typography.footnote, color: Colors.textTertiary },
   taskRowDue: { ...Typography.footnote, color: Colors.textSecondary },
+  taskRowConfirm: { ...Typography.footnote, color: Colors.home, marginTop: 2 },
   taskRowDueDone: { color: Colors.textTertiary },
   taskRowCompletedInfo: {
     ...Typography.footnote,

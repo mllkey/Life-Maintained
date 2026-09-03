@@ -29,6 +29,7 @@ import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 import Paywall from "@/components/Paywall";
 import LoadErrorState from "@/components/LoadErrorState";
 import { vehicleGlyph } from "@/lib/vehicleIcons";
+import { vehicleTaskCalibrationState } from "@/lib/calibration";
 
 type Vehicle = {
   id: string;
@@ -88,7 +89,7 @@ export default function VehiclesScreen() {
       const ids = vehicles.map(v => v.id);
       const { data, error } = await supabase
         .from("user_vehicle_maintenance_tasks")
-        .select("vehicle_id, next_due_date, interval_miles")
+        .select("vehicle_id, next_due_date, interval_miles, last_completed_date, last_completed_miles, last_completed_hours, last_completed_source, created_at")
         .in("vehicle_id", ids);
       if (error) throw error;
 
@@ -101,6 +102,11 @@ export default function VehiclesScreen() {
       for (const t of data ?? []) {
         if (!map[t.vehicle_id]) {
           map[t.vehicle_id] = { worstStatus: "good", pendingCount: 0, hasMileageInterval: false };
+        }
+        // ESTIMATED tasks carry no urgency; they never drive the card badge.
+        if (vehicleTaskCalibrationState(t) === "estimated") {
+          if (t.interval_miles) map[t.vehicle_id].hasMileageInterval = true;
+          continue;
         }
         const s = getTaskStatus(t.next_due_date);
         if (s !== "good") map[t.vehicle_id].pendingCount++;

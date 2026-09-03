@@ -7,6 +7,7 @@
  */
 
 import { inferTrackingMode } from "./vehicleTypes";
+import { vehicleTaskCalibrationState } from "./calibration";
 
 function fullCalendarDaysBetween(later: Date, earlier: Date): number {
   const L = Date.UTC(later.getFullYear(), later.getMonth(), later.getDate());
@@ -400,6 +401,8 @@ export function calcVehicleTaskStatus(
   mode: TrackingMode,
 ): "overdue" | "due_soon" | "upcoming" | "completed" {
   if (task.status === "completed") return "completed";
+  // Uncalibrated estimates carry no urgency; the Confirm-history card owns them.
+  if (vehicleTaskCalibrationState(task) === "estimated") return "upcoming";
   const today = new Date();
   const dueDate = task.next_due_date ? new Date(task.next_due_date) : null;
 

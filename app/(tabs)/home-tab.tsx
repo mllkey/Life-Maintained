@@ -23,6 +23,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
 import { parseISO, isBefore, addDays } from "date-fns";
 import { propertyLimit } from "@/lib/subscription";
+import { propertyTaskCalibrationState } from "@/lib/calibration";
 import Paywall from "@/components/Paywall";
 import LoadErrorState from "@/components/LoadErrorState";
 
@@ -100,7 +101,7 @@ export default function HomeTabScreen() {
       const ids = properties.map(p => p.id);
       const { data, error } = await supabase
         .from("property_maintenance_tasks")
-        .select("property_id, next_due_date, last_completed_at")
+        .select("property_id, next_due_date, last_completed_at, last_completed_source, created_at")
         .in("property_id", ids);
       if (error) throw error;
 
@@ -108,6 +109,8 @@ export default function HomeTabScreen() {
       for (const t of data ?? []) {
         if (!map[t.property_id]) map[t.property_id] = { overdue: 0, due_soon: 0, total: 0 };
         map[t.property_id].total++;
+        // ESTIMATED tasks carry no urgency; they never drive the card badge.
+        if (propertyTaskCalibrationState(t) === "estimated") continue;
         const s = getStatus(t.next_due_date, t.last_completed_at);
         if (s === "overdue") map[t.property_id].overdue++;
         else if (s === "due_soon") map[t.property_id].due_soon++;

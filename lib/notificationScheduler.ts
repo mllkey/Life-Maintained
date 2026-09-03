@@ -4,6 +4,7 @@ import Constants from "expo-constants";
 import { supabase } from "./supabase";
 import { loadNotifPrefs } from "./notificationPrefs";
 import { projectedMileage, projectedHours } from "./usageHelpers";
+import { vehicleTaskCalibrationState, propertyTaskCalibrationState } from "./calibration";
 import * as Sentry from "@sentry/react-native";
 
 function parseNotifTime(timeStr: string): { hour: number; minute: number } {
@@ -240,13 +241,13 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       vehicleIds.length > 0
         ? supabase
             .from("user_vehicle_maintenance_tasks")
-            .select("id, vehicle_id, name, next_due_date, next_due_miles, next_due_hours")
+            .select("id, vehicle_id, name, next_due_date, next_due_miles, next_due_hours, last_completed_date, last_completed_miles, last_completed_hours, last_completed_source, created_at")
             .in("vehicle_id", vehicleIds)
         : Promise.resolve({ data: [] as any[] }),
       propertyIds.length > 0
         ? supabase
             .from("property_maintenance_tasks")
-            .select("id, property_id, task, next_due_date")
+            .select("id, property_id, task, next_due_date, last_completed_at, last_completed_source, created_at")
             .in("property_id", propertyIds)
             .not("next_due_date", "is", null)
         : Promise.resolve({ data: [] as any[] }),
@@ -371,6 +372,8 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       const assetName = vehicle.nickname ?? `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
       const isMuted = (prefs.mutedVehicles ?? []).includes(task.vehicle_id);
       if (isMuted) continue;
+      // ESTIMATED tasks get no notifications until calibrated/confirmed.
+      if (vehicleTaskCalibrationState(task) === "estimated") continue;
 
       // Date-based notifications (existing behavior)
       if (task.next_due_date) {
@@ -467,6 +470,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
       if (!task.next_due_date) continue;
       const property = propertyMap.get(task.property_id);
       if (!property) continue;
+      if (propertyTaskCalibrationState(task) === "estimated") continue;
       const assetName = property.nickname ?? property.address ?? "Property";
       const isMuted = (prefs.mutedProperties ?? []).includes(task.property_id);
       enqueue(task.task, assetName, task.next_due_date, isMuted, task.property_id, "property", task.id, "property_task");
@@ -774,6 +778,8 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
 
     const overdueVehicle = vehicleTasks.filter(t => {
       if ((prefs.mutedVehicles ?? []).includes(t.vehicle_id)) return false;
+      // ESTIMATED tasks never count toward the badge.
+      if (vehicleTaskCalibrationState(t) === "estimated") return false;
       // Date-based overdue
       {
         const dueDate = parseDueDateAnchor(t.next_due_date);
@@ -800,6 +806,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     const overdueProperty = propertyTasks.filter(t => {
       if (!t.next_due_date) return false;
       if ((prefs.mutedProperties ?? []).includes(t.property_id)) return false;
+      if (propertyTaskCalibrationState(t) === "estimated") return false;
       const dueDate = parseDueDateAnchor(t.next_due_date);
       return !!dueDate && dueDate.getTime() < now.getTime();
     }).length;

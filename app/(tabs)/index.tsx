@@ -35,6 +35,7 @@ import { differenceInDays, parseISO, isBefore, addDays, format, subMonths, start
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { primeHaptics } from "@/lib/haptics";
+import { vehicleTaskCalibrationState, propertyTaskCalibrationState } from "@/lib/calibration";
 import { useBudgetAlert } from "@/context/BudgetAlertContext";
 import TrialBanner from "@/components/TrialBanner";
 import { currentUsageValue, projectedMileage, projectedHours, resolveTrackingMode, calcVehicleTaskStatus, isHoursTrackedMode, isMileageTrackedMode, isHoursTracked, isTimeOnly, taskDaysUntilDue } from "@/lib/usageHelpers";
@@ -303,6 +304,7 @@ export default function DashboardScreen() {
       for (const t of propertyTasks.data ?? []) {
         const p = (t as any).properties;
         if (!p) continue;
+        if (propertyTaskCalibrationState(t) === "estimated") continue;
         const status = getStatus(t.next_due_date);
         if (status !== "good") {
           items.push({ id: t.id, title: t.task, subtitle: p.nickname ?? p.address ?? "Property", dueDate: t.next_due_date, status, category: "properties", entityId: t.property_id });
@@ -347,6 +349,7 @@ export default function DashboardScreen() {
 
       for (const t of vehicleTasks.data ?? []) {
         if (t.status === "completed") continue;
+        if (vehicleTaskCalibrationState(t) === "estimated") continue;
         const v = (t as { vehicles: JoinedVehicle | null }).vehicles;
         if (!v) continue;
         const days = taskDaysUntilDue(t, v);
@@ -354,6 +357,7 @@ export default function DashboardScreen() {
       }
       for (const t of propertyTasks.data ?? []) {
         if (t.is_completed) continue;
+        if (propertyTaskCalibrationState(t) === "estimated") continue;
         const p = (t as { properties: JoinedProperty | null }).properties;
         if (!p) continue;
         const days = taskDaysUntilDue(t, null);

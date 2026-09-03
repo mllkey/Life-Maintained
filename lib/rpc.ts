@@ -178,6 +178,8 @@ export type TaskCompletionSnapshot = {
   last_completed_date: string | null;
   last_completed_miles: number | null;
   last_completed_hours: number | null;
+  /** Present on events created from v7 onward; absent in older stored snapshots. */
+  last_completed_source?: string | null;
   next_due_miles: number | null;
   next_due_hours: number | null;
   next_due_date: string | null;
@@ -235,4 +237,29 @@ export async function undoVehicleCompletions(eventIds: string[]): Promise<{
 }> {
   const { data, error } = await supabase.rpc("undo_vehicle_completions", { p_event_ids: eventIds });
   return { data: (data as UndoVehicleCompletionsResult | null), error };
+}
+
+export type CalibrateItem = {
+  task_id: string;
+  choice: "recent" | "while_back";
+};
+
+export type CalibrateTasksResult =
+  | { ok: false; error: "invalid_input" }
+  | { ok: true; applied: number; skipped: number; applied_task_ids: string[] };
+
+export async function calibrateVehicleTasks(items: CalibrateItem[]): Promise<{
+  data: CalibrateTasksResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("calibrate_vehicle_tasks", { p_items: items });
+  return { data: (data as CalibrateTasksResult | null), error };
+}
+
+export async function calibratePropertyTasks(items: CalibrateItem[]): Promise<{
+  data: CalibrateTasksResult | null;
+  error: unknown;
+}> {
+  const { data, error } = await supabase.rpc("calibrate_property_tasks", { p_items: items });
+  return { data: (data as CalibrateTasksResult | null), error };
 }

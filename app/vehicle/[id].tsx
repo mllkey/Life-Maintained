@@ -61,6 +61,7 @@ import {
   formatUsageValue,
   taskNextDueUsage,
   taskLastCompletedUsage,
+  formatIntervalUsage,
   type TrackingMode,
 } from "@/lib/usageHelpers";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
@@ -68,6 +69,9 @@ import UpdateBanner from "@/components/UpdateBanner";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import { useDeepLinkHighlight } from "@/lib/useDeepLinkHighlight";
 import { HighlightBackdrop } from "@/components/HighlightBackdrop";
+import { vehicleTaskCalibrationState, vehicleTaskHasCalibratableAxis } from "@/lib/calibration";
+import { CalibrationEntryCard } from "@/components/CalibrationEntryCard";
+import CalibrationSheet, { type CalibrationSheetHandle } from "@/components/CalibrationSheet";
 import ReminderMoment, { type ReminderMomentHandle } from "@/components/ReminderMoment";
 
 function taskUsesHoursUsage(task: any, mode: TrackingMode): boolean {
@@ -82,6 +86,8 @@ function calcStatus(
   vehicle: any,
 ): "overdue" | "needs_attention" | "due_soon" | "upcoming" | "completed" {
   if (task.status === "completed") return "completed";
+  // Uncalibrated estimates carry no urgency; the Confirm-history card owns them.
+  if (vehicleTaskCalibrationState(task) === "estimated") return "upcoming";
   const today = new Date();
   const dueDate = task.next_due_date ? parseISO(task.next_due_date) : null;
 
@@ -192,6 +198,7 @@ export default function VehicleDetailScreen() {
 
   const [reminderMoment, setReminderMoment] = useState<{ task: any; title: string; statusLine: string; costLine: string | null } | null>(null);
   const reminderRef = useRef<ReminderMomentHandle>(null);
+  const calibrationRef = useRef<CalibrationSheetHandle>(null);
   const reminderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reminderFiredRef = useRef<string | null>(null);
   const costEstimatesRef = useRef<Record<string, any> | undefined>(undefined);
@@ -357,6 +364,16 @@ export default function VehicleDetailScreen() {
       status: calcStatus(t, vehicle),
     }));
   }, [scheduleTasks, vehicle]);
+
+  const estimatedTasks = useMemo(
+    () =>
+      (scheduleTasks ?? []).filter(
+        (t: any) =>
+          vehicleTaskCalibrationState(t) === "estimated" &&
+          vehicleTaskHasCalibratableAxis(t, vehicle, vehicleMode),
+      ),
+    [scheduleTasks, vehicle, vehicleMode],
+  );
 
   // Reminder-fired moment: when opened from a maintenance reminder
   // (reminder === "1") and the tapped task is genuinely overdue, surface a
@@ -1657,12 +1674,19 @@ export default function VehicleDetailScreen() {
                       </Text>
                     </Pressable>
                   )}
+                  <CalibrationEntryCard
+                    count={estimatedTasks.length}
+                    tint={Colors.vehicle}
+                    onPress={() => calibrationRef.current?.present()}
+                  />
+                  {estimatedTasks.length === 0 && (
                   <View style={{ backgroundColor: Colors.card, borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, padding: 12, marginHorizontal: 16, marginTop: 8, marginBottom: 12, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
                     <Icon name="information-circle-outline" size={18} color={Colors.dueSoon} style={{ marginTop: 1 }} />
                     <Text style={{ ...Typography.footnote, color: Colors.dueSoon, flex: 1 }}>
                       This schedule is estimated from your current usage. Tap any task to log your last service date for more accurate due dates.
                     </Text>
                   </View>
+                  )}
                   {actionNeededTasks.length > 0 && (
                     <ScheduleSection
                       title={`Action Needed (${actionNeededTasks.length})`}
@@ -1763,6 +1787,11 @@ export default function VehicleDetailScreen() {
                       Your plan is ready.
                     </Reanimated.Text>
                   )}
+                  <CalibrationEntryCard
+                    count={estimatedTasks.length}
+                    tint={Colors.vehicle}
+                    onPress={() => calibrationRef.current?.present()}
+                  />
                   {actionNeededTasks.length > 0 && (
                     <ScheduleSection
                       title={`Action Needed (${actionNeededTasks.length})`}
@@ -2085,6 +2114,23 @@ export default function VehicleDetailScreen() {
           if (reminderTimerRef.current) { clearTimeout(reminderTimerRef.current); reminderTimerRef.current = null; }
         }}
       />
+
+      <CalibrationSheet
+        ref={calibrationRef}
+        vertical="vehicle"
+        tint={Colors.vehicle}
+        tasks={estimatedTasks.map((t: any) => ({
+          id: t.id,
+          label: t.name,
+          intervalHint: formatIntervalUsage(t, vehicle) ?? (t.interval_months ? `every ${t.interval_months} months` : null),
+        }))}
+        onApplied={(result) => {
+          refetchSchedule();
+          queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+          if (user?.id) scheduleMaintenanceNotifications(user.id).catch(() => {});
+          if (result.applied === 0) showToast("No updates applied");
+        }}
+      />
     </View>
   );
 }
@@ -2256,15 +2302,23 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, costEstim
   const lastCompletedUsage = taskLastCompletedUsage(task, vehicle);
   const tracksHrs = isHoursTracked(vehicle);
 
+  const calibState = vehicleTaskCalibrationState(task);
+  // Both estimated and calibrated rows keep the "Est." label; only confirmed drops it.
+  const showEstLabel = calibState !== "confirmed";
+
   const dueParts: string[] = [];
   if (!isCompleted) {
-    if (nextDueUsage != null) dueParts.push(`Due at ${formatUsageValue(nextDueUsage, vehicle)}`);
+    if (nextDueUsage != null) dueParts.push(`${showEstLabel ? "Est. due" : "Due"} at ${formatUsageValue(nextDueUsage, vehicle)}`);
     if (task.next_due_date != null) dueParts.push(format(parseISO(task.next_due_date), "MMM d, yyyy"));
     if (dueParts.length === 0) dueParts.push("No schedule set");
   } else if (task.last_completed_date) {
     dueParts.push(`Completed ${format(parseISO(task.last_completed_date), "MMM d, yyyy")}`);
   }
-  const dueText = dueParts.join(" · ");
+  let dueText = dueParts.join(" · ");
+  // Date-only rows carry no usage part, so the label goes on the date itself.
+  if (!isCompleted && showEstLabel && nextDueUsage == null && task.next_due_date != null) {
+    dueText = `Est. due ${dueText}`;
+  }
   let lastServicedText: string | null = null;
   if (!isCompleted && task.last_completed_date) {
     const lastDate = format(parseISO(task.last_completed_date), "MMM d, yyyy");
@@ -2298,6 +2352,13 @@ function ScheduleTaskCard({ task, vehicle, onMarkComplete, onEditTask, costEstim
             {dueText}
           </Text>
         )}
+        {calibState === "estimated" ? (
+          <Pressable onPress={() => onMarkComplete(task)} hitSlop={6}>
+            <Text style={{ ...Typography.footnote, color: Colors.vehicle, marginTop: 2 }}>
+              Confirm last service →
+            </Text>
+          </Pressable>
+        ) : null}
         {!!lastServicedText && (
           <Text style={{ ...Typography.caption, fontWeight: "600", color: Colors.textSecondary, marginTop: 4 }}>
             {lastServicedText}

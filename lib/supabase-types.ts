@@ -1229,6 +1229,7 @@ export type Database = {
           interval: string | null
           is_completed: boolean | null
           last_completed_at: string | null
+          last_completed_source: string | null
           next_due_date: string | null
           notes: string | null
           priority: string
@@ -1248,6 +1249,7 @@ export type Database = {
           interval?: string | null
           is_completed?: boolean | null
           last_completed_at?: string | null
+          last_completed_source?: string | null
           next_due_date?: string | null
           notes?: string | null
           priority?: string
@@ -1267,6 +1269,7 @@ export type Database = {
           interval?: string | null
           is_completed?: boolean | null
           last_completed_at?: string | null
+          last_completed_source?: string | null
           next_due_date?: string | null
           notes?: string | null
           priority?: string
@@ -1872,6 +1875,7 @@ export type Database = {
           last_completed_date: string | null
           last_completed_hours: number | null
           last_completed_miles: number | null
+          last_completed_source: string | null
           name: string
           next_due_date: string | null
           next_due_hours: number | null
@@ -1897,6 +1901,7 @@ export type Database = {
           last_completed_date?: string | null
           last_completed_hours?: number | null
           last_completed_miles?: number | null
+          last_completed_source?: string | null
           name: string
           next_due_date?: string | null
           next_due_hours?: number | null
@@ -1922,6 +1927,7 @@ export type Database = {
           last_completed_date?: string | null
           last_completed_hours?: number | null
           last_completed_miles?: number | null
+          last_completed_source?: string | null
           name?: string
           next_due_date?: string | null
           next_due_hours?: number | null
@@ -2302,6 +2308,14 @@ export type Database = {
         Returns: string
       }
       _lm_table_exists: { Args: { p_table: string }; Returns: boolean }
+      calibrate_property_tasks: {
+        Args: { p_items: Json }
+        Returns: Json
+      }
+      calibrate_vehicle_tasks: {
+        Args: { p_items: Json }
+        Returns: Json
+      }
       check_rate_limit: {
         Args: {
           p_fn_name: string
