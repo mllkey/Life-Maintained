@@ -343,6 +343,7 @@ export default function AddPropertyScreen() {
     queryClient.invalidateQueries({ queryKey: ["properties"] });
     queryClient.invalidateQueries({ queryKey: ["properties", user.id] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard_counts"] });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     if (newProperty?.id) {
       capture("property_added", {

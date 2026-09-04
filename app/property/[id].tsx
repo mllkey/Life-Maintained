@@ -67,6 +67,25 @@ function getStatus(task: {
   return "good";
 }
 
+function formatPropertyIntervalHint(task: {
+  interval_months?: number | null;
+  interval?: string | null;
+}): string | null {
+  // Mirror the server's effective-interval rule: true stored months when
+  // positive, else the legacy bucket — humanized either way.
+  const m = task.interval_months;
+  if (typeof m === "number" && m > 0) {
+    if (m === 1) return "Monthly";
+    if (m === 12) return "Annually";
+    return `Every ${m} months`;
+  }
+  if (task.interval) {
+    const words = task.interval.replace(/_/g, " ");
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+  return null;
+}
+
 // Date-only "Overdue by ..." line for the reminder-fired moment.
 function buildOverdueDaysLine(nextDueDate: string | null): string {
   if (!nextDueDate) return "Overdue";
@@ -1182,7 +1201,7 @@ export default function PropertyDetailScreen() {
         tasks={estimatedTasks.map((t: any) => ({
           id: t.id,
           label: t.task,
-          intervalHint: t.interval ?? null,
+          intervalHint: formatPropertyIntervalHint(t),
         }))}
         onApplied={(result) => {
           refetch();
