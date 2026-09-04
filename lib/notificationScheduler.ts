@@ -161,8 +161,8 @@ export async function upsertPushToken(userId: string): Promise<UpsertPushTokenRe
   return { ok: true, token, reason: null };
 }
 
-export type NotifAssetKind = "vehicle" | "property" | "family_member" | "health";
-export type NotifTaskKind = "vehicle_task" | "property_task" | "health_appointment" | "medication";
+export type NotifAssetKind = "vehicle" | "property" | "family_member" | "health" | "digest";
+export type NotifTaskKind = "vehicle_task" | "property_task" | "health_appointment" | "medication" | "digest";
 
 type Candidate = {
   body: string;
@@ -172,6 +172,10 @@ type Candidate = {
   assetKind: NotifAssetKind;
   taskId: string;
   taskKind: NotifTaskKind;
+  taskName: string;
+  assetName: string;
+  shortLabel: string;
+  isUrgent: boolean;
 };
 
 export async function scheduleMaintenanceNotifications(userId: string): Promise<boolean> {
@@ -303,16 +307,16 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
 
       const advDays = prefs.advanceDays ?? 14;
       const OFFSETS = [
-        ...(advDays >= 30 ? [{ days: -30, label: "is due in 30 days" }] : []),
-        ...(advDays >= 14 ? [{ days: -14, label: "is due in 2 weeks" }] : []),
-        ...(advDays >= 7 ? [{ days: -7, label: "is due in 7 days" }] : []),
-        { days: -3, label: "is due in 3 days" },
-        { days: 0, label: "is due today" },
-        { days: 7, label: "is 7 days overdue" },
+        ...(advDays >= 30 ? [{ days: -30, label: "is due in 30 days", short: "in 30 days" }] : []),
+        ...(advDays >= 14 ? [{ days: -14, label: "is due in 2 weeks", short: "in 2 weeks" }] : []),
+        ...(advDays >= 7 ? [{ days: -7, label: "is due in 7 days", short: "in 7 days" }] : []),
+        { days: -3, label: "is due in 3 days", short: "in 3 days" },
+        { days: 0, label: "is due today", short: "due today" },
+        { days: 7, label: "is 7 days overdue", short: "overdue" },
       ];
 
       let pushedAny = false;
-      for (const { days, label } of OFFSETS) {
+      for (const { days, label, short } of OFFSETS) {
         const triggerDate = new Date(dueDate.getTime());
         triggerDate.setDate(triggerDate.getDate() + days);
         triggerDate.setHours(hour, minute, 0, 0);
@@ -340,6 +344,10 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
           assetKind,
           taskId,
           taskKind,
+          taskName,
+          assetName,
+          shortLabel: short,
+          isUrgent: days >= 0,
         });
         pushedAny = true;
       }
@@ -359,6 +367,10 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
             assetKind,
             taskId,
             taskKind,
+            taskName,
+            assetName,
+            shortLabel: `${Math.abs(daysUntilDue)} days overdue`,
+            isUrgent: true,
           });
         }
       }
@@ -450,6 +462,10 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
           assetKind: "vehicle",
           taskId: task.id,
           taskKind: "vehicle_task",
+          taskName: task.name,
+          assetName,
+          shortLabel: `${Math.abs(Math.round(usageRemaining)).toLocaleString()} ${usageUnit} overdue`,
+          isUrgent: true,
         });
       } else if (usageDueSoon && (daysToDateDue === null || daysToDateDue >= dateCoverageDays)) {
         // Usage due-soon fires unless the date ladder already covers this task
@@ -462,6 +478,10 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
           assetKind: "vehicle",
           taskId: task.id,
           taskKind: "vehicle_task",
+          taskName: task.name,
+          assetName,
+          shortLabel: `in ${Math.round(usageRemaining).toLocaleString()} ${usageUnit}`,
+          isUrgent: false,
         });
       }
     }
@@ -554,6 +574,59 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         }
       }
     }
+
+    // ── Same-time digest collapse ───────────────────────────────────────
+    // One candidate per task per minute first: the date ladder and the
+    // usage pass can both target the same task for the same morning; keep
+    // the more urgent (lower priority) so neither singles nor digests
+    // repeat a task.
+    const dedupe = new Map<string, Candidate>();
+    for (const c of candidates) {
+      const key = `${Math.floor(c.triggerDate.getTime() / 60000)}|${c.taskKind}|${c.taskId}`;
+      const prev = dedupe.get(key);
+      if (!prev || c.priority < prev.priority) dedupe.set(key, c);
+    }
+    const dedupedCandidates = [...dedupe.values()];
+
+    // Reminders resolving to the same effective fire minute (post quiet-
+    // hours shift) group together; 3+ collapse into one digest so a fresh
+    // schedule never buries the user in simultaneous banners. Grouping by
+    // effective time (not calendar day) preserves any distinct times and
+    // is immune to midnight/DST boundary questions.
+    type ScheduleUnit =
+      | { kind: "single"; c: Candidate }
+      | { kind: "digest"; triggerDate: Date; priority: number; items: Candidate[] };
+
+    const byMinute = new Map<number, Candidate[]>();
+    for (const c of dedupedCandidates) {
+      const key = Math.floor(c.triggerDate.getTime() / 60000);
+      const arr = byMinute.get(key);
+      if (arr) arr.push(c);
+      else byMinute.set(key, [c]);
+    }
+
+    const units: ScheduleUnit[] = [];
+    for (const group of byMinute.values()) {
+      if (group.length <= 2) {
+        for (const c of group) units.push({ kind: "single", c });
+      } else {
+        units.push({
+          kind: "digest",
+          triggerDate: group[0].triggerDate,
+          priority: Math.min(...group.map(g => g.priority)),
+          items: group,
+        });
+      }
+    }
+
+    units.sort((a, b) => {
+      const pa = a.kind === "single" ? a.c.priority : a.priority;
+      const pb = b.kind === "single" ? b.c.priority : b.priority;
+      if (pa !== pb) return pa - pb;
+      const ta = a.kind === "single" ? a.c.triggerDate.getTime() : a.triggerDate.getTime();
+      const tb = b.kind === "single" ? b.c.triggerDate.getTime() : b.triggerDate.getTime();
+      return ta - tb;
+    });
 
     await Notifications.cancelAllScheduledNotificationsAsync();
 
@@ -672,7 +745,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
 
     // ── Date-based maintenance notifications (fills remaining budget) ──
     const maintenanceBudget = Math.max(0, TOTAL_NOTIFICATION_BUDGET - medicationsScheduled);
-    const toSchedule = candidates.slice(0, maintenanceBudget);
+    const toSchedule = units.slice(0, maintenanceBudget);
 
     if (__DEV__) {
       console.log("[NotifScheduler] scheduling run:", {
@@ -689,11 +762,14 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
         medicationsParseSkipped,
         maintenanceBudget,
         scheduledCount: toSchedule.length,
+        digestCount: toSchedule.filter(u => u.kind === "digest").length,
         totalBudget: TOTAL_NOTIFICATION_BUDGET,
       });
     }
 
-    for (const { body, triggerDate, assetId, assetKind, taskId, taskKind } of toSchedule) {
+    for (const unit of toSchedule) {
+      if (unit.kind === "single") {
+        const { body, triggerDate, assetId, assetKind, taskId, taskKind } = unit.c;
       const tt = triggerDate.getTime();
       if (!Number.isFinite(tt)) {
         if (__DEV__) {
@@ -733,6 +809,67 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
           .then(() => {}, () => {});
       } catch (err) {
         console.warn("[NotifScheduler] scheduleNotificationAsync threw:", err);
+      }
+      } else {
+        const n = unit.items.length;
+        const urgent = unit.items.some(i => i.isUrgent);
+        const lead = urgent ? `${n} things need attention` : `${n} upcoming reminders`;
+        const shown = unit.items.slice(0, 3)
+          .map(i => `${i.taskName} (${i.assetName}) — ${i.shortLabel}`)
+          .join(" · ");
+        const more = n > 3 ? ` · +${n - 3} more` : "";
+        const body = `\u{1F527} ${lead}: ${shown}${more}`;
+
+        const tt = unit.triggerDate.getTime();
+        if (!Number.isFinite(tt)) {
+          if (__DEV__) {
+            console.warn("[NotifScheduler] skipped digest for invalid trigger:", { itemCount: n });
+          }
+          continue;
+        }
+        if (tt - now.getTime() > MAX_FUTURE_MS) {
+          if (__DEV__) {
+            console.warn("[NotifScheduler] skipped digest for far-future trigger:", { itemCount: n });
+          }
+          continue;
+        }
+        try {
+          const digestNotifId = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "LifeMaintained",
+              body,
+              sound: true,
+              data: { assetId: "digest", assetKind: "digest", taskId: "digest", taskKind: "digest" },
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DATE,
+              date: unit.triggerDate,
+            },
+          });
+          // Best-effort schedule-event insert for notification audit history.
+          supabase
+            .from("notification_events")
+            .insert({
+              user_id: userId,
+              notif_id: digestNotifId,
+              asset_kind: "digest",
+              task_kind: "digest",
+              scheduled_for: unit.triggerDate.toISOString(),
+            })
+            .then(() => {}, () => {});
+        } catch (err) {
+          console.warn("[NotifScheduler] digest scheduleNotificationAsync threw:", err);
+          try {
+            Sentry.captureException(err, {
+              extra: {
+                context: "digest scheduleNotificationAsync",
+                userId,
+                itemCount: n,
+                triggerIso: unit.triggerDate.toISOString(),
+              },
+            });
+          } catch {}
+        }
       }
     }
 

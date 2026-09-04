@@ -404,6 +404,16 @@ function RootLayoutNav() {
       return;
     }
 
+    // A digest stands for many tasks at one fire time, so there is no single
+    // task to open: it lands on the dashboard before any per-task lookup.
+    if (d?.taskKind === "digest" || d?.assetKind === "digest") {
+      addNotifDeepLinkBreadcrumb("route_attempt", { source, reqId, route: "digest_dashboard", assetId, taskId, paramKeys: "" });
+      router.push("/(tabs)");
+      handledNotifIds.current.add(reqId);
+      addNotifDeepLinkBreadcrumb("route_completed", { source, reqId, route: "digest_dashboard" });
+      return;
+    }
+
     try {
       let route: string | null = null;
       if (assetKind === "vehicle" && taskKind === "vehicle_task") {
