@@ -199,7 +199,7 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
     }
 
     const { status } = await Notifications.getPermissionsAsync();
-    if (status !== "granted") return false;
+    if (status !== "granted") { if (__DEV__) console.log("[NotifScheduler] skipped scheduling run: notification permission not granted"); return false; }
 
     // Register/refresh the push token whenever OS permission is granted,
     // regardless of the in-app pushEnabled toggle.
@@ -902,14 +902,13 @@ export async function scheduleMaintenanceNotifications(userId: string): Promise<
             ts,
           };
         })
-        .filter((x: any) => x.ts != null)
-        .sort((a: any, b: any) => a.ts - b.ts);
+        .sort((a: any, b: any) => (Number.isFinite(a.ts) ? a.ts : Number.MAX_SAFE_INTEGER) - (Number.isFinite(b.ts) ? b.ts : Number.MAX_SAFE_INTEGER));
 
       console.log("[NotifScheduler] next scheduled reminders:", normalized.slice(0, 5).map((x: any) => ({
         title: x.title,
         body: x.body,
-        iso: new Date(x.ts).toISOString(),
-        local: new Date(x.ts).toString(),
+        iso: Number.isFinite(x.ts) && Math.abs(x.ts) <= 8.64e15 ? new Date(x.ts).toISOString() : "unknown-trigger-shape",
+        local: Number.isFinite(x.ts) && Math.abs(x.ts) <= 8.64e15 ? new Date(x.ts).toString() : "unknown-trigger-shape",
       })));
     }
 

@@ -158,8 +158,7 @@ export default forwardRef<
         <View style={styles.grabber} />
         <Text style={styles.title}>Confirm history</Text>
         <Text style={styles.subtitle}>
-          When was each of these last done? Rough answers are fine — we&apos;ll
-          anchor the schedule to them.
+          When was each of these last done? "Done recently" starts a fresh maintenance cycle from today; "A while back" assumes you're about halfway through it.
         </Text>
 
         <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 8 }}>
@@ -203,6 +202,10 @@ export default forwardRef<
             <Text style={styles.errorText}>{errorText}</Text>
           </View>
         ) : null}
+
+        <Text style={styles.exactDateHint}>
+          Know the exact date? You can log it from the task list later for a more precise schedule.
+        </Text>
 
         <Pressable
           onPress={apply}
@@ -269,6 +272,7 @@ const styles = StyleSheet.create({
   },
   chipText: { ...Typography.footnote, color: Colors.textSecondary },
   errorRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
+  exactDateHint: { ...Typography.caption, color: Colors.textTertiary, marginTop: 10, textAlign: "center" },
   errorText: { ...Typography.footnote, color: Colors.overdue, flex: 1 },
   applyButton: {
     marginTop: 12,
