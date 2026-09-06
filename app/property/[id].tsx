@@ -1204,6 +1204,18 @@ export default function PropertyDetailScreen() {
           intervalHint: formatPropertyIntervalHint(t),
         }))}
         onApplied={(result) => {
+          if (result.applied > 0) {
+            queryClient.setQueryData(
+              ["property_tasks", id],
+              (old: any[] | undefined) =>
+                old?.map((t: any) =>
+                  result.applied_task_ids.includes(t.id)
+                    ? { ...t, last_completed_source: "calibrated" }
+                    : t,
+                ),
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: ["property_tasks", id] });
           refetch();
           queryClient.invalidateQueries({ queryKey: ["dashboard"] });
           queryClient.invalidateQueries({ queryKey: ["dashboard", user?.id] });

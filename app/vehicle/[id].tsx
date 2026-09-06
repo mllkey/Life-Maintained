@@ -2125,6 +2125,18 @@ export default function VehicleDetailScreen() {
           intervalHint: formatIntervalUsage(t, vehicle) ?? (t.interval_months ? `every ${t.interval_months} months` : null),
         }))}
         onApplied={(result) => {
+          if (result.applied > 0) {
+            queryClient.setQueryData(
+              ["user_vehicle_maintenance_tasks", id],
+              (old: any[] | undefined) =>
+                old?.map((t: any) =>
+                  result.applied_task_ids.includes(t.id)
+                    ? { ...t, last_completed_source: "calibrated" }
+                    : t,
+                ),
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: ["user_vehicle_maintenance_tasks", id] });
           refetchSchedule();
           queryClient.invalidateQueries({ queryKey: ["dashboard"] });
           if (user?.id) scheduleMaintenanceNotifications(user.id).catch(() => {});
