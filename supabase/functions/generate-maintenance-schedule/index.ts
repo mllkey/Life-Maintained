@@ -365,6 +365,10 @@ Deno.serve(async (req: Request) => {
     }
     interface IntervalClamp {
       match: RegExp[];
+      // A task whose name satisfies `exclude` never matches this entry, however
+      // well `match` fits. Keeps the engine-oil entries off non-engine
+      // lubricants and the chain entries off primary/cam/timing chains.
+      exclude?: (name: string) => boolean;
       max_months?: number;
       min_months?: number;
       max_miles?: number;
@@ -374,6 +378,9 @@ Deno.serve(async (req: Request) => {
     }
     interface RequiredTask {
       match: RegExp[];
+      // See IntervalClamp.exclude. A task the entry excludes cannot satisfy the
+      // entry either, so the real required service is still injected.
+      exclude?: (name: string) => boolean;
       task: string;
       description: string;
       category: string;
@@ -415,11 +422,11 @@ Deno.serve(async (req: Request) => {
       // Coolant: most air-cooled bikes lack it; liquid-cooled mfrs say 2-3 years.
       { match: [/coolant/i], max_months: 24, max_miles: 24000 },
       // Oil: Kawasaki ZX-10R/Yamaha R1 say every 3,750 mi or 6 mo. Cap at 6 mo (not 12) for safety.
-      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 6, max_miles: 4000, min_miles: 2000 },
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], exclude: (n) => isNonEngineLubricantName(n), max_months: 6, max_miles: 4000, min_miles: 2000 },
       // Chain lube: most chain manufacturers say every 300-400 mi; 500 mi is the absolute max.
-      { match: [/chain.*clean/i, /chain.*lube/i, /chain.*lubrication/i, /chain maintenance/i], max_months: 1, max_miles: 500, min_miles: 200 },
+      { match: [/chain.*clean/i, /chain.*lube/i, /chain.*lubrication/i, /chain maintenance/i], exclude: (n) => /timing|cam\b|primary/i.test(n), max_months: 1, max_miles: 500, min_miles: 200 },
       // Chain tension: Kawasaki says every 600 mi; 3,000 mi is a reasonable outer bound.
-      { match: [/chain.*adjust/i, /chain.*tension/i], max_months: 6, max_miles: 3000, min_miles: 600 },
+      { match: [/chain.*adjust/i, /chain.*tension/i], exclude: (n) => /timing|cam\b|primary/i.test(n), max_months: 6, max_miles: 3000, min_miles: 600 },
       // Valve clearance: ZX-10R 7,500 mi; R1 11,250 mi; CBR600RR 8,000 mi. 10k is a safe outer bound.
       { match: [/valve.*check/i, /valve.*clearance/i, /valve.*adjust/i, /valve.*inspection/i], max_months: 18, max_miles: 10000, min_miles: 3000 },
       // Tire inspect: safety-critical; inspect at least every 3,000 mi or 3 months. More frequent than before.
@@ -439,7 +446,7 @@ Deno.serve(async (req: Request) => {
       // Coolant: traditional green = 2 yr/30k mi; long-life OAT = 5 yr/150k. Cap at 3 yr/60k (conservative middle ground).
       { match: [/coolant/i], max_months: 36, max_miles: 60000 },
       // Oil: conventional = 3,000-5,000 mi / 6 mo. Already tightened last pass.
-      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 6, max_miles: 7500, min_miles: 3000 },
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], exclude: (n) => isNonEngineLubricantName(n), max_months: 6, max_miles: 7500, min_miles: 3000 },
       // Transmission fluid: most mfrs recommend 30,000-45,000 mi for conventional ATF/MTF.
       { match: [/transmission.*fluid/i], max_months: 36, max_miles: 45000 },
       // Brake pad inspection: most mfrs say every 12,000-15,000 mi or annually. 20,000 mi cap is conservative.
@@ -523,14 +530,14 @@ Deno.serve(async (req: Request) => {
     ];
 
     const MOTORCYCLE_REQUIRED: RequiredTask[] = [
-      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], task: "Engine Oil & Filter Change", description: "Change engine oil and replace oil filter per manufacturer spec", category: "Engine", interval_miles: 4000, interval_hours: null, interval_months: 6, priority: "high" },
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], exclude: (n) => isNonEngineLubricantName(n), task: "Engine Oil & Filter Change", description: "Change engine oil and replace oil filter per manufacturer spec", category: "Engine", interval_miles: 4000, interval_hours: null, interval_months: 6, priority: "high" },
       { match: [/brake.*fluid/i], task: "Brake Fluid Flush", description: "Replace brake fluid to maintain stopping performance", category: "Brakes", interval_miles: null, interval_hours: null, interval_months: 24, priority: "high" },
       { match: [/valve.*check/i, /valve.*clearance/i, /valve.*adjust/i, /valve.*inspection/i], task: "Valve Check / Adjustment", description: "Check and adjust valve clearances per manufacturer spec", category: "Engine", interval_miles: 15000, interval_hours: null, interval_months: 24, priority: "high" },
       { match: [/brake.*pad/i, /brake.*inspection/i], task: "Brake Pad Inspection", description: "Inspect brake pads for wear and replace if needed", category: "Brakes", interval_miles: 7500, interval_hours: null, interval_months: 12, priority: "high" },
       { match: [/tire.*inspect/i, /tire.*check/i, /tire.*wear/i, /tire.*pressure/i], task: "Tire Inspection", description: "Inspect tires for wear, damage, and proper pressure", category: "Safety", interval_miles: 3000, interval_hours: null, interval_months: 3, priority: "high" },
     ];
     const CAR_TRUCK_REQUIRED: RequiredTask[] = [
-      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], task: "Engine Oil & Filter Change", description: "Change engine oil and replace oil filter", category: "Engine", interval_miles: 5000, interval_hours: null, interval_months: 6, priority: "high" },
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], exclude: (n) => isNonEngineLubricantName(n), task: "Engine Oil & Filter Change", description: "Change engine oil and replace oil filter", category: "Engine", interval_miles: 5000, interval_hours: null, interval_months: 6, priority: "high" },
       { match: [/brake.*fluid/i], task: "Brake Fluid Flush", description: "Replace brake fluid", category: "Brakes", interval_miles: null, interval_hours: null, interval_months: 24, priority: "high" },
       { match: [/brake.*pad/i, /brake.*inspection/i], task: "Brake Pad Inspection", description: "Inspect brake pads and rotors for wear", category: "Brakes", interval_miles: 20000, interval_hours: null, interval_months: 12, priority: "high" },
       { match: [/tire.*rotation/i], task: "Tire Rotation", description: "Rotate tires for even wear", category: "Tires", interval_miles: 7500, interval_hours: null, interval_months: 6, priority: "medium" },
@@ -580,6 +587,7 @@ Deno.serve(async (req: Request) => {
     }
     function clampTask(t: ValidatedTask, clamps: IntervalClamp[]): ValidatedTask {
       for (const c of clamps) {
+        if (c.exclude && c.exclude(t.task)) continue;
         if (c.match.some(re => re.test(t.task))) {
           let mi = t.interval_miles;
           let hr = t.interval_hours;
@@ -612,6 +620,174 @@ Deno.serve(async (req: Request) => {
     // hash and has a single definition. Behaviour unchanged.
     const PROTECTED_NAMES = ["Engine Oil and Filter Change", "Clean, Lubricate, and Adjust Chain", "Inspect Brake Pads", "Check Tire Pressure and Condition", "Check and Adjust Valve Clearance"];
 
+    // ── Motorcycle drivetrain correctness (deterministic) ─────────────────
+    // A bike's final drive is chain, belt, or shaft, and the services differ
+    // completely. The model is unreliable about drive type, so drive type is
+    // decided here and enforced on every path that can produce a schedule:
+    // the cache-hit path, the fresh-generation path (early AND late), and the
+    // template fallback. Hoisted so all four share one definition, and folded
+    // into the rules hash below so changing a list invalidates cached rows.
+    // Function declarations, not consts: the clamp/required tables above are
+    // initialised earlier in this block and reference the name classifiers.
+
+    // Verified CHAIN-drive models whose names fall inside a belt/shaft/ambiguous
+    // family. Checked FIRST so a family pattern can never mis-strip them.
+    // NOTE: Buell 1125R/CR is factory BELT and stays covered by /\bbuell\b/i —
+    // no 1125 exception. Honda Shadow Spirit/Phantom are SHAFT, so the Shadow
+    // family stays in the ambiguous list rather than becoming an exception.
+    const CHAIN_DRIVE_EXCEPTIONS: RegExp[] = [
+      /pan\s*america/i, /\bra1250\b/i,
+      /\bftr\b/i,
+      /\bebr\b/i, /\b1190\s?(rx|sx|rs)\b/i,
+      /\bx\s?350\b/i, /\bx\s?440\b/i,
+      /vulcan\s*s\b/i,
+      /\bvlx\b/i,
+    ];
+
+    // SHAFT final drive: gear oil service, never chain, never belt.
+    const SHAFT_DRIVE_MODELS: RegExp[] = [
+      /gold\s*wing/i, /\bgl1\d{3}\b/i, /\bvalkyrie\b/i, /\bst1\d{3}\b/i, /\bnt\d{3}\b/i, /deauville/i,
+      /moto\s*guzzi/i, /\bural\b/i,
+      /\bfjr\s?1300\b|\bfjr\b/i, /super\s*t[eé]n[eé]r[eé]|\bxt1200\b/i, /\bv-?max\b/i,
+      /concours/i, /\bgtr\s?14\d{2}\b/i, /\b14\d{2}\s?gtr\b/i,
+      /\bvfr\s?1200/i, /\bctx\s?1300\b/i, /pacific\s*coast/i,
+      /rocket\s*(iii|3\b)/i, /tiger\s*explorer/i, /\btiger\s?1200\b/i,
+      /\bcavalcade\b/i, /\bventure\b/i,
+    ];
+
+    // BELT final drive: belt inspection/tension, never chain, never gear oil.
+    const BELT_DRIVE_MODELS: RegExp[] = [
+      /harley|h-?d\b|sportster|softail|street\s*glide|road\s*glide|road\s*king|fat\s*boy|electra\s*glide|\bdyna\b|\bflh|\bfxd|\bxl\d/i,
+      /\bindian\b|chieftain|roadmaster|\bscout\b|\bchief\b|springfield/i,
+      /\bbuell\b/i, /\bvictory\b/i,
+      /\bf\s?800\s?(gt|st)\b/i,
+      /roadliner/i, /stratoliner/i, /\braider\b/i, /road\s*star/i, /\bstryker\b/i, /\beluder\b/i, /\bbolt\b/i,
+    ];
+
+    // Drive varies by year/variant within these families (e.g. Shadow Spirit is
+    // shaft, Shadow Phantom is shaft, Vulcan S is chain). Strip final-drive
+    // chain tasks — always wrong for the shaft/belt majority — but inject
+    // nothing, because we cannot tell shaft from belt without the variant.
+    const AMBIGUOUS_NON_CHAIN_MODELS: RegExp[] = [/\bvulcan\b/i, /boulevard/i, /\bshadow\b/i];
+
+    const FINAL_DRIVE_TASKS: { shaft: ValidatedTask; belt: ValidatedTask } = {
+      shaft: { task: "Change Final Drive Gear Oil", description: "Drain and refill the final drive (shaft) gear oil. Typical interval 12,000-16,000 miles or 2 years; confirm against your owner's manual.", category: "Drivetrain", interval_miles: 12000, interval_hours: null, interval_months: 24, priority: "medium" },
+      belt: { task: "Inspect Final Drive Belt", description: "Inspect drive belt tension and condition for cracks, missing teeth, and wear; adjust tension per spec. Typical interval 5,000 miles or annually; confirm against your owner's manual.", category: "Drivetrain", interval_miles: 5000, interval_hours: null, interval_months: 12, priority: "medium" },
+    };
+
+    // BMW: R and K twins/fours are shaft; F/G singles and parallel twins and the
+    // S1000 family are chain (the F800GT/ST are belt, handled by the belt list —
+    // reachable only because the F exclusion keeps them out of shaft).
+    function isBmwShaftDrive(mkmdl: string): boolean {
+      return /\bbmw\b/i.test(mkmdl)
+        && (/\br\s?\d{2,4}/i.test(mkmdl) || /\bk\s?\d{3,4}/i.test(mkmdl) || /\br\s?9\s?t\b/i.test(mkmdl) || /\br\s?nine\s?t\b/i.test(mkmdl))
+        && !/\b[fg]\s?\d{2,4}/i.test(mkmdl)
+        && !/\bs\s?1000/i.test(mkmdl);
+    }
+
+    // TIGHT. Confirmed final-drive lubricant services only — used for reciprocal
+    // stripping and for the "is it already there?" injection check. A generic
+    // "Gear Oil Change" or a gearbox/transmission oil task must NOT qualify.
+    function isFinalDriveOilName(n: string): boolean {
+      return /(final|rear|shaft)\s*drive/i.test(n) && /\boil\b|fluid|lube/i.test(n);
+    }
+    // TIGHT. Confirmed final-drive belt services only. A CVT/transmission belt
+    // (e.g. a BMW C650 scooter) must NOT qualify.
+    function isFinalDriveBeltName(n: string): boolean {
+      return /\bbelt\b/i.test(n) && /(drive|final)/i.test(n) && !/serpentine|timing|accessory|transmission|cvt|variator|primary/i.test(n);
+    }
+    // BROAD. Any lubricant service that is NOT engine oil — the exclusion for the
+    // engine-oil matchers only. A combined service that names engine oil
+    // explicitly ("Engine Oil and Transmission Oil Change" on a shared sump)
+    // stays eligible; a generic "Gear Oil Change" stays excluded.
+    function isNonEngineLubricantName(n: string): boolean {
+      return (/\bgear\b|gearbox|transmission|differential|(final|rear|shaft)\s*drive/i.test(n)) && !/engine\s*oil|motor\s*oil/i.test(n);
+    }
+    function hasChainWord(name: string): boolean {
+      const n = name.toLowerCase();
+      if (/timing chain|cam chain|primary chain/.test(n)) return false;
+      return /\bchain\b/.test(n) || /sprocket/.test(n);
+    }
+    function isChainMaintenance(name: string): boolean {
+      if (!hasChainWord(name)) return false;
+      const n = name.toLowerCase();
+      return /clean|lube|lubric|adjust|tension|maintenance|service|inspect/.test(n) && !/replace/.test(n);
+    }
+
+    type DriveType = "chain" | "shaft" | "belt" | "ambiguous" | "unknown";
+    // Order is load-bearing. Exceptions win over every family; "Royal Star" is
+    // shaft and must be settled before the belt-drive "Star Venture" (2018+),
+    // which in turn must be settled before the shaft list's bare /venture/.
+    function detectDriveType(mk: string, mdl: string): DriveType {
+      const mkmdl = `${mk} ${mdl}`;
+      if (CHAIN_DRIVE_EXCEPTIONS.some((re) => re.test(mkmdl))) return "chain";
+      if (/royal\s*star/i.test(mkmdl)) return "shaft";
+      if (/star\s*venture/i.test(mkmdl)) return "belt";
+      if (SHAFT_DRIVE_MODELS.some((re) => re.test(mkmdl)) || isBmwShaftDrive(mkmdl)) return "shaft";
+      if (BELT_DRIVE_MODELS.some((re) => re.test(mkmdl))) return "belt";
+      if (AMBIGUOUS_NON_CHAIN_MODELS.some((re) => re.test(mkmdl))) return "ambiguous";
+      return "unknown";
+    }
+
+    // Removes drivetrain services that cannot exist on this bike, in both
+    // directions, then collapses surviving final-drive chain MAINTENANCE tasks
+    // into one canonical entry (the family matcher is word-order sensitive and
+    // misses natural titles). Chain REPLACEMENT stays distinct; primary/cam/
+    // timing chains are never touched, because hasChainWord already excludes
+    // them. Motorcycles only — ATV/UTV/snowmobile and cars are untouched.
+    function applyDrivetrainStrip(tasks: ValidatedTask[], mk: string, mdl: string): ValidatedTask[] {
+      if (vehicleCategory !== "motorcycle") return tasks;
+      const driveType = detectDriveType(mk, mdl);
+      if (driveType === "shaft") return tasks.filter((t) => !hasChainWord(t.task) && !isFinalDriveBeltName(t.task));
+      if (driveType === "belt") return tasks.filter((t) => !hasChainWord(t.task) && !isFinalDriveOilName(t.task));
+      if (driveType === "ambiguous") return tasks.filter((t) => !hasChainWord(t.task));
+
+      let out = driveType === "chain"
+        ? tasks.filter((t) => !isFinalDriveBeltName(t.task) && !isFinalDriveOilName(t.task))
+        : tasks;
+
+      const chainIdxs: number[] = [];
+      out.forEach((t, i) => { if (isChainMaintenance(t.task)) chainIdxs.push(i); });
+      if (chainIdxs.length >= 1) {
+        let minMiles: number | null = null;
+        for (const ci of chainIdxs) {
+          const mi = out[ci].interval_miles;
+          if (mi !== null && (minMiles === null || mi < minMiles)) minMiles = mi;
+        }
+        const keepIdx = chainIdxs[0];
+        const existingDesc = (out[keepIdx].description ?? "").trim();
+        const merged = out.slice();
+        merged[keepIdx] = {
+          ...merged[keepIdx],
+          task: "Clean, Lubricate, and Adjust Chain",
+          description: existingDesc !== "" ? existingDesc : "Clean and lubricate drive chain, check and adjust tension. Recommended every 300-600 miles depending on riding conditions.",
+          interval_miles: minMiles !== null ? Math.max(minMiles, 300) : 500,
+          priority: "high",
+        };
+        const drop = new Set<number>(chainIdxs.slice(1));
+        out = merged.filter((_, i) => !drop.has(i));
+      }
+      return out;
+    }
+
+    // Adds the final-drive service the bike actually needs, when the schedule
+    // does not already carry a real one. A seal service, an inspection, or a
+    // generic "service" does not count as a gear-oil change; a replace-only
+    // belt task does not count as a belt inspection.
+    function injectFinalDriveService(tasks: ValidatedTask[], mk: string, mdl: string): ValidatedTask[] {
+      if (vehicleCategory !== "motorcycle") return tasks;
+      const driveType = detectDriveType(mk, mdl);
+      if (driveType === "shaft") {
+        const present = tasks.some((t) => isFinalDriveOilName(t.task) && /change|replace|drain|flush/i.test(t.task));
+        return present ? tasks : [...tasks, { ...FINAL_DRIVE_TASKS.shaft }];
+      }
+      if (driveType === "belt") {
+        const present = tasks.some((t) => isFinalDriveBeltName(t.task) && /inspect|tension|adjust|check/i.test(t.task));
+        return present ? tasks : [...tasks, { ...FINAL_DRIVE_TASKS.belt }];
+      }
+      return tasks;
+    }
+
     // -- Rules-versioned cache key -----------------------------------------
     // A cached schedule is only as current as the rules that shaped it. The
     // hash covers the rules DATA (required tables, clamps, exclusions,
@@ -619,7 +795,7 @@ Deno.serve(async (req: Request) => {
     // LOGIC - bump it whenever code in the generation/post-processing region
     // changes semantics without changing this data. Spurious invalidation
     // costs one model call; missing invalidation is the defect this fixes.
-    const RULES_EPOCH = 1;
+    const RULES_EPOCH = 2;
     const serializeRules = (v: unknown): unknown => {
       if (v instanceof RegExp) return String(v);
       if (v instanceof Set) return Array.from(v).sort();
@@ -639,6 +815,7 @@ Deno.serve(async (req: Request) => {
       iceOnly: ICE_ONLY,
       protectedNames: PROTECTED_NAMES,
       cats: { small: SMALL_EQUIPMENT_CATS, heavy: HEAVY_EQUIPMENT_CATS, dump: DUMP_CATEGORIES },
+      drivetrain: { exceptions: CHAIN_DRIVE_EXCEPTIONS, shaft: SHAFT_DRIVE_MODELS, belt: BELT_DRIVE_MODELS, ambiguous: AMBIGUOUS_NON_CHAIN_MODELS, finalDrive: FINAL_DRIVE_TASKS },
     }));
     let rulesHash = 0x811c9dc5;
     for (let i = 0; i < rulesBlob.length; i++) {
@@ -654,7 +831,7 @@ Deno.serve(async (req: Request) => {
       if (isEvFuel) v = v.filter(t => !isIceOnly(t.task));
       for (const req of required) {
         if (isEvFuel && isIceOnly(req.task)) continue;
-        if (!v.some(t => req.match.some(re => re.test(t.task)))) {
+        if (!v.some(t => !(req.exclude && req.exclude(t.task)) && req.match.some(re => re.test(t.task)))) {
           v.push({ task: req.task, description: req.description, category: normalizeCategory(req.category), interval_miles: req.interval_miles, interval_hours: req.interval_hours, interval_months: req.interval_months, priority: normalizePriority(req.priority) });
         }
       }
@@ -680,7 +857,7 @@ Deno.serve(async (req: Request) => {
       const out = tasks.slice();
       for (const req of required) {
         if (isEvFuel && isIceOnly(req.task)) continue;
-        if (!out.some(t => req.match.some(re => re.test(t.task)))) {
+        if (!out.some(t => !(req.exclude && req.exclude(t.task)) && req.match.some(re => re.test(t.task)))) {
           out.push({ task: req.task, description: req.description, category: normalizeCategory(req.category), interval_miles: req.interval_miles, interval_hours: req.interval_hours, interval_months: req.interval_months, priority: normalizePriority(req.priority) });
         }
       }
@@ -710,6 +887,11 @@ Deno.serve(async (req: Request) => {
             // any row that still slips through with a required task missing.
             preInjectionTaskCount = validatedTasks.length;
             validatedTasks = ensureRequiredTasks(validatedTasks, vehicleCategory);
+            // Same drivetrain guarantee the fresh path gets. A cached row can
+            // predate these rules or have been shaped by a model that guessed
+            // the drive type wrong, so it is corrected on the way out too.
+            validatedTasks = applyDrivetrainStrip(validatedTasks, make, vehicleModel);
+            validatedTasks = injectFinalDriveService(validatedTasks, make, vehicleModel);
           }
         } catch { console.warn("[CACHE] Parse failed"); }
       }
@@ -772,6 +954,7 @@ Rules:
 - Be specific to this exact year/make/model — do not use generic averages
 - Account for engine type, cooling type, drivetrain type, and asset category
 - For motorcycles: spark plug intervals are 3,000-7,500 miles for sport/supersport bikes, up to 16,000 miles for standard/touring — NEVER use car spark plug intervals (30,000-100,000 miles) for motorcycles
+- For motorcycles: FIRST determine this exact model's final drive type (chain, belt, or shaft). Include only final-drive services matching that type: chain cleaning/lubrication/adjustment and condition-based chain replacement for chain drive; belt inspection/tension and condition-based belt replacement for belt drive; final drive gear oil changes for shaft drive. NEVER include chain service on a shaft- or belt-driven motorcycle, and NEVER include belt or shaft final-drive service on a chain-driven motorcycle. Primary, cam, and timing chain services are engine services, not final-drive services, and are unaffected by this rule.
 - For cars and trucks: oil change intervals should reflect oil type — 3,000-5,000 miles for conventional oil, 5,000-7,500 miles for synthetic blend or full synthetic. Default to conventional (3,000-5,000 miles) unless the vehicle is known to require or recommend synthetic (e.g., turbocharged engines, European vehicles, luxury brands)
 - Each task description must include the recommended interval AND a realistic range
 - Do NOT assign identical intervals to unrelated tasks unless they are genuinely part of the same service milestone
@@ -841,75 +1024,21 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
             if (validatedTasks && !isHoursOnlyMode) {
               const isSmallMoto = (vehicleCategory === "motorcycle" || vehicleCategory === "atv" || vehicleCategory === "utv" || vehicleCategory === "snowmobile");
 
-              // ── Motorcycle drive-chain correctness (deterministic) ───────────
-              // Drive chain exists only on chain-driven bikes; the LLM is unreliable
-              // about drive type, so this is the hard guard. (1) Known shaft/belt
-              // models get every final-drive chain/sprocket task stripped. (2) Otherwise
-              // all final-drive chain MAINTENANCE tasks collapse into one canonical entry
-              // (the family matcher below is word-order sensitive and misses natural
-              // titles). Chain REPLACEMENT stays distinct; primary/timing/cam chains and
-              // cars are never touched. Scoped to motorcycles only (not ATV/UTV/snowmobile).
-              if (vehicleCategory === "motorcycle" && validatedTasks) {
-                const vt = validatedTasks;
-                const NON_CHAIN_DRIVE: RegExp[] = [
-                  /gold\s*wing/i, /\bgl1\d{3}\b/i, /\bvalkyrie\b/i, /\bst1\d{3}\b/i, /\bnt\d{3}\b/i, /deauville/i,
-                  /moto\s*guzzi/i, /\bural\b/i,
-                  /\bfjr\s?1300\b|\bfjr\b/i, /super\s*t[eé]n[eé]r[eé]|\bxt1200\b/i, /\bv-?max\b/i, /royal\s*star|\bventure\b/i,
-                  /harley|h-?d\b|sportster|softail|street\s*glide|road\s*glide|road\s*king|fat\s*boy|electra\s*glide|\bdyna\b|\bflh|\bfxd|\bxl\d/i,
-                  /\bindian\b|chieftain|roadmaster|\bscout\b|\bchief\b|springfield/i,
-                  /\bbuell\b/i, /\bvulcan\b/i, /boulevard/i, /\bshadow\b/i,
-                  // Shaft/belt models the LLM commonly mis-tags as chain (verified; no chain-bike overlap).
-                  /concours/i, /\bgtr\s?14\d{2}\b/i, /\b14\d{2}\s?gtr\b/i,
-                  /\bvfr\s?1200/i, /\bctx\s?1300\b/i, /pacific\s*coast/i,
-                  /rocket\s*(iii|3\b)/i, /tiger\s*explorer/i, /\btiger\s?1200\b/i,
-                  /roadliner|stratoliner|\braider\b|road\s*star|\bstryker\b|\beluder\b|star\s*venture|\bbolt\b/i,
-                  /\bcavalcade\b/i, /\bvictory\b/i,
-                ];
-                const mkmdl = `${make} ${vehicleModel}`;
-                const isBmwShaft = /\bbmw\b/i.test(mkmdl)
-                  && (/\br\s?\d{2,4}/i.test(mkmdl) || /\bk\s?\d{3,4}/i.test(mkmdl) || /\br\s?9\s?t\b/i.test(mkmdl) || /\br\s?nine\s?t\b/i.test(mkmdl))
-                  && !/\b[fg]\s?\d{2,4}/i.test(mkmdl)
-                  && !/\bs\s?1000/i.test(mkmdl);
-                const isNonChainDrive = NON_CHAIN_DRIVE.some((re) => re.test(mkmdl)) || isBmwShaft;
-                const hasChainWord = (name: string): boolean => {
-                  const n = name.toLowerCase();
-                  if (/timing chain|cam chain|primary chain/.test(n)) return false;
-                  return /\bchain\b/.test(n) || /sprocket/.test(n);
-                };
-                const isChainMaintenance = (name: string): boolean => {
-                  if (!hasChainWord(name)) return false;
-                  const n = name.toLowerCase();
-                  return /clean|lube|lubric|adjust|tension|maintenance|service|inspect/.test(n) && !/replace/.test(n);
-                };
-                if (isNonChainDrive) {
-                  validatedTasks = vt.filter((t) => !hasChainWord(t.task));
-                } else {
-                  const chainIdxs: number[] = [];
-                  vt.forEach((t, i) => { if (isChainMaintenance(t.task)) chainIdxs.push(i); });
-                  if (chainIdxs.length >= 1) {
-                    let minMiles: number | null = null;
-                    for (const ci of chainIdxs) {
-                      const mi = vt[ci].interval_miles;
-                      if (mi !== null && (minMiles === null || mi < minMiles)) minMiles = mi;
-                    }
-                    const keepIdx = chainIdxs[0];
-                    const existingDesc = (vt[keepIdx].description ?? "").trim();
-                    vt[keepIdx] = {
-                      ...vt[keepIdx],
-                      task: "Clean, Lubricate, and Adjust Chain",
-                      description: existingDesc !== "" ? existingDesc : "Clean and lubricate drive chain, check and adjust tension. Recommended every 300-600 miles depending on riding conditions.",
-                      interval_miles: minMiles !== null ? Math.max(minMiles, 300) : 500,
-                      priority: "high",
-                    };
-                    const drop = new Set<number>(chainIdxs.slice(1));
-                    validatedTasks = vt.filter((_, i) => !drop.has(i));
-                  }
-                }
+              // ── Motorcycle drivetrain correctness (deterministic) ───────────
+              // Early pass, at the position the inline guard used to hold: get
+              // the wrong-drivetrain services out before the family pipeline can
+              // rename them into canonical ones. Repeated after the pipeline,
+              // where the correct final-drive service is also injected.
+              if (validatedTasks) {
+                validatedTasks = applyDrivetrainStrip(validatedTasks, make, vehicleModel);
               }
 
               interface TaskFamily {
                 key: string;
                 patterns: RegExp[];
+                // See IntervalClamp.exclude — a task the family excludes never
+                // maps into it, so it is never renamed to the canonical name.
+                exclude?: (name: string) => boolean;
                 canonical: string;
                 description: string;
                 priorityOverride?: string;
@@ -920,9 +1049,9 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               }
 
               const families: TaskFamily[] = [
-                { key: "engine_oil", patterns: [/oil.*change/i, /oil.*filter/i, /engine.*oil/i], canonical: "Engine Oil and Filter Change", description: "Change engine oil and replace oil filter. Recommended every 2,500-3,500 miles or 6 months for small-displacement engines, 5,000-7,500 miles for larger engines.", priorityOverride: "high" },
-                { key: "chain_maintenance", patterns: [/chain.*clean/i, /chain.*lube/i, /chain.*adjust/i, /chain.*tension/i, /chain.*maintenance/i], canonical: "Clean, Lubricate, and Adjust Chain", description: "Clean and lubricate drive chain, check and adjust tension. Recommended every 300-600 miles depending on riding conditions.", priorityOverride: "high", mergeIntervals: true },
-                { key: "chain_replacement", patterns: [/chain.*replace/i, /drive.*chain.*replace/i], canonical: "Replace Chain", description: "Inspect regularly and replace as needed based on wear.", conditionBased: true },
+                { key: "engine_oil", patterns: [/oil.*change/i, /oil.*filter/i, /engine.*oil/i], exclude: (n) => isNonEngineLubricantName(n), canonical: "Engine Oil and Filter Change", description: "Change engine oil and replace oil filter. Recommended every 2,500-3,500 miles or 6 months for small-displacement engines, 5,000-7,500 miles for larger engines.", priorityOverride: "high" },
+                { key: "chain_maintenance", patterns: [/chain.*clean/i, /chain.*lube/i, /chain.*adjust/i, /chain.*tension/i, /chain.*maintenance/i], exclude: (n) => /timing|cam\b|primary/i.test(n), canonical: "Clean, Lubricate, and Adjust Chain", description: "Clean and lubricate drive chain, check and adjust tension. Recommended every 300-600 miles depending on riding conditions.", priorityOverride: "high", mergeIntervals: true },
+                { key: "chain_replacement", patterns: [/chain.*replace/i, /drive.*chain.*replace/i], exclude: (n) => /timing|cam\b|primary/i.test(n), canonical: "Replace Chain", description: "Inspect regularly and replace as needed based on wear.", conditionBased: true },
                 { key: "tire_inspection", patterns: [/tire.*pressure/i, /tire.*check/i, /tire.*condition/i, /tire.*inspect/i], canonical: "Check Tire Pressure and Condition", description: "Check tire pressure and inspect tread depth, sidewalls, and overall condition. Recommended every 1,000-3,000 miles or monthly.", priorityOverride: "high" },
                 { key: "tire_replacement", patterns: [/tire.*replace/i], canonical: "Replace Tires", description: "Inspect regularly and replace as needed based on wear.", conditionBased: true },
                 { key: "brake_fluid", patterns: [/brake.*fluid/i], canonical: "Replace Brake Fluid", description: "Replace brake fluid to maintain stopping performance. Recommended every 1-2 years regardless of mileage." },
@@ -955,7 +1084,9 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
                 const fam = activeFamilies[fi];
                 for (let ti = 0; ti < validatedTasks.length; ti++) {
                   if (matched.has(ti)) continue;
-                  if (fam.patterns.some(p => p.test(validatedTasks![ti].task))) {
+                  const tName = validatedTasks[ti].task;
+                  if (fam.exclude && fam.exclude(tName)) continue;
+                  if (fam.patterns.some(p => p.test(tName))) {
                     const arr = familyGroups.get(fi) || [];
                     arr.push(ti);
                     familyGroups.set(fi, arr);
@@ -1119,6 +1250,14 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               // count. Gates below use the pre-injection count.
               preInjectionTaskCount = validatedTasks.length;
               validatedTasks = ensureRequiredTasks(validatedTasks, vehicleCategory);
+              // Drivetrain, late pass. The family pipeline can rename or merge a
+              // stripped task back into existence, so strip once more; then
+              // inject the correct final-drive service HERE, beyond every
+              // rename, the interval-diversity stretch, and both 18-task trims,
+              // so what we inject cannot be renamed, stretched, or trimmed away.
+              // Runs before the cache upsert below, so the cached row is correct.
+              validatedTasks = applyDrivetrainStrip(validatedTasks, make, vehicleModel);
+              validatedTasks = injectFinalDriveService(validatedTasks, make, vehicleModel);
             }
 
             if (preInjectionTaskCount >= 5) {
@@ -1526,6 +1665,59 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
           is_custom: false,
           source: "template",
         });
+      }
+    }
+
+    // Motorcycle drivetrain correctness for the template path — the same
+    // guarantee the AI paths carry. Templates are drive-type agnostic, so
+    // without this a shaft bike is handed chain service and no final-drive
+    // service at all. Runs after the required-task guarantee so injected rows
+    // are filtered too, and before the insert. Intervals and due-date maths for
+    // every other row are untouched.
+    if (vehicleCategory === "motorcycle") {
+      const fallbackDrive = detectDriveType(make, vehicleModel);
+      if (fallbackDrive !== "unknown") {
+        const keepRow = (name: string): boolean => {
+          if (fallbackDrive === "shaft") return !hasChainWord(name) && !isFinalDriveBeltName(name);
+          if (fallbackDrive === "belt") return !hasChainWord(name) && !isFinalDriveOilName(name);
+          if (fallbackDrive === "ambiguous") return !hasChainWord(name);
+          return !isFinalDriveBeltName(name) && !isFinalDriveOilName(name);
+        };
+        const keptRows = tasksToInsert.filter((row) => keepRow(row.name as string));
+        tasksToInsert.length = 0;
+        for (const row of keptRows) tasksToInsert.push(row);
+
+        if (fallbackDrive === "shaft" || fallbackDrive === "belt") {
+          const fd = fallbackDrive === "shaft" ? FINAL_DRIVE_TASKS.shaft : FINAL_DRIVE_TASKS.belt;
+          const alreadyPresent = fallbackDrive === "shaft"
+            ? tasksToInsert.some((row) => isFinalDriveOilName(row.name as string) && /change|replace|drain|flush/i.test(row.name as string))
+            : tasksToInsert.some((row) => isFinalDriveBeltName(row.name as string) && /inspect|tension|adjust|check/i.test(row.name as string));
+          const fdMiles = isHoursOnlyMode ? null : fd.interval_miles;
+          const fdMonths = fd.interval_months;
+          if (!alreadyPresent) {
+            tasksToInsert.push({
+              user_id: authUserId,
+              vehicle_id,
+              template_id: null,
+              name: fd.task,
+              description: fd.description,
+              category: fd.category,
+              interval_miles: fdMiles,
+              interval_hours: null,
+              interval_months: fdMonths,
+              last_completed_date: null,
+              last_completed_miles: null,
+              last_completed_hours: null,
+              next_due_miles: fdMiles !== null && fdMiles > 0 ? Math.round(resolvedCurrentMileage) + fdMiles : null,
+              next_due_hours: null,
+              next_due_date: fdMonths !== null && fdMonths > 0 ? addMonths(today, fdMonths).toISOString() : null,
+              status: "upcoming",
+              priority: fd.priority,
+              is_custom: false,
+              source: "template",
+            });
+          }
+        }
       }
     }
 
