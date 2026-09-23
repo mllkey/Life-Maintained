@@ -729,15 +729,87 @@ Deno.serve(async (req: Request) => {
       return "unknown";
     }
 
+    // ── AI-declared configuration facts (motorcycles) ─────────────────────
+    // The drive-type lists close one instance of a wider error class: the model
+    // emitting service for a component this bike does not have — coolant on an
+    // air-cooled Harley, a carb sync on a fuel-injected bike, a throttle-body
+    // service on a carbureted one. Verified lists cannot scale to every model,
+    // so the model DECLARES the configuration alongside its tasks and the
+    // strips below enforce it deterministically. "unknown" is inert: it never
+    // implies a component is present OR absent, and strips nothing.
+    interface DeclaredConfig {
+      final_drive: "chain" | "belt" | "shaft" | "unknown";
+      cooling: "liquid" | "air" | "air_oil" | "unknown";
+      fuel_system: "carburetor" | "fuel_injection" | "unknown";
+    }
+    // Never throws. Any missing, non-string, or off-allowlist value — and any
+    // malformed config object at all — degrades to "unknown", which strips
+    // nothing, so a bad declaration can only cost us enforcement, never tasks.
+    function normalizeDeclaredConfig(raw: unknown): DeclaredConfig {
+      const out: DeclaredConfig = { final_drive: "unknown", cooling: "unknown", fuel_system: "unknown" };
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+      const r = raw as Record<string, unknown>;
+      const norm = (v: unknown): string => (typeof v === "string" ? v.toLowerCase().trim() : "");
+      const fd = norm(r.final_drive);
+      if (fd === "chain" || fd === "belt" || fd === "shaft") out.final_drive = fd;
+      const cl = norm(r.cooling);
+      if (cl === "liquid" || cl === "air" || cl === "air_oil") out.cooling = cl;
+      const fs = norm(r.fuel_system);
+      if (fs === "carburetor" || fs === "fuel_injection") out.fuel_system = fs;
+      return out;
+    }
+
+    const COOLANT_TASK_PATTERNS: RegExp[] = [/coolant/i, /antifreeze/i];
+    // Radiator is handled apart from the coolant patterns: an air-cooled or
+    // air/oil-cooled bike carries no coolant radiator but very often carries an
+    // OIL cooler, which manuals and the model alike title "oil radiator". That
+    // is a real service on exactly the bikes this strip targets, so it is
+    // excluded by name rather than lost to a bare /radiator/ match.
+    const RADIATOR_PATTERN = /radiator/i;
+    const OIL_COOLER_EXCLUSION = /oil\s*(cooler|radiator)|oil-?cooled/i;
+    const CARB_TASK_PATTERNS: RegExp[] = [/carburet/i, /\bcarb\s*(sync|clean|adjust|rebuild|service)/i, /\bjetting\b/i];
+    const EFI_TASK_PATTERNS: RegExp[] = [/fuel\s*inject/i, /\binjector/i, /throttle\s*bod(y|ies)/i];
+
+    // Removals only. Never adds a task, so it can never re-create something the
+    // EV guard or the drivetrain strip already removed, and never contradicts
+    // them. Each axis is independent; "unknown" (and "liquid") strip nothing.
+    function applyConfigStrip(tasks: ValidatedTask[], config: DeclaredConfig): ValidatedTask[] {
+      let out = tasks;
+      if (config.cooling === "air" || config.cooling === "air_oil") {
+        out = out.filter((t) => !COOLANT_TASK_PATTERNS.some((re) => re.test(t.task)));
+        out = out.filter((t) => !(RADIATOR_PATTERN.test(t.task) && !OIL_COOLER_EXCLUSION.test(t.task)));
+      }
+      if (config.fuel_system === "fuel_injection") {
+        out = out.filter((t) => !CARB_TASK_PATTERNS.some((re) => re.test(t.task)));
+      } else if (config.fuel_system === "carburetor") {
+        out = out.filter((t) => !EFI_TASK_PATTERNS.some((re) => re.test(t.task)));
+      }
+      return out;
+    }
+
+    // The deterministic verified lists ALWAYS outrank the AI declaration: a
+    // model on a list is settled, and a confident wrong declaration cannot
+    // override it. The declaration only fills the gap the lists leave — the
+    // "unknown" and "ambiguous" models, which is where the strip has been
+    // doing nothing (unknown) or half the job (ambiguous: strip, never inject).
+    function resolveDriveType(mk: string, mdl: string, config: DeclaredConfig): DriveType {
+      const d = detectDriveType(mk, mdl);
+      if (d === "chain" || d === "shaft" || d === "belt") return d;
+      if (config.final_drive === "chain" || config.final_drive === "belt" || config.final_drive === "shaft") return config.final_drive;
+      return d;
+    }
+
     // Removes drivetrain services that cannot exist on this bike, in both
     // directions, then collapses surviving final-drive chain MAINTENANCE tasks
     // into one canonical entry (the family matcher is word-order sensitive and
     // misses natural titles). Chain REPLACEMENT stays distinct; primary/cam/
     // timing chains are never touched, because hasChainWord already excludes
     // them. Motorcycles only — ATV/UTV/snowmobile and cars are untouched.
-    function applyDrivetrainStrip(tasks: ValidatedTask[], mk: string, mdl: string): ValidatedTask[] {
+    function applyDrivetrainStrip(tasks: ValidatedTask[], mk: string, mdl: string, declaredConfig?: DeclaredConfig): ValidatedTask[] {
       if (vehicleCategory !== "motorcycle") return tasks;
-      const driveType = detectDriveType(mk, mdl);
+      // No config passed (cache-hit path, template fallback): detectDriveType
+      // only, exactly as before.
+      const driveType = declaredConfig ? resolveDriveType(mk, mdl, declaredConfig) : detectDriveType(mk, mdl);
       if (driveType === "shaft") return tasks.filter((t) => !hasChainWord(t.task) && !isFinalDriveBeltName(t.task));
       if (driveType === "belt") return tasks.filter((t) => !hasChainWord(t.task) && !isFinalDriveOilName(t.task));
       if (driveType === "ambiguous") return tasks.filter((t) => !hasChainWord(t.task));
@@ -774,9 +846,11 @@ Deno.serve(async (req: Request) => {
     // does not already carry a real one. A seal service, an inspection, or a
     // generic "service" does not count as a gear-oil change; a replace-only
     // belt task does not count as a belt inspection.
-    function injectFinalDriveService(tasks: ValidatedTask[], mk: string, mdl: string): ValidatedTask[] {
+    function injectFinalDriveService(tasks: ValidatedTask[], mk: string, mdl: string, declaredConfig?: DeclaredConfig): ValidatedTask[] {
       if (vehicleCategory !== "motorcycle") return tasks;
-      const driveType = detectDriveType(mk, mdl);
+      // Injection for an AI-resolved shaft/belt bike is allowed: the existence
+      // checks below are what prevent a duplicate, not the source of the type.
+      const driveType = declaredConfig ? resolveDriveType(mk, mdl, declaredConfig) : detectDriveType(mk, mdl);
       if (driveType === "shaft") {
         const present = tasks.some((t) => isFinalDriveOilName(t.task) && /change|replace|drain|flush/i.test(t.task));
         return present ? tasks : [...tasks, { ...FINAL_DRIVE_TASKS.shaft }];
@@ -795,7 +869,7 @@ Deno.serve(async (req: Request) => {
     // LOGIC - bump it whenever code in the generation/post-processing region
     // changes semantics without changing this data. Spurious invalidation
     // costs one model call; missing invalidation is the defect this fixes.
-    const RULES_EPOCH = 2;
+    const RULES_EPOCH = 3;
     const serializeRules = (v: unknown): unknown => {
       if (v instanceof RegExp) return String(v);
       if (v instanceof Set) return Array.from(v).sort();
@@ -815,7 +889,7 @@ Deno.serve(async (req: Request) => {
       iceOnly: ICE_ONLY,
       protectedNames: PROTECTED_NAMES,
       cats: { small: SMALL_EQUIPMENT_CATS, heavy: HEAVY_EQUIPMENT_CATS, dump: DUMP_CATEGORIES },
-      drivetrain: { exceptions: CHAIN_DRIVE_EXCEPTIONS, shaft: SHAFT_DRIVE_MODELS, belt: BELT_DRIVE_MODELS, ambiguous: AMBIGUOUS_NON_CHAIN_MODELS, finalDrive: FINAL_DRIVE_TASKS },
+      drivetrain: { exceptions: CHAIN_DRIVE_EXCEPTIONS, shaft: SHAFT_DRIVE_MODELS, belt: BELT_DRIVE_MODELS, ambiguous: AMBIGUOUS_NON_CHAIN_MODELS, finalDrive: FINAL_DRIVE_TASKS, configStrip: { coolant: COOLANT_TASK_PATTERNS, radiator: RADIATOR_PATTERN, oilCoolerExclusion: OIL_COOLER_EXCLUSION, carb: CARB_TASK_PATTERNS, efi: EFI_TASK_PATTERNS, allow: ["chain", "belt", "shaft", "unknown", "liquid", "air", "air_oil", "carburetor", "fuel_injection"] } },
     }));
     let rulesHash = 0x811c9dc5;
     for (let i = 0; i < rulesBlob.length; i++) {
@@ -920,6 +994,40 @@ CRITICAL: This is an hours-tracked asset (e.g., marine engine, small engine, hea
 - Typical intervals: oil 25-100 hrs, filters 50-250 hrs, major service 200-500 hrs depending on equipment
 ` : "";
 
+        // Motorcycle-only prompt additions. The prompt is shared by every
+        // vehicle category, so both interpolations below are inert for the
+        // others: motoConfigRules is the empty string and outputSpec is the
+        // original bare-array specification, byte for byte.
+        const isMotorcyclePrompt = vehicleCategory === "motorcycle";
+        const motoConfigRules = isMotorcyclePrompt ? `
+- The "config" block must state this exact model's real configuration. If you are not certain of a fact, use "unknown" — never guess. Do not include services for a system whose presence you marked "unknown".
+- Air-cooled and air/oil-cooled motorcycles have no coolant service. Fuel-injected motorcycles have no carburetor service. Carbureted motorcycles have no fuel-injection or throttle-body service.` : "";
+        const taskItemSpec = `  {
+    "task": "Task Name",
+    "description": "Brief practical description including recommended interval range",
+    "category": "Engine|Drivetrain|Brakes|Fluids|Electrical|Safety|Suspension|Body|Controls|Cooling|Tires|Seasonal|General",
+    "interval_miles": <number or null>,
+    "interval_hours": <number or null>,
+    "interval_months": <number or null>,
+    "priority": "high"|"medium"|"low"
+  }`;
+        const outputSpec = isMotorcyclePrompt
+          ? `Respond ONLY with a valid JSON object, no markdown, no backticks, no explanation. Shape:
+{
+  "config": {
+    "final_drive": "chain|belt|shaft|unknown",
+    "cooling": "liquid|air|air_oil|unknown",
+    "fuel_system": "carburetor|fuel_injection|unknown"
+  },
+  "tasks": [
+${taskItemSpec}
+  ]
+}`
+          : `Respond ONLY with a valid JSON array, no markdown, no backticks, no explanation. Each item:
+[
+${taskItemSpec}
+]`;
+
         const prompt = `You are an expert maintenance advisor for vehicles and assets. Generate a realistic, trustworthy maintenance schedule for this specific asset.
 
 Asset: ${vehicleDesc}${categoryHint}${fuelHint}${awdHint}
@@ -954,7 +1062,7 @@ Rules:
 - Be specific to this exact year/make/model — do not use generic averages
 - Account for engine type, cooling type, drivetrain type, and asset category
 - For motorcycles: spark plug intervals are 3,000-7,500 miles for sport/supersport bikes, up to 16,000 miles for standard/touring — NEVER use car spark plug intervals (30,000-100,000 miles) for motorcycles
-- For motorcycles: FIRST determine this exact model's final drive type (chain, belt, or shaft). Include only final-drive services matching that type: chain cleaning/lubrication/adjustment and condition-based chain replacement for chain drive; belt inspection/tension and condition-based belt replacement for belt drive; final drive gear oil changes for shaft drive. NEVER include chain service on a shaft- or belt-driven motorcycle, and NEVER include belt or shaft final-drive service on a chain-driven motorcycle. Primary, cam, and timing chain services are engine services, not final-drive services, and are unaffected by this rule.
+- For motorcycles: FIRST determine this exact model's final drive type (chain, belt, or shaft). Include only final-drive services matching that type: chain cleaning/lubrication/adjustment and condition-based chain replacement for chain drive; belt inspection/tension and condition-based belt replacement for belt drive; final drive gear oil changes for shaft drive. NEVER include chain service on a shaft- or belt-driven motorcycle, and NEVER include belt or shaft final-drive service on a chain-driven motorcycle. Primary, cam, and timing chain services are engine services, not final-drive services, and are unaffected by this rule.${motoConfigRules}
 - For cars and trucks: oil change intervals should reflect oil type — 3,000-5,000 miles for conventional oil, 5,000-7,500 miles for synthetic blend or full synthetic. Default to conventional (3,000-5,000 miles) unless the vehicle is known to require or recommend synthetic (e.g., turbocharged engines, European vehicles, luxury brands)
 - Each task description must include the recommended interval AND a realistic range
 - Do NOT assign identical intervals to unrelated tasks unless they are genuinely part of the same service milestone
@@ -964,18 +1072,7 @@ Rules:
 - Interval values are the INTERVAL (e.g., every ${isHoursAsset ? "50 hours" : "3000 miles"}), NOT the absolute ${usageWord}
 - Be conservative on safety-critical items
 
-Respond ONLY with a valid JSON array, no markdown, no backticks, no explanation. Each item:
-[
-  {
-    "task": "Task Name",
-    "description": "Brief practical description including recommended interval range",
-    "category": "Engine|Drivetrain|Brakes|Fluids|Electrical|Safety|Suspension|Body|Controls|Cooling|Tires|Seasonal|General",
-    "interval_miles": <number or null>,
-    "interval_hours": <number or null>,
-    "interval_months": <number or null>,
-    "priority": "high"|"medium"|"low"
-  }
-]
+${outputSpec}
 
 Generate 12-16 tasks. Quality over quantity. Every task should be something a knowledgeable owner would actually schedule and track.
 Every task MUST have at least one of ${intervalField} or interval_months.`;
@@ -1001,10 +1098,29 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
         if (aiResponse.ok) {
           const aiData = await aiResponse.json();
           const aiText = aiData.content?.[0]?.text ?? "";
-          let aiTasks: any[];
-          try { aiTasks = JSON.parse(aiText); } catch {
-            const m = aiText.match(/\[[\s\S]*\]/);
-            if (m) aiTasks = JSON.parse(m[0]); else throw new Error("Could not parse AI JSON");
+          // Shape-agnostic for every category: motorcycles answer with
+          // { config, tasks }, everything else still answers with a bare array.
+          // This widens ACCEPTANCE only — the request each non-motorcycle
+          // category sends is unchanged, and a bare array behaves exactly as it
+          // did before, with an all-unknown config that strips nothing. The
+          // bracket-extraction fallback now also matches a top-level object;
+          // alternation is positional, so a bare array still wins when its "["
+          // precedes the first "{".
+          let aiParsed: unknown;
+          try { aiParsed = JSON.parse(aiText); } catch {
+            const m = aiText.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+            if (m) aiParsed = JSON.parse(m[0]); else throw new Error("Could not parse AI JSON");
+          }
+          let aiTasks: any[] = [];
+          let declaredConfig: DeclaredConfig = { final_drive: "unknown", cooling: "unknown", fuel_system: "unknown" };
+          if (Array.isArray(aiParsed)) {
+            aiTasks = aiParsed;
+          } else if (aiParsed && typeof aiParsed === "object") {
+            const wrapper = aiParsed as Record<string, unknown>;
+            if (Array.isArray(wrapper.tasks)) {
+              aiTasks = wrapper.tasks;
+              declaredConfig = normalizeDeclaredConfig(wrapper.config);
+            }
           }
           if (Array.isArray(aiTasks) && aiTasks.length >= 5) {
             const parsed: ValidatedTask[] = aiTasks.filter(t => typeof t.task === "string" && t.task.trim()).map(t => ({
@@ -1030,7 +1146,13 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               // rename them into canonical ones. Repeated after the pipeline,
               // where the correct final-drive service is also injected.
               if (validatedTasks) {
-                validatedTasks = applyDrivetrainStrip(validatedTasks, make, vehicleModel);
+                validatedTasks = applyDrivetrainStrip(validatedTasks, make, vehicleModel, declaredConfig);
+                // Same reasoning as the drivetrain strip: get services for
+                // components this bike does not have out before the family
+                // pipeline can rename one into a canonical task.
+                if (vehicleCategory === "motorcycle") {
+                  validatedTasks = applyConfigStrip(validatedTasks, declaredConfig);
+                }
               }
 
               interface TaskFamily {
@@ -1256,8 +1378,11 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               // rename, the interval-diversity stretch, and both 18-task trims,
               // so what we inject cannot be renamed, stretched, or trimmed away.
               // Runs before the cache upsert below, so the cached row is correct.
-              validatedTasks = applyDrivetrainStrip(validatedTasks, make, vehicleModel);
-              validatedTasks = injectFinalDriveService(validatedTasks, make, vehicleModel);
+              validatedTasks = applyDrivetrainStrip(validatedTasks, make, vehicleModel, declaredConfig);
+              if (vehicleCategory === "motorcycle") {
+                validatedTasks = applyConfigStrip(validatedTasks, declaredConfig);
+              }
+              validatedTasks = injectFinalDriveService(validatedTasks, make, vehicleModel, declaredConfig);
             }
 
             if (preInjectionTaskCount >= 5) {
