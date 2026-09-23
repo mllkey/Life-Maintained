@@ -79,7 +79,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const vehicleModel = typeof model === "string" ? model : "";
-    const vehicleCategory = typeof vehicle_category === "string" ? vehicle_category : "car";
+    // "automobile" is the legacy DB default for the car category. Normalised
+    // here so every consumer — prompt, routing, cache key — sees one name.
+    const rawVehicleCategory = typeof vehicle_category === "string" ? vehicle_category : "car";
+    const vehicleCategory = rawVehicleCategory === "automobile" ? "car" : rawVehicleCategory;
 
     // Resolve tracking mode: explicit from request > infer from vehicle category
     const HOURS_TYPES = new Set(["boat", "pwc", "lawnmower", "lawn_mower", "chainsaw", "generator", "excavator", "skid_steer", "mini_excavator", "compact_track_loader", "backhoe", "wheel_loader", "telehandler", "forklift", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder"]);
@@ -132,15 +135,39 @@ Deno.serve(async (req: Request) => {
       : (typeof vehicle_type === "string" ? vehicle_type : "gas");
     const resolvedIsAwd = typeof is_awd === "boolean" ? is_awd : false;
 
-    // Packet A: dump-truck categories are diesel-maintenance regardless of submitted fuel.
     // effectiveFuel is the single source of truth for ALL downstream fuel-dependent logic.
     const DUMP_CATEGORIES = new Set(["dump_truck", "standard_dump", "roll_off", "hook_lift"]);
-    const effectiveFuel = DUMP_CATEGORIES.has(vehicleCategory) ? "diesel" : resolvedVehicleType;
+    // Battery-electric models sold under mixed-fuel makes. The app defaults fuel
+    // to "gas" for these, and real Ioniq 5/6 owners were served an oil change
+    // as a result. The deterministic list wins over user input. Scoped to road
+    // cars/trucks so an equipment name like "Leaf Blower" can never match.
+    const EV_MODELS: RegExp[] = [
+      /ioniq\s*[56]/i, /\bev[69]\b/i, /kona\s*electric/i, /niro\s*ev/i, /\bbolt\s*(ev|euv)\b/i,
+      /\bleaf\b/i, /\bariya\b/i, /mach-?e/i, /f-?150\s*lightning/i, /\bid\.?\s*(4|buzz)\b/i,
+      /e-?tron/i, /\beq[abcesv]\b/i, /bz4x/i, /solterra/i, /polestar/i, /taycan/i, /cruise\s*origin/i,
+      /silverado\s*ev/i, /blazer\s*ev/i, /equinox\s*ev/i, /hummer\s*ev/i, /lyriq/i, /prologue/i,
+      /\bmodel\s*[3sxy]\b/i, /\b(500e|mini\s*electric|cooper\s*se)\b/i,
+    ];
+    // BMW i3/i4/iX only — the bare pattern would match too many other makes.
+    const BMW_I_MODEL = /\bi[34x]\b(?!\d)/i;
+    const isKnownEvModel = (vehicleCategory === "car" || vehicleCategory === "truck")
+      && (EV_MODELS.some((re) => re.test(`${make} ${vehicleModel}`))
+        || (/\bbmw\b/i.test(make) && BMW_I_MODEL.test(vehicleModel)));
+    // Dump-truck categories default to diesel maintenance ONLY when the client
+    // sent no fuel at all; an explicit "gas" (7.3L gas dump bodies exist) is respected.
+    const clientSentFuel = typeof fuel_type === "string" || typeof vehicle_type === "string";
+    const effectiveFuel = isKnownEvModel
+      ? "ev"
+      : (DUMP_CATEGORIES.has(vehicleCategory) && !clientSentFuel ? "diesel" : resolvedVehicleType);
 
     // Preload mode removed (closes PASS-B-004). Auth is mandatory below.
 
     // ── Category exclusion map ─────────────────────────────────────────────
-    const CATEGORY_EXCLUSIONS: Record<string, string[]> = {
+    // Exact template names, plus regexes where a whole family is impossible for
+    // the category. Consulted by the template fallback AND (since epoch 4) the
+    // AI path — see AI_PATH_EXCLUSION_SKIP for the two entries that are template-
+    // only because the AI legitimately emits them.
+    const CATEGORY_EXCLUSIONS: Record<string, (string | RegExp)[]> = {
       motorcycle: [
         "Tire Rotation",
         "Cabin Air Filter",
@@ -189,6 +216,7 @@ Deno.serve(async (req: Request) => {
       ],
       snowmobile: [
         "Tire Rotation",
+        /tire/i,
         "Cabin Air Filter",
         "Wiper Blade Replacement",
         "Serpentine Belt Replacement",
@@ -219,6 +247,16 @@ Deno.serve(async (req: Request) => {
       ],
       rv: [],
     };
+    // Entries the AI path must NOT enforce: boats have spark plugs (the boat
+    // list was written to filter car template rows), and belt-cam Ducatis
+    // really do have a timing belt service.
+    const AI_PATH_EXCLUSION_SKIP: Record<string, string[]> = {
+      boat: ["Spark Plug Replacement"],
+      motorcycle: ["Timing Belt Replacement"],
+    };
+    function matchesExclusion(name: string, e: string | RegExp): boolean {
+      return e instanceof RegExp ? e.test(name) : e.trim().toLowerCase() === name.trim().toLowerCase();
+    }
 
     // ── 2. Authenticate user from JWT (real signature verification) ──
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -472,7 +510,7 @@ Deno.serve(async (req: Request) => {
       // Differential/axle fluid: most mfrs say 30,000-50,000 mi.
       { match: [/differential.*fluid/i, /axle.*fluid/i, /rear.*axle/i], max_months: 36, max_miles: 40000 },
     ];
-    const BOAT_PWC_CLAMPS: IntervalClamp[] = [
+    const BOAT_CLAMPS: IntervalClamp[] = [
       // Engine oil: Mercury/Yamaha/Sea-Doo all say 100 hours or annually. This is firm.
       { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], max_months: 12, max_hours: 100 },
       // Impeller: Sea-Doo says inspect every 100 hours; many sources say replace at 200 hours. Cap at 200 hr / 1 yr.
@@ -542,7 +580,7 @@ Deno.serve(async (req: Request) => {
       { match: [/brake.*pad/i, /brake.*inspection/i], task: "Brake Pad Inspection", description: "Inspect brake pads and rotors for wear", category: "Brakes", interval_miles: 20000, interval_hours: null, interval_months: 12, priority: "high" },
       { match: [/tire.*rotation/i], task: "Tire Rotation", description: "Rotate tires for even wear", category: "Tires", interval_miles: 7500, interval_hours: null, interval_months: 6, priority: "medium" },
     ];
-    const BOAT_PWC_REQUIRED: RequiredTask[] = [
+    const BOAT_REQUIRED: RequiredTask[] = [
       { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], task: "Engine Oil & Filter Change", description: "Change engine oil and replace oil filter", category: "Engine", interval_miles: null, interval_hours: 100, interval_months: 12, priority: "high" },
       { match: [/impeller/i], task: "Impeller Inspection / Replacement", description: "Inspect and replace water pump impeller", category: "Cooling", interval_miles: null, interval_hours: 100, interval_months: 12, priority: "high" },
       { match: [/lower unit/i, /gear.*oil/i, /gear.*lube/i], task: "Lower Unit Gear Oil Change", description: "Change lower unit gear oil and check for water intrusion", category: "Drivetrain", interval_miles: null, interval_hours: 100, interval_months: 12, priority: "high" },
@@ -571,19 +609,90 @@ Deno.serve(async (req: Request) => {
     const SMALL_EQUIPMENT_CATS = new Set(["lawnmower", "lawn_mower", "chainsaw", "generator", "snow_blower", "pressure_washer", "wood_chipper", "stump_grinder", "concrete_saw", "welder"]);
     const HEAVY_EQUIPMENT_CATS = new Set(["excavator", "skid_steer", "mini_excavator", "compact_track_loader", "backhoe", "wheel_loader", "telehandler", "forklift"]);
 
+    // ── Category-specific tables added in epoch 4 ─────────────────────────
+    // Snowmobile: months-only requireds. 2-stroke vs 4-stroke is unknowable
+    // here, so no oil-change/valve requireds and no stripping of AI oil/valve
+    // tasks either; tires are impossible and are excluded by name above.
+    const SNOWMOBILE_CLAMPS: IntervalClamp[] = [
+      { match: [/chaincase/i], max_months: 24 },
+      { match: [/drive\s*belt/i], max_months: 12 },
+    ];
+    const SNOWMOBILE_REQUIRED: RequiredTask[] = [
+      { match: [/chaincase/i], task: "Chaincase Oil Change", description: "Drain and refill chaincase oil. Typically annually; confirm against your owner's manual.", category: "Drivetrain", interval_miles: null, interval_hours: null, interval_months: 12, priority: "medium" },
+      { match: [/drive\s*belt/i], task: "Drive Belt Inspection", description: "Inspect the drive belt for cracks, glazing, and width loss; replace as needed.", category: "Drivetrain", interval_miles: null, interval_hours: null, interval_months: 12, priority: "medium" },
+      { match: [/track.*tension/i, /hyfax/i, /slide/i], task: "Track Tension and Slide (Hyfax) Inspection", description: "Check track tension and alignment; inspect slides (hyfax) for wear.", category: "Drivetrain", interval_miles: null, interval_hours: null, interval_months: 12, priority: "medium" },
+      { match: [/spark\s*plug/i], task: "Replace Spark Plugs", description: "Replace spark plugs per manufacturer interval.", category: "Engine", interval_miles: null, interval_hours: null, interval_months: 24, priority: "medium" },
+    ];
+    // PWC: a jet drive has no lower unit, so the boat gear-oil clamp and
+    // required are dropped. Engine oil is left to the model (vintage 2-strokes).
+    const PWC_CLAMPS: IntervalClamp[] = BOAT_CLAMPS.filter((c) => !c.match.some((re) => re.test("lower unit")));
+    const PWC_REQUIRED: RequiredTask[] = [
+      { match: [/jet\s*pump/i, /wear\s*ring/i], task: "Jet Pump and Wear Ring Inspection", description: "Inspect the jet pump, impeller, and wear ring for damage and clearance; check pump bearing oil where applicable.", category: "Drivetrain", interval_miles: null, interval_hours: 50, interval_months: 12, priority: "medium" },
+      { match: [/spark\s*plug/i], task: "Replace Spark Plugs", description: "Replace spark plugs per manufacturer interval.", category: "Engine", interval_miles: null, interval_hours: 100, interval_months: 24, priority: "medium" },
+    ];
+    // Heavy road (semi trucks, dump trucks): manufacturer intervals run 10-50k
+    // mi for oil and far beyond for fluids; air brakes mean no brake fluid,
+    // and duals are not rotated on a car cadence.
+    const HEAVY_ROAD_CLAMPS: IntervalClamp[] = [
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], exclude: (n) => isNonEngineLubricantName(n), max_months: 12, max_miles: 50000 },
+      { match: [/coolant/i], max_months: 60, max_miles: 300000 },
+      { match: [/transmission.*fluid/i], max_months: 60, max_miles: 300000 },
+      { match: [/differential.*fluid/i, /axle.*fluid/i, /rear.*axle/i], max_months: 60, max_miles: 250000 },
+    ];
+    const HEAVY_ROAD_REQUIRED: RequiredTask[] = [
+      { match: [/oil.*change/i, /oil.*filter/i, /engine oil/i], exclude: (n) => isNonEngineLubricantName(n), task: "Engine Oil and Filter Change", description: "Heavy-duty interval varies 10,000-50,000 mi by duty cycle; confirm against your maintenance schedule.", category: "Engine", interval_miles: 25000, interval_hours: null, interval_months: 12, priority: "high" },
+    ];
+    // RV: the car set minus tire rotation, plus the roof — the single most
+    // common RV failure point.
+    const RV_CLAMPS: IntervalClamp[] = CAR_TRUCK_CLAMPS.filter((c) => !c.match.some((re) => re.test("tire rotation")));
+    const RV_REQUIRED: RequiredTask[] = [
+      ...CAR_TRUCK_REQUIRED.filter((r) => r.task !== "Tire Rotation"),
+      { match: [/roof/i], task: "Inspect Roof Seals and Seams", description: "Inspect all roof seams, vents, and sealant for cracks or separation; reseal as needed.", category: "Body", interval_miles: null, interval_hours: null, interval_months: 12, priority: "high" },
+    ];
+    // Diesel: no spark plugs or ignition coils exist; a fuel filter / water
+    // separator service always does on road diesels.
+    const DIESEL_STRIP: RegExp[] = [/spark\s*plug/i, /ignition\s*coil/i];
+    const DIESEL_REQUIRED: RequiredTask[] = [
+      { match: [/fuel.*filter/i, /water.*separator/i], task: "Fuel Filter / Water Separator Service", description: "Replace the fuel filter and drain the water separator. Typical interval 10,000-20,000 miles or annually; confirm against your maintenance schedule.", category: "Engine", interval_miles: 15000, interval_hours: null, interval_months: 12, priority: "high" },
+    ];
+
+    // ── Explicit routing — no fall-through ────────────────────────────────
+    // Every category the app can send is named here. Anything unlisted gets
+    // EMPTY clamps and EMPTY requireds; the old default to the car tables is
+    // what put an engine oil change on a dump trailer.
+    type RouteKey = "car" | "moto" | "snowmobile" | "boat" | "pwc" | "small" | "heavy" | "heavy_road" | "rv" | "none";
+    const CATEGORY_ROUTING: Record<string, RouteKey> = {
+      car: "car", truck: "car",
+      motorcycle: "moto", atv: "moto", utv: "moto",
+      snowmobile: "snowmobile",
+      boat: "boat", pwc: "pwc",
+      semi_truck: "heavy_road",
+      rv: "rv",
+      trailer: "none", dump_trailer: "none", dumpster: "none", other: "none",
+    };
+    for (const c of SMALL_EQUIPMENT_CATS) CATEGORY_ROUTING[c] = "small";
+    for (const c of HEAVY_EQUIPMENT_CATS) CATEGORY_ROUTING[c] = "heavy";
+    for (const c of DUMP_CATEGORIES) CATEGORY_ROUTING[c] = "heavy_road";
+    const ROUTE_CLAMPS: Record<RouteKey, IntervalClamp[]> = {
+      car: CAR_TRUCK_CLAMPS, moto: MOTORCYCLE_CLAMPS, snowmobile: SNOWMOBILE_CLAMPS, boat: BOAT_CLAMPS, pwc: PWC_CLAMPS,
+      small: SMALL_EQUIPMENT_CLAMPS, heavy: HEAVY_EQUIPMENT_CLAMPS, heavy_road: HEAVY_ROAD_CLAMPS, rv: RV_CLAMPS, none: [],
+    };
+    const ROUTE_REQUIRED: Record<RouteKey, RequiredTask[]> = {
+      car: CAR_TRUCK_REQUIRED, moto: MOTORCYCLE_REQUIRED, snowmobile: SNOWMOBILE_REQUIRED, boat: BOAT_REQUIRED, pwc: PWC_REQUIRED,
+      small: SMALL_EQUIPMENT_REQUIRED, heavy: HEAVY_EQUIPMENT_REQUIRED, heavy_road: HEAVY_ROAD_REQUIRED, rv: RV_REQUIRED, none: [],
+    };
+    // Road diesels that get DIESEL_REQUIRED on top of their category set.
+    const DIESEL_REQUIRED_ROUTES = new Set<RouteKey>(["car", "heavy_road", "rv"]);
+    function routeFor(cat: string): RouteKey {
+      return Object.prototype.hasOwnProperty.call(CATEGORY_ROUTING, cat) ? CATEGORY_ROUTING[cat] : "none";
+    }
     function getClampsForCategory(cat: string): IntervalClamp[] {
-      if (cat === "motorcycle" || cat === "atv" || cat === "utv" || cat === "snowmobile") return MOTORCYCLE_CLAMPS;
-      if (cat === "boat" || cat === "pwc") return BOAT_PWC_CLAMPS;
-      if (SMALL_EQUIPMENT_CATS.has(cat)) return SMALL_EQUIPMENT_CLAMPS;
-      if (HEAVY_EQUIPMENT_CATS.has(cat)) return HEAVY_EQUIPMENT_CLAMPS;
-      return CAR_TRUCK_CLAMPS;
+      return ROUTE_CLAMPS[routeFor(cat)];
     }
     function getRequiredForCategory(cat: string): RequiredTask[] {
-      if (cat === "motorcycle" || cat === "atv" || cat === "utv" || cat === "snowmobile") return MOTORCYCLE_REQUIRED;
-      if (cat === "boat" || cat === "pwc") return BOAT_PWC_REQUIRED;
-      if (SMALL_EQUIPMENT_CATS.has(cat)) return SMALL_EQUIPMENT_REQUIRED;
-      if (HEAVY_EQUIPMENT_CATS.has(cat)) return HEAVY_EQUIPMENT_REQUIRED;
-      return CAR_TRUCK_REQUIRED;
+      const route = routeFor(cat);
+      const base = ROUTE_REQUIRED[route];
+      return effectiveFuel === "diesel" && DIESEL_REQUIRED_ROUTES.has(route) ? [...base, ...DIESEL_REQUIRED] : base;
     }
     function clampTask(t: ValidatedTask, clamps: IntervalClamp[]): ValidatedTask {
       for (const c of clamps) {
@@ -616,6 +725,13 @@ Deno.serve(async (req: Request) => {
     const ICE_ONLY: RegExp[] = [/oil.*change/i, /oil.*filter/i, /engine oil/i, /spark.*plug/i, /fuel.*filter/i, /fuel.*system/i, /fuel.*inject/i, /emission/i, /\bpcv\b/i, /catalytic/i, /muffler/i, /exhaust/i, /smog/i, /timing belt/i, /serpentine/i, /accessory belt/i];
     const isEvFuel = effectiveFuel === "ev";
     const isIceOnly = (name: string) => ICE_ONLY.some(re => re.test(name));
+    // Equipment-only extension of the ICE guard: an electric mower or forklift
+    // has no air filter, while an EV car keeps its cabin filter. Consulted only
+    // for the small/heavy equipment routes, so ICE_ONLY itself is unchanged.
+    const ICE_ONLY_EQUIPMENT_EXTRA: RegExp[] = [/\bair\s*filter\b/i];
+    const isEquipmentRoute = (cat: string) => { const r = routeFor(cat); return r === "small" || r === "heavy"; };
+    const isIceOnlyFor = (name: string, cat: string) => isIceOnly(name) || (isEquipmentRoute(cat) && ICE_ONLY_EQUIPMENT_EXTRA.some(re => re.test(name)));
+    const isDieselStripName = (name: string) => effectiveFuel === "diesel" && DIESEL_STRIP.some(re => re.test(name));
     // Hoisted from the post-processing block so it participates in the rules
     // hash and has a single definition. Behaviour unchanged.
     const PROTECTED_NAMES = ["Engine Oil and Filter Change", "Clean, Lubricate, and Adjust Chain", "Inspect Brake Pads", "Check Tire Pressure and Condition", "Check and Adjust Valve Clearance"];
@@ -869,7 +985,7 @@ Deno.serve(async (req: Request) => {
     // LOGIC - bump it whenever code in the generation/post-processing region
     // changes semantics without changing this data. Spurious invalidation
     // costs one model call; missing invalidation is the defect this fixes.
-    const RULES_EPOCH = 3;
+    const RULES_EPOCH = 4;
     const serializeRules = (v: unknown): unknown => {
       if (v instanceof RegExp) return String(v);
       if (v instanceof Set) return Array.from(v).sort();
@@ -883,10 +999,14 @@ Deno.serve(async (req: Request) => {
     };
     const rulesBlob = JSON.stringify(serializeRules({
       epoch: RULES_EPOCH,
-      required: { car: CAR_TRUCK_REQUIRED, moto: MOTORCYCLE_REQUIRED, boat: BOAT_PWC_REQUIRED, small: SMALL_EQUIPMENT_REQUIRED, heavy: HEAVY_EQUIPMENT_REQUIRED },
-      clamps: { car: CAR_TRUCK_CLAMPS, moto: MOTORCYCLE_CLAMPS, boat: BOAT_PWC_CLAMPS, small: SMALL_EQUIPMENT_CLAMPS, heavy: HEAVY_EQUIPMENT_CLAMPS },
+      required: ROUTE_REQUIRED,
+      clamps: ROUTE_CLAMPS,
+      routing: CATEGORY_ROUTING,
+      fuel: { evModels: EV_MODELS, bmwIModel: BMW_I_MODEL, dieselStrip: DIESEL_STRIP, dieselRequired: DIESEL_REQUIRED, dieselRequiredRoutes: DIESEL_REQUIRED_ROUTES },
       exclusions: CATEGORY_EXCLUSIONS,
+      aiPathExclusionSkip: AI_PATH_EXCLUSION_SKIP,
       iceOnly: ICE_ONLY,
+      iceOnlyEquipmentExtra: ICE_ONLY_EQUIPMENT_EXTRA,
       protectedNames: PROTECTED_NAMES,
       cats: { small: SMALL_EQUIPMENT_CATS, heavy: HEAVY_EQUIPMENT_CATS, dump: DUMP_CATEGORIES },
       drivetrain: { exceptions: CHAIN_DRIVE_EXCEPTIONS, shaft: SHAFT_DRIVE_MODELS, belt: BELT_DRIVE_MODELS, ambiguous: AMBIGUOUS_NON_CHAIN_MODELS, finalDrive: FINAL_DRIVE_TASKS, configStrip: { coolant: COOLANT_TASK_PATTERNS, radiator: RADIATOR_PATTERN, oilCoolerExclusion: OIL_COOLER_EXCLUSION, carb: CARB_TASK_PATTERNS, efi: EFI_TASK_PATTERNS, allow: ["chain", "belt", "shaft", "unknown", "liquid", "air", "air_oil", "carburetor", "fuel_injection"] } },
@@ -902,9 +1022,16 @@ Deno.serve(async (req: Request) => {
       const required = getRequiredForCategory(vCat);
       let v = tasks.map(t => ({ ...clampTask(t, clamps), category: normalizeCategory(t.category), priority: normalizePriority(t.priority) }));
       v = v.filter(t => t.task.trim() !== "" && (t.interval_miles !== null || t.interval_hours !== null || t.interval_months !== null));
-      if (isEvFuel) v = v.filter(t => !isIceOnly(t.task));
+      // Category exclusions, enforced on the AI path too (epoch 4). Removes only
+      // what the category's own list names, minus the template-only entries.
+      const excludedForCat = CATEGORY_EXCLUSIONS[vCat] ?? [];
+      const aiSkipForCat = AI_PATH_EXCLUSION_SKIP[vCat] ?? [];
+      v = v.filter(t => !excludedForCat.some(e => !aiSkipForCat.some(sk => sk === e) && matchesExclusion(t.task, e)));
+      if (isEvFuel) v = v.filter(t => !isIceOnlyFor(t.task, vCat));
+      if (effectiveFuel === "diesel") v = v.filter(t => !isDieselStripName(t.task));
       for (const req of required) {
-        if (isEvFuel && isIceOnly(req.task)) continue;
+        if (isEvFuel && isIceOnlyFor(req.task, vCat)) continue;
+        if (isDieselStripName(req.task)) continue;
         if (!v.some(t => !(req.exclude && req.exclude(t.task)) && req.match.some(re => re.test(t.task)))) {
           v.push({ task: req.task, description: req.description, category: normalizeCategory(req.category), interval_miles: req.interval_miles, interval_hours: req.interval_hours, interval_months: req.interval_months, priority: normalizePriority(req.priority) });
         }
@@ -930,7 +1057,8 @@ Deno.serve(async (req: Request) => {
       const required = getRequiredForCategory(vCat);
       const out = tasks.slice();
       for (const req of required) {
-        if (isEvFuel && isIceOnly(req.task)) continue;
+        if (isEvFuel && isIceOnlyFor(req.task, vCat)) continue;
+        if (isDieselStripName(req.task)) continue;
         if (!out.some(t => !(req.exclude && req.exclude(t.task)) && req.match.some(re => re.test(t.task)))) {
           out.push({ task: req.task, description: req.description, category: normalizeCategory(req.category), interval_miles: req.interval_miles, interval_hours: req.interval_hours, interval_months: req.interval_months, priority: normalizePriority(req.priority) });
         }
@@ -979,9 +1107,23 @@ Deno.serve(async (req: Request) => {
         const isHoursAsset = isHoursOnlyMode;
         const usageWord = isHoursAsset ? "engine hours" : "miles";
         const intervalField = isHoursAsset ? "interval_hours" : "interval_miles";
-        const currentUsageDesc = isHoursAsset
-          ? `Current engine hours: ${resolvedCurrentHours}`
-          : `Current mileage: ${resolvedCurrentMileage}`;
+        const currentUsageDesc = isTimeOnlyMode
+          ? "Usage: not tracked (time-based asset)"
+          : isHoursAsset
+            ? `Current engine hours: ${resolvedCurrentHours}`
+            : `Current mileage: ${resolvedCurrentMileage}`;
+        // Time-only assets (trailers, dumpsters) have no usage meter at all.
+        // Every fragment below is the empty string / the original text for
+        // every other tracking mode, so those prompts are byte-for-byte unchanged.
+        const timeOnlyContext = isTimeOnlyMode ? `
+CRITICAL: This is a time-tracked asset (e.g., trailer, dumpster) with no usage meter.
+- Use time-based intervals ONLY (interval_months); set interval_miles and interval_hours to null for every task
+` : "";
+        const intervalRule = isTimeOnlyMode
+          ? "- Use time-based intervals ONLY (interval_months); set interval_miles and interval_hours to null"
+          : `- Include BOTH ${usageWord}-based AND time-based intervals for every task (whichever comes first)`;
+        const intervalExample = isTimeOnlyMode ? "6 months" : (isHoursAsset ? "50 hours" : "3000 miles");
+        const intervalRequirement = isTimeOnlyMode ? "interval_months" : `at least one of ${intervalField} or interval_months`;
 
         const hoursContext = isHoursAsset ? `
 CRITICAL: This is an hours-tracked asset (e.g., marine engine, small engine, heavy equipment).
@@ -1032,7 +1174,7 @@ ${taskItemSpec}
 
 Asset: ${vehicleDesc}${categoryHint}${fuelHint}${awdHint}
 ${currentUsageDesc}
-${hoursContext}
+${hoursContext}${timeOnlyContext}
 Important context:
 - Assume prior maintenance history is unknown
 - The schedule starts from the asset's current ${usageWord}
@@ -1068,14 +1210,14 @@ Rules:
 - Do NOT assign identical intervals to unrelated tasks unless they are genuinely part of the same service milestone
 - Priorities: high = oil, critical fluids, safety-critical; medium = filters, secondary fluids, inspections; lower = condition-based replacements
 - Output should feel like it was written by an experienced technician — practical, realistic, not artificially uniform
-- Include BOTH ${usageWord}-based AND time-based intervals for every task (whichever comes first)
-- Interval values are the INTERVAL (e.g., every ${isHoursAsset ? "50 hours" : "3000 miles"}), NOT the absolute ${usageWord}
+${intervalRule}
+- Interval values are the INTERVAL (e.g., every ${intervalExample}), NOT the absolute ${usageWord}
 - Be conservative on safety-critical items
 
 ${outputSpec}
 
 Generate 12-16 tasks. Quality over quantity. Every task should be something a knowledgeable owner would actually schedule and track.
-Every task MUST have at least one of ${intervalField} or interval_months.`;
+Every task MUST have ${intervalRequirement}.`;
 
         const TIMEOUT_MS = 90_000;
         const aiController = new AbortController();
@@ -1127,8 +1269,8 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               task: t.task.trim(),
               description: typeof t.description === "string" ? t.description : "",
               category: typeof t.category === "string" ? t.category : "General",
-              interval_miles: isHoursOnlyMode ? null : (typeof t.interval_miles === "number" && t.interval_miles > 0 ? t.interval_miles : null),
-              interval_hours: isHoursCapableMode ? (typeof t.interval_hours === "number" && t.interval_hours > 0 ? t.interval_hours : null) : null,
+              interval_miles: (isHoursOnlyMode || isTimeOnlyMode) ? null : (typeof t.interval_miles === "number" && t.interval_miles > 0 ? t.interval_miles : null),
+              interval_hours: (isHoursCapableMode && !isTimeOnlyMode) ? (typeof t.interval_hours === "number" && t.interval_hours > 0 ? t.interval_hours : null) : null,
               interval_months: typeof t.interval_months === "number" && t.interval_months > 0 ? t.interval_months : null,
               priority: typeof t.priority === "string" ? t.priority : "medium",
             }));
@@ -1171,7 +1313,10 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
               }
 
               const families: TaskFamily[] = [
-                { key: "engine_oil", patterns: [/oil.*change/i, /oil.*filter/i, /engine.*oil/i], exclude: (n) => isNonEngineLubricantName(n), canonical: "Engine Oil and Filter Change", description: "Change engine oil and replace oil filter. Recommended every 2,500-3,500 miles or 6 months for small-displacement engines, 5,000-7,500 miles for larger engines.", priorityOverride: "high" },
+                // Snowmobile chaincase oil is a gearcase lubricant, not engine oil:
+                // without this scope the family would rename the required
+                // "Chaincase Oil Change" into an engine oil change on a 2-stroke.
+                { key: "engine_oil", patterns: [/oil.*change/i, /oil.*filter/i, /engine.*oil/i], exclude: (n) => isNonEngineLubricantName(n) || (vehicleCategory === "snowmobile" && /chain\s*case/i.test(n)), canonical: "Engine Oil and Filter Change", description: "Change engine oil and replace oil filter. Recommended every 2,500-3,500 miles or 6 months for small-displacement engines, 5,000-7,500 miles for larger engines.", priorityOverride: "high" },
                 { key: "chain_maintenance", patterns: [/chain.*clean/i, /chain.*lube/i, /chain.*adjust/i, /chain.*tension/i, /chain.*maintenance/i], exclude: (n) => /timing|cam\b|primary/i.test(n), canonical: "Clean, Lubricate, and Adjust Chain", description: "Clean and lubricate drive chain, check and adjust tension. Recommended every 300-600 miles depending on riding conditions.", priorityOverride: "high", mergeIntervals: true },
                 { key: "chain_replacement", patterns: [/chain.*replace/i, /drive.*chain.*replace/i], exclude: (n) => /timing|cam\b|primary/i.test(n), canonical: "Replace Chain", description: "Inspect regularly and replace as needed based on wear.", conditionBased: true },
                 { key: "tire_inspection", patterns: [/tire.*pressure/i, /tire.*check/i, /tire.*condition/i, /tire.*inspect/i], canonical: "Check Tire Pressure and Condition", description: "Check tire pressure and inspect tread depth, sidewalls, and overall condition. Recommended every 1,000-3,000 miles or monthly.", priorityOverride: "high" },
@@ -1418,7 +1563,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
             estimateWarning = "Cost estimates were not generated because EDGE_FUNCTION_SECRET is not configured.";
           } else {
             const estimateUrl = `${supabaseUrl}/functions/v1/estimate-repair-cost`;
-            const estimateHeaders: Record<string, string> = { "Content-Type": "application/json", "x-edge-secret": supabaseServiceKey, "Authorization": `Bearer ${supabaseServiceKey}` };
+            const estimateHeaders: Record<string, string> = { "Content-Type": "application/json", "x-edge-secret": edgeFnSecret, "Authorization": `Bearer ${supabaseServiceKey}` };
             const estimateNames = aiTasksToInsert.map((t: any) => (t.name as string).toLowerCase().trim());
             const BATCH = 5;
             for (let i = 0; i < estimateNames.length; i += BATCH) {
@@ -1501,7 +1646,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     // ── 6b. Filter templates by vehicle category ───────────────────────────
     const excluded = CATEGORY_EXCLUSIONS[vehicleCategory] ?? [];
     const filteredTemplates = excluded.length > 0
-      ? templates.filter((t: Record<string, unknown>) => !excluded.includes(t.task as string))
+      ? templates.filter((t: Record<string, unknown>) => !excluded.some((e) => matchesExclusion(t.task as string, e)))
       : templates;
 
     type IntervalRule = {
@@ -1764,7 +1909,8 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
     {
       const requiredForTemplate = getRequiredForCategory(vehicleCategory);
       for (const req of requiredForTemplate) {
-        if (isEvFuel && isIceOnly(req.task)) continue;
+        if (isEvFuel && isIceOnlyFor(req.task, vehicleCategory)) continue;
+        if (isDieselStripName(req.task)) continue;
         if (tasksToInsert.some(row => req.match.some(re => re.test(row.name as string)))) continue;
         const reqMiles = isHoursOnlyMode ? null : req.interval_miles;
         const reqMonths = req.interval_months;
@@ -1867,7 +2013,7 @@ Every task MUST have at least one of ${intervalField} or interval_months.`;
       tplEstimateWarning = "Cost estimates were not generated because EDGE_FUNCTION_SECRET is not configured.";
     } else {
       const tplEstimateUrl = `${supabaseUrl}/functions/v1/estimate-repair-cost`;
-      const tplEstimateHeaders: Record<string, string> = { "Content-Type": "application/json", "x-edge-secret": supabaseServiceKey, "Authorization": `Bearer ${supabaseServiceKey}` };
+      const tplEstimateHeaders: Record<string, string> = { "Content-Type": "application/json", "x-edge-secret": tplEdgeFnSecret, "Authorization": `Bearer ${supabaseServiceKey}` };
       const tplEstimateNames = tasksToInsert.map((t: any) => (t.name as string).toLowerCase().trim());
       const TPL_BATCH = 5;
       for (let i = 0; i < tplEstimateNames.length; i += TPL_BATCH) {
