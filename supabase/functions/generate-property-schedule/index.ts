@@ -106,8 +106,19 @@ function normalizePriority(p: string): string {
 // ── Interval clamps ──────────────────────────────────────────────────
 interface IntervalClamp { match: RegExp[]; max_months?: number; min_months?: number; }
 
+// Order is load-bearing: first match wins. Filters come first so a
+// "Heating System Filter Inspection" never falls into the service clamp; the
+// seasonal entries come next so /seal/ and /sprinkler.*system/ below cannot
+// shadow a winterization task and let a 6-month recurrence survive.
 const PROPERTY_CLAMPS: IntervalClamp[] = [
-  { match: [/hvac.*filter/i, /air.*filter.*replace/i, /furnace.*filter/i], max_months: 3, min_months: 1 },
+  { match: [/hvac.*filter/i, /air.*filter.*replace/i, /furnace.*filter/i, /heating.*filter/i, /air.*filter/i], max_months: 3, min_months: 1 },
+  // Winterization / de-winterization is once a year, full stop.
+  { match: [/winteriz/i, /de-?winteriz/i, /faucet.*winter/i, /sprinkler.*(blow|open|close|winter)/i], max_months: 12, min_months: 12 },
+  // Heating-side professional service.
+  { match: [/heating(?!.*filter).*(service|tune|inspect)/i, /furnace(?!.*filter).*(service|tune|inspect)/i, /boiler.*(service|tune|inspect)/i, /hvac(?!.*filter).*(service|tune)/i], max_months: 12, min_months: 6 },
+  // Cooling-side professional service.
+  { match: [/air\s*condition(?!.*filter).*(service|tune|check)/i, /\bac\b(?!.*filter).*(service|tune|check)/i, /cooling\s*system.*(service|tune|check)/i], max_months: 12, min_months: 6 },
+  { match: [/gutter/i], max_months: 12, min_months: 3 },
   { match: [/hvac.*service/i, /hvac.*tune/i, /furnace.*inspect/i, /ac.*service/i], max_months: 12, min_months: 6 },
   { match: [/gutter.*clean/i], max_months: 12, min_months: 3 },
   { match: [/roof.*inspect/i], max_months: 24, min_months: 12 },
@@ -143,8 +154,16 @@ const REQUIRED_TASKS: RequiredTask[] = [
   { match: [/hvac.*filter/i, /air.*filter.*replace/i, /furnace.*filter/i], task: "HVAC Filter Replacement", description: "Replace HVAC air filters every 1-3 months depending on filter type, pets, and allergies.", category: "HVAC", interval_months: 3, estimated_cost_low: 15, estimated_cost_high: 40, priority: "high" },
   { match: [/smoke.*detector/i, /carbon.*monoxide/i, /co.*detector/i, /smoke.*co/i], task: "Test Smoke & CO Detectors", description: "Test all smoke and carbon monoxide detectors. Replace batteries annually.", category: "Safety", interval_months: 6, estimated_cost_low: 0, estimated_cost_high: 25, priority: "high" },
   { match: [/gutter/i], task: "Clean Gutters & Downspouts", description: "Remove debris from gutters and flush downspouts.", category: "Roof", interval_months: 6, estimated_cost_low: 100, estimated_cost_high: 250, priority: "medium", condition: (ctx) => ctx.propertyType !== "condo" && ctx.propertyType !== "apartment" },
-  { match: [/hvac.*service/i, /hvac.*tune/i, /furnace.*inspect/i], task: "HVAC Professional Service", description: "Annual professional HVAC inspection, cleaning, and tune-up.", category: "HVAC", interval_months: 12, estimated_cost_low: 100, estimated_cost_high: 250, priority: "high" },
+  // Accepts the heating vocabulary so an existing "Heating System Professional
+  // Tune-Up" satisfies it (no duplicate). Condo/apartment mirror the gutter
+  // condition: their template deliberately omits building-level HVAC service.
+  { match: [/hvac(?!.*filter).*(service|tune)/i, /heating(?!.*filter).*(service|tune|inspect)/i, /furnace(?!.*filter).*(service|tune|inspect)/i, /boiler.*(service|tune|inspect)/i], task: "HVAC Professional Service", description: "Annual professional HVAC inspection, cleaning, and tune-up.", category: "HVAC", interval_months: 12, estimated_cost_low: 100, estimated_cost_high: 250, priority: "high", condition: (ctx) => ctx.propertyType !== "condo" && ctx.propertyType !== "apartment" },
 ];
+
+// Building-level work the HOA handles: stripped on the AI path for condo and
+// apartment only (townhouses keep their roof and gutters, as the template does).
+const INTERIOR_ONLY_EXCLUSIONS: RegExp[] = [/gutter|roof|siding|exterior\s*paint|landscap|lawn|irrigation|sprinkler/i];
+const isInteriorOnlyType = (propertyType: string) => propertyType === "condo" || propertyType === "apartment";
 
 interface ValidatedTask {
   task: string;
@@ -154,7 +173,59 @@ interface ValidatedTask {
   estimated_cost_low: number;
   estimated_cost_high: number;
   priority: string;
+  // Seasonal anchor: absolute calendar month (1-12) the task should FIRST fall
+  // in, or null/absent for routine tasks. Never a relative offset, so a cache
+  // hit in any month lands the task in the same season. Only the AI parse
+  // sets it; template and required tasks fall through to the interval path.
+  target_month?: number | null;
 }
+
+// ── Due-date math (one helper for the fresh and cache paths) ──────────
+// No anchor: one full interval from today, exactly as before. Anchored: the
+// next occurrence of target_month on or after today — the current month
+// counts as now (a task generated in its season is due now), any other month
+// is the 1st of its next occurrence, year bumped when the target has already
+// passed this year. UTC throughout, matching the ISO date the insert writes;
+// Date.UTC(y, m, 1) can never overflow the way setMonth on the 31st does.
+function nextDueFor(t: ValidatedTask, today: Date): Date {
+  const target = t.target_month ?? null;
+  if (target === null) return addMonths(today, t.interval_months);
+  const m0 = today.getUTCMonth();
+  const t0 = target - 1;
+  if (t0 === m0) return today;
+  const y = today.getUTCFullYear() + (t0 > m0 ? 0 : 1);
+  return new Date(Date.UTC(y, t0, 1));
+}
+// first_due_in_months (0-11, months from now) → absolute target month, decided
+// at generation time so the stored value is season-stable.
+function targetMonthFrom(firstDueInMonths: unknown, today: Date): number | null {
+  if (typeof firstDueInMonths !== "number" || !Number.isInteger(firstDueInMonths) || firstDueInMonths < 0 || firstDueInMonths > 11) return null;
+  return ((today.getUTCMonth() + firstDueInMonths) % 12) + 1;
+}
+
+// ── Rules-versioned cache key ────────────────────────────────────────
+// Same pattern as the vehicle function: the hash covers the rules DATA and a
+// PROMPT_VERSION for prompt-shape changes, regexes serialised as strings so a
+// matcher change actually moves the hash. Old-shape rows are unreachable.
+const PROMPT_VERSION = 2;
+const serializeRules = (v: unknown): unknown => {
+  if (v instanceof RegExp) return String(v);
+  if (typeof v === "function") return String(v);
+  if (Array.isArray(v)) return v.map(serializeRules);
+  if (v && typeof v === "object") {
+    const o: Record<string, unknown> = {};
+    for (const k of Object.keys(v as Record<string, unknown>).sort()) o[k] = serializeRules((v as Record<string, unknown>)[k]);
+    return o;
+  }
+  return v;
+};
+const rulesBlob = JSON.stringify(serializeRules({ promptVersion: PROMPT_VERSION, clamps: PROPERTY_CLAMPS, required: REQUIRED_TASKS, interiorOnly: INTERIOR_ONLY_EXCLUSIONS }));
+let rulesHash = 0x811c9dc5;
+for (let i = 0; i < rulesBlob.length; i++) {
+  rulesHash ^= rulesBlob.charCodeAt(i);
+  rulesHash = Math.imul(rulesHash, 0x01000193) >>> 0;
+}
+const RULES_VERSION = rulesHash.toString(16).padStart(8, "0");
 
 function clampTask(t: ValidatedTask): ValidatedTask {
   for (const c of PROPERTY_CLAMPS) {
@@ -175,6 +246,7 @@ function validateAndEnforce(tasks: ValidatedTask[], ctx: { propertyType: string;
     priority: normalizePriority(t.priority),
   }));
   v = v.filter(t => t.task.trim() !== "" && t.interval_months > 0);
+  if (isInteriorOnlyType(ctx.propertyType)) v = v.filter(t => !INTERIOR_ONLY_EXCLUSIONS.some(re => re.test(t.task)));
 
   for (const req of REQUIRED_TASKS) {
     if (req.condition && !req.condition(ctx)) continue;
@@ -334,7 +406,8 @@ Deno.serve(async (req: Request) => {
     const climate = getClimateZone(zip);
     const today = new Date();
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-    const cacheKey = `prop|${propType}|${yearBuilt ?? "unknown"}|${sqft ?? "unknown"}|${climate.zone}`.toLowerCase();
+    // No month in the key: target_month makes cached rows season-stable.
+    const cacheKey = `${`prop|${propType}|${yearBuilt ?? "unknown"}|${sqft ?? "unknown"}|${climate.zone}`.toLowerCase()}|r${RULES_VERSION}`;
 
     // Property description for AI prompt
     const ageDesc = yearBuilt
@@ -357,7 +430,32 @@ Deno.serve(async (req: Request) => {
     let usedAi = false;
 
     if (cached?.tasks_json) {
-      try { validatedTasks = JSON.parse(cached.tasks_json); console.log(`[CACHE HIT] ${cacheKey}`); } catch { console.warn("[CACHE] Parse failed"); }
+      try {
+        const raw: unknown = JSON.parse(cached.tasks_json);
+        if (Array.isArray(raw)) {
+          // Stored dates are never reused: only interval_months and
+          // target_month are trusted, and the insert map below recomputes
+          // every next_due_date from the current date. The same
+          // validateAndEnforce the fresh path runs is applied here too.
+          const shaped: ValidatedTask[] = raw
+            .filter((t) => t && typeof t === "object" && typeof (t as Record<string, unknown>).task === "string")
+            .map((t) => {
+              const r = t as Record<string, unknown>;
+              return {
+                task: String(r.task),
+                description: typeof r.description === "string" ? r.description : "",
+                category: typeof r.category === "string" ? r.category : "General",
+                interval_months: typeof r.interval_months === "number" && r.interval_months > 0 ? Math.min(120, Math.max(1, Math.round(r.interval_months))) : 12,
+                estimated_cost_low: typeof r.estimated_cost_low === "number" ? r.estimated_cost_low : 0,
+                estimated_cost_high: typeof r.estimated_cost_high === "number" ? r.estimated_cost_high : 0,
+                priority: typeof r.priority === "string" ? r.priority : "medium",
+                target_month: typeof r.target_month === "number" && Number.isInteger(r.target_month) && r.target_month >= 1 && r.target_month <= 12 ? r.target_month : null,
+              };
+            });
+          validatedTasks = validateAndEnforce(shaped, { propertyType: propType, yearBuilt, climateZone: climate.zone });
+          console.log(`[CACHE HIT] ${cacheKey}`);
+        }
+      } catch { console.warn("[CACHE] Parse failed"); }
     }
 
     // AI generation
@@ -375,7 +473,7 @@ Current date: ${currentMonth} ${currentYear}
 
 Important context:
 - Generate tasks the homeowner should actually track and maintain
-- SEASONAL ANCHORING: Set each task's interval_months so the FIRST due date lands in the right season. For example, if it is March and gutter cleaning should happen in November, use interval_months: 8 (not 6). If winterizing faucets should happen in October and it is March, use interval_months: 7. Roof inspections in spring, HVAC tune-ups before heating/cooling season, etc. The interval_months you return will be used to calculate the first due date from today — make it land in the correct month.
+- interval_months is the recurrence ONLY — how often the task repeats. For season-dependent tasks ONLY (winterization, gutters, heating service, AC service, sprinkler open/close, and similar), also set first_due_in_months (0-11): months from now until the task is FIRST due, so it lands in the right season; 0 means due now. OMIT first_due_in_months for routine tasks. NEVER shorten interval_months to encode seasonal timing.
 - Adjust intervals for the climate zone: freeze zones need winterization, pipe protection, ice dam prevention; humid zones need mold/moisture checks; hot-dry zones need different cooling and exterior cadences
 - Adjust for property age: older homes need more frequent structural, plumbing, and electrical inspections
 - For condos/apartments: skip tasks the HOA/building handles (roof, exterior, gutters, landscaping). Focus on unit-interior tasks.
@@ -400,6 +498,7 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
     "description": "Practical description",
     "category": "HVAC|Plumbing|Electrical|Roof|Exterior|Interior|Appliances|Safety|Pest Control|Landscaping|Structural|Seasonal|General",
     "interval_months": <positive integer>,
+    "first_due_in_months": <integer 0-11, season-dependent tasks only — omit otherwise>,
     "estimated_cost_low": <number>,
     "estimated_cost_high": <number>,
     "priority": "high"|"medium"|"low"
@@ -437,10 +536,11 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
                 task: t.task.trim(),
                 description: typeof t.description === "string" ? t.description : "",
                 category: typeof t.category === "string" ? t.category : "General",
-                interval_months: typeof t.interval_months === "number" && t.interval_months > 0 ? Math.round(t.interval_months) : 12,
+                interval_months: typeof t.interval_months === "number" && t.interval_months > 0 ? Math.min(120, Math.max(1, Math.round(t.interval_months))) : 12,
                 estimated_cost_low: typeof t.estimated_cost_low === "number" ? Math.round(t.estimated_cost_low) : 0,
                 estimated_cost_high: typeof t.estimated_cost_high === "number" ? Math.round(t.estimated_cost_high) : 0,
                 priority: typeof t.priority === "string" ? t.priority : "medium",
+                target_month: targetMonthFrom(t.first_due_in_months, today),
               }));
 
             validatedTasks = validateAndEnforce(parsed, { propertyType: propType, yearBuilt, climateZone: climate.zone });
@@ -487,7 +587,7 @@ Respond ONLY with a valid JSON array, no markdown, no backticks:
       interval_months: t.interval_months,
       estimated_cost: Math.round((t.estimated_cost_low + t.estimated_cost_high) / 2),
       priority: t.priority,
-      next_due_date: addMonths(today, t.interval_months).toISOString().split("T")[0],
+      next_due_date: nextDueFor(t, today).toISOString().split("T")[0],
       is_completed: false,
       created_at: today.toISOString(),
       updated_at: today.toISOString(),

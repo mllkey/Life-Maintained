@@ -481,9 +481,20 @@ Deno.serve(async (req: Request) => {
     }
     try {
 
-    const cacheKey = memberType === "pet"
+    // Rules-versioned key (epoch: the tables, the clamp/template/required logic
+    // as source text, and PROMPT_VERSION), so prompt or rule changes reach the
+    // cached rows instead of being pinned behind them forever.
+    const HEALTH_PROMPT_VERSION = 2;
+    const healthRulesBlob = JSON.stringify([HEALTH_PROMPT_VERSION, PERSON_ELIGIBILITY.map((r) => String(r.rx)), PERSON_TRANSITIONS, DOG_SENIOR_AGE, String(clampInterval), String(getTemplateTasks), String(injectRequired)]);
+    let healthRulesHash = 0x811c9dc5;
+    for (let i = 0; i < healthRulesBlob.length; i++) {
+      healthRulesHash ^= healthRulesBlob.charCodeAt(i);
+      healthRulesHash = Math.imul(healthRulesHash, 0x01000193) >>> 0;
+    }
+    const HEALTH_RULES_VERSION = healthRulesHash.toString(16).padStart(8, "0");
+    const cacheKey = `${memberType === "pet"
       ? `health-v2|pet|${bracket}|${petType}|${petBreed ?? "none"}`.toLowerCase()
-      : `health-v2|${memberType}|${age ?? "unknown"}|${sexAtBirth}|${petType}`.toLowerCase();
+      : `health-v2|${memberType}|${age ?? "unknown"}|${sexAtBirth}|${petType}`.toLowerCase()}|r${HEALTH_RULES_VERSION}`;
 
     const { data: cached } = await adminClient
       .from("ai_schedule_cache")
