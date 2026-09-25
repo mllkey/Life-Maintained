@@ -25,6 +25,9 @@ interface HealthTask {
   appointment_type: string;
   interval_months: number;
   priority: "high" | "medium" | "low";
+  // Optional guidance carried to the row's notes column (deterministic
+  // requireds only; model output never sets it).
+  notes?: string;
 }
 
 const AGE_TRIGGERED_SCREENINGS = /mammogram|colonoscop|colorectal|prostate|\bpsa\b|bone\s*densit|dexa|dxa|zoster|shingles|pneumococc|\brsv\b|cervical|\bhpv\b|\bpap\b/i;
@@ -52,6 +55,10 @@ const PERSON_ELIGIBILITY: Array<{ rx: RegExp; ok: (age: number, isFemale: boolea
 ];
 
 function personTaskEligible(appointmentType: string, age: number, isFemale: boolean, isMale: boolean): boolean {
+  // Pediatric "Discuss ... Vaccination" items (HPV at 11-12, PCV, RSV
+  // nirsevimab) are ACIP childhood guidance; the adult windows below must
+  // not strip them from a minor's schedule.
+  if (age < 18 && /^discuss/i.test(appointmentType) && /\bhpv\b|pneumococc|\brsv\b/i.test(appointmentType)) return true;
   for (const rule of PERSON_ELIGIBILITY) {
     if (rule.rx.test(appointmentType)) return rule.ok(age, isFemale, isMale);
   }
@@ -61,11 +68,14 @@ function personTaskEligible(appointmentType: string, age: number, isFemale: bool
 // Person reconciliation: legacy administration-named rows convert in place
 // to their discussion-named successors (or retire when the successor already
 // exists), mirroring the pet transition machinery.
-const PERSON_TRANSITIONS: Array<{ from: string; to: string; months: number }> = [
-  { from: "Prostate Screening", to: "Discuss PSA Screening", months: 12 },
+// `when` gates a transition on the member's current age, so the
+// pediatric → adult conversion cannot fire on a child.
+const PERSON_TRANSITIONS: Array<{ from: string; to: string; months: number; when?: (age: number) => boolean }> = [
+  { from: "Prostate Screening", to: "Discuss PSA Screening", months: 60 },
   { from: "Pneumococcal Vaccine", to: "Discuss Pneumococcal Vaccination", months: 120 },
   { from: "Shingles Vaccine", to: "Discuss Shingles Vaccination (Shingrix)", months: 120 },
   { from: "RSV Vaccine", to: "Discuss RSV Vaccination", months: 120 },
+  { from: "Well-Child Visit", to: "Annual Physical", months: 12, when: (a) => a >= 18 },
 ];
 
 const PET_SENIOR_SCREENINGS = /senior|geriatric|elderly|\baging\b|semi[-\s]?annual\s+(?:vet|veterinary|wellness)/i;
@@ -78,6 +88,32 @@ const VACCINATION_TASK = /vaccin/i;
 // "Bordetella Vaccine", which keep their own cadence.
 const GENERIC_VACCINATION_TASK = /^\s*(?:annual\s+|yearly\s+|core\s+)*(?:vaccin(?:e|es|ation|ations)(?:\s+(?:boosters?|shots?))?|vaccin(?:e|ation)\s+series)\s*$/i;
 const BLOODWORK_TASK = /bloodwork|blood work|blood panel/i;
+
+// ── Pediatric branch (person < 18) ──────────────────────────────────
+// The well-child visit replaces the adult Annual Physical: any generic
+// physical/checkup the model emits collapses into it (never "Dental
+// Checkup" or "Vision Checkup", which the anchored alternates exclude).
+const WELL_CHILD_RX = /well.?child|annual\s*physical|^(?:annual\s+)?(?:check.?up|physical(?:\s+exam)?)$/i;
+function wellChildIntervalFor(age: number): number {
+  return age < 1 ? 3 : age <= 3 ? 6 : 12;
+}
+// One-time shared decisions must not recur annually; recurring vaccine
+// discussions (flu, COVID, Tdap) are the only "Discuss ..." items exempt.
+const DISCUSS_FLOOR_RX = /^discuss(?!.*\b(?:flu|influenza|covid|tdap)\b)/i;
+
+// ── Core pet preventives, injected deterministically ─────────────────
+// Match regexes are tight enough that a model-emitted EQUIVALENT satisfies
+// them but a look-alike does not: "Heartworm Test" is not prevention, a
+// tick-borne disease screening is not flea/tick prevention. Dog/cat only,
+// every bracket except the first-year series.
+interface PetRequired { appointment_type: string; interval_months: number; priority: HealthTask["priority"]; match: RegExp; species: "dog" | "cat" | "both"; notes?: string }
+const PET_REQUIRED: PetRequired[] = [
+  { appointment_type: "Heartworm Prevention", interval_months: 1, priority: "high", match: /heartworm\s*prevent/i, species: "both" },
+  { appointment_type: "Flea and Tick Prevention", interval_months: 1, priority: "medium", match: /flea|tick\s*prevent/i, species: "both" },
+  { appointment_type: "Rabies Vaccination", interval_months: 36, priority: "high", match: /rabies/i, species: "both", notes: "1-3 year vaccine depending on local requirements; confirm with your vet" },
+  { appointment_type: "DHPP Booster", interval_months: 36, priority: "medium", match: /dhpp|da2pp|distemper/i, species: "dog" },
+  { appointment_type: "FVRCP Booster", interval_months: 36, priority: "medium", match: /fvrcp/i, species: "cat" },
+];
 
 type PetBracket = "puppy" | "kitten" | "adult" | "mature" | "senior" | "unknown";
 
@@ -233,13 +269,12 @@ function getTemplateTasks(memberType: string, age: number | null, sexAtBirth: st
     ];
   }
 
-  // Person
+  // Person — pediatric template: well-child cadence by age, dental from age 1.
   if (age !== null && age < 18) {
-    return [
-      { appointment_type: "Annual Physical", interval_months: 12, priority: "high" },
-      { appointment_type: "Dental Cleaning", interval_months: 6, priority: "medium" },
-      { appointment_type: "Eye Exam", interval_months: 24, priority: "medium" },
-    ];
+    const out: HealthTask[] = [{ appointment_type: "Well-Child Visit", interval_months: wellChildIntervalFor(age), priority: "high" }];
+    if (age >= 1) out.push({ appointment_type: "Dental Cleaning", interval_months: 6, priority: "medium" });
+    out.push({ appointment_type: "Eye Exam", interval_months: 24, priority: "medium" });
+    return out;
   }
 
   const isFemale = sexAtBirth === "female";
@@ -255,7 +290,7 @@ function getTemplateTasks(memberType: string, age: number | null, sexAtBirth: st
   const cervical: HealthTask = { appointment_type: "Cervical Cancer Screening", interval_months: 36, priority: "high" };
   const mammogram: HealthTask = { appointment_type: "Mammogram", interval_months: 24, priority: "high" };
   const colonoscopy: HealthTask = { appointment_type: "Colonoscopy", interval_months: 120, priority: "high" };
-  const prostate: HealthTask = { appointment_type: "Discuss PSA Screening", interval_months: 12, priority: "medium" };
+  const prostate: HealthTask = { appointment_type: "Discuss PSA Screening", interval_months: 60, priority: "medium" };
   const dexa: HealthTask = { appointment_type: "Bone Density (DEXA) Scan", interval_months: 24, priority: "medium" };
   const pneumo: HealthTask = { appointment_type: "Discuss Pneumococcal Vaccination", interval_months: 120, priority: "medium" };
   const shingles: HealthTask = { appointment_type: "Discuss Shingles Vaccination (Shingrix)", interval_months: 120, priority: "medium" };
@@ -279,6 +314,7 @@ function getTemplateTasks(memberType: string, age: number | null, sexAtBirth: st
 function clampInterval(appointmentType: string, intervalMonths: number, memberType: string, bracket: PetBracket): number {
   const mo = Math.round(intervalMonths);
   if (memberType === "person") {
+    if (DISCUSS_FLOOR_RX.test(appointmentType)) return Math.max(60, Math.min(120, mo));
     if (appointmentType === "Annual Physical") return 12;
     if (appointmentType === "Dental Cleaning") return Math.max(6, Math.min(12, mo));
     if (appointmentType === "Eye Exam") return Math.max(12, Math.min(24, mo));
@@ -315,6 +351,7 @@ function normalizeAndValidate(raw: unknown[], memberType: string, bracket: PetBr
       appointment_type: t.appointment_type.trim(),
       interval_months: clampInterval(t.appointment_type.trim(), t.interval_months, memberType, bracket),
       priority: normalizePriority(t.priority),
+      ...(typeof t.notes === "string" && t.notes.trim() ? { notes: t.notes.trim() } : {}),
     });
   }
   return result;
@@ -340,13 +377,20 @@ function replaceMatchingWithCanonical(tasks: HealthTask[], matcher: RegExp, cano
   tasks.splice(insertAt, 0, canonical);
 }
 
-function injectRequired(tasks: HealthTask[], memberType: string, petType: string, bracket: PetBracket): HealthTask[] {
+function injectRequired(tasks: HealthTask[], memberType: string, petType: string, bracket: PetBracket, age: number | null): HealthTask[] {
   const result = [...tasks];
   const hasType = (type: string) => result.some(t => t.appointment_type === type);
 
   if (memberType === "person") {
-    if (!hasType("Annual Physical")) result.push({ appointment_type: "Annual Physical", interval_months: 12, priority: "high" });
-    if (!hasType("Dental Cleaning")) result.push({ appointment_type: "Dental Cleaning", interval_months: 6, priority: "medium" });
+    if (age !== null && age < 18) {
+      // Pediatric: the well-child visit IS the physical; any generic
+      // physical/checkup collapses into it at the age-banded cadence.
+      replaceMatchingWithCanonical(result, WELL_CHILD_RX, { appointment_type: "Well-Child Visit", interval_months: wellChildIntervalFor(age), priority: "high" });
+      if (age >= 1 && !hasType("Dental Cleaning")) result.push({ appointment_type: "Dental Cleaning", interval_months: 6, priority: "medium" });
+    } else {
+      if (!hasType("Annual Physical")) result.push({ appointment_type: "Annual Physical", interval_months: 12, priority: "high" });
+      if (!hasType("Dental Cleaning")) result.push({ appointment_type: "Dental Cleaning", interval_months: 6, priority: "medium" });
+    }
   } else {
     const pt = petType.toLowerCase();
 
@@ -373,6 +417,16 @@ function injectRequired(tasks: HealthTask[], memberType: string, petType: string
 
     if (pt === "dog" && bracket !== "puppy" && !hasType("Dental Cleaning")) {
       result.push({ appointment_type: "Dental Cleaning", interval_months: 12, priority: "medium" });
+    }
+
+    // Core preventives, guaranteed regardless of what the model chose to
+    // spend its item budget on. First-year pets get the Vaccine Series instead.
+    if ((pt === "dog" || pt === "cat") && bracket !== "puppy" && bracket !== "kitten") {
+      for (const req of PET_REQUIRED) {
+        if (req.species !== "both" && req.species !== pt) continue;
+        if (result.some(t => req.match.test(t.appointment_type))) continue;
+        result.push({ appointment_type: req.appointment_type, interval_months: req.interval_months, priority: req.priority, ...(req.notes ? { notes: req.notes } : {}) });
+      }
     }
   }
 
@@ -484,8 +538,8 @@ Deno.serve(async (req: Request) => {
     // Rules-versioned key (epoch: the tables, the clamp/template/required logic
     // as source text, and PROMPT_VERSION), so prompt or rule changes reach the
     // cached rows instead of being pinned behind them forever.
-    const HEALTH_PROMPT_VERSION = 2;
-    const healthRulesBlob = JSON.stringify([HEALTH_PROMPT_VERSION, PERSON_ELIGIBILITY.map((r) => String(r.rx)), PERSON_TRANSITIONS, DOG_SENIOR_AGE, String(clampInterval), String(getTemplateTasks), String(injectRequired)]);
+    const HEALTH_PROMPT_VERSION = 3;
+    const healthRulesBlob = JSON.stringify([HEALTH_PROMPT_VERSION, PERSON_ELIGIBILITY.map((r) => String(r.rx)), PERSON_TRANSITIONS.map((t) => [t.from, t.to, t.months, t.when ? String(t.when) : ""]), DOG_SENIOR_AGE, String(clampInterval), String(getTemplateTasks), String(injectRequired), String(personTaskEligible), String(wellChildIntervalFor), String(WELL_CHILD_RX), String(DISCUSS_FLOOR_RX), PET_REQUIRED.map((r) => [r.appointment_type, r.interval_months, r.priority, String(r.match), r.species, r.notes ?? ""])]);
     let healthRulesHash = 0x811c9dc5;
     for (let i = 0; i < healthRulesBlob.length; i++) {
       healthRulesHash ^= healthRulesBlob.charCodeAt(i);
@@ -523,7 +577,10 @@ Deno.serve(async (req: Request) => {
       if (anthropicKey) {
         const claudeModel = Deno.env.get("CLAUDE_SONNET_MODEL") ?? "claude-sonnet-4-5";
         let userPrompt: string;
-        if (memberType === "person") {
+        if (memberType === "person" && age !== null && age < 18) {
+          // Pediatric prompt. The adult prompt below is byte-for-byte unchanged.
+          userPrompt = `Generate a preventive health schedule for a ${age}-year-old child (pediatric), sex at birth: ${sexAtBirth}. Include 6-10 items. Each item must have: appointment_type (string), interval_months (number), priority ("high" | "medium" | "low"). Follow the AAP Bright Futures periodicity schedule and the ACIP childhood immunization schedule: a "Well-Child Visit" with interval_months ${wellChildIntervalFor(age)}; "Dental Cleaning" every 6 months${age < 1 ? " only once the first tooth erupts (omit for an infant under 1)" : ""}; vision and hearing screening at the age-appropriate cadence; and age-appropriate "Discuss ... Vaccination" items named as discussions (for example "Discuss HPV Vaccination" at ages 11-12), never as recurring administrations. Do NOT include ANY adult screenings: no colonoscopy or colorectal screening, no cholesterol or lipid panel, no mammogram, no prostate or PSA, no bone density, no adult vaccine schedules (shingles, adult pneumococcal, RSV for older adults), and no adult blood-pressure cadence.`;
+        } else if (memberType === "person") {
           const personDesc = age !== null ? `a ${age}-year-old person` : "an adult person (age unknown)";
           userPrompt = `Generate a preventive health schedule for ${personDesc}, sex at birth: ${sexAtBirth}. Include 8-14 preventive screenings, checkups, and adult vaccines. Each item must have: appointment_type (string), interval_months (number), priority ("high" | "medium" | "low"). Follow current USPSTF and ACIP guidance: blood pressure screening (annual from 40, every 3 years ages 18-39); cervical cancer screening for females from 21 (every 3 years ages 21-29, every 5 years with HPV testing 30-65); mammogram BIENNIAL (interval_months 24) for females 40-74; colorectal screening from 45 (colonoscopy every 10 years); a "Discuss PSA Screening" item (shared decision, never an automatic screening) ONLY for males 55-69; bone density (DEXA) for females from 65; "Discuss Pneumococcal Vaccination" and "Discuss Shingles Vaccination (Shingrix)" items from 50 and a "Discuss RSV Vaccination" item from 75 - vaccine dosing depends on history, so these are named as discussions, never as recurring administrations. NEVER include lung cancer CT, aortic aneurysm screening, or diabetes/glucose screening - those require smoking or BMI history that is not available. For ages 76 and over, do NOT add new colorectal screening; for 75 and over add no new mammogram or PSA items.`;
           if (age === null) {
@@ -543,7 +600,7 @@ Deno.serve(async (req: Request) => {
             petDesc = `an adult ${petType}`;
           }
 
-          userPrompt = `Generate a preventive health schedule for ${petDesc}. Include 5-8 veterinary appointments. Each item must have: appointment_type (string), interval_months (number), priority ("high" | "medium" | "low"). Keep appointment_type names short and canonical.`;
+          userPrompt = `Generate a preventive health schedule for ${petDesc}. Include ${petBreed ? "8-12" : "5-8"} veterinary appointments. Each item must have: appointment_type (string), interval_months (number), priority ("high" | "medium" | "low"). Keep appointment_type names short and canonical.`;
           if (bracket === "senior") {
             userPrompt += ` This is a senior pet: name the routine wellness visit exactly "Semi-Annual Vet Visit" with interval_months 6, and include "Senior Bloodwork" with interval_months 6.`;
           } else if (bracket === "puppy" || bracket === "kitten") {
@@ -606,7 +663,7 @@ Deno.serve(async (req: Request) => {
 
             if (Array.isArray(aiTasks)) {
               const normalized = normalizeAndValidate(aiTasks, memberType, bracket);
-              const withRequired = injectRequired(normalized, memberType, petType, bracket);
+              const withRequired = injectRequired(normalized, memberType, petType, bracket, age);
               const deduped = deduplicateTasks(withRequired);
               if (deduped.length >= 2) {
                 finalTasks = deduped;
@@ -631,14 +688,14 @@ Deno.serve(async (req: Request) => {
       console.warn("[FALLBACK] Using template tasks");
       const raw = getTemplateTasks(memberType, age, sexAtBirth, petType, bracket);
       const normalized = normalizeAndValidate(raw as unknown[], memberType, bracket);
-      const withRequired = injectRequired(normalized, memberType, petType, bracket);
+      const withRequired = injectRequired(normalized, memberType, petType, bracket, age);
       finalTasks = deduplicateTasks(withRequired);
       source = "template";
     }
 
     if (source === "cache") {
       const reclamped = normalizeAndValidate(finalTasks as unknown[], memberType, bracket);
-      const withRequired = injectRequired(reclamped, memberType, petType, bracket);
+      const withRequired = injectRequired(reclamped, memberType, petType, bracket, age);
       finalTasks = deduplicateTasks(withRequired);
     }
 
@@ -659,7 +716,7 @@ Deno.serve(async (req: Request) => {
 
     if (memberType === "pet" && bracket !== "senior") {
       finalTasks = finalTasks.filter(t => !PET_SENIOR_SCREENINGS.test(t.appointment_type));
-      finalTasks = deduplicateTasks(injectRequired(finalTasks, memberType, petType, bracket));
+      finalTasks = deduplicateTasks(injectRequired(finalTasks, memberType, petType, bracket, age));
     }
 
     if (source !== "cache") {
@@ -772,6 +829,7 @@ Deno.serve(async (req: Request) => {
       const mal = sexAtBirth === "male";
 
       for (const rule of PERSON_TRANSITIONS) {
+        if (rule.when && !rule.when(age as number)) continue;
         const src = activeByType.get(rule.from);
         if (!src) continue;
         if (!existingTypes.has(rule.to) && personTaskEligible(rule.to, age as number, fem, mal)) {
@@ -922,7 +980,7 @@ Deno.serve(async (req: Request) => {
         next_due_date: addMonthsUTC(today, t.interval_months).toISOString().split("T")[0],
         provider_name: null,
         estimated_cost: null,
-        notes: null,
+        notes: t.notes ?? null,
       }));
 
       const { error: insertError } = await adminClient.from("health_appointments").insert(rows);
