@@ -137,8 +137,13 @@ export default function EditVehicleScreen() {
           setSaving(false);
           return;
         }
-        updates.hours = newHours;
-        updates.last_hours_update = new Date().toISOString();
+        if (newHours !== currentHours) {
+          // Mirror the mileage branch: only an actual reading change writes the value and
+          // re-anchors the projection clock. The input is prefilled with the stored value, so an
+          // unrelated edit (nickname, color) must not silently reset accrued projected hours.
+          updates.hours = newHours;
+          updates.last_hours_update = new Date().toISOString();
+        }
       }
     }
 
