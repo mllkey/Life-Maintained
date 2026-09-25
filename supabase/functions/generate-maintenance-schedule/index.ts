@@ -1476,10 +1476,17 @@ Every task MUST have ${intervalRequirement}.`;
             const wrapper = aiParsed as Record<string, unknown>;
             if (Array.isArray(wrapper.tasks)) {
               aiTasks = wrapper.tasks;
+              // Each normalized declaration is logged so the deterministic lists
+              // (EV_MODELS, FWD_ONLY_MODELS, the ATV/UTV drive lists) can be
+              // grown from what real models actually declare.
               declaredConfig = normalizeDeclaredConfig(wrapper.config);
+              console.log(`[CONFIG] motorcycle-shape ${vehicleCategory} "${make} ${vehicleModel}"`, JSON.stringify(declaredConfig));
               declaredCar = normalizeCarConfig(wrapper.config);
+              console.log(`[CONFIG] car-shape ${vehicleCategory} "${make} ${vehicleModel}"`, JSON.stringify(declaredCar));
               declaredAtv = normalizeAtvConfig(wrapper.config);
+              console.log(`[CONFIG] atv-shape ${vehicleCategory} "${make} ${vehicleModel}"`, JSON.stringify(declaredAtv));
               declaredTrailer = normalizeTrailerConfig(wrapper.config);
+              console.log(`[CONFIG] trailer-shape ${vehicleCategory} "${make} ${vehicleModel}"`, JSON.stringify(declaredTrailer));
             }
           }
           aiDeclaredBev = isCarConfigCategory && !isEvFuel && declaredCar.powertrain === "bev";
