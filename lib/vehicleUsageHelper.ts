@@ -41,7 +41,7 @@ export async function updateVehicleUsage(
   if (milesVal != null && milesVal > (currentMileage ?? 0)) {
     const { data: raised, error: updErr } = await supabase
       .from("vehicles")
-      .update({ mileage: milesVal, updated_at: now })
+      .update({ mileage: milesVal, last_mileage_update: now, updated_at: now })
       .eq("id", vehicleId)
       .or(`mileage.is.null,mileage.lt.${milesVal}`)
       .select("id");
