@@ -60,3 +60,6 @@ LifeMaintained-Pass-*-Audit*.docx
 credentials/apple/*.p8
 
 feature_dossier.txt
+
+# local-only credentials (never commit)
+.secrets/

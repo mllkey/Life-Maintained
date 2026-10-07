@@ -1,0 +1,8 @@
+Automated capture attempts on 2026-10-06:
+- Headless Chrome print-to-pdf and curl were served Cloudflare "Performing security verification" pages (not the content) — discarded.
+- Scripted Chrome (AppleScript) and screen capture were blocked by macOS automation / Screen Recording permissions for the terminal.
+Page content was verified via a server-side fetch on the same date:
+- /photo/209315/: title "Brown Wall Paint House Near at Garden", photo ID 209315, contributor Pixabay, license shown as Free, uploaded October 23, 2016.
+- /creative-commons-images/: heading "Creative Commons Images"; text: "All photos that are covered by the Creative Commons Zero license are marked with 'CC0' on the photo page."
+TODO (manual, ~1 min): in Chrome open each URL, File > Print > Save as PDF into this folder as
+  pexels-photo-209315.pdf and pexels-creative-commons-images.pdf.
