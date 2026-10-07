@@ -105,16 +105,49 @@ focusManager.setEventListener((handleFocus) => {
   return () => subscription.remove();
 });
 
+// Derive react-query's online flag from an expo-network state. expo-network
+// reports isConnected === false for BOTH NetworkStateType.NONE and
+// NetworkStateType.UNKNOWN; UNKNOWN is what iOS hands back transiently while
+// the app is backgrounded behind a native picker/camera sheet, and no further
+// event fires once the app returns. Treating UNKNOWN as offline therefore left
+// onlineManager false (queries stuck in fetchStatus "paused", "Unable to load"
+// states) until relaunch. Only an explicit NONE, or an explicit
+// isConnected/isInternetReachable === false on a known interface, means offline.
+function deriveOnline(state: Network.NetworkState): boolean {
+  if (state.type === Network.NetworkStateType.NONE) return false;
+  if (state.type === Network.NetworkStateType.UNKNOWN || state.type == null) return true;
+  return state.isConnected !== false && state.isInternetReachable !== false;
+}
+
 if (Platform.OS !== "web") {
   onlineManager.setEventListener((setOnline) => {
     const sub = Network.addNetworkStateListener((state) => {
-      setOnline(state.isInternetReachable ?? state.isConnected ?? true);
+      setOnline(deriveOnline(state));
     });
     return () => sub.remove();
   });
   Network.getNetworkStateAsync()
-    .then((state) => onlineManager.setOnline(state.isInternetReachable ?? state.isConnected ?? true))
+    .then((state) => onlineManager.setOnline(deriveOnline(state)))
     .catch(() => {});
+
+  // Belt and suspenders: whenever the app comes back to the foreground,
+  // re-sync from the CURRENT network state (never force true). A false -> true
+  // transition resumes paused queries via react-query's own onOnline path; we
+  // additionally refetch active queries only on that transition so a screen
+  // that errored while paused recovers without a relaunch.
+  AppState.addEventListener("change", (nextState: AppStateStatus) => {
+    if (nextState !== "active") return;
+    Network.getNetworkStateAsync()
+      .then((state) => {
+        const wasOnline = onlineManager.isOnline();
+        const nowOnline = deriveOnline(state);
+        onlineManager.setOnline(nowOnline);
+        if (nowOnline && !wasOnline) {
+          queryClient.refetchQueries({ type: "active" }).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  });
 }
 
 // Module-scope debounce ref for profiles.last_active_at upsert.

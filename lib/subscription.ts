@@ -1,6 +1,9 @@
 import { supabase } from "./supabase";
 import { getScanQuota } from "./rpc";
 
+export { planState, paidTierLabel, isPaidTier } from "./planState";
+export type { PlanState, PlanKind, PaidTier, PlanCopyProfile } from "./planState";
+
 export type Profile = {
   user_id?: string;
   subscription_tier: string | null;

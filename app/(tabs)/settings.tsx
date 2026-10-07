@@ -35,11 +35,11 @@ import { loadNotifPrefs, saveNotifPrefs, type NotifPrefs, DEFAULT_NOTIF_PREFS } 
 import { parseISO, differenceInDays, format, addDays } from "date-fns";
 import {
   hasPersonalOrAbove,
-  hasProOrAbove,
-  hasBusiness,
   getLiveScanQuota,
   scanLimit,
   hasActivePremium,
+  planState,
+  paidTierLabel,
 } from "@/lib/subscription";
 import ScanPackModal, { type ScanPackModalHandle } from "@/components/ScanPackModal";
 import { PaidActionCTA } from "@/components/PaidActionCTA";
@@ -517,16 +517,15 @@ export default function SettingsScreen() {
     );
   }
 
-  const userIsInTrial =
-    profile?.subscription_tier === "trial" ||
-    (!!profile?.trial_expires_at && new Date(profile.trial_expires_at) > new Date());
-  const trialDaysLeft = profile?.trial_expires_at
-    ? Math.max(0, Math.ceil((new Date(profile.trial_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-    : 0;
-  const isPremium = hasPersonalOrAbove(profile);
-  const userIsFreeTier = !userIsInTrial && !isPremium;
-  const tierLabel = userIsInTrial ? "Trial" : hasBusiness(profile) ? "Business" : hasProOrAbove(profile) ? "Pro" : hasPersonalOrAbove(profile) ? "Personal" : "Free";
-  const expiryDate = profile?.subscription_expires_at ? parseISO(profile.subscription_expires_at) : null;
+  // Plan copy comes from one place (lib/planState): paid beats trial beats
+  // free, so a paid profile with a stale/active trial_expires_at never reads
+  // as "Free trial". Feature gating below still uses hasPersonalOrAbove & co.
+  const plan = planState(profile);
+  const userIsInTrial = plan.kind === "trial";
+  const trialDaysLeft = userIsInTrial ? (plan.daysRemaining ?? 0) : 0;
+  const userIsFreeTier = plan.kind === "free";
+  const tierLabel = plan.kind === "trial" ? "Trial" : plan.kind === "paid" && plan.tier ? paidTierLabel(plan.tier) : "Free";
+  const expiryDate = plan.kind === "paid" ? plan.expiresAt : null;
   const isLifetime = expiryDate != null && expiryDate.getFullYear() - new Date().getFullYear() > 50;
   const tierExpiry = expiryDate && !isLifetime ? format(expiryDate, "MMMM d, yyyy") : null;
   const tierExpiryLabel = isLifetime
@@ -539,11 +538,7 @@ export default function SettingsScreen() {
   // period attached to Personal/Pro/Business), show the tier label so the
   // banner does not just say "Free Trial". Falls back to "Trial" when no
   // paid tier can be inferred from the profile.
-  const trialBannerTitle =
-    profile?.subscription_tier === "personal" ? "Personal Plan" :
-    profile?.subscription_tier === "pro" ? "Pro Plan" :
-    profile?.subscription_tier === "business" ? "Business Plan" :
-    "Trial";
+  const trialBannerTitle = plan.tier ? `${paidTierLabel(plan.tier)} Plan` : "Trial";
 
   if (!isLoaded) {
     return (
@@ -580,7 +575,7 @@ export default function SettingsScreen() {
             </Pressable>
           )}
 
-          {userIsFreeTier && !userIsInTrial && (
+          {userIsFreeTier && (
             <Pressable
               style={({ pressed }) => [styles.banner, pressed && styles.bannerPressed]}
               onPress={openSubscriptionFromSettings}
@@ -602,7 +597,7 @@ export default function SettingsScreen() {
             </Pressable>
           )}
 
-          {isPremium && !userIsInTrial && (
+          {plan.kind === "paid" && (
             <View style={styles.banner}>
               <View style={styles.bannerText}>
                 <Text style={styles.bannerTitle}>{tierLabel} Plan</Text>
@@ -611,7 +606,7 @@ export default function SettingsScreen() {
             </View>
           )}
 
-          {isPremium && !userIsInTrial && !!profile?.revenuecat_customer_id && (
+          {plan.kind === "paid" && !!profile?.revenuecat_customer_id && (
             <Pressable
               style={({ pressed }) => [styles.manageSubCard, { opacity: pressed ? 0.85 : 1 }]}
               onPress={() => {

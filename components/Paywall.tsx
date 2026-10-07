@@ -29,6 +29,7 @@ import {
   petLimit,
   scanLimit,
   type Profile as SubscriptionProfile,
+  planState,
 } from "@/lib/subscription";
 import { voiceCapPerDay } from "@/lib/voiceQuota";
 
@@ -199,13 +200,15 @@ function isFutureDate(value: string | null | undefined): boolean {
   return Number.isFinite(time) && time > Date.now();
 }
 
+/** Paid tier the paywall should treat as current. Precedence lives in lib/planState (paid > trial > free). */
 function activeTierForPaywall(profile: PaywallProfile | null | undefined): TierKey | null {
-  const tier = profile?.subscription_tier;
-  if (tier !== "personal" && tier !== "pro" && tier !== "business") return null;
-  if (isFutureDate(profile?.trial_expires_at) || isFutureDate(profile?.subscription_expires_at)) {
-    return tier;
-  }
-  return null;
+  const plan = planState(profile);
+  return plan.kind === "paid" ? plan.tier : null;
+}
+
+/** True only when trial copy applies: no active paid plan and a live trial. */
+function hasTrialCopy(profile: PaywallProfile | null | undefined): boolean {
+  return planState(profile).kind === "trial";
 }
 
 /** Price order. The first qualifying candidate is therefore the cheapest one. */
@@ -263,7 +266,7 @@ function legacyPreselectedTierFor(
   profile: PaywallProfile | null | undefined,
   isLimitContext: boolean,
 ): TierKey {
-  if (isFutureDate(profile?.trial_expires_at) && profile?.subscription_tier === "trial") {
+  if (hasTrialCopy(profile)) {
     return isLimitContext ? "business" : "personal";
   }
 
@@ -298,7 +301,7 @@ function preselectedTierFor(
 
   // Trial keeps its existing mapping to Business by contract; no capability
   // probe can improve on the top tier anyway.
-  if (isFutureDate(profile?.trial_expires_at) && profile?.subscription_tier === "trial") return legacy;
+  if (hasTrialCopy(profile)) return legacy;
 
   const current = activeTierForPaywall(profile);
   const currentLimit = limitForVertical(context.vertical, current);
@@ -325,7 +328,7 @@ function purchaseCtaLabel(
   profile: PaywallProfile | null | undefined,
 ): string {
   const selectedLabel = TIER_CONFIG[selectedTier].label;
-  if (isFutureDate(profile?.trial_expires_at)) return `Choose ${selectedLabel}`;
+  if (hasTrialCopy(profile)) return `Choose ${selectedLabel}`;
   const current = activeTierForPaywall(profile);
   if (!current) return `Continue with ${selectedLabel}`;
   if (tierRank(selectedTier) > tierRank(current)) return `Upgrade to ${selectedLabel}`;
@@ -689,7 +692,7 @@ export default function Paywall({
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
   const tiers: TierKey[] = ["personal", "pro", "business"];
   const currentPaywallTier = activeTierForPaywall(profile);
-  const hasActiveTrial = isFutureDate(profile?.trial_expires_at);
+  const hasActiveTrial = hasTrialCopy(profile);
   const purchaseLabel = purchaseCtaLabel(selectedTier, profile);
   const planCallout = hasActiveTrial
     ? "Your free trial is active · Manage in Settings"

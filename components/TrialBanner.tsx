@@ -6,7 +6,7 @@ import { Radius } from "@/constants/radius";
 import { Typography } from "@/constants/typography";
 import { Icon } from "@/components/ui/Icon";
 import { useAuth } from "@/context/AuthContext";
-import { isInTrial, trialDaysRemaining } from "@/lib/subscription";
+import { planState } from "@/lib/subscription";
 import * as Haptics from "expo-haptics";
 
 export default function TrialBanner() {
@@ -15,8 +15,10 @@ export default function TrialBanner() {
   const translateY = useRef(new Animated.Value(-12)).current;
   const prevVisible = useRef(false);
 
-  const daysLeft = trialDaysRemaining(profile);
-  const inTrial = isInTrial(profile);
+  // Trial copy only when no paid plan is active (lib/planState precedence).
+  const plan = planState(profile);
+  const inTrial = plan.kind === "trial";
+  const daysLeft = inTrial ? (plan.daysRemaining ?? 0) : 0;
   const shouldShow = inTrial && daysLeft <= 7;
 
   useEffect(() => {
