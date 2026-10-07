@@ -21,6 +21,18 @@ export type Profile = {
 
 const PAID_TIERS = ["personal", "pro", "business"];
 
+/**
+ * A paid tier is active when no expiry is on file (lifetime / non-renewing
+ * entitlements are stored with subscription_expires_at = NULL) or the expiry is
+ * still in the future. A past expiry means inactive. Mirrors planState rule (a)
+ * so what the user is told and what they are allowed to do never disagree.
+ */
+export function paidExpiryIsActive(expiresAt: string | null | undefined): boolean {
+  if (expiresAt == null || expiresAt === "") return true;
+  const t = new Date(expiresAt).getTime();
+  return !Number.isFinite(t) || t > Date.now();
+}
+
 export function hasActivePremium(profile: Profile | null | undefined): boolean {
   if (!profile) return false;
   try {
@@ -32,8 +44,7 @@ export function hasActivePremium(profile: Profile | null | undefined): boolean {
 
     if (
       PAID_TIERS.includes(profile.subscription_tier ?? "") &&
-      profile.subscription_expires_at &&
-      new Date(profile.subscription_expires_at) > new Date()
+      paidExpiryIsActive(profile.subscription_expires_at)
     ) return true;
 
     return false;
@@ -56,8 +67,7 @@ export function hasProOrAbove(profile: Profile | null | undefined): boolean {
     ) return true;
     if (
       ["pro", "business"].includes(profile.subscription_tier ?? "") &&
-      profile.subscription_expires_at &&
-      new Date(profile.subscription_expires_at) > new Date()
+      paidExpiryIsActive(profile.subscription_expires_at)
     ) return true;
     return false;
   } catch {
@@ -70,8 +80,7 @@ export function hasBusiness(profile: Profile | null | undefined): boolean {
   try {
     return (
       profile.subscription_tier === "business" &&
-      !!profile.subscription_expires_at &&
-      new Date(profile.subscription_expires_at) > new Date()
+      paidExpiryIsActive(profile.subscription_expires_at)
     );
   } catch {
     return false;
