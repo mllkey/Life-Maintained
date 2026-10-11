@@ -166,7 +166,10 @@ export default function TabLayout() {
 
       {voiceTipVisible && (
         <View
-          style={[styles.voiceTipWrap, { bottom: fabBottomOffset(insets.bottom) + FAB_SIZE + 10, left: FAB_LEFT }]}
+          // Anchored directly above the FAB: bubble bottom sits 8pt over the FAB's top edge,
+          // caret points down at the FAB's centre. Opaque, elevated, so it reads as a floating
+          // callout rather than part of whatever card scrolls beneath it.
+          style={[styles.voiceTipWrap, { bottom: fabBottomOffset(insets.bottom) + FAB_SIZE + 8, left: FAB_LEFT }]}
           pointerEvents="box-none"
         >
           <Pressable onPress={dismissVoiceTip} style={styles.voiceTip} accessibilityRole="button" accessibilityLabel="Dismiss voice tip">
@@ -207,28 +210,33 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  voiceTipWrap: { position: "absolute", maxWidth: 300 },
+  voiceTipWrap: { position: "absolute", maxWidth: 320, zIndex: 20 },
   voiceTip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.surface,
     borderRadius: Radius.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: "rgba(232, 147, 58, 0.35)",
+    borderColor: Colors.accent,
+    shadowColor: "#000",
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
   voiceTipText: { ...Typography.footnote, fontWeight: "600", color: Colors.text },
   voiceTipCaret: {
     width: 12,
     height: 12,
-    marginLeft: 18,
-    marginTop: -6,
-    backgroundColor: Colors.card,
+    marginLeft: FAB_SIZE / 2 - 6,
+    marginTop: -7,
+    backgroundColor: Colors.surface,
     borderRightWidth: 1,
     borderBottomWidth: 1,
-    borderColor: "rgba(232, 147, 58, 0.35)",
+    borderColor: Colors.accent,
     transform: [{ rotate: "45deg" }],
   },
   fab: {

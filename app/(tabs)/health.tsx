@@ -28,7 +28,7 @@ import { Spacing } from "@/constants/spacing";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import { parseISO, isBefore, addDays, addMonths, format } from "date-fns";
+import { parseISO, isBefore, addDays, addMonths, format, differenceInCalendarDays } from "date-fns";
 import { scheduleMaintenanceNotifications } from "@/lib/notificationScheduler";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
@@ -392,13 +392,17 @@ export default function HealthScreen() {
   const actionNeededAppts = useMemo(() => [...overdueAppts, ...dueSoonAppts], [overdueAppts, dueSoonAppts]);
 
   const apptStatusByMember = useMemo(() => {
-    const map: Record<string, { overdue: number; upcoming: number }> = {};
+    const map: Record<string, { overdue: number; upcoming: number; nextTitle: string | null; nextDue: string | null }> = {};
     for (const a of appointments ?? []) {
       if (a.family_member_id) {
-        if (!map[a.family_member_id]) map[a.family_member_id] = { overdue: 0, upcoming: 0 };
+        if (!map[a.family_member_id]) map[a.family_member_id] = { overdue: 0, upcoming: 0, nextTitle: null, nextDue: null };
+        const entry = map[a.family_member_id];
+        if (a.is_completed) continue;
         const s = getStatus(a.next_due_date, a.last_completed_at);
-        if (s === "overdue") map[a.family_member_id].overdue++;
-        else if (s === "due_soon") map[a.family_member_id].upcoming++;
+        if (s === "overdue") entry.overdue++;
+        else if (s === "due_soon") entry.upcoming++;
+        // Nearest dated open appointment (overdue first, then soonest) feeds the card's third line.
+        if (a.next_due_date && (entry.nextDue == null || a.next_due_date < entry.nextDue)) { entry.nextDue = a.next_due_date; entry.nextTitle = a.appointment_type; }
       }
     }
     return map;
@@ -701,7 +705,7 @@ export default function HealthScreen() {
                       {people.map((person, personIdx) => {
                         const maxPeople = personLimit(profile);
                         const isLocked = Number.isFinite(maxPeople) && personIdx >= maxPeople;
-                        const status = apptStatusByMember[person.id] ?? { overdue: 0, upcoming: 0 };
+                        const status = apptStatusByMember[person.id] ?? { overdue: 0, upcoming: 0, nextTitle: null, nextDue: null };
                         return (
                           <View key={person.id} style={{ position: "relative" }}>
                             <View style={{ opacity: isLocked ? 0.5 : 1 }}>
@@ -709,6 +713,9 @@ export default function HealthScreen() {
                                 member={person}
                                 overdue={status.overdue}
                                 upcoming={status.upcoming}
+                                nextTitle={status.nextTitle}
+                                nextDue={status.nextDue}
+                                loaded={appointments !== undefined}
                                 onPress={() => { router.push(`/family-member/${person.id}` as any); Haptics.selectionAsync(); }}
                               />
                             </View>
@@ -734,7 +741,7 @@ export default function HealthScreen() {
                       {pets.map((pet, petIdx) => {
                         const maxPets = petLimit(profile);
                         const isLocked = Number.isFinite(maxPets) && petIdx >= maxPets;
-                        const status = apptStatusByMember[pet.id] ?? { overdue: 0, upcoming: 0 };
+                        const status = apptStatusByMember[pet.id] ?? { overdue: 0, upcoming: 0, nextTitle: null, nextDue: null };
                         return (
                           <View key={pet.id} style={{ position: "relative" }}>
                             <View style={{ opacity: isLocked ? 0.5 : 1 }}>
@@ -742,6 +749,9 @@ export default function HealthScreen() {
                                 member={pet}
                                 overdue={status.overdue}
                                 upcoming={status.upcoming}
+                                nextTitle={status.nextTitle}
+                                nextDue={status.nextDue}
+                                loaded={appointments !== undefined}
                                 onPress={() => { router.push(`/family-member/${pet.id}` as any); Haptics.selectionAsync(); }}
                               />
                             </View>
@@ -981,12 +991,26 @@ function AppointmentCard({ appointment, onMarkComplete }: { appointment: any; on
   );
 }
 
-function MemberCard({ member, overdue, upcoming, onPress }: { member: any; overdue: number; upcoming: number; onPress: () => void }) {
+/** "in 8 days" / "today" / "3 days overdue" from a date-only or ISO string. */
+function relativeDue(dateStr: string): string {
+  const days = differenceInCalendarDays(parseISO(dateStr), new Date());
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days > 1) return `in ${days} days`;
+  return `${Math.abs(days)} day${days === -1 ? "" : "s"} overdue`;
+}
+
+function MemberCard({ member, overdue, upcoming, nextTitle, nextDue, loaded, onPress }: {
+  member: any; overdue: number; upcoming: number; nextTitle: string | null; nextDue: string | null; loaded: boolean; onPress: () => void;
+}) {
   const isPet = member.member_type === "pet";
   const label = isPet
     ? (member.pet_type ?? "Pet")
     : (member.relationship ?? member.member_type ?? "Person");
   const statusDotColor = overdue > 0 ? Colors.overdue : upcoming > 0 ? Colors.dueSoon : null;
+  // Third line: next due appointment with a relative date, or all caught up (nothing while loading).
+  const nextLine = !loaded ? null : nextTitle && nextDue ? `${nextTitle} · ${relativeDue(nextDue)}` : "All caught up";
+  const nextLineColor = overdue > 0 ? Colors.overdue : Colors.health;
 
   return (
     <Card padding={Spacing.lg} onPress={onPress} accessibilityLabel={member.name}>
@@ -998,6 +1022,9 @@ function MemberCard({ member, overdue, upcoming, onPress }: { member: any; overd
           <Text style={styles.memberName}>{member.name}</Text>
         </View>
         <Text style={styles.memberMeta} numberOfLines={1}>{label}</Text>
+        {nextLine ? (
+          <Text style={[styles.memberNext, { color: nextLineColor }]} numberOfLines={2}>{nextLine}</Text>
+        ) : null}
       </View>
       <View style={styles.memberRight}>
         <Icon name="chevron-forward" size={16} color={Colors.textTertiary} />
@@ -1040,6 +1067,7 @@ const styles = StyleSheet.create({
   memberTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   memberName: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
   memberMeta: { ...Typography.footnote, color: Colors.textSecondary, textTransform: "capitalize" },
+  memberNext: { ...Typography.footnote, fontWeight: "500" },
   memberRight: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   memberStatusDot: { width: 8, height: 8, borderRadius: Radius.pill },
 

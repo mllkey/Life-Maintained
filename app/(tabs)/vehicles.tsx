@@ -22,7 +22,7 @@ import { Spacing } from "@/constants/spacing";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import { parseISO, isBefore, addDays, differenceInDays, formatDistanceToNowStrict } from "date-fns";
+import { parseISO, isBefore, addDays, differenceInDays, differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import { vehicleLimit } from "@/lib/subscription";
 import { resolveTrackingMode, isHoursTracked, isMileageTracked, currentUsageValue, projectedMileage, projectedHours } from "@/lib/usageHelpers";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
@@ -53,6 +53,15 @@ type Vehicle = {
   photo_url: string | null;
   tracking_mode: string | null;
 };
+
+/** "in 8 days" / "today" / "3 days overdue" from a date-only or ISO string. */
+function relativeDue(dateStr: string): string {
+  const days = differenceInCalendarDays(parseISO(dateStr), new Date());
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days > 1) return `in ${days} days`;
+  return `${Math.abs(days)} day${days === -1 ? "" : "s"} overdue`;
+}
 
 function getTaskStatus(date: string | null): "overdue" | "due_soon" | "good" {
   if (!date) return "good";
@@ -89,7 +98,7 @@ export default function VehiclesScreen() {
       const ids = vehicles.map(v => v.id);
       const { data, error } = await supabase
         .from("user_vehicle_maintenance_tasks")
-        .select("vehicle_id, next_due_date, interval_miles, last_completed_date, last_completed_miles, last_completed_hours, last_completed_source, created_at")
+        .select("vehicle_id, name, next_due_date, interval_miles, last_completed_date, last_completed_miles, last_completed_hours, last_completed_source, created_at")
         .in("vehicle_id", ids);
       if (error) throw error;
 
@@ -97,23 +106,36 @@ export default function VehiclesScreen() {
         worstStatus: "overdue" | "due_soon" | "good";
         pendingCount: number;
         hasMileageInterval: boolean;
+        nextTask: string | null;
+        nextDue: string | null;
+        nextIsEstimate: boolean;
+        estTask: string | null;
+        estDue: string | null;
       }> = {};
 
       for (const t of data ?? []) {
         if (!map[t.vehicle_id]) {
-          map[t.vehicle_id] = { worstStatus: "good", pendingCount: 0, hasMileageInterval: false };
+          map[t.vehicle_id] = { worstStatus: "good", pendingCount: 0, hasMileageInterval: false, nextTask: null, nextDue: null, nextIsEstimate: false, estTask: null, estDue: null };
         }
-        // ESTIMATED tasks carry no urgency; they never drive the card badge.
+        const entry = map[t.vehicle_id];
+        // ESTIMATED tasks carry no urgency; they never drive the card status. They only
+        // feed the row's third line as a fallback (prefixed "Est.") when nothing confirmed is dated.
         if (vehicleTaskCalibrationState(t) === "estimated") {
-          if (t.interval_miles) map[t.vehicle_id].hasMileageInterval = true;
+          if (t.interval_miles) entry.hasMileageInterval = true;
+          if (t.next_due_date && (entry.estDue == null || t.next_due_date < entry.estDue)) { entry.estDue = t.next_due_date; entry.estTask = t.name; }
           continue;
         }
         const s = getTaskStatus(t.next_due_date);
-        if (s !== "good") map[t.vehicle_id].pendingCount++;
-        if (s === "overdue" || (s === "due_soon" && map[t.vehicle_id].worstStatus === "good")) {
-          map[t.vehicle_id].worstStatus = s;
+        if (s !== "good") entry.pendingCount++;
+        if (s === "overdue" || (s === "due_soon" && entry.worstStatus === "good")) {
+          entry.worstStatus = s;
         }
-        if (t.interval_miles) map[t.vehicle_id].hasMileageInterval = true;
+        if (t.interval_miles) entry.hasMileageInterval = true;
+        // Nearest dated confirmed task (overdue first, then soonest) feeds the row's third line.
+        if (t.next_due_date && (entry.nextDue == null || t.next_due_date < entry.nextDue)) { entry.nextDue = t.next_due_date; entry.nextTask = t.name; }
+      }
+      for (const entry of Object.values(map)) {
+        if (entry.nextTask == null && entry.estTask) { entry.nextTask = entry.estTask; entry.nextDue = entry.estDue; entry.nextIsEstimate = true; }
       }
       return map;
     },
@@ -255,16 +277,20 @@ export default function VehiclesScreen() {
               metaLine = "";
             }
 
-            const statusDotColor = worstStatus === "overdue"
-              ? Colors.overdue
-              : worstStatus === "due_soon"
-                ? Colors.dueSoon
-                : null;
+            // Status is folded into the third line's colour (overdue red, due soon amber,
+            // otherwise the vehicle accent) — same information the old dot carried.
+            const nextLine = td === undefined
+              ? null
+              : td.nextTask && td.nextDue
+                ? `${td.nextIsEstimate ? "Est. " : ""}${td.nextTask} · ${relativeDue(td.nextDue)}`
+                : "All caught up";
+            const nextLineColor = worstStatus === "overdue" ? Colors.overdue : worstStatus === "due_soon" ? Colors.dueSoon : Colors.vehicle;
+            const subtitle = v.nickname && title ? [title, metaLine].filter(Boolean).join(" · ") : metaLine;
 
             return (
               <Card
                 key={v.id}
-                padding={Spacing.lg}
+                padding={Spacing.md}
                 style={isLocked ? styles.lockedCard : null}
                 accessibilityLabel={displayName}
                 onPress={() => {
@@ -278,29 +304,28 @@ export default function VehiclesScreen() {
               >
                 <View style={styles.cardRow}>
                 {v.photo_url ? (
-                  <Image source={{ uri: v.photo_url }} style={{ width: 36, height: 36, borderRadius: Radius.md }} resizeMode="cover" />
-                ) : icon.family === "ionicons" ? (
-                  <Icon name={icon.name as IconName} size={18} color={Colors.textSecondary} />
+                  <Image source={{ uri: v.photo_url }} style={styles.thumb} resizeMode="cover" accessibilityIgnoresInvertColors />
                 ) : (
-                  <MciIcon name={icon.name} size={18} color={Colors.textSecondary} />
+                  <View style={[styles.thumb, styles.thumbGlyph]}>
+                    {icon.family === "ionicons" ? (
+                      <Icon name={icon.name as IconName} size={28} color={Colors.vehicle} />
+                    ) : (
+                      <MciIcon name={icon.name} size={28} color={Colors.vehicle} />
+                    )}
+                  </View>
                 )}
                 <View style={styles.vehicleInfo}>
-                  <View style={styles.vehicleTitleRow}>
-                    {statusDotColor && <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />}
-                    <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
-                  </View>
-                  {v.nickname && title ? (
-                    <Text style={{ ...Typography.caption, color: Colors.textSecondary }} numberOfLines={1}>
-                      {title}
-                    </Text>
-                  ) : null}
-                  {metaLine ? (
+                  <Text style={styles.vehicleTitle} numberOfLines={1}>{displayName}</Text>
+                  {subtitle ? (
                     <Text
                       style={[styles.vehicleMeta, isStale && (tracksMiles || tracksHrs) && currentUsageValue(v) != null && { color: Colors.dueSoon }]}
                       numberOfLines={1}
                     >
-                      {metaLine}
+                      {subtitle}
                     </Text>
+                  ) : null}
+                  {nextLine ? (
+                    <Text style={[styles.vehicleNext, { color: nextLineColor }]} numberOfLines={2}>{nextLine}</Text>
                   ) : null}
                   {isLocked && (
                     <View style={styles.lockedRow}>
@@ -334,10 +359,11 @@ export default function VehiclesScreen() {
 function VehicleCardSkeleton({ anim }: { anim: ReturnType<typeof usePulse> }) {
   return (
     <View style={styles.vehicleCard}>
-      <S anim={anim} w={36} h={36} r={10} />
+      <S anim={anim} w={72} h={72} r={12} />
       <Col flex={1} gap={5}>
         <S anim={anim} w="55%" h={16} r={5} />
         <S anim={anim} w="75%" h={13} r={5} />
+        <S anim={anim} w="60%" h={13} r={5} />
       </Col>
       <S anim={anim} w={16} h={16} r={4} />
     </View>
@@ -367,12 +393,13 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     padding: 16,
   },
-  vehicleInfo: { flex: 1, gap: 4, minWidth: 0 },
-  vehicleTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  thumb: { width: 72, height: 72, borderRadius: Radius.md, flexShrink: 0 },
+  thumbGlyph: { backgroundColor: Colors.vehicleMuted, alignItems: "center", justifyContent: "center" },
+  vehicleInfo: { flex: 1, gap: 3, minWidth: 0 },
   vehicleTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
   vehicleMeta: { ...Typography.footnote, color: Colors.textSecondary },
+  vehicleNext: { ...Typography.footnote, fontWeight: "500" },
   cardRight: { alignItems: "flex-end", gap: 4, flexShrink: 0 },
-  statusDot: { width: 8, height: 8, borderRadius: Radius.pill },
   lockedRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   lockedText: { ...Typography.caption, color: Colors.textTertiary },
 });
