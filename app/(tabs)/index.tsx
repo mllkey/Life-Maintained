@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  type DimensionValue,
   View,
   Text,
   ScrollView,
@@ -43,6 +44,10 @@ import * as Linking from "expo-linking";
 import { LogSheet } from "@/components/LogSheet";
 import { SaveToast } from "@/components/SaveToast";
 import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
+import { BudgetThresholdControl } from "@/components/BudgetThresholdControl";
+import { budgetQueryKey, fetchBudgetThreshold, parseBudgetInput, saveBudgetThreshold } from "@/lib/budget";
+import { scrollBottomInset } from "@/constants/layout";
+import { queryClient } from "@/lib/query-client";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -135,6 +140,7 @@ interface JoinedVehicle {
 interface JoinedProperty {
   address: string | null;
   nickname: string | null;
+  property_type: string | null;
 }
 
 function formatDaysUntil(d: number): string {
@@ -181,6 +187,30 @@ function getAgeScreenings(dob: string | null, sex: string | null): { title: stri
   return screenings;
 }
 
+
+/** Display name for a property in dashboard copy: nickname, else a short type label — never a street address. */
+function shortPropertyLabel(nickname: string | null | undefined, propertyType: string | null | undefined): string {
+  const nick = nickname?.trim();
+  if (nick) return nick;
+  switch (propertyType) {
+    case "condo": return "condo";
+    case "apartment": return "apartment";
+    case "townhouse": return "townhouse";
+    case "commercial": return "building";
+    case "vacation": return "vacation home";
+    case "house": return "house";
+    default: return "home";
+  }
+}
+
+/** Display name for a vehicle in dashboard copy: nickname, else the model ("4Runner"), else the full year/make/model. */
+function shortVehicleLabel(nickname: string | null | undefined, model: string | null | undefined, fallback: string): string {
+  const nick = nickname?.trim();
+  if (nick) return nick;
+  const m = model?.trim();
+  if (m) return m;
+  return fallback.trim() || "vehicle";
+}
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -278,7 +308,7 @@ export default function DashboardScreen() {
       const items: DashboardItem[] = [];
       const [vehicleTasks, propertyTasks, healthAppts] = await Promise.all([
         supabase.from("user_vehicle_maintenance_tasks").select("*, vehicles(make, model, nickname, mileage, hours, tracking_mode, vehicle_type, average_miles_per_month, last_mileage_update, last_hours_update)").eq("user_id", user.id),
-        supabase.from("property_maintenance_tasks").select("*, properties!inner(address, nickname)").eq("properties.user_id", user.id),
+        supabase.from("property_maintenance_tasks").select("*, properties!inner(address, nickname, property_type)").eq("properties.user_id", user.id),
         supabase.from("health_appointments").select("*").eq("user_id", user.id).is("retired_at", null),
       ]);
       if (vehicleTasks.error) throw vehicleTasks.error;
@@ -294,7 +324,7 @@ export default function DashboardScreen() {
         items.push({
           id: t.id,
           title: t.name,
-          subtitle: v.nickname ?? `${v.make} ${v.model}`,
+          subtitle: shortVehicleLabel(v.nickname, v.model, `${v.make} ${v.model}`),
           dueDate: t.next_due_date,
           status,
           category: "vehicles",
@@ -307,7 +337,7 @@ export default function DashboardScreen() {
         if (propertyTaskCalibrationState(t) === "estimated") continue;
         const status = getStatus(t.next_due_date);
         if (status !== "good") {
-          items.push({ id: t.id, title: t.task, subtitle: p.nickname ?? p.address ?? "Property", dueDate: t.next_due_date, status, category: "properties", entityId: t.property_id });
+          items.push({ id: t.id, title: t.task, subtitle: shortPropertyLabel(p.nickname, p.property_type), dueDate: t.next_due_date, status, category: "properties", entityId: t.property_id });
         }
       }
       for (const a of healthAppts.data ?? []) {
@@ -331,7 +361,7 @@ export default function DashboardScreen() {
       const out: MonthAheadItem[] = [];
       const [vehicleTasks, propertyTasks, healthAppts] = await Promise.all([
         supabase.from("user_vehicle_maintenance_tasks").select("*, vehicles(make, model, nickname, mileage, hours, tracking_mode, vehicle_type, average_miles_per_month, last_mileage_update, last_hours_update)").eq("user_id", user.id),
-        supabase.from("property_maintenance_tasks").select("*, properties!inner(address, nickname)").eq("properties.user_id", user.id),
+        supabase.from("property_maintenance_tasks").select("*, properties!inner(address, nickname, property_type)").eq("properties.user_id", user.id),
         supabase.from("health_appointments").select("*").eq("user_id", user.id).is("retired_at", null),
       ]);
       if (vehicleTasks.error) throw vehicleTasks.error;
@@ -353,7 +383,7 @@ export default function DashboardScreen() {
         const v = (t as { vehicles: JoinedVehicle | null }).vehicles;
         if (!v) continue;
         const days = taskDaysUntilDue(t, v);
-        push(t.id, t.name, v.nickname ?? `${v.make} ${v.model}`, t.next_due_date, days, "vehicles", t.vehicle_id);
+        push(t.id, t.name, shortVehicleLabel(v.nickname, v.model, `${v.make} ${v.model}`), t.next_due_date, days, "vehicles", t.vehicle_id);
       }
       for (const t of propertyTasks.data ?? []) {
         if (t.is_completed) continue;
@@ -361,7 +391,7 @@ export default function DashboardScreen() {
         const p = (t as { properties: JoinedProperty | null }).properties;
         if (!p) continue;
         const days = taskDaysUntilDue(t, null);
-        push(t.id, t.task, p.nickname ?? p.address ?? "Property", t.next_due_date, days, "properties", t.property_id);
+        push(t.id, t.task, shortPropertyLabel(p.nickname, p.property_type), t.next_due_date, days, "properties", t.property_id);
       }
       for (const a of healthAppts.data ?? []) {
         if (a.is_completed) continue;
@@ -465,14 +495,13 @@ export default function DashboardScreen() {
         const { data, error } = await supabase.from("vehicles").select("nickname, year, make, model").eq("user_id", user.id).limit(1).maybeSingle();
         if (error) throw error;
         if (!data) return null;
-        const vehicleName = [data.year, data.make, data.model].filter(Boolean).join(" ");
-        return data.nickname ?? (vehicleName.length > 0 ? vehicleName : null);
+        return shortVehicleLabel(data.nickname, data.model, [data.year, data.make, data.model].filter(Boolean).join(" "));
       }
       if (onlyProperty) {
-        const { data, error } = await supabase.from("properties").select("nickname, address").eq("user_id", user.id).limit(1).maybeSingle();
+        const { data, error } = await supabase.from("properties").select("nickname, property_type").eq("user_id", user.id).limit(1).maybeSingle();
         if (error) throw error;
         if (!data) return null;
-        return data.nickname ?? data.address ?? null;
+        return shortPropertyLabel(data.nickname, data.property_type);
       }
       return null;
     },
@@ -574,7 +603,7 @@ export default function DashboardScreen() {
         </View>
       </LinearGradient>
 
-      <View style={[styles.content, { paddingBottom: insets.bottom + 100 + (Platform.OS === "web" ? 34 : 0) }]}>
+      <View style={[styles.content, { paddingBottom: scrollBottomInset(insets.bottom) }]}>
         {isLoading ? (
           <DashboardSkeleton />
         ) : (hasDashboardError || isOfflineNoData) ? (
@@ -646,7 +675,7 @@ export default function DashboardScreen() {
 
             <UpcomingTasksCard items={upcomingItems} />
 
-            <SpendingChartCard spending={spending} />
+            <SpendingChartCard spending={spending} userId={user?.id} />
 
             {screenings.length > 0 && (
               <Section title="Health screenings">
@@ -1221,7 +1250,7 @@ function YourMonthAheadCard({
 
   const resolvedVehicleName = primaryAssetName ?? verticalHero[0]?.subtitle ?? "vehicle";
   const vehicleDisplayName = resolvedVehicleName === "vehicle" ? "your vehicle" : `your ${resolvedVehicleName}`;
-  const propertyDisplayName = primaryAssetName ?? "your home";
+  const propertyDisplayName = primaryAssetName ? `your ${primaryAssetName}` : "your home";
 
   const emptyText = onlyVehicle
     ? `Nothing due this month for ${vehicleDisplayName}.`
@@ -1397,11 +1426,11 @@ function HealthScoreCard({ score, overdue, dueSoon, onTrack }: { score: number; 
   const cy = 48;
   const circumference = 2 * Math.PI * r;
   const offset = circumference * (1 - score / 100);
-  const message =
-    score >= 90 ? "Everything is on track" :
-    score >= 70 ? "A few items need attention" :
-    score >= 50 ? "Several items are overdue" :
-    "Maintenance is falling behind";
+  // One headline (the ring), one status line.
+  const needsAttention = overdue + dueSoon;
+  const statusLine = score === 100 || needsAttention === 0
+    ? `${onTrack} task${onTrack === 1 ? "" : "s"} on track`
+    : `${needsAttention} need${needsAttention === 1 ? "s" : ""} attention · ${onTrack} on track`;
 
   return (
     <View style={styles.scoreHero}>
@@ -1425,18 +1454,13 @@ function HealthScoreCard({ score, overdue, dueSoon, onTrack }: { score: number; 
         </View>
       </View>
       <Text style={styles.scoreTitle}>Maintenance Score</Text>
-      <Text style={styles.scoreMessage}>{message}</Text>
-      {score === 100 && (
-        <Text style={{ ...Typography.footnote, fontWeight: "500", color: Colors.good, marginTop: 2 }}>
-          You&apos;re all caught up!
-        </Text>
-      )}
-      <Text style={styles.scoreDetail}>{score === 100 ? `${onTrack} on track` : [`${onTrack} on track`, dueSoon > 0 ? `${dueSoon} due soon` : null, overdue > 0 ? `${overdue} overdue` : null].filter(Boolean).join(" · ")}</Text>
+      <Text style={styles.scoreMessage}>{statusLine}</Text>
     </View>
   );
 }
 
-function SpendingChartCard({ spending }: { spending: Record<string, number> | undefined }) {
+function SpendingChartCard({ spending, userId }: { spending: Record<string, number> | undefined; userId: string | undefined }) {
+  const { refreshBudget } = useBudgetAlert();
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = subMonths(new Date(), 5 - i);
     return { key: format(d, "yyyy-MM"), label: format(d, "MMM") };
@@ -1449,18 +1473,105 @@ function SpendingChartCard({ spending }: { spending: Record<string, number> | un
   const activeMonths = months.filter((_, i) => amounts[i] > 0);
   const activeAmounts = amounts.filter(a => a > 0);
 
+  // Budget: same query key/shape Settings uses (lib/budget).
+  const { data: budgetPref } = useQuery({
+    queryKey: budgetQueryKey(userId),
+    queryFn: async () => (userId ? fetchBudgetThreshold(userId) : null),
+    enabled: !!userId,
+  });
+  const budget = budgetPref?.budget_threshold ?? null;
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function openSheet() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setDraft(budget != null ? String(budget) : "");
+    setSaveError(null);
+    setSheetOpen(true);
+  }
+
+  async function saveSheet() {
+    if (!userId || saving) return;
+    const threshold = parseBudgetInput(draft);
+    if (threshold == null) { setSaveError("Enter an amount greater than $0."); return; }
+    setSaving(true);
+    try {
+      await saveBudgetThreshold(queryClient, userId, threshold);
+      refreshBudget();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setSheetOpen(false);
+    } catch {
+      setSaveError("Couldn't save. Give it another shot.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const progress = budget != null && budget > 0 ? Math.min(1, currentMonthTotal / budget) : 0;
+  const overBudget = budget != null && currentMonthTotal > budget;
+  const fillWidth: DimensionValue = `${Math.round(progress * 100)}%`;
+
   return (
     <View style={{ gap: 8 }}>
       <Text style={styles.sectionLabel}>SPENDING</Text>
       <View style={styles.panelCard}>
-        <View style={styles.spendingTopRow}>
-          <Text style={styles.spendingThisMonth}>This month</Text>
-          <Text style={styles.spendingAmount}>${currentMonthTotal.toFixed(0)}</Text>
-        </View>
-        {!hasData ? (
-          <Text style={styles.spendingEmpty}>No spending recorded yet</Text>
+        {budget != null ? (
+          <Pressable
+            onPress={openSheet}
+            style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1, gap: 8 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Spent $${currentMonthTotal.toFixed(0)} of your $${budget.toLocaleString()} budget this month. Edit budget`}
+          >
+            <View style={styles.spendingTopRow}>
+              <Text style={styles.spendingThisMonth}>
+                <Text style={[styles.spendingAmount, overBudget ? { color: Colors.overdue } : null]}>${currentMonthTotal.toFixed(0)}</Text>
+                {" of $"}{budget.toLocaleString()}{" this month"}
+              </Text>
+              <View style={styles.budgetEditPill}>
+                <Icon name="pencil-outline" size={12} color={Colors.textSecondary} />
+                <Text style={styles.budgetEditText}>Edit</Text>
+              </View>
+            </View>
+            <View style={styles.budgetTrack}>
+              <View style={[styles.budgetFill, { width: fillWidth, backgroundColor: overBudget ? Colors.overdue : Colors.accent }]} />
+            </View>
+          </Pressable>
         ) : (
-          <View style={styles.spendingBars}>
+          <View style={styles.spendingTopRow}>
+            <Text style={styles.spendingThisMonth}>This month</Text>
+            <Text style={styles.spendingAmount}>${currentMonthTotal.toFixed(0)}</Text>
+          </View>
+        )}
+        {!hasData ? (
+          budget == null ? (
+            <Pressable
+              onPress={openSheet}
+              style={({ pressed }) => [styles.budgetCta, { opacity: pressed ? 0.85 : 1 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Set a monthly budget"
+            >
+              <Icon name="wallet-outline" size={16} color={Colors.textInverse} />
+              <Text style={styles.budgetCtaText}>Set a monthly budget</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.spendingEmpty}>No spending recorded yet</Text>
+          )
+        ) : (
+          <View style={[styles.spendingBars, budget != null ? { marginTop: 8 } : null]}>
+            {budget == null && (
+              <Pressable
+                onPress={openSheet}
+                style={({ pressed }) => [styles.budgetLinkRow, { opacity: pressed ? 0.7 : 1 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Set a monthly budget"
+              >
+                <Icon name="wallet-outline" size={14} color={Colors.accent} />
+                <Text style={styles.budgetLinkText}>Set a monthly budget</Text>
+                <Icon name="chevron-forward" size={12} color={Colors.accent} />
+              </Pressable>
+            )}
             {activeMonths.map((m, i) => {
               const amount = activeAmounts[i];
               const isCurrent = m.key === currentMonthKey;
@@ -1477,6 +1588,35 @@ function SpendingChartCard({ spending }: { spending: Record<string, number> | un
           </View>
         )}
       </View>
+
+      <Modal visible={sheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSheetOpen(false)}>
+        <View style={styles.budgetSheet}>
+          <View style={styles.budgetSheetHeader}>
+            <Text style={styles.budgetSheetTitle}>Monthly budget</Text>
+            <Pressable onPress={() => setSheetOpen(false)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close budget sheet">
+              <Icon name="close" size={22} color={Colors.text} />
+            </Pressable>
+          </View>
+          <BudgetThresholdControl
+            value={draft}
+            onChangeText={v => { setDraft(v); setSaveError(null); }}
+            currentThreshold={budget}
+            autoFocus
+            onSubmitEditing={saveSheet}
+          />
+          {saveError ? <Text style={styles.budgetSheetError}>{saveError}</Text> : null}
+          <Pressable
+            onPress={saveSheet}
+            disabled={saving}
+            style={({ pressed }) => [styles.budgetSheetSave, { opacity: saving ? 0.6 : pressed ? 0.85 : 1 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Save monthly budget"
+          >
+            {saving ? <ActivityIndicator color={Colors.textInverse} /> : <Text style={styles.budgetSheetSaveText}>Save budget</Text>}
+          </Pressable>
+          <Text style={styles.budgetSheetFoot}>You can change this anytime here or in Settings.</Text>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2055,6 +2195,21 @@ const styles = StyleSheet.create({
   spendingTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   spendingThisMonth: { ...Typography.footnote, color: Colors.textSecondary },
   spendingAmount: { ...Typography.headline, fontWeight: "700", color: Colors.text },
+  budgetEditPill: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: Colors.card, borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: Colors.border },
+  budgetEditText: { ...Typography.caption, fontWeight: "600", color: Colors.textSecondary },
+  budgetTrack: { height: 8, backgroundColor: Colors.borderSubtle, borderRadius: Radius.pill, overflow: "hidden" },
+  budgetFill: { height: 8, borderRadius: Radius.pill },
+  budgetLinkRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingBottom: 6 },
+  budgetLinkText: { ...Typography.footnote, fontWeight: "600", color: Colors.accent },
+  budgetCta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: Colors.accent, borderRadius: Radius.md, paddingVertical: 12, marginTop: 4 },
+  budgetCtaText: { ...Typography.subheadline, fontWeight: "600", color: Colors.textInverse },
+  budgetSheet: { flex: 1, backgroundColor: Colors.background, padding: 20, gap: 16 },
+  budgetSheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingBottom: 4 },
+  budgetSheetTitle: { ...Typography.headline, color: Colors.text },
+  budgetSheetError: { ...Typography.footnote, color: Colors.overdue },
+  budgetSheetSave: { backgroundColor: Colors.accent, borderRadius: Radius.lg, height: 50, alignItems: "center", justifyContent: "center" },
+  budgetSheetSaveText: { ...Typography.subheadline, fontWeight: "700", color: Colors.textInverse },
+  budgetSheetFoot: { ...Typography.caption, color: Colors.textTertiary, textAlign: "center" },
   spendingEmpty: { ...Typography.footnote, color: Colors.textTertiary, textAlign: "center", paddingVertical: 12 },
   spendingBars: { gap: 8 },
   spendingBarRow: { gap: 4 },

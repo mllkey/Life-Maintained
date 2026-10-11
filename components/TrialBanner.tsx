@@ -37,7 +37,8 @@ export default function TrialBanner() {
     }
   }, [shouldShow]);
 
-  if (!inTrial) return null;
+  // No invisible spacer: when the banner has nothing to show it takes no space.
+  if (!inTrial || !shouldShow) return null;
 
   return (
     <Animated.View

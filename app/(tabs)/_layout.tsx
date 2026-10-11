@@ -2,7 +2,7 @@ import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs, router } from "expo-router";
 import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
-import { Platform, Pressable, StyleSheet, useColorScheme, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, useColorScheme, View } from "react-native";
 import React, { useState, useEffect } from "react";
 import { Colors } from "@/constants/colors";
 import { Radius } from "@/constants/radius";
@@ -12,6 +12,15 @@ import * as Haptics from "expo-haptics";
 import { useAuth } from "@/context/AuthContext";
 import { LogSheet } from "@/components/LogSheet";
 import { takePendingIntent } from "@/lib/onboardingIntent";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Typography } from "@/constants/typography";
+import { FAB_LEFT, FAB_SIZE, fabBottomOffset } from "@/constants/layout";
+import { TOOLTIP_IDS } from "@/components/Tooltip";
+
+// Same key the Tooltip component uses, so the mic tip shows exactly once overall:
+// here on the first dashboard view, or inside the LogSheet if the user opens it first.
+const VOICE_TIP_SEEN_KEY = `@tooltip_seen_${TOOLTIP_IDS.VOICE_LOG_TIP}`;
+export const VOICE_TIP_COPY = "Say what you did. We log it.";
 
 function NativeTabLayout() {
   return (
@@ -113,9 +122,29 @@ function ClassicTabLayout() {
 
 export default function TabLayout() {
   const [logSheetVisible, setLogSheetVisible] = useState(false);
+  const [voiceTipVisible, setVoiceTipVisible] = useState(false);
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const isNative = isLiquidGlassAvailable();
+
+  // One-time mic tip on the first dashboard view. Only a bubble that actually
+  // showed writes the seen flag; if the user taps the mic before it appears,
+  // the LogSheet's own Tooltip (same key) still gets to show the tip once.
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      AsyncStorage.getItem(VOICE_TIP_SEEN_KEY)
+        .then((seen) => { if (!cancelled && !seen) setVoiceTipVisible(true); })
+        .catch(() => {});
+    }, 900);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, []);
+
+  function dismissVoiceTip() {
+    if (!voiceTipVisible) return;
+    setVoiceTipVisible(false);
+    AsyncStorage.setItem(VOICE_TIP_SEEN_KEY, "true").catch(() => {});
+  }
 
   // One-shot navigation intent from onboarding completion. The tabs layout
   // mounts once on group entry (independent of the active tab), so draining
@@ -135,16 +164,31 @@ export default function TabLayout() {
     <View style={{ flex: 1 }}>
       {isNative ? <NativeTabLayout /> : <ClassicTabLayout />}
 
+      {voiceTipVisible && (
+        <View
+          style={[styles.voiceTipWrap, { bottom: fabBottomOffset(insets.bottom) + FAB_SIZE + 10, left: FAB_LEFT }]}
+          pointerEvents="box-none"
+        >
+          <Pressable onPress={dismissVoiceTip} style={styles.voiceTip} accessibilityRole="button" accessibilityLabel="Dismiss voice tip">
+            <UiIcon name="mic" size={14} color={Colors.accent} />
+            <Text style={styles.voiceTipText}>{VOICE_TIP_COPY}</Text>
+            <UiIcon name="close" size={14} color={Colors.textTertiary} />
+          </Pressable>
+          <View style={styles.voiceTipCaret} />
+        </View>
+      )}
+
       <Pressable
         style={[
           styles.fab,
           {
-            bottom: insets.bottom + (Platform.OS === "web" ? 84 : 49) + 16,
-            left: 20,
+            bottom: fabBottomOffset(insets.bottom),
+            left: FAB_LEFT,
           },
         ]}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          dismissVoiceTip();
           setLogSheetVisible(true);
         }}
         accessibilityLabel="Record voice maintenance log"
@@ -163,10 +207,34 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  voiceTipWrap: { position: "absolute", maxWidth: 300 },
+  voiceTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(232, 147, 58, 0.35)",
+  },
+  voiceTipText: { ...Typography.footnote, fontWeight: "600", color: Colors.text },
+  voiceTipCaret: {
+    width: 12,
+    height: 12,
+    marginLeft: 18,
+    marginTop: -6,
+    backgroundColor: Colors.card,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "rgba(232, 147, 58, 0.35)",
+    transform: [{ rotate: "45deg" }],
+  },
   fab: {
     position: "absolute",
-    width: 48,
-    height: 48,
+    width: FAB_SIZE,
+    height: FAB_SIZE,
     borderRadius: Radius.pill,
     backgroundColor: Colors.accent,
     alignItems: "center",

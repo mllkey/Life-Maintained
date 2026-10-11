@@ -169,17 +169,24 @@ export default function VehiclesScreen() {
     </>
   );
 
+  // One add affordance per state: the loaded-empty state shows only the
+  // centered EmptyState (its CTA), so the header pill + import icon hide there.
+  // Error/offline states keep the header actions (they have no inline CTA).
+  const isLoadedEmpty = !isLoading && vehicles?.length === 0;
+  const hasVehicles = (vehicles?.length ?? 0) > 0;
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <Screen
         title="Vehicles"
-        trailing={trailing}
+        trailing={isLoadedEmpty ? null : trailing}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.accent} />}
         contentStyle={styles.content}
       >
-        {!isLoading && (
+        {hasVehicles && (
           <Tooltip
             id={TOOLTIP_IDS.VEHICLES_FIRST_VISIT}
+            userId={user?.id}
             message="Tap any vehicle to see its full maintenance schedule, cost estimates, and service history."
             icon="car-sport-outline"
           />

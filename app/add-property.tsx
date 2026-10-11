@@ -164,6 +164,9 @@ export default function AddPropertyScreen() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Monotonic request id: a slow earlier autocomplete call (edge cold start on
+  // a fresh install) must never overwrite the results of a later keystroke.
+  const suggestionReqRef = useRef(0);
 
   const [isLookingUpProperty, setIsLookingUpProperty] = useState(false);
   const [propertyAutoFilled, setPropertyAutoFilled] = useState(false);
@@ -183,6 +186,8 @@ export default function AddPropertyScreen() {
     setError(null);
     setSuggestions([]);
     setShowSuggestions(false);
+    suggestionReqRef.current++;
+    setIsFetchingSuggestions(false);
     setIsLookingUpProperty(false);
     setPropertyAutoFilled(false);
     setPropertyRateLimited(false);
@@ -199,8 +204,11 @@ export default function AddPropertyScreen() {
       return;
     }
     debounceRef.current = setTimeout(async () => {
+      const reqId = ++suggestionReqRef.current;
       setIsFetchingSuggestions(true);
       const results = await fetchSuggestions(text);
+      // Drop stale responses: only the most recent request may touch state.
+      if (reqId !== suggestionReqRef.current) return;
       if (__DEV__) console.log("[places] setting suggestions, count:", results.length, "showSuggestions:", results.length > 0);
       setSuggestions(results);
       setShowSuggestions(results.length > 0);
@@ -216,6 +224,9 @@ export default function AddPropertyScreen() {
 
   async function onSelectSuggestion(suggestion: PlaceSuggestion) {
     Keyboard.dismiss();
+    suggestionReqRef.current++;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setIsFetchingSuggestions(false);
     setStreet(suggestion.mainText);
     setShowSuggestions(false);
     setSuggestions([]);

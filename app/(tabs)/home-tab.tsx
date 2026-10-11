@@ -6,6 +6,7 @@ import {
   Pressable,
   RefreshControl,
   Modal,
+  Image,
 } from "react-native";
 import { usePulse, S, Row, Col } from "@/components/Skeleton";
 import { router } from "expo-router";
@@ -21,7 +22,8 @@ import { Spacing } from "@/constants/spacing";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
-import { parseISO, isBefore, addDays } from "date-fns";
+import { parseISO, isBefore, addDays, differenceInCalendarDays } from "date-fns";
+import Tooltip, { TOOLTIP_IDS } from "@/components/Tooltip";
 import { propertyLimit } from "@/lib/subscription";
 import { propertyTaskCalibrationState } from "@/lib/calibration";
 import Paywall from "@/components/Paywall";
@@ -35,7 +37,31 @@ type Property = {
   square_footage: number | null;
   nickname: string | null;
   is_primary_residence: boolean | null;
+  photo_url: string | null;
 };
+
+const TYPE_LABEL: Record<string, string> = {
+  house: "Single Family Home", condo: "Condo", apartment: "Apartment",
+  townhouse: "Townhouse", commercial: "Commercial Building",
+  vacation: "Vacation Home", other: "Property",
+};
+
+/** Title precedence for the list row: nickname → first line of the address → type. */
+function propertyTitle(p: Property): string {
+  if (p.nickname?.trim()) return p.nickname.trim();
+  const firstLine = p.address?.split(",")[0]?.trim();
+  if (firstLine) return firstLine;
+  return TYPE_LABEL[p.property_type ?? "other"] ?? "Property";
+}
+
+/** "in 8 days" / "today" / "3 days overdue" from a date-only or ISO string. */
+function relativeDue(dateStr: string): string {
+  const days = differenceInCalendarDays(parseISO(dateStr), new Date());
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days > 1) return `in ${days} days`;
+  return `${Math.abs(days)} day${days === -1 ? "" : "s"} overdue`;
+}
 
 function getStatus(nextDueDate: string | null, lastCompletedAt: string | null): "overdue" | "due_soon" | "good" {
   const now = new Date();
@@ -62,16 +88,6 @@ function getPropertyIcon(type: string | null): string {
     case "townhouse": return "home-outline";
     default: return "home-outline";
   }
-}
-
-function getPropertyLabel(p: Property): string {
-  if (p.nickname) return p.nickname;
-  const typeLabel: Record<string, string> = {
-    house: "House", condo: "Condo", apartment: "Apartment",
-    townhouse: "Townhouse", commercial: "Commercial Building",
-    vacation: "Vacation Home", other: "Property",
-  };
-  return typeLabel[p.property_type ?? "other"] ?? "Property";
 }
 
 export default function HomeTabScreen() {
@@ -101,19 +117,29 @@ export default function HomeTabScreen() {
       const ids = properties.map(p => p.id);
       const { data, error } = await supabase
         .from("property_maintenance_tasks")
-        .select("property_id, next_due_date, last_completed_at, last_completed_source, created_at")
+        .select("property_id, task, next_due_date, last_completed_at, last_completed_source, created_at")
         .in("property_id", ids);
       if (error) throw error;
 
-      const map: Record<string, { overdue: number; due_soon: number; total: number }> = {};
+      const map: Record<string, { overdue: number; due_soon: number; total: number; nextTask: string | null; nextDue: string | null; nextIsEstimate: boolean; estTask: string | null; estDue: string | null }> = {};
       for (const t of data ?? []) {
-        if (!map[t.property_id]) map[t.property_id] = { overdue: 0, due_soon: 0, total: 0 };
-        map[t.property_id].total++;
-        // ESTIMATED tasks carry no urgency; they never drive the card badge.
-        if (propertyTaskCalibrationState(t) === "estimated") continue;
+        if (!map[t.property_id]) map[t.property_id] = { overdue: 0, due_soon: 0, total: 0, nextTask: null, nextDue: null, nextIsEstimate: false, estTask: null, estDue: null };
+        const entry = map[t.property_id];
+        entry.total++;
+        // ESTIMATED tasks carry no urgency; they never drive the card badge. They only
+        // feed the row's third line as a fallback (prefixed "Est.") when nothing confirmed is dated.
+        if (propertyTaskCalibrationState(t) === "estimated") {
+          if (t.next_due_date && (entry.estDue == null || t.next_due_date < entry.estDue)) { entry.estDue = t.next_due_date; entry.estTask = t.task; }
+          continue;
+        }
         const s = getStatus(t.next_due_date, t.last_completed_at);
-        if (s === "overdue") map[t.property_id].overdue++;
-        else if (s === "due_soon") map[t.property_id].due_soon++;
+        if (s === "overdue") entry.overdue++;
+        else if (s === "due_soon") entry.due_soon++;
+        // Nearest dated confirmed task (overdue first, then soonest) feeds the row's third line.
+        if (t.next_due_date && (entry.nextDue == null || t.next_due_date < entry.nextDue)) { entry.nextDue = t.next_due_date; entry.nextTask = t.task; }
+      }
+      for (const entry of Object.values(map)) {
+        if (entry.nextTask == null && entry.estTask) { entry.nextTask = entry.estTask; entry.nextDue = entry.estDue; entry.nextIsEstimate = true; }
       }
       return map;
     },
@@ -155,14 +181,27 @@ export default function HomeTabScreen() {
         </Pressable>
   );
 
+  // One add affordance per state: the loaded-empty state shows only the
+  // EmptyState CTA, so the header pill hides there. Error/offline states keep it.
+  const isLoadedEmpty = !isLoading && properties?.length === 0;
+  const hasProperties = (properties?.length ?? 0) > 0;
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <Screen
         title="Properties"
-        trailing={trailing}
+        trailing={isLoadedEmpty ? null : trailing}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.accent} />}
         contentStyle={styles.content}
       >
+        {hasProperties && (
+          <Tooltip
+            id={TOOLTIP_IDS.PROPERTY_DETAIL_SCHEDULE}
+            userId={user?.id}
+            message="Tap any property to see its seasonal schedule, cost estimates, and service history."
+            icon="home-outline"
+          />
+        )}
         {isLoading ? (
           <PropertyListSkeleton />
         ) : (!properties?.length && (isError || fetchStatus === "paused")) ? (
@@ -182,26 +221,30 @@ export default function HomeTabScreen() {
             const dueSoon = counts?.due_soon ?? 0;
             const statusDotColor = overdue > 0 ? Colors.overdue : dueSoon > 0 ? Colors.dueSoon : null;
             const icon = getPropertyIcon(p.property_type);
-            const label = getPropertyLabel(p);
+            const title = propertyTitle(p);
 
             const metaParts: string[] = [];
             if (p.year_built) metaParts.push(`Built ${p.year_built}`);
             if (p.square_footage) metaParts.push(`${p.square_footage.toLocaleString()} sqft`);
-            const typeLabel: Record<string, string> = {
-              house: "Single Family Home", condo: "Condo", apartment: "Apartment",
-              townhouse: "Townhouse", commercial: "Commercial Building",
-              vacation: "Vacation Home", other: "Property",
-            };
             const metaLine = metaParts.length > 0
               ? metaParts.join(" · ")
-              : (typeLabel[p.property_type ?? "other"] ?? "Property");
+              : (TYPE_LABEL[p.property_type ?? "other"] ?? "Property");
+
+            // Third line: the nearest due task with a relative date, or all caught up.
+            // Undefined while task data is still loading → render nothing rather than a false "caught up".
+            const nextLine = counts === undefined
+              ? null
+              : counts.nextTask && counts.nextDue
+                ? `${counts.nextIsEstimate ? "Est. " : ""}${counts.nextTask} · ${relativeDue(counts.nextDue)}`
+                : "All caught up";
+            const nextLineColor = overdue > 0 ? Colors.overdue : Colors.home;
 
             return (
               <Card
                 key={p.id}
-                padding={Spacing.lg}
+                padding={Spacing.md}
                 style={isLocked ? styles.lockedCard : null}
-                accessibilityLabel={label}
+                accessibilityLabel={title}
                 onPress={() => {
                   if (isLocked) {
                     setPaywallReason("locked_existing");
@@ -212,14 +255,26 @@ export default function HomeTabScreen() {
                 }}
               >
                 <View style={styles.cardRow}>
-                <Icon name={icon as any} size={18} color={Colors.textSecondary} />
+                {p.photo_url ? (
+                  <Image source={{ uri: p.photo_url }} style={styles.thumb} resizeMode="cover" accessibilityIgnoresInvertColors />
+                ) : (
+                  <View style={[styles.thumb, styles.thumbGlyph]}>
+                    <Icon name={icon as any} size={28} color={Colors.home} />
+                  </View>
+                )}
 
                 <View style={styles.cardInfo}>
                   <View style={styles.cardTitleRow}>
                     {statusDotColor && <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />}
-                    <Text style={styles.cardTitle} numberOfLines={1}>{label}</Text>
+                    <Text style={styles.cardTitle} numberOfLines={1}>{title}</Text>
                   </View>
                   <Text style={styles.cardMeta} numberOfLines={1}>{metaLine}</Text>
+                  {nextLine ? (
+                    <Text style={[styles.cardNext, { color: nextLineColor }]} numberOfLines={2}>{nextLine}</Text>
+                  ) : null}
+                  {isLocked && (
+                    <Text style={styles.lockedText}>Upgrade to access</Text>
+                  )}
                 </View>
 
                 <View style={styles.cardRight}>
@@ -247,10 +302,11 @@ export default function HomeTabScreen() {
 function PropertyCardSkeleton({ anim }: { anim: ReturnType<typeof usePulse> }) {
   return (
     <View style={styles.propertyCard}>
-      <S anim={anim} w={36} h={36} r={10} />
+      <S anim={anim} w={72} h={72} r={12} />
       <Col flex={1} gap={6}>
         <S anim={anim} w="55%" h={16} r={5} />
         <S anim={anim} w="70%" h={13} r={5} />
+        <S anim={anim} w="60%" h={13} r={5} />
       </Col>
       <S anim={anim} w={16} h={16} r={4} />
     </View>
@@ -270,7 +326,7 @@ function PropertyListSkeleton() {
 
 const styles = StyleSheet.create({
   content: { gap: Spacing.md },
-  cardRow: { flexDirection: "row", alignItems: "center", gap: Spacing.lg },
+  cardRow: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
   lockedCard: { opacity: 0.5 },
 
   propertyCard: {
@@ -281,7 +337,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     padding: 16,
   },
-  cardInfo: { flex: 1, gap: 4 },
+  thumb: { width: 72, height: 72, borderRadius: Radius.md, flexShrink: 0 },
+  thumbGlyph: { backgroundColor: Colors.homeMuted, alignItems: "center", justifyContent: "center" },
+  cardInfo: { flex: 1, gap: 3, minWidth: 0 },
+  cardNext: { ...Typography.footnote, fontWeight: "500" },
+  lockedText: { ...Typography.caption, color: Colors.textTertiary, marginTop: 2 },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   cardTitle: { ...Typography.subheadline, fontWeight: "600", color: Colors.text },
   cardMeta: { ...Typography.footnote, color: Colors.textSecondary },

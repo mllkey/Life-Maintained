@@ -10,12 +10,11 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
 import { Spacing } from "@/constants/spacing";
+import { scrollBottomInset } from "@/constants/layout";
 import { Text } from "./Text";
 
 /** Existing tab screens pad the top by 67 on web; kept for parity. */
 const WEB_TOP_PAD = 67;
-/** Clears the tab bar and the voice FAB; matches existing tab screens. */
-const TAB_BOTTOM_CLEARANCE = 100;
 /** Pinned bar height below the safe area; the compact title lives here. */
 const BAR_HEIGHT = 44;
 /** The large title has scrolled far enough to hand off to the compact one. */
@@ -51,7 +50,8 @@ export function Screen({
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const topPad = insets.top + (Platform.OS === "web" ? WEB_TOP_PAD : 0) + Spacing.lg;
-  const bottomPad = insets.bottom + TAB_BOTTOM_CLEARANCE;
+  // Clears the tab bar and the voice FAB (see constants/layout).
+  const bottomPad = scrollBottomInset(insets.bottom);
   const barTop = insets.top + (Platform.OS === "web" ? WEB_TOP_PAD : 0);
   const scrollY = useSharedValue(0);
 

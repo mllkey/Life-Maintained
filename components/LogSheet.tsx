@@ -930,7 +930,7 @@ export function LogSheet({
             <View style={{ paddingHorizontal: 20 }}>
               <Tooltip
                 id={TOOLTIP_IDS.VOICE_LOG_TIP}
-                message="Tap the microphone, say what you did, and we'll log it automatically. Works for vehicles, home, and health."
+                message="Say what you did. We log it."
                 icon="mic-outline"
                 delay={500}
               />
@@ -1047,7 +1047,7 @@ export function LogSheet({
 
                 <Tooltip
                   id={TOOLTIP_IDS.VOICE_LOG_TIP}
-                  message="Tap the microphone, say what you did, and we'll log it automatically. Works for vehicles, home, and health."
+                  message="Say what you did. We log it."
                   icon="mic-outline"
                   delay={500}
                 />

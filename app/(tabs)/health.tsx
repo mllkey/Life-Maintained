@@ -584,11 +584,17 @@ export default function HealthScreen() {
         </>
   );
 
+  // Loaded-empty: no members, appointments, or medications (the same condition
+  // that renders the empty view). Only then does the header "Add" hide — the
+  // empty view carries the primary CTA. Error/offline states keep the header.
+  const isLoadedEmpty =
+    !isLoading && !showHealthLoadError && hasNoMembers && (!appointments || appointments.length === 0) && (!medications || medications.length === 0);
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <Screen
         title="Health"
-        trailing={trailing}
+        trailing={isLoadedEmpty ? null : trailing}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={Colors.accent} />}
         contentStyle={styles.content}
       >
@@ -612,11 +618,14 @@ export default function HealthScreen() {
           <LoadErrorState onRetry={refetch} title="Unable to load your health info" body="Your health records are saved and safe. Check your connection and try again." retryAccessibilityLabel="Try loading health info again" />
         ) : (
           <>
-            <Tooltip
-              id={TOOLTIP_IDS.HEALTH_FIRST_VISIT}
-              message="Track appointments, medications, and screenings for yourself, family members, and pets."
-              icon="heart-outline"
-            />
+            {!isLoadedEmpty && (
+              <Tooltip
+                id={TOOLTIP_IDS.HEALTH_FIRST_VISIT}
+                userId={user?.id}
+                message="Track appointments, medications, and screenings for yourself, family members, and pets."
+                icon="heart-outline"
+              />
+            )}
             {hasNoMembers && (!appointments || appointments.length === 0) && (!medications || medications.length === 0) ? (
               <View style={styles.emptyWrap}>
                 <Icon name="heart-outline" size={48} color={Colors.healthMuted} />

@@ -42,6 +42,8 @@ import {
   paidTierLabel,
 } from "@/lib/subscription";
 import ScanPackModal, { type ScanPackModalHandle } from "@/components/ScanPackModal";
+import { BudgetThresholdControl } from "@/components/BudgetThresholdControl";
+import { budgetQueryKey, fetchBudgetThreshold, parseBudgetInput, saveBudgetThreshold } from "@/lib/budget";
 import { PaidActionCTA } from "@/components/PaidActionCTA";
 import { projectedMileage } from "@/lib/usageHelpers";
 import ServicePredictionSheet, {
@@ -191,16 +193,8 @@ export default function SettingsScreen() {
   const scanCreditBalance = scanQuota?.credit_balance ?? 0;
 
   const { data: budgetPref } = useQuery({
-    queryKey: ["budget_threshold", user?.id],
-    queryFn: async () => {
-      if (!user) return null;
-      const { data, error } = await (supabase.from("user_notification_preferences") as any)
-        .select("budget_threshold")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryKey: budgetQueryKey(user?.id),
+    queryFn: async () => (user ? fetchBudgetThreshold(user.id) : null),
     enabled: !!user,
   });
 
@@ -429,15 +423,9 @@ export default function SettingsScreen() {
     try {
       await persistSettings(settings);
 
-      const threshold = parseFloat(settings.budgetThreshold);
-      if (!isNaN(threshold) && threshold > 0) {
-        const { error: budgetErr } = await (supabase.from("user_notification_preferences") as any).upsert(
-          { user_id: user.id, budget_threshold: threshold, updated_at: new Date().toISOString() },
-          { onConflict: "user_id" }
-        );
-        if (budgetErr) throw budgetErr;
-        queryClient.setQueryData(["budget_threshold", user.id], { budget_threshold: threshold });
-        queryClient.invalidateQueries({ queryKey: ["budget_threshold"] });
+      const threshold = parseBudgetInput(settings.budgetThreshold);
+      if (threshold != null) {
+        await saveBudgetThreshold(queryClient, user.id, threshold);
       }
 
       savedRef.current = { ...settings };
@@ -736,30 +724,13 @@ export default function SettingsScreen() {
           </Section>
           {/* BUDGET */}
           <Section title="Budget Notifications">
-            <View style={[styles.sectionBody, styles.budgetContent]}>
-              <Text style={styles.budgetHint}>
-                We&apos;ll notify you when upcoming maintenance costs in a given month exceed this amount.
-              </Text>
-              <View style={styles.budgetInputRow}>
-                <View style={styles.budgetInputWrap}>
-                  <Text style={styles.budgetCurrency}>$</Text>
-                  <TextInput
-                    style={styles.budgetInput}
-                    value={settings.budgetThreshold}
-                    onChangeText={v => updateSetting("budgetThreshold", v)}
-                    placeholder="500"
-                    placeholderTextColor={Colors.textTertiary}
-                    keyboardType="decimal-pad"
-                    returnKeyType="done"
-                  />
-                </View>
-                <Text style={styles.budgetLabel}>monthly threshold</Text>
-              </View>
-              {budgetPref?.budget_threshold != null && (
-                <Text style={styles.budgetSaved}>
-                  Current: ${Number(budgetPref.budget_threshold).toLocaleString()}/mo
-                </Text>
-              )}
+            <View style={styles.sectionBody}>
+              {/* Same control the dashboard budget sheet uses; Settings persists it with the global Save. */}
+              <BudgetThresholdControl
+                value={settings.budgetThreshold}
+                onChangeText={v => updateSetting("budgetThreshold", v)}
+                currentThreshold={budgetPref?.budget_threshold ?? null}
+              />
             </View>
           </Section>
 
@@ -1081,32 +1052,6 @@ const styles = StyleSheet.create({
 
   rowDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: -16, marginVertical: 0 },
 
-  budgetContent: { gap: 12 },
-  budgetHint: { ...Typography.footnote, color: Colors.textSecondary },
-  budgetInputRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  budgetInputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: 12,
-    flex: 1,
-    maxWidth: 160,
-    height: 46,
-  },
-  budgetCurrency: { ...Typography.body, fontWeight: "500", color: Colors.textSecondary },
-  budgetInput: {
-    ...Typography.body,
-    flex: 1,
-    paddingVertical: 12,
-    color: Colors.text,
-    paddingLeft: 4,
-    minHeight: 44,
-  },
-  budgetLabel: { ...Typography.footnote, color: Colors.textTertiary },
-  budgetSaved: { ...Typography.caption, color: Colors.good },
 
   chipScrollWrap: { marginHorizontal: -16, marginBottom: 12 },
   chipScroll: { paddingHorizontal: 16, gap: 8 },

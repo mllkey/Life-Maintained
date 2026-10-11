@@ -33,19 +33,22 @@ interface TooltipProps {
   message: string;
   icon?: IconName;
   delay?: number; // ms before showing (default 800)
+  /** Scope the one-time flag to a user so a second account on the device sees it once too. */
+  userId?: string | null;
 }
 
-export default function Tooltip({ id, message, icon, delay = 800 }: TooltipProps) {
+export default function Tooltip({ id, message, icon, delay = 800, userId }: TooltipProps) {
   const [visible, setVisible] = useState(false);
   const mountedRef = useRef(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seenKey = userId ? `${SEEN_PREFIX}${id}_${userId}` : `${SEEN_PREFIX}${id}`;
 
   useEffect(() => {
     mountedRef.current = true;
 
     (async () => {
       try {
-        const seen = await AsyncStorage.getItem(`${SEEN_PREFIX}${id}`);
+        const seen = await AsyncStorage.getItem(seenKey);
         if (seen || !mountedRef.current) return;
         timerRef.current = setTimeout(() => {
           if (mountedRef.current) setVisible(true);
@@ -57,12 +60,12 @@ export default function Tooltip({ id, message, icon, delay = 800 }: TooltipProps
       mountedRef.current = false;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [id, delay]);
+  }, [seenKey, delay]);
 
   async function dismiss() {
     // Write first, then hide — prevents re-showing on flaky devices
     try {
-      await AsyncStorage.setItem(`${SEEN_PREFIX}${id}`, "true");
+      await AsyncStorage.setItem(seenKey, "true");
     } catch {}
     if (mountedRef.current) setVisible(false);
     Haptics.selectionAsync();
