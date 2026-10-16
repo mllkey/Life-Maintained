@@ -14,7 +14,10 @@ export function extractTierHintFromCustomerInfo(
   return null;
 }
 
-export type SyncSuccessAction = "synced" | "downgraded" | "skipped_trial";
+// "skipped_local_grant": RC reported no active entitlement but the profile holds a
+// locally-granted (promo/manual/lifetime) tier that is still valid, so the server
+// left it untouched. Treated as success: nothing to restore, nothing lost.
+export type SyncSuccessAction = "synced" | "downgraded" | "skipped_trial" | "skipped_local_grant";
 export type SyncSuccessTier = "personal" | "pro" | "business" | "free" | null;
 
 export type SyncResult =
@@ -26,7 +29,7 @@ function isSyncSuccessTier(value: unknown): value is SyncSuccessTier {
 }
 
 function isSyncSuccessAction(value: unknown): value is SyncSuccessAction {
-  return value === "synced" || value === "downgraded" || value === "skipped_trial";
+  return value === "synced" || value === "downgraded" || value === "skipped_trial" || value === "skipped_local_grant";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.98.0";
+import { decideEntitlement, type PaidTier } from "../_shared/entitlementDecision.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-type Tier = "personal" | "pro" | "business" | null;
+type Tier = PaidTier | null;
 
 type RcLookup =
   | { ok: true; body: unknown }
@@ -63,7 +64,7 @@ Deno.serve(async (req) => {
 
   const { data: profile, error: profileErr } = await supabaseAdmin
     .from("profiles")
-    .select("user_id, trial_expires_at, revenuecat_customer_id")
+    .select("user_id, trial_expires_at, revenuecat_customer_id, subscription_tier, subscription_expires_at")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -124,6 +125,7 @@ Deno.serve(async (req) => {
   const now = Date.now();
   const activeEntIds: string[] = [];
   let latestExpiresAt: string | null = null;
+  let expiredEntitlement = false;
 
   for (const [entitlementId, rawEntitlement] of Object.entries(entitlements)) {
     const entitlement = objectRecord(rawEntitlement);
@@ -140,6 +142,8 @@ Deno.serve(async (req) => {
       if (!latestExpiresAt || expiresMs > new Date(latestExpiresAt).getTime()) {
         latestExpiresAt = expiresIso;
       }
+    } else if (!Number.isNaN(expiresMs)) {
+      expiredEntitlement = true;
     }
   }
 
@@ -150,14 +154,25 @@ Deno.serve(async (req) => {
     : null;
   const rcCustomerId = originalAppUserId && originalAppUserId.length > 0 ? originalAppUserId : userId;
 
-  if (tier === null) {
-    const trialExpires = profile.trial_expires_at;
-    const stillInTrial = typeof trialExpires === "string" && new Date(trialExpires).getTime() > now;
+  // One rule for pull (here) and push (revenuecat-webhook): RC may upgrade or
+  // refresh, but never downgrades a locally-granted entitlement that is still
+  // valid. See _shared/entitlementDecision.ts.
+  const decision = decideEntitlement(
+    {
+      subscription_tier: typeof profile.subscription_tier === "string" ? profile.subscription_tier : null,
+      subscription_expires_at: typeof profile.subscription_expires_at === "string" ? profile.subscription_expires_at : null,
+      revenuecat_customer_id: typeof profile.revenuecat_customer_id === "string" ? profile.revenuecat_customer_id : null,
+      trial_expires_at: typeof profile.trial_expires_at === "string" ? profile.trial_expires_at : null,
+    },
+    { tier, expiresAt: latestExpiresAt, expiredEntitlement },
+    now,
+  );
 
-    if (stillInTrial) {
-      return jsonResponse({ tier: null, expiresAt: null, action: "skipped_trial" });
-    }
+  if (decision.action === "untouched") {
+    return jsonResponse({ tier: null, expiresAt: null, action: decision.reason === "trial" ? "skipped_trial" : "skipped_local_grant", reason: decision.reason });
+  }
 
+  if (decision.action === "downgrade") {
     const { error: downgradeErr } = await supabaseAdmin
       .from("profiles")
       .update({ subscription_tier: "free", subscription_expires_at: null })
@@ -168,14 +183,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Update failed" }, 500);
     }
 
-    return jsonResponse({ tier: "free", expiresAt: null, action: "downgraded" });
+    return jsonResponse({ tier: "free", expiresAt: null, action: "downgraded", reason: decision.reason });
   }
 
   const { error: upgradeErr } = await supabaseAdmin
     .from("profiles")
     .update({
-      subscription_tier: tier,
-      subscription_expires_at: latestExpiresAt,
+      subscription_tier: decision.tier,
+      subscription_expires_at: decision.expiresAt,
       revenuecat_customer_id: rcCustomerId,
     })
     .eq("user_id", userId);
@@ -185,5 +200,5 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Update failed" }, 500);
   }
 
-  return jsonResponse({ tier, expiresAt: latestExpiresAt, action: "synced" });
+  return jsonResponse({ tier: decision.tier, expiresAt: decision.expiresAt, action: "synced" });
 });

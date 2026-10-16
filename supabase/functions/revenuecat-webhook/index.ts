@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.98.0";
+import { decideEntitlement } from "../_shared/entitlementDecision.ts";
 
 
 const UPGRADE_EVENTS = new Set([
@@ -102,9 +103,19 @@ type ProcessResult =
   | { status: "skipped"; reason: string }
   | { status: "failed"; error: string };
 
+type WebhookProfile = {
+  user_id: string;
+  trial_expires_at: string | null;
+  subscription_tier: string | null;
+  subscription_expires_at: string | null;
+  revenuecat_customer_id: string | null;
+};
+
+const PROFILE_COLUMNS = "user_id, trial_expires_at, subscription_tier, subscription_expires_at, revenuecat_customer_id";
+
 type ProfileMatch =
   | { kind: "none" }
-  | { kind: "one"; profile: { user_id: string; trial_expires_at: string | null } }
+  | { kind: "one"; profile: WebhookProfile }
   | { kind: "ambiguous"; reason: string };
 
 Deno.serve(async (req) => {
@@ -245,7 +256,7 @@ async function findProfile(
 
   const { data: byRc, error: rcErr } = await supabase
     .from("profiles")
-    .select("user_id, trial_expires_at")
+    .select(PROFILE_COLUMNS)
     .in("revenuecat_customer_id", ids);
   if (rcErr) {
     return { kind: "ambiguous", reason: `findProfile rc lookup failed: ${rcErr.message}` };
@@ -275,7 +286,7 @@ async function findProfile(
   if (normalizedUuidIds.length > 0) {
     const { data: byUser, error: userErr } = await supabase
       .from("profiles")
-      .select("user_id, trial_expires_at")
+      .select(PROFILE_COLUMNS)
       .in("user_id", normalizedUuidIds);
     if (userErr) {
       return { kind: "ambiguous", reason: `findProfile user lookup failed: ${userErr.message}` };
@@ -385,7 +396,7 @@ async function handleEvent(
   }
 
   const profileUserId = profileMatch.profile.user_id;
-  const trialExpiry = profileMatch.profile.trial_expires_at;
+  const matchedProfile = profileMatch.profile;
 
   if (UPGRADE_EVENTS.has(eventType)) {
     const tier = entitlementIdsToTier(extractEntitlementIds(event));
@@ -420,8 +431,24 @@ async function handleEvent(
   }
 
   if (DOWNGRADE_EVENTS.has(eventType)) {
-    const stillInTrial = trialExpiry && new Date(trialExpiry) > new Date();
-    if (stillInTrial) return { status: "skipped", reason: "User still in trial" };
+    // Same rule as sync-subscription-from-rc: an EXPIRATION from RC is proof
+    // that RC's own entitlement lapsed, but it never downgrades a locally
+    // granted entitlement that is still valid (_shared/entitlementDecision.ts).
+    const decision = decideEntitlement(
+      {
+        subscription_tier: matchedProfile.subscription_tier ?? null,
+        subscription_expires_at: matchedProfile.subscription_expires_at ?? null,
+        revenuecat_customer_id: matchedProfile.revenuecat_customer_id ?? null,
+        trial_expires_at: matchedProfile.trial_expires_at ?? null,
+      },
+      { tier: null, expiresAt: null, expiredEntitlement: true },
+    );
+    if (decision.action !== "downgrade") {
+      const reason = decision.action === "untouched"
+        ? (decision.reason === "trial" ? "User still in trial" : `Local grant still valid (${decision.reason})`)
+        : "EXPIRATION with an active RC tier is contradictory; not writing";
+      return { status: "skipped", reason };
+    }
 
     const { error } = await supabase
       .from("profiles")
@@ -429,7 +456,7 @@ async function handleEvent(
       .eq("user_id", profileUserId);
 
     if (error) return { status: "failed", error: `Downgrade write failed: ${error.message}` };
-    return { status: "processed", note: "Downgraded to free" };
+    return { status: "processed", note: `Downgraded to free (${decision.reason})` };
   }
 
   return { status: "skipped", reason: `No handler for event type ${eventType}` };
