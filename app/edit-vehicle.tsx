@@ -230,7 +230,7 @@ export default function EditVehicleScreen() {
         >
           <View style={styles.field}>
             <Text style={styles.label}>Vehicle Type</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
               {VEHICLE_TYPE_OPTIONS.map(opt => (
                 <Pressable
                   key={opt.value}

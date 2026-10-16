@@ -122,7 +122,7 @@ export default function AddPropertyTaskScreen() {
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Quick Templates</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.templates}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.templates}>
               {TEMPLATE_TASKS.map(t => (
                 <Pressable key={t.task} style={({ pressed }) => [styles.template, { opacity: pressed ? 0.8 : 1 }]} onPress={() => applyTemplate(t)}>
                   <Text style={styles.templateTask} numberOfLines={2}>{t.task}</Text>

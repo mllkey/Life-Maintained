@@ -563,6 +563,10 @@ export default function DashboardScreen() {
       style={{ flex: 1 }}
       showsVerticalScrollIndicator={false}
       contentInsetAdjustmentBehavior="never"
+      // The budget sheet (Modal) and the quick-mileage field live inside this
+      // ScrollView's responder tree; "handled" keeps their Save buttons from
+      // being swallowed by the first tap when the keyboard is up.
+      keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.accent} />}
     >
       <LinearGradient

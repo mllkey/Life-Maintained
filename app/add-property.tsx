@@ -418,6 +418,7 @@ export default function AddPropertyScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.typeRow}
             >
               {PROPERTY_TYPES.map(t => {

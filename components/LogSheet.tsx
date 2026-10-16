@@ -1112,7 +1112,7 @@ export function LogSheet({
                 )}
 
                 {phase === "results" && (
-                  <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }}>
+                  <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: 500 }}>
                     {items.map(it => (
                       <ConfirmCard key={it._key} item={it} userId={userId} onRemove={() => removeCard(it._key)} onToast={fireLogSuccessToast} />
                     ))}

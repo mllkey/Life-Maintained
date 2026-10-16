@@ -1693,7 +1693,7 @@ export default function LogServiceScreen() {
             <View style={styles.fieldGroup}>
               <Text style={styles.groupLabel}>Service Type</Text>
               {taskChips.length > 0 && (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickPicks}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.quickPicks}>
                   {taskChips.map(chip => {
                     const selected = directTask?.id === chip.id && task === chip.name;
                     return (

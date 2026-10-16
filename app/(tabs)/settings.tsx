@@ -730,6 +730,7 @@ export default function SettingsScreen() {
                 value={settings.budgetThreshold}
                 onChangeText={v => updateSetting("budgetThreshold", v)}
                 currentThreshold={budgetPref?.budget_threshold ?? null}
+                onSubmitEditing={handleSave}
               />
             </View>
           </Section>
@@ -746,6 +747,7 @@ export default function SettingsScreen() {
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
                   contentContainerStyle={styles.chipScroll}
                   style={styles.chipScrollWrap}
                 >

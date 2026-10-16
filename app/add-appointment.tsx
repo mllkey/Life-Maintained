@@ -215,7 +215,7 @@ export default function AddAppointmentScreen() {
           {error && <View style={styles.errorBox}><Icon name="alert-circle" size={16} color={Colors.overdue} /><Text style={styles.errorText}>{error}</Text></View>}
 
           <Section title="Appointment Type">
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips}>
               {APPOINTMENT_TYPES.map(t => (
                 <Pressable key={t} style={[styles.chip, appointmentType === t && styles.chipSelected]} onPress={() => { setAppointmentType(t); Haptics.selectionAsync(); }}>
                   <Text style={[styles.chipText, appointmentType === t && styles.chipTextSelected]}>{t}</Text>
