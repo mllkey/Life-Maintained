@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.98.0";
-import { decideEntitlement, type PaidTier } from "../_shared/entitlementDecision.ts";
+import { decideEntitlement, describeGrantReconcile, reconcileRcGrants, type PaidTier } from "../_shared/entitlementDecision.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -101,7 +101,29 @@ Deno.serve(async (req) => {
     }
   }
 
-  let rcLookup = await fetchRevenueCatSubscriber(userId);
+  // Grants bridge (Revision 7, Stage 2B.7). The caller's verified JWT identity is the only RC
+  // identity used: the watermark is taken, then RevenueCat is fetched for userId, then the
+  // complete snapshot is applied to the grant model. The result is observed, not authoritative:
+  // everything below still decides the legacy profile and the build-180 response from the same
+  // RevenueCat response, and a failed grant write never changes that outcome.
+  const grantReconcile = await reconcileRcGrants(
+    {
+      rpc: (fn: string, args: Record<string, unknown>) => supabaseAdmin.rpc(fn, args),
+      fetchSubscriber: fetchRevenueCatSubscriber,
+    },
+    { userId, rcAppUserId: userId, actor: "sync-subscription-from-rc" },
+  );
+  if (grantReconcile.result.status === "failed") {
+    console.error(`[sync-rc] grants reconcile for ${userId}: ${describeGrantReconcile(grantReconcile.result)}`);
+  } else {
+    console.log(`[sync-rc] grants reconcile for ${userId}: ${describeGrantReconcile(grantReconcile.result)}`);
+  }
+  // Additive response field; build 180 reads only tier, expiresAt and action.
+  const shadow = grantReconcile.result.status === "applied"
+    ? { status: "applied", ...grantReconcile.result.shadow }
+    : { status: "failed", code: grantReconcile.result.code };
+
+  let rcLookup = grantReconcile.lookup;
 
   if (
     !rcLookup.ok &&
@@ -169,7 +191,7 @@ Deno.serve(async (req) => {
   );
 
   if (decision.action === "untouched") {
-    return jsonResponse({ tier: null, expiresAt: null, action: decision.reason === "trial" ? "skipped_trial" : "skipped_local_grant", reason: decision.reason });
+    return jsonResponse({ tier: null, expiresAt: null, action: decision.reason === "trial" ? "skipped_trial" : "skipped_local_grant", reason: decision.reason, shadow });
   }
 
   if (decision.action === "downgrade") {
@@ -183,7 +205,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Update failed" }, 500);
     }
 
-    return jsonResponse({ tier: "free", expiresAt: null, action: "downgraded", reason: decision.reason });
+    return jsonResponse({ tier: "free", expiresAt: null, action: "downgraded", reason: decision.reason, shadow });
   }
 
   const { error: upgradeErr } = await supabaseAdmin
@@ -200,5 +222,5 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Update failed" }, 500);
   }
 
-  return jsonResponse({ tier: decision.tier, expiresAt: decision.expiresAt, action: "synced" });
+  return jsonResponse({ tier: decision.tier, expiresAt: decision.expiresAt, action: "synced", shadow });
 });

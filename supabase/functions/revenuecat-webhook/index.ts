@@ -1,5 +1,12 @@
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.98.0";
-import { decideEntitlement } from "../_shared/entitlementDecision.ts";
+import {
+  decideEntitlement,
+  describeGrantReconcile,
+  fetchRcSubscriber,
+  reconcileRcGrants,
+  reconcileRcTransfer,
+  type GrantReconcileDeps,
+} from "../_shared/entitlementDecision.ts";
 
 
 const UPGRADE_EVENTS = new Set([
@@ -113,6 +120,51 @@ type WebhookProfile = {
 
 const PROFILE_COLUMNS = "user_id, trial_expires_at, subscription_tier, subscription_expires_at, revenuecat_customer_id";
 
+// Grants bridge (Revision 7, Stage 2B.6): outcome of reconciling the grant model for one event.
+type GrantStep =
+  | { status: "applied"; note: string }
+  | { status: "not_applicable"; note: string }
+  | { status: "failed"; error: string };
+
+type VerifiedOwner =
+  | { kind: "none" }
+  | { kind: "one"; userId: string }
+  | { kind: "error"; reason: string };
+
+// Durable processed/succeeded distinction (Revision 7, Stage 2B.6). When the legacy step of an
+// event completed but its grant step failed, the event row is stored as failed (so RevenueCat
+// redelivers) with this marker in its error column. A redelivery that finds the marker must NOT
+// run the legacy profile writer again, because by then the payload may be stale: it restores the
+// recorded legacy outcome and retries only the grant step.
+type LegacyDone =
+  | { status: "processed"; note?: string }
+  | { status: "skipped"; reason: string };
+
+const LEGACY_DONE_PREFIX = "legacy-done ";
+
+function legacyDoneMarker(legacy: LegacyDone, grantsError: string): string {
+  return LEGACY_DONE_PREFIX + JSON.stringify({
+    status: legacy.status,
+    note: legacy.status === "skipped" ? legacy.reason : legacy.note ?? null,
+    grants: grantsError,
+  });
+}
+
+function parseLegacyDone(stored: unknown): LegacyDone | null {
+  if (typeof stored !== "string" || stored.startsWith(LEGACY_DONE_PREFIX) === false) return null;
+  try {
+    const parsed: unknown = JSON.parse(stored.slice(LEGACY_DONE_PREFIX.length));
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const fields: { status?: unknown; note?: unknown } = parsed;
+    const note = typeof fields.note === "string" ? fields.note : null;
+    if (fields.status === "processed") return note === null ? { status: "processed" } : { status: "processed", note };
+    if (fields.status === "skipped") return { status: "skipped", reason: note ?? "" };
+    return null;
+  } catch (_e) {
+    return null;
+  }
+}
+
 type ProfileMatch =
   | { kind: "none" }
   | { kind: "one"; profile: WebhookProfile }
@@ -166,10 +218,12 @@ async function processWebhook(rawBody: string): Promise<void> {
   const event = body.event;
   if (!event) { console.warn("[WEBHOOK] Missing event"); return; }
 
+  const env = Deno.env;
   const supabase = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    env.get("SUPABASE_URL") ?? "",
+    env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
+  const rcApiKey = env.get("REVENUECAT_REST_API_KEY") ?? "";
 
   const eventId: string = event.id ?? await fallbackEventId(event);
   const eventType: string = event.type ?? "UNKNOWN";
@@ -186,6 +240,7 @@ async function processWebhook(rawBody: string): Promise<void> {
       status: "received",
     });
 
+  let legacyDone: LegacyDone | null = null;
   if (auditErr) {
     if (auditErr.code === "23505") {
       // Event id already seen. Only ack if the prior attempt actually resolved; a
@@ -193,12 +248,14 @@ async function processWebhook(rawBody: string): Promise<void> {
       // retry can complete the grant. Re-processing is idempotent (scan_credits
       // .transaction_id UNIQUE; tier writes are same-value updates).
       const { data: prior } = await supabase
-        .from("webhook_events").select("status")
+        .from("webhook_events").select("status, error")
         .eq("source", "revenuecat").eq("event_id", eventId).maybeSingle();
       if (prior?.status === "processed" || prior?.status === "skipped") {
         console.log(`[WEBHOOK] Duplicate ${eventId} already ${prior.status}`);
         return;
       }
+      // Legacy step already completed on an earlier delivery; only the grant step is owed.
+      if (prior?.status === "failed") legacyDone = parseLegacyDone(prior.error);
       console.log(`[WEBHOOK] Duplicate ${eventId} (prior=${prior?.status ?? "unknown"}) — re-processing`);
     } else {
       console.error("[WEBHOOK] Audit insert failed:", auditErr);
@@ -213,7 +270,28 @@ async function processWebhook(rawBody: string): Promise<void> {
 
   console.log(`[WEBHOOK] Processing ${eventType} for ${appUserId || "(no app_user_id)"}`);
 
-  const result = await handleEvent(supabase, event, eventType, appUserId);
+  const result: ProcessResult = legacyDone === null
+    ? await handleEvent(supabase, event, eventType, appUserId)
+    : legacyDone;
+  if (legacyDone !== null) console.log(`[WEBHOOK] ${eventId}: legacy step already ${legacyDone.status}; retrying the grant step only`);
+
+  // Grants bridge (Revision 7, Stage 2B.6). The event is only a trigger: the grant model is
+  // reconciled from RevenueCat's CURRENT state for the verified owner, never from the event
+  // payload. The legacy handler above is unchanged and stays authoritative. The event is
+  // recorded as processed/skipped only after the grant write has committed; a failed grant
+  // write stores it as failed WITH the completed legacy outcome and returns 5xx, so RevenueCat
+  // redelivers and the redelivery retries the grant step without repeating the legacy write.
+  let grantsNote: string | null = null;
+  if (result.status !== "failed") {
+    const grants = await reconcileGrantsForEvent(supabase, rcApiKey, event, eventType, appUserId, eventId);
+    if (grants.status === "failed") {
+      console.error(`[WEBHOOK] grants reconcile failed for ${eventId}: ${grants.error}`);
+      await markEvent(supabase, eventId, "failed", legacyDoneMarker(result, grants.error));
+      throw new Error(`grants reconcile failed: ${grants.error}`);
+    }
+    grantsNote = grants.note;
+    console.log(`[WEBHOOK] grants for ${eventId}: ${grants.note}`);
+  }
 
   await markEvent(
     supabase,
@@ -221,7 +299,7 @@ async function processWebhook(rawBody: string): Promise<void> {
     result.status,
     result.status === "failed"
       ? result.error
-      : (result as any).reason ?? (result as any).note ?? null
+      : withGrantsNote((result as any).reason ?? (result as any).note ?? null, grantsNote)
   );
 
   if (result.status === "failed") {
@@ -244,6 +322,121 @@ async function markEvent(
   if (status === "failed") q = q.neq("status", "processed").neq("status", "skipped");
   const { error: updateErr } = await q;
   if (updateErr) console.error(`[WEBHOOK] markEvent failed for ${eventId}:`, updateErr);
+}
+
+function withGrantsNote(legacy: string | null, grants: string | null): string | null {
+  if (grants === null) return legacy;
+  return legacy === null ? `grants: ${grants}` : `${legacy} | grants: ${grants}`;
+}
+
+// Grant-model ownership: the owner of a RevenueCat customer is the ONE profile whose user_id is
+// itself among the identities RevenueCat reports for that customer (the app logs in to RevenueCat
+// with the Supabase user id). profiles.revenuecat_customer_id is deliberately not consulted here:
+// it is not proof of ownership. More than one match is an ownership conflict, not a guess.
+async function resolveVerifiedOwner(
+  supabase: SupabaseClient,
+  identities: unknown[],
+): Promise<VerifiedOwner> {
+  const uuids: string[] = [];
+  for (const identity of identities) {
+    const normalized = typeof identity === "string" ? normalizeUuidCandidate(identity) : null;
+    if (normalized !== null && uuids.includes(normalized) === false) uuids.push(normalized);
+  }
+  if (uuids.length === 0) return { kind: "none" };
+
+  const { data, error } = await supabase.from("profiles").select("user_id").in("user_id", uuids);
+  if (error) return { kind: "error", reason: `owner lookup failed: ${error.message}` };
+  const rows: Array<{ user_id: string }> = Array.isArray(data) ? data : [];
+  if (rows.length > 1) return { kind: "error", reason: `${rows.length} profiles match this customer's identities` };
+  if (rows.length === 1) return { kind: "one", userId: rows[0].user_id };
+  return { kind: "none" };
+}
+
+// Whether any profile still references one of these RevenueCat ids through the legacy
+// revenuecat_customer_id column. It only tells "unknown customer" apart from "known customer whose
+// ownership cannot be verified"; it never selects who receives a grant. null = lookup failed.
+async function hasLegacyLink(
+  supabase: SupabaseClient,
+  identities: unknown[],
+): Promise<boolean | null> {
+  const ids: string[] = [];
+  for (const identity of identities) {
+    if (typeof identity === "string" && identity.length > 0 && ids.includes(identity) === false) ids.push(identity);
+  }
+  if (ids.length === 0) return false;
+  const { data, error } = await supabase.from("profiles").select("user_id").in("revenuecat_customer_id", ids).limit(1);
+  if (error) return null;
+  return Array.isArray(data) && data.length > 0;
+}
+
+async function reconcileGrantsForEvent(
+  supabase: SupabaseClient,
+  rcApiKey: string,
+  event: Record<string, unknown>,
+  eventType: string,
+  appUserId: string,
+  eventId: string,
+): Promise<GrantStep> {
+  const unverified = "customer is referenced by a profile but RevenueCat's identities do not verify its owner; no grant written";
+  try {
+    if (rcApiKey.length === 0) return { status: "failed", error: "REVENUECAT_REST_API_KEY not set" };
+
+    const deps: GrantReconcileDeps = {
+      rpc: (fn: string, args: Record<string, unknown>) => supabase.rpc(fn, args),
+      fetchSubscriber: (id: string) => fetchRcSubscriber(fetch, rcApiKey, id),
+    };
+    const actor = "revenuecat-webhook";
+
+    if (eventType === "TRANSFER") {
+      const from: unknown[] = Array.isArray(event.transferred_from) ? event.transferred_from : [];
+      const to: unknown[] = Array.isArray(event.transferred_to) ? event.transferred_to : [];
+      const fromOwner = await resolveVerifiedOwner(supabase, from);
+      if (fromOwner.kind === "error") return { status: "failed", error: `TRANSFER losing side: ${fromOwner.reason}` };
+      const toOwner = await resolveVerifiedOwner(supabase, to);
+      if (toOwner.kind === "error") return { status: "failed", error: `TRANSFER gaining side: ${toOwner.reason}` };
+
+      if (fromOwner.kind === "none" && toOwner.kind === "none") {
+        const linked = await hasLegacyLink(supabase, [...from, ...to]);
+        if (linked === null) return { status: "failed", error: "TRANSFER legacy link lookup failed" };
+        if (linked) return { status: "failed", error: `TRANSFER: ${unverified}` };
+        return { status: "not_applicable", note: "TRANSFER with no mapped customer" };
+      }
+      // One side only: completing it would mean revoking or granting on half a transfer.
+      if (fromOwner.kind === "none" || toOwner.kind === "none") {
+        return { status: "failed", error: "TRANSFER maps to a verified user on one side only; nothing written, retry" };
+      }
+      if (fromOwner.userId === toOwner.userId) {
+        const same = await reconcileRcGrants(deps, { userId: toOwner.userId, rcAppUserId: toOwner.userId, actor });
+        if (same.result.status === "failed") return { status: "failed", error: describeGrantReconcile(same.result) };
+        return { status: "applied", note: `TRANSFER within one user, ${describeGrantReconcile(same.result)}` };
+      }
+      const moved = await reconcileRcTransfer(deps, {
+        fromUserId: fromOwner.userId,
+        toUserId: toOwner.userId,
+        eventRef: eventId,
+        actor,
+      });
+      if (moved.status === "failed") return { status: "failed", error: `TRANSFER ${describeGrantReconcile(moved)}` };
+      return { status: "applied", note: `TRANSFER ${describeGrantReconcile(moved)}` };
+    }
+
+    const aliases: unknown[] = Array.isArray(event.aliases) ? event.aliases : [];
+    const identities: unknown[] = [appUserId, event.original_app_user_id, ...aliases];
+    const owner = await resolveVerifiedOwner(supabase, identities);
+    if (owner.kind === "error") return { status: "failed", error: owner.reason };
+    if (owner.kind === "none") {
+      const linked = await hasLegacyLink(supabase, identities);
+      if (linked === null) return { status: "failed", error: "legacy link lookup failed" };
+      if (linked) return { status: "failed", error: unverified };
+      return { status: "not_applicable", note: "no mapped customer" };
+    }
+
+    const single = await reconcileRcGrants(deps, { userId: owner.userId, rcAppUserId: owner.userId, actor });
+    if (single.result.status === "failed") return { status: "failed", error: describeGrantReconcile(single.result) };
+    return { status: "applied", note: describeGrantReconcile(single.result) };
+  } catch (e) {
+    return { status: "failed", error: `unexpected: ${e instanceof Error ? e.message : "exception"}` };
+  }
 }
 
 async function findProfile(
