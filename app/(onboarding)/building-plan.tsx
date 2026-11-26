@@ -17,6 +17,9 @@ export default function BuildingPlanScreen() {
   const trackingMode = oneParam(params.trackingMode);
   const fuelType = oneParam(params.fuelType) || "gas";
   const vehicleCategory = oneParam(params.vehicleCategory);
+  // Only the literal "true" routed from add-vehicle counts as AWD.
+  const isAwd = oneParam(params.isAwd) === "true";
+  const hasMileage = (parseInt(currentMileageStr, 10) || 0) > 0;
   const displayName = (oneParam(params.vehicleName) || `${yearStr} ${make} ${model}`).trim();
 
   const config: BuildingConfig = {
@@ -32,31 +35,34 @@ export default function BuildingPlanScreen() {
       { lib: "ion", icon: "settings", label: "Mileage + wear", anim: "spin" },
     ],
     copy: {
-      initial: "Reading the factory service manual",
-      beat1: `Reading ${displayName}’s service manual`,
-      beat2: "Checking seasonal service intervals",
-      beat3: "Building your personalized plan",
-      slow: "Cross-checking the schedule — a few more seconds.",
-      ready: "Your plan is ready.",
+      beat1: yearStr && make && model
+        ? `Reading your ${yearStr} ${make} ${model}'s service intervals`
+        : "Reading your vehicle's service intervals",
+      // Vehicles carry no city, so nothing location-specific is claimed here.
+      beat2: hasMileage ? "Tailoring it to your vehicle's mileage" : "Tailoring it to your vehicle",
+      beat3: (count) => `${count} items written to your plan`,
+      slow: "Still working. Some vehicles take up to a minute.",
     },
     failedTitle: "Couldn’t build your schedule",
     failedSubtitle: "Your vehicle is saved. Retry now, or build it later from the vehicle screen.",
-    invokeGenerate: async () => {
-      const { error } = await supabase.functions.invoke("generate-maintenance-schedule", {
+    invokeGenerate: async (signal) => {
+      const { data, error } = await supabase.functions.invoke("generate-maintenance-schedule", {
         body: {
           vehicle_id: vehicleId, make, model,
           year: parseInt(yearStr, 10) || new Date().getFullYear(),
           current_mileage: parseInt(currentMileageStr, 10) || 0,
           current_hours: parseFloat(currentHoursStr) || 0,
           tracking_mode: trackingMode, vehicle_type: fuelType,
-          vehicle_category: vehicleCategory, is_awd: false,
+          vehicle_category: vehicleCategory, is_awd: isAwd,
         },
+        signal,
       });
-      if (!error) return { ok: true };
+      if (!error) return { kind: "success", data };
       const status = getInvokeStatus(error);
-      if (status === 409) return { ok: true };
+      // 409 = lock held or rows already exist. Never a success on its own.
+      if (status === 409) return { kind: "conflict" };
       if (__DEV__) console.warn("[onboarding] schedule generation error:", error.message);
-      return { ok: false, status, error };
+      return { kind: "failure", status, error };
     },
     onGenerated: () => {
       qc.invalidateQueries({ queryKey: ["vehicles"] });

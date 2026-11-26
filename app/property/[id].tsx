@@ -840,7 +840,7 @@ export default function PropertyDetailScreen() {
                 ) : (
                   <View style={styles.skeletonWrap}>
                     <Text style={styles.skeletonTitle}>Building your maintenance plan</Text>
-                    <Text style={styles.skeletonSubtitle}>This can take up to a minute</Text>
+                    <Text style={styles.skeletonSubtitle}>Your plan will show up here once it is built</Text>
                     <PropertySkeleton />
                   </View>
                 )

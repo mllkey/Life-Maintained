@@ -16,8 +16,6 @@ export default function BuildingHealthPlanScreen() {
   const petType = oneParam(params.petType);
   const relationship = oneParam(params.relationship);
   const isPet = memberType === "pet";
-  const petLabel = petType ? petType.toLowerCase() : "pet";
-  const relLabel = relationship ? relationship.toLowerCase() : "this person";
 
   const chips: [ChipSpec, ChipSpec, ChipSpec] = isPet
     ? [
@@ -40,24 +38,25 @@ export default function BuildingHealthPlanScreen() {
     docIcon: { lib: "ion", icon: "heart" },
     chips,
     copy: {
-      initial: isPet ? "Reading pet care guidance" : "Reading preventive-care guidelines",
-      beat1: isPet ? `Pulling ${petLabel} care intervals` : `Pulling preventive care for ${relLabel}`,
-      beat2: isPet ? "Checking vaccination cadence" : "Checking annual visit intervals",
-      beat3: `Building ${memberName}’s reminders`,
-      slow: "Cross-checking the schedule — a few more seconds.",
-      ready: "Care reminders are ready.",
+      beat1: `Reading ${memberName}'s preventive-care guidelines`,
+      // Names the factor only; no birth date or age is claimed.
+      beat2: `Matching it to ${memberName}'s age`,
+      beat3: (count) => `${count} appointments written to your plan`,
+      slow: "Still working. Some plans take up to a minute.",
     },
     failedTitle: "Couldn’t build the reminders",
     failedSubtitle: `${memberName} is saved. Retry now, or build reminders later from Health.`,
-    invokeGenerate: async () => {
-      const { error } = await supabase.functions.invoke("generate-health-schedule", {
+    invokeGenerate: async (signal) => {
+      const { data, error } = await supabase.functions.invoke("generate-health-schedule", {
         body: { family_member_id: familyMemberId },
+        signal,
       });
-      if (!error) return { ok: true };
+      if (!error) return { kind: "success", data };
       const status = getInvokeStatus(error);
-      if (status === 409) return { ok: true };
+      // 409 = generation lock held. Never a success on its own.
+      if (status === 409) return { kind: "conflict" };
       if (__DEV__) console.warn("[onboarding] health schedule error:", error.message);
-      return { ok: false, status, error };
+      return { kind: "failure", status, error };
     },
     onGenerated: () => {
       qc.invalidateQueries({ queryKey: ["family_members"] });

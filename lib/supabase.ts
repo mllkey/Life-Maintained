@@ -8,6 +8,27 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 25000;
 const FUNCTIONS_REQUEST_TIMEOUT_MS = 75000;
+// The three schedule generators get a ceiling ABOVE the onboarding scene's own
+// 90s attempt deadline (BUILDING_SCENE.attemptDeadlineMs), so the scene's
+// AbortController is what ends a slow attempt, not this wrapper. Every other
+// edge call keeps FUNCTIONS_REQUEST_TIMEOUT_MS.
+const SCHEDULE_GENERATION_REQUEST_TIMEOUT_MS = 95000;
+const SCHEDULE_GENERATION_PATHNAMES: readonly string[] = [
+  "/functions/v1/generate-maintenance-schedule",
+  "/functions/v1/generate-property-schedule",
+  "/functions/v1/generate-health-schedule",
+];
+
+// Pathname only: origin, query string and fragment are stripped, so a function
+// name that merely appears in a query value or another path cannot match.
+function requestPathname(url: string): string {
+  const schemeEnd = url.indexOf("://");
+  const pathStart = schemeEnd === -1 ? 0 : url.indexOf("/", schemeEnd + 3);
+  if (pathStart === -1) return "/";
+  const rest = url.slice(pathStart);
+  const end = rest.search(/[?#]/);
+  return end === -1 ? rest : rest.slice(0, end);
+}
 
 const timeoutFetch: typeof fetch = (input, init) => {
   const url =
@@ -16,9 +37,11 @@ const timeoutFetch: typeof fetch = (input, init) => {
       : input instanceof Request
         ? input.url
         : String(input);
-  const timeoutMs = url.includes("/functions/v1/")
-    ? FUNCTIONS_REQUEST_TIMEOUT_MS
-    : DEFAULT_REQUEST_TIMEOUT_MS;
+  const timeoutMs = SCHEDULE_GENERATION_PATHNAMES.includes(requestPathname(url))
+    ? SCHEDULE_GENERATION_REQUEST_TIMEOUT_MS
+    : url.includes("/functions/v1/")
+      ? FUNCTIONS_REQUEST_TIMEOUT_MS
+      : DEFAULT_REQUEST_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const external = init?.signal;

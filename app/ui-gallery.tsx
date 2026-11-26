@@ -194,7 +194,7 @@ export default function UiGallery() {
           icon="car-outline"
           tone="vehicle"
           title="Never forget an oil change again"
-          body="Add your first vehicle and we build its maintenance plan in about 30 seconds."
+          body="Add your first vehicle and we build its maintenance plan around its year, make and model."
           action={{ label: "Add vehicle", onPress: NOOP }}
           secondaryAction={{ label: "or import from a spreadsheet", onPress: NOOP }}
         />

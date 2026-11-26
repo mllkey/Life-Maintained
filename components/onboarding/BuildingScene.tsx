@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { View, Text, StyleSheet, Pressable, AppState } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
@@ -11,10 +11,20 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import { useAuth, getOnboardingKey } from "@/context/AuthContext";
 import { capture } from "@/lib/analytics";
+import { BUILDING_SCENE, REVEAL_BEATS, REVEAL_HAPTIC_OFFSETS } from "@/lib/revealChoreography";
+import {
+  isRevealPreviewReady,
+  loadOnboardingRevealData,
+  loadOnboardingTaskCount,
+  serializeRevealPreview,
+  type RevealData,
+} from "@/lib/onboardingRevealData";
 import Svg, { Defs, RadialGradient, Stop, Circle } from "react-native-svg";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useReducedMotion,
+  ReduceMotion,
   withTiming,
   withSpring,
   withDelay,
@@ -22,26 +32,36 @@ import Animated, {
   withRepeat,
   Easing,
   interpolate,
-  runOnJS,
   cancelAnimation,
   type SharedValue,
 } from "react-native-reanimated";
 
 const HALO_SIZE = 200;
 const DOC_GLOW_SIZE = 160;
-const MIN_SCENE_MS = 7600;
-const MAX_WAIT_MS = 35000;
 const PARTICLE_COUNT = 12;
 const ORBIT_RADIUS = 96;
 const ORBIT_DOTS = Array.from({ length: 8 }, (_, i) => {
   const a = (i / 8) * Math.PI * 2;
   return { x: Math.cos(a) * ORBIT_RADIUS, y: Math.sin(a) * ORBIT_RADIUS };
 });
+// Status-line crossfade, shared with the reveal cascade's rhythm: the outgoing
+// line clears in one hero beat, the incoming line settles on the second tick.
+const CROSSFADE_OUT_MS = REVEAL_BEATS.hero;
+const CROSSFADE_IN_MS = REVEAL_HAPTIC_OFFSETS[1];
+const SEGMENTS = [1, 2, 3] as const;
 
 export type IconLib = "ion" | "mci";
 export type ChipAnim = "shimmer" | "shimmerScale" | "bounce" | "spin" | "spinSequence" | "pulse";
 export type ChipSpec = { lib: IconLib; icon: string; label: string; anim: ChipAnim };
-export type GenerateResult = { ok: true } | { ok: false; status?: number; error: unknown };
+// What one generation request told us. None of these advances the scene on its
+// own: only a positive asset-scoped row count plus a loaded preview does.
+//   success   2xx; `data` is the function's response body, untouched
+//   conflict  409: a lock is held OR rows already exist. Never a success.
+//   failure   any other status, a network error, or an aborted request
+export type GenerateResult =
+  | { kind: "success"; data: unknown }
+  | { kind: "conflict" }
+  | { kind: "failure"; status?: number; error: unknown };
 export type BuildingConfig = {
   tint: string;
   assetId: string;
@@ -50,11 +70,34 @@ export type BuildingConfig = {
   analyticsStep: "building_plan" | "building_property_plan" | "building_health_plan";
   docIcon: { lib: IconLib; icon: string };
   chips: [ChipSpec, ChipSpec, ChipSpec];
-  copy: { initial: string; beat1: string; beat2: string; beat3: string; slow: string; ready: string };
+  // beat1 shows at dispatch, beat2 is context copy, beat3 is built from the
+  // verified row count, slow is the secondary line added on a long wait.
+  copy: { beat1: string; beat2: string; beat3: (count: number) => string; slow: string };
   failedTitle: string;
   failedSubtitle: string;
-  invokeGenerate: () => Promise<GenerateResult>;
+  invokeGenerate: (signal: AbortSignal) => Promise<GenerateResult>;
   onGenerated: () => void;
+};
+
+type TimerName = "beat2" | "slow" | "deadline" | "present" | "swap" | "haptic" | "nav";
+type AttemptPhase = "waiting" | "succeeding" | "done" | "failed";
+type Attempt = {
+  token: number;
+  // Wall clock at the start of the attempt. Deadlines are measured against
+  // this, not against timers, so time spent backgrounded is still counted.
+  startedAt: number;
+  phase: AttemptPhase;
+  dispatched: boolean;
+  requestSettled: boolean;
+  outcome: GenerateResult | null;
+  controller: AbortController | null;
+  beat: 1 | 2 | 3;
+  beat2SettledAt: number;
+  ready: RevealData | null;
+  evaluating: boolean;
+  evaluateQueued: boolean;
+  hapticFired: boolean;
+  navigated: boolean;
 };
 
 export function oneParam(v: string | string[] | undefined): string {
@@ -91,8 +134,10 @@ function armChip(sv: SharedValue<number>, kind: ChipAnim, delay: number) {
   }
 }
 
-function chipIconStyle(kind: ChipAnim, v: number) {
+// `still` is reduced motion: the icon is drawn at full strength with no transform.
+function chipIconStyle(kind: ChipAnim, v: number, still: boolean) {
   "worklet";
+  if (still) return { opacity: 1 };
   if (kind === "bounce") return { transform: [{ translateY: v }] };
   if (kind === "spin") return { transform: [{ rotate: `${v * 360}deg` }] };
   if (kind === "spinSequence") return { transform: [{ rotate: `${v}rad` }] };
@@ -120,24 +165,52 @@ const Particle = React.memo(function Particle({ progress, index, total, color }:
   return <Animated.View style={[styles.particle, { backgroundColor: color }, pStyle]} />;
 });
 
+/**
+ * Onboarding building scene, shared by all three verticals.
+ *
+ * The scene leaves for plan-reveal on exactly one condition: an asset-scoped
+ * row count that is positive AND a reveal preview that loaded and matches it.
+ * No timer, HTTP 200 or HTTP 409 advances it.
+ *
+ *   mount      one POST, its promise kept in liveRequestRef
+ *   settle     read the count (always, before any failure screen)
+ *                rows + preview          -> Beat 3, hold, replace route
+ *                409, or 200 with none   -> poll the count every 2s
+ *                request failed, no rows -> failure screen
+ *   90s        abort the request, one final read, then failure
+ *   Try again  count first; POST only if empty and no earlier POST is unresolved
+ *
+ * Nothing is surfaced while the app is not active (no failure screen, haptic
+ * or route change); returning to the foreground re-reads before deciding.
+ */
 export function BuildingScene({ config }: { config: BuildingConfig }) {
   const insets = useSafeAreaInsets();
   const { setOnboardingCompleted, user } = useAuth();
+  const reduceMotion = useReducedMotion();
 
-  const [subtitleText, setSubtitleText] = useState(config.copy.initial);
+  const [subtitleText, setSubtitleText] = useState(config.copy.beat1);
+  const [beat, setBeat] = useState<1 | 2 | 3>(1);
+  const [slowNotice, setSlowNotice] = useState(false);
   const [failed, setFailed] = useState(false);
   const [continueError, setContinueError] = useState<string | null>(null);
 
-  const hasAttempted = useRef(false);
-  const hasFinalized = useRef(false);
-  const sceneStart = useRef(Date.now());
-  const scheduleDone = useRef(false);
-  const failedRef = useRef(false);
-  const retrying = useRef(false);
-  const maxWaitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const finalizeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sceneTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Latest props for the async machine below, which outlives any one render.
+  const configRef = useRef(config);
+  configRef.current = config;
+  const reduceMotionRef = useRef(reduceMotion);
+  reduceMotionRef.current = reduceMotion;
+
+  const mountedRef = useRef(false);
+  const hasStartedRef = useRef(false);
+  const tokenRef = useRef(0);
+  const attemptRef = useRef<Attempt | null>(null);
+  // The one unresolved generation request this mounted scene may have. A new
+  // POST is never dispatched while this is set.
+  const liveRequestRef = useRef<Promise<GenerateResult> | null>(null);
+  const appActiveRef = useRef(AppState.currentState !== "background" && AppState.currentState !== "inactive");
+  const timersRef = useRef<Map<TimerName, ReturnType<typeof setTimeout>>>(new Map());
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const unmountAbortRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const titleOpacity = useSharedValue(0);
   const titleY = useSharedValue(10);
@@ -171,19 +244,55 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
   const particle11 = useSharedValue(0);
   const particleProgress = [particle0, particle1, particle2, particle3, particle4, particle5, particle6, particle7, particle8, particle9, particle10, particle11];
 
-  useEffect(() => { failedRef.current = failed; }, [failed]);
+  // ── Timers ────────────────────────────────────────────────────────────────
+  function clearTimer(name: TimerName) {
+    const t = timersRef.current.get(name);
+    if (t !== undefined) {
+      clearTimeout(t);
+      timersRef.current.delete(name);
+    }
+  }
 
-  const swapSubtitle = useCallback((next: string) => {
-    if (failedRef.current) return;
-    subtitleOpacity.value = withTiming(0, { duration: 160, easing: Easing.in(Easing.ease) }, (finished) => {
-      if (finished) {
-        runOnJS(setSubtitleText)(next);
-        subtitleOpacity.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.ease) });
-      }
-    });
-  }, [subtitleOpacity]);
+  // One timer per name: setting a name replaces whatever was pending under it.
+  function setTimer(name: TimerName, fn: () => void, ms: number) {
+    clearTimer(name);
+    timersRef.current.set(name, setTimeout(() => {
+      timersRef.current.delete(name);
+      fn();
+    }, Math.max(ms, 0)));
+  }
 
-  const stopScene = useCallback(() => {
+  function clearAllTimers() {
+    timersRef.current.forEach((t) => clearTimeout(t));
+    timersRef.current.clear();
+  }
+
+  function stopPolling() {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  // ── Attempt identity ──────────────────────────────────────────────────────
+  // Every async completion re-checks this: still mounted, and the attempt that
+  // scheduled it still holds the current token. A retry or an unmount makes
+  // every handler of an older attempt a no-op.
+  function isCurrent(a: Attempt): boolean {
+    const current = attemptRef.current;
+    return mountedRef.current && current !== null && current.token === a.token;
+  }
+
+  function isLiveWaiting(a: Attempt): boolean {
+    return isCurrent(a) && a.phase === "waiting";
+  }
+
+  function deadlinePassed(a: Attempt): boolean {
+    return Date.now() - a.startedAt >= BUILDING_SCENE.attemptDeadlineMs;
+  }
+
+  // ── Visuals ───────────────────────────────────────────────────────────────
+  function cancelSceneAnimations() {
     [
       haloPulse, orbitSpin, titleOpacity, titleY, subtitleOpacity,
       chip1Opacity, chip1Y, chip2Opacity, chip2Y, chip3Opacity, chip3Y,
@@ -191,137 +300,10 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
       particle0, particle1, particle2, particle3, particle4, particle5,
       particle6, particle7, particle8, particle9, particle10, particle11,
     ].forEach((sv) => cancelAnimation(sv));
-    sceneTimers.current.forEach(clearTimeout);
-    if (finalizeTimer.current) clearTimeout(finalizeTimer.current);
-    if (maxWaitTimer.current) clearTimeout(maxWaitTimer.current);
-    if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }
 
-  const markFailed = useCallback(() => {
-    failedRef.current = true;
-    stopScene();
-    subtitleOpacity.value = 1;
-    setFailed(true);
-  }, [stopScene, subtitleOpacity]);
-
-  const handleViewPlan = useCallback(() => {
-    setContinueError(null);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.replace({
-      pathname: "/(onboarding)/plan-reveal",
-      params: { vertical: config.revealVertical, assetId: config.assetId, assetName: config.assetName },
-    });
-  }, [config.revealVertical, config.assetId, config.assetName]);
-
-  const finalizeReveal = useCallback((confirmed: boolean) => {
-    if (failedRef.current || hasFinalized.current) return;
-    hasFinalized.current = true;
-    if (confirmed) {
-      swapSubtitle(config.copy.ready);
-      docScale.value = withSpring(1.15, { damping: 10, stiffness: 140 }, () => {
-        docScale.value = withSpring(1, { damping: 14, stiffness: 180 });
-      });
-      docGlow.value = withTiming(1, { duration: 400 });
-      readyOpacity.value = withTiming(1, { duration: 300 });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-    autoAdvanceTimer.current = setTimeout(() => {
-      autoAdvanceTimer.current = null;
-      if (failedRef.current) return;
-      handleViewPlan();
-    }, confirmed ? 1100 : 300);
-  }, [config.copy.ready, swapSubtitle, docScale, docGlow, readyOpacity, handleViewPlan]);
-
-  const generateSchedule = useCallback(async () => {
-    if (!config.assetId) { markFailed(); return; }
-    try {
-      const result = await config.invokeGenerate();
-      if (!result.ok) { markFailed(); return; }
-      scheduleDone.current = true;
-      config.onGenerated();
-      const elapsed = Date.now() - sceneStart.current;
-      const remaining = Math.max(MIN_SCENE_MS - elapsed, 0);
-      finalizeTimer.current = setTimeout(() => finalizeReveal(true), remaining);
-    } catch (e) {
-      if (__DEV__) console.error("[onboarding] generation failed:", e);
-      markFailed();
-    }
-  }, [config, finalizeReveal, markFailed]);
-
-  const armScene = useCallback(() => {
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    titleOpacity.value = withTiming(1, { duration: 480, easing: Easing.out(Easing.cubic) });
-    titleY.value = withSpring(0, { damping: 17, stiffness: 150 });
-    haloPulse.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.inOut(Easing.ease) }), -1, true);
-    orbitSpin.value = withRepeat(withTiming(1, { duration: 9000, easing: Easing.linear }), -1);
-
-    timers.push(setTimeout(() => swapSubtitle(config.copy.beat1), 1400));
-    timers.push(setTimeout(() => swapSubtitle(config.copy.beat2), 3100));
-    timers.push(setTimeout(() => swapSubtitle(config.copy.beat3), 4700));
-    timers.push(setTimeout(() => { if (!scheduleDone.current && !hasFinalized.current) swapSubtitle(config.copy.slow); }, 8000));
-
-    chip1Opacity.value = withDelay(1400, withTiming(1, { duration: 400 }));
-    chip1Y.value = withDelay(1400, withSpring(0, { damping: 14, stiffness: 180 }));
-    chip2Opacity.value = withDelay(1700, withTiming(1, { duration: 400 }));
-    chip2Y.value = withDelay(1700, withSpring(0, { damping: 14, stiffness: 180 }));
-    chip3Opacity.value = withDelay(2000, withTiming(1, { duration: 400 }));
-    chip3Y.value = withDelay(2000, withSpring(0, { damping: 14, stiffness: 180 }));
-
-    armChip(chipIcon0, config.chips[0].anim, 1400);
-    armChip(chipIcon1, config.chips[1].anim, 1700);
-    armChip(chipIcon2, config.chips[2].anim, 2000);
-
-    particleProgress.forEach((p, i) => {
-      p.value = withDelay(4700 + i * 100, withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic) }));
-    });
-    // E2b: dim presence from 800ms so the circle is never empty, then the existing
-    // beat at 5300ms lifts it the rest of the way. One sequence per shared value —
-    // a second assignment would cancel the first. Scale rises with it because the
-    // doc card is scale 0 until the beat, which would hide a dim-but-present icon.
-    docOpacity.value = withDelay(800, withSequence(
-      withTiming(0.35, { duration: 400 }),
-      withDelay(4100, withTiming(0.6, { duration: 500 })),
-    ));
-    docScale.value = withDelay(800, withSequence(
-      withTiming(0.85, { duration: 400 }),
-      withDelay(4100, withTiming(0.85, { duration: 500 })),
-    ));
-    return timers;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, swapSubtitle]);
-
-  useEffect(() => {
-    if (hasAttempted.current) return;
-    hasAttempted.current = true;
-    sceneStart.current = Date.now();
-    capture("onboarding_step_viewed", { step: config.analyticsStep });
-    sceneTimers.current = armScene();
-    void generateSchedule();
-    maxWaitTimer.current = setTimeout(() => {
-      if (!scheduleDone.current && !failedRef.current) finalizeReveal(false);
-    }, MAX_WAIT_MS);
-    return () => {
-      stopScene();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function handleRetry() {
-    if (retrying.current) return;
-    retrying.current = true;
-    setFailed(false);
-    failedRef.current = false;
-    setContinueError(null);
-    setSubtitleText(config.copy.initial);
-    scheduleDone.current = false;
-    hasFinalized.current = false;
-    sceneStart.current = Date.now();
-    sceneTimers.current.forEach(clearTimeout);
-    if (finalizeTimer.current) clearTimeout(finalizeTimer.current);
-    if (maxWaitTimer.current) clearTimeout(maxWaitTimer.current);
-    if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
-
+  function resetVisuals() {
+    cancelSceneAnimations();
     titleOpacity.value = 0; titleY.value = 10;
     subtitleOpacity.value = 1;
     chip1Opacity.value = 0; chip1Y.value = 12;
@@ -332,16 +314,437 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
     readyOpacity.value = 0;
     particleProgress.forEach((p) => { p.value = 0; });
     haloPulse.value = 0; orbitSpin.value = 0;
+  }
 
-    sceneTimers.current = armScene();
-    maxWaitTimer.current = setTimeout(() => {
-      if (!scheduleDone.current && !failedRef.current) finalizeReveal(false);
-    }, MAX_WAIT_MS);
-    try {
-      await generateSchedule();
-    } finally {
-      retrying.current = false;
+  // Ambient presentation only: title, halo, orbit, chips and a dim doc icon.
+  // Nothing here represents progress; the three segments and the status line do.
+  function armVisuals() {
+    const chips = configRef.current.chips;
+    titleOpacity.value = withTiming(1, { duration: 480, easing: Easing.out(Easing.cubic) });
+    chip1Opacity.value = withDelay(1400, withTiming(1, { duration: 400 }));
+    chip2Opacity.value = withDelay(1700, withTiming(1, { duration: 400 }));
+    chip3Opacity.value = withDelay(2000, withTiming(1, { duration: 400 }));
+    docOpacity.value = withDelay(800, withTiming(0.35, { duration: 400 }));
+    docScale.value = withDelay(800, withTiming(0.85, { duration: 400 }));
+
+    if (reduceMotionRef.current) {
+      // Static halo and icons, no orbit, no chip loops, no travel.
+      titleY.value = 0;
+      chip1Y.value = 0; chip2Y.value = 0; chip3Y.value = 0;
+      haloPulse.value = 0.5;
+      orbitSpin.value = 0;
+      return;
     }
+
+    titleY.value = withSpring(0, { damping: 17, stiffness: 150 });
+    haloPulse.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.inOut(Easing.ease) }), -1, true);
+    orbitSpin.value = withRepeat(withTiming(1, { duration: 9000, easing: Easing.linear }), -1);
+    chip1Y.value = withDelay(1400, withSpring(0, { damping: 14, stiffness: 180 }));
+    chip2Y.value = withDelay(1700, withSpring(0, { damping: 14, stiffness: 180 }));
+    chip3Y.value = withDelay(2000, withSpring(0, { damping: 14, stiffness: 180 }));
+    armChip(chipIcon0, chips[0].anim, 1400);
+    armChip(chipIcon1, chips[1].anim, 1700);
+    armChip(chipIcon2, chips[2].anim, 2000);
+  }
+
+  // Beat 2 has landed: lift the doc icon and run the particle converge once.
+  // One-shot and tied to a real beat; it never loops.
+  function armBeat2Visuals() {
+    docOpacity.value = withTiming(0.6, { duration: 500 });
+    if (reduceMotionRef.current) return;
+    particleProgress.forEach((p, i) => {
+      p.value = 0;
+      p.value = withDelay(i * 100, withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic) }));
+    });
+  }
+
+  // Beat 3 has landed (rows verified, preview loaded): settle the doc, glow, badge.
+  function armBeat3Visuals() {
+    if (reduceMotionRef.current) {
+      docScale.value = withTiming(1, { duration: CROSSFADE_IN_MS });
+    } else {
+      docScale.value = withDelay(REVEAL_BEATS.coverage, withSpring(1.15, { damping: 10, stiffness: 140 }, () => {
+        docScale.value = withSpring(1, { damping: 14, stiffness: 180 });
+      }));
+    }
+    docGlow.value = withDelay(REVEAL_BEATS.hero, withTiming(1, { duration: 400 }));
+    readyOpacity.value = withDelay(REVEAL_BEATS.supportOne, withTiming(1, { duration: 300 }));
+  }
+
+  // Status-line crossfade. `onSwapped` runs at the moment the new line becomes
+  // the visible one, and only if this is still the mounted, current attempt.
+  function crossfadeSubtitle(a: Attempt, next: string, onSwapped: () => void) {
+    // ReduceMotion.Never: an opacity crossfade is the reduced-motion treatment
+    // itself, so it must still run when the system setting is on (Reanimated
+    // would otherwise skip the timing and leave a blank gap, then a hard cut).
+    subtitleOpacity.value = withTiming(0, { duration: CROSSFADE_OUT_MS, easing: Easing.in(Easing.ease), reduceMotion: ReduceMotion.Never });
+    setTimer("swap", () => {
+      if (!isCurrent(a) || a.phase === "failed") return;
+      setSubtitleText(next);
+      subtitleOpacity.value = withTiming(1, { duration: CROSSFADE_IN_MS, easing: Easing.out(Easing.ease), reduceMotion: ReduceMotion.Never });
+      onSwapped();
+    }, CROSSFADE_OUT_MS);
+  }
+
+  function stopScene() {
+    cancelSceneAnimations();
+    clearAllTimers();
+    stopPolling();
+  }
+
+  // ── Beat 2 ────────────────────────────────────────────────────────────────
+  // 1.5s when the plan is already confirmed by then; otherwise 5s, or the
+  // moment a confirmed result arrives in between. Idempotent: safe to call
+  // from its own timer, from a confirmation, and from a foreground resume.
+  function armBeat2(a: Attempt) {
+    if (!isLiveWaiting(a) || a.beat >= 2) return;
+    const elapsed = Date.now() - a.startedAt;
+    if (elapsed < BUILDING_SCENE.beat2FastMs) {
+      setTimer("beat2", () => armBeat2(a), BUILDING_SCENE.beat2FastMs - elapsed);
+    } else if (a.ready !== null || elapsed >= BUILDING_SCENE.beat2PendingMs) {
+      showBeat2(a);
+    } else {
+      setTimer("beat2", () => armBeat2(a), BUILDING_SCENE.beat2PendingMs - elapsed);
+    }
+  }
+
+  function showBeat2(a: Attempt) {
+    if (!isLiveWaiting(a) || a.beat >= 2) return;
+    a.beat = 2;
+    clearTimer("beat2");
+    a.beat2SettledAt = Date.now() + CROSSFADE_OUT_MS + CROSSFADE_IN_MS;
+    crossfadeSubtitle(a, configRef.current.copy.beat2, () => {
+      setBeat(2);
+      armBeat2Visuals();
+    });
+    maybePresent(a);
+  }
+
+  // ── Attempt timers (all measured from the attempt's wall-clock start) ─────
+  function armAttemptTimers(a: Attempt) {
+    if (!isLiveWaiting(a)) return;
+    const elapsed = Date.now() - a.startedAt;
+    armBeat2(a);
+    if (a.ready === null) {
+      setTimer("slow", () => {
+        if (isLiveWaiting(a) && a.ready === null) setSlowNotice(true);
+      }, BUILDING_SCENE.slowNoticeMs - elapsed);
+      setTimer("deadline", () => onDeadline(a), BUILDING_SCENE.attemptDeadlineMs - elapsed);
+    }
+  }
+
+  // ── Request ───────────────────────────────────────────────────────────────
+  function dispatch(a: Attempt) {
+    if (!isLiveWaiting(a) || a.dispatched) return;
+    if (liveRequestRef.current !== null) return;
+    a.dispatched = true;
+    stopPolling();
+    const controller = new AbortController();
+    a.controller = controller;
+
+    let request: Promise<GenerateResult>;
+    try {
+      request = configRef.current.invokeGenerate(controller.signal);
+    } catch (error) {
+      request = Promise.resolve<GenerateResult>({ kind: "failure", error });
+    }
+    const live: Promise<GenerateResult> = request.then(
+      (result) => result,
+      (error): GenerateResult => ({ kind: "failure", error }),
+    );
+    liveRequestRef.current = live;
+    void live.then((result) => {
+      if (liveRequestRef.current === live) liveRequestRef.current = null;
+      onRequestSettled(a, result);
+    });
+  }
+
+  function onRequestSettled(a: Attempt, result: GenerateResult) {
+    if (!mountedRef.current) return;
+    const current = attemptRef.current;
+    if (current === null || current.token !== a.token) {
+      // An earlier attempt's request has finally resolved. If the current
+      // attempt was holding its own POST behind it, it may re-check now.
+      if (current !== null && current.phase === "waiting" && !current.dispatched) void evaluate(current);
+      return;
+    }
+    a.requestSettled = true;
+    a.outcome = result;
+    if (__DEV__ && result.kind === "failure") console.warn("[onboarding] generation request did not succeed:", result.status ?? "no status");
+    void evaluate(a);
+  }
+
+  // ── Readiness ─────────────────────────────────────────────────────────────
+  // The only place that decides what happens next. Reads the asset-scoped
+  // count, then the preview when there are rows. A read that throws is
+  // "unknown" (count stays null) and is never treated as zero rows.
+  async function evaluate(a: Attempt) {
+    if (!isLiveWaiting(a)) return;
+    if (a.ready !== null) { maybePresent(a); return; }
+    if (!appActiveRef.current) return;
+    if (a.evaluating) { a.evaluateQueued = true; return; }
+    a.evaluating = true;
+    const cfg = configRef.current;
+    // A read that STARTS after the deadline is the final one for this attempt.
+    const readIsFinal = deadlinePassed(a);
+    let count: number | null = null;
+    let preview: RevealData | null = null;
+    try {
+      count = await loadOnboardingTaskCount(cfg.revealVertical, cfg.assetId);
+      if (count > 0) {
+        const loaded = await loadOnboardingRevealData(cfg.revealVertical, cfg.assetId, cfg.assetName);
+        if (isRevealPreviewReady(loaded) && loaded.count === count) preview = loaded;
+      }
+    } catch (error) {
+      if (__DEV__) console.warn("[onboarding] readiness read failed:", error);
+    }
+    a.evaluating = false;
+    const queued = a.evaluateQueued;
+    a.evaluateQueued = false;
+    if (!isLiveWaiting(a)) return;
+    if (preview !== null) { confirmReady(a, preview); return; }
+    decide(a, count, readIsFinal);
+    if (queued && isLiveWaiting(a) && !a.evaluating) void evaluate(a);
+  }
+
+  function decide(a: Attempt, count: number | null, readIsFinal: boolean) {
+    if (deadlinePassed(a)) {
+      // Fail only on a read that began after the deadline; otherwise read once more.
+      if (readIsFinal) fail(a);
+      else void evaluate(a);
+      return;
+    }
+    if (!a.dispatched) {
+      // Try again: POST only when the table is confirmed empty and no earlier
+      // POST from this scene is still unresolved.
+      if (count === 0 && liveRequestRef.current === null) { dispatch(a); return; }
+      // The read failed and nothing is in flight (e.g. still offline): unknown
+      // is not zero, so no POST, and there is nothing to wait for. Back to the
+      // failure screen rather than a 90s wait on no work.
+      if (count === null && liveRequestRef.current === null) { fail(a); return; }
+      // An earlier POST is still unresolved, or rows exist without a ready
+      // preview: keep watching the rows.
+      startPolling(a);
+      return;
+    }
+    if (!a.requestSettled || a.outcome === null) return;
+    // The request itself failed and no rows can be shown for it: that is the
+    // failure screen. (count === null: the one read failed too, e.g. offline.)
+    if (a.outcome.kind === "failure" && (count === null || count === 0)) { fail(a); return; }
+    // 409, 200 with nothing observable yet, or rows whose preview is not ready.
+    startPolling(a);
+  }
+
+  function startPolling(a: Attempt) {
+    if (pollRef.current !== null) return;
+    pollRef.current = setInterval(() => {
+      if (!isLiveWaiting(a)) { stopPolling(); return; }
+      if (!appActiveRef.current) return;
+      void evaluate(a);
+    }, BUILDING_SCENE.pollIntervalMs);
+  }
+
+  function onDeadline(a: Attempt) {
+    if (!isLiveWaiting(a) || a.ready !== null) return;
+    // Backgrounded: nothing is decided here. Returning active re-checks the clock.
+    if (!appActiveRef.current) return;
+    if (!deadlinePassed(a)) { armAttemptTimers(a); return; }
+    stopPolling();
+    // The scene's deadline, not the fetch wrapper's, ends the request. The
+    // abort is "unconfirmed", not "failed": the read below decides.
+    a.controller?.abort();
+    void evaluate(a);
+  }
+
+  function fail(a: Attempt) {
+    if (!isLiveWaiting(a)) return;
+    // Never surface a failure while not active; the resume path re-reads first.
+    if (!appActiveRef.current) return;
+    a.phase = "failed";
+    stopScene();
+    a.controller?.abort();
+    subtitleOpacity.value = 1;
+    setSlowNotice(false);
+    setFailed(true);
+  }
+
+  // ── Success ───────────────────────────────────────────────────────────────
+  function confirmReady(a: Attempt, preview: RevealData) {
+    if (!isLiveWaiting(a) || a.ready !== null) return;
+    a.ready = preview;
+    stopPolling();
+    clearTimer("deadline");
+    maybePresent(a);
+  }
+
+  // Beat 3 needs: verified preview, Beat 2 fully shown, the minimum scene time,
+  // and a foreground app. Missing any one, it re-arms and waits.
+  function maybePresent(a: Attempt) {
+    if (!isLiveWaiting(a) || a.ready === null) return;
+    if (!appActiveRef.current) return;
+    if (a.beat < 2) { armBeat2(a); return; }
+    const now = Date.now();
+    const waitMs = Math.max(a.startedAt + BUILDING_SCENE.minSceneMs - now, a.beat2SettledAt - now, 0);
+    if (waitMs > 0) { setTimer("present", () => maybePresent(a), waitMs); return; }
+    presentBeat3(a, a.ready);
+  }
+
+  function presentBeat3(a: Attempt, ready: RevealData) {
+    a.phase = "succeeding";
+    stopPolling();
+    clearTimer("beat2"); clearTimer("slow"); clearTimer("deadline"); clearTimer("present");
+    setSlowNotice(false);
+    // Rows are verified: now, and only now, the app's caches are invalidated.
+    configRef.current.onGenerated();
+    runBeat3(a, ready);
+  }
+
+  // Beat 3 itself: swap the line in, fill the third segment, then the success
+  // haptic and the route change, each guarded to happen once per attempt.
+  function runBeat3(a: Attempt, ready: RevealData) {
+    crossfadeSubtitle(a, configRef.current.copy.beat3(ready.count), () => {
+      a.beat = 3;
+      setBeat(3);
+      armBeat3Visuals();
+      setTimer("haptic", () => fireSuccessHaptic(a), REVEAL_HAPTIC_OFFSETS[0]);
+      setTimer("nav", () => navigateToReveal(a), BUILDING_SCENE.beat3HoldMs);
+    });
+  }
+
+  function fireSuccessHaptic(a: Attempt) {
+    if (!isCurrent(a)) return;
+    if (a.hapticFired || a.beat !== 3 || !appActiveRef.current) return;
+    a.hapticFired = true;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  }
+
+  function navigateToReveal(a: Attempt) {
+    if (!isCurrent(a)) return;
+    if (a.navigated || a.phase !== "succeeding" || a.ready === null) return;
+    // Backgrounded: hold. resumeAttempt() restarts the Beat 3 tail.
+    if (!appActiveRef.current) return;
+    fireSuccessHaptic(a);
+    a.navigated = true;
+    a.phase = "done";
+    clearAllTimers();
+    const cfg = configRef.current;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    router.replace({
+      pathname: "/(onboarding)/plan-reveal",
+      params: {
+        vertical: cfg.revealVertical,
+        assetId: cfg.assetId,
+        assetName: cfg.assetName,
+        taskCount: String(a.ready.count),
+        preview: serializeRevealPreview(a.ready),
+      },
+    });
+  }
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+  function startAttempt(isRetry: boolean) {
+    clearAllTimers();
+    stopPolling();
+    tokenRef.current += 1;
+    const a: Attempt = {
+      token: tokenRef.current,
+      startedAt: Date.now(),
+      phase: "waiting",
+      dispatched: false,
+      requestSettled: false,
+      outcome: null,
+      controller: null,
+      beat: 1,
+      beat2SettledAt: 0,
+      ready: null,
+      evaluating: false,
+      evaluateQueued: false,
+      hapticFired: false,
+      navigated: false,
+    };
+    attemptRef.current = a;
+
+    setFailed(false);
+    setContinueError(null);
+    setSlowNotice(false);
+    setBeat(1);
+    setSubtitleText(configRef.current.copy.beat1);
+    resetVisuals();
+    armVisuals();
+
+    if (!configRef.current.assetId) { fail(a); return; }
+    armAttemptTimers(a);
+    // First attempt: dispatch now (Beat 1 is the dispatch). Try again: look at
+    // the rows first; decide() dispatches only if there are none.
+    if (isRetry) void evaluate(a);
+    else dispatch(a);
+  }
+
+  // Returning to the foreground (or an effect re-entry): re-arm from the wall
+  // clock and re-read before anything is surfaced.
+  function resumeAttempt() {
+    const a = attemptRef.current;
+    if (!mountedRef.current || a === null) return;
+    if (a.phase === "succeeding") {
+      // Beat 3 was interrupted. If its line is already up, finish the tail.
+      // If it is not, a pending swap timer will carry it; restart the swap
+      // only when that timer is gone.
+      if (a.navigated || a.ready === null) return;
+      if (a.beat === 3) {
+        fireSuccessHaptic(a);
+        setTimer("nav", () => navigateToReveal(a), BUILDING_SCENE.beat3HoldMs);
+      } else if (!timersRef.current.has("swap")) {
+        runBeat3(a, a.ready);
+      }
+      return;
+    }
+    if (a.phase !== "waiting") return;
+    armAttemptTimers(a);
+    if (a.ready !== null) { maybePresent(a); return; }
+    if (deadlinePassed(a)) { onDeadline(a); return; }
+    if (a.requestSettled || !a.dispatched) void evaluate(a);
+  }
+
+  useEffect(() => {
+    mountedRef.current = true;
+    if (unmountAbortRef.current !== null) {
+      clearTimeout(unmountAbortRef.current);
+      unmountAbortRef.current = null;
+    }
+    if (!hasStartedRef.current) {
+      // Exactly one dispatch per mount, even if this effect is re-entered.
+      hasStartedRef.current = true;
+      capture("onboarding_step_viewed", { step: configRef.current.analyticsStep });
+      startAttempt(false);
+    } else {
+      resumeAttempt();
+    }
+    const subscription = AppState.addEventListener("change", (next) => {
+      const wasActive = appActiveRef.current;
+      appActiveRef.current = next === "active";
+      if (!wasActive && appActiveRef.current) resumeAttempt();
+    });
+    return () => {
+      mountedRef.current = false;
+      subscription.remove();
+      stopScene();
+      const a = attemptRef.current;
+      // Abort the in-flight request on unmount. Deferred one tick so an effect
+      // re-entry (which is not an unmount) can cancel it.
+      unmountAbortRef.current = setTimeout(() => {
+        unmountAbortRef.current = null;
+        a?.controller?.abort();
+      }, 0);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleRetry() {
+    const a = attemptRef.current;
+    // Only from the failure screen. A second tap finds the new attempt already
+    // "waiting" and does nothing, so one tap is one attempt.
+    if (a !== null && a.phase !== "failed") return;
+    startAttempt(true);
   }
 
   async function handleContinueAnyway() {
@@ -370,9 +773,9 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
   const chip0Anim = config.chips[0].anim;
   const chip1Anim = config.chips[1].anim;
   const chip2Anim = config.chips[2].anim;
-  const chipIcon0Style = useAnimatedStyle(() => chipIconStyle(chip0Anim, chipIcon0.value));
-  const chipIcon1Style = useAnimatedStyle(() => chipIconStyle(chip1Anim, chipIcon1.value));
-  const chipIcon2Style = useAnimatedStyle(() => chipIconStyle(chip2Anim, chipIcon2.value));
+  const chipIcon0Style = useAnimatedStyle(() => chipIconStyle(chip0Anim, chipIcon0.value, reduceMotion));
+  const chipIcon1Style = useAnimatedStyle(() => chipIconStyle(chip1Anim, chipIcon1.value, reduceMotion));
+  const chipIcon2Style = useAnimatedStyle(() => chipIconStyle(chip2Anim, chipIcon2.value, reduceMotion));
   const docStyle = useAnimatedStyle(() => ({ opacity: docOpacity.value, transform: [{ scale: docScale.value }] }));
   const docGlowStyle = useAnimatedStyle(() => ({ opacity: interpolate(docGlow.value, [0, 1], [0, 0.8]), transform: [{ scale: interpolate(docGlow.value, [0, 1], [0.8, 1.4]) }] }));
   const readyStyle = useAnimatedStyle(() => ({ opacity: readyOpacity.value }));
@@ -384,8 +787,12 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 }]}>
-      <View style={[styles.progressBar, { marginHorizontal: 20 }]}>
-        <View style={[styles.progressFill, { width: "75%", backgroundColor: config.tint }]} />
+      <View style={[styles.progressRow, { marginHorizontal: 20 }]}>
+        {SEGMENTS.map((n) => (
+          <View key={n} style={styles.progressSegment}>
+            {beat >= n ? <View style={[styles.progressFill, { backgroundColor: config.tint }]} /> : null}
+          </View>
+        ))}
       </View>
 
       <View style={styles.headerSection}>
@@ -446,7 +853,7 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
             </Svg>
           </Animated.View>
 
-          {particleProgress.map((p, i) => (
+          {!reduceMotion && particleProgress.map((p, i) => (
             <Particle key={i} progress={p} index={i} total={PARTICLE_COUNT} color={Colors.white} />
           ))}
 
@@ -454,9 +861,12 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
             <VerticalIcon lib={config.docIcon.lib} icon={config.docIcon.icon} size={40} color={config.tint} />
           </Animated.View>
 
-          <Animated.Text style={[styles.statusCaption, subtitleStyle]} numberOfLines={2}>
-            {subtitleText}
-          </Animated.Text>
+          <View style={styles.statusBlock}>
+            <Animated.Text style={[styles.statusCaption, subtitleStyle]} numberOfLines={2}>
+              {subtitleText}
+            </Animated.Text>
+            {slowNotice ? <Text style={styles.slowCaption}>{config.copy.slow}</Text> : null}
+          </View>
 
           <Animated.View style={[styles.readyBadge, readyStyle]}>
             <Icon name="checkmark-circle" size={16} color={Colors.good} />
@@ -482,13 +892,16 @@ export function BuildingScene({ config }: { config: BuildingConfig }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background, gap: 32 },
-  progressBar: { height: 3, borderRadius: Radius.sm, backgroundColor: Colors.border, overflow: "hidden" },
-  progressFill: { height: 3, borderRadius: Radius.sm },
+  progressRow: { flexDirection: "row", gap: 6 },
+  progressSegment: { flex: 1, height: 3, borderRadius: Radius.sm, backgroundColor: Colors.border, overflow: "hidden" },
+  progressFill: { flex: 1, borderRadius: Radius.sm },
   headerSection: { paddingHorizontal: 20, gap: 16, alignItems: "center" },
   titleWrap: { position: "relative" },
   title: { ...Typography.title2, fontWeight: "600", color: Colors.textSecondary, textAlign: "center" },
   subtitle: { ...Typography.title3, fontWeight: "700", color: Colors.text, minHeight: 27, textAlign: "center" },
-  statusCaption: { ...Typography.title3, fontWeight: "700", position: "absolute", top: 0, left: 20, right: 20, color: Colors.text, minHeight: 27, textAlign: "center" },
+  statusBlock: { position: "absolute", top: 0, left: 20, right: 20, alignItems: "center", gap: 8 },
+  statusCaption: { ...Typography.title3, fontWeight: "700", color: Colors.text, minHeight: 27, textAlign: "center" },
+  slowCaption: { ...Typography.footnote, color: Colors.textSecondary, textAlign: "center" },
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20, justifyContent: "center" },
   chip: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: Colors.card, borderRadius: Radius.pill, borderWidth: 1, borderColor: Colors.border },
   chipText: { ...Typography.caption, fontWeight: "500", color: Colors.textSecondary },

@@ -1167,6 +1167,7 @@ export default function AddVehicleScreen() {
               trackingMode: inferredMode,
               fuelType: fuelType,
               vehicleCategory: selectedVehicleCategory,
+              isAwd: String(isAwd),
             },
           });
           return;

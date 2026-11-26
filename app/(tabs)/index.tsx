@@ -1635,7 +1635,7 @@ function WelcomeView() {
       color: Colors.vehicle,
       muted: Colors.vehicleMuted,
       title: "Start with your vehicle",
-      body: "Never forget an oil change again. Takes 30 seconds to set up.",
+      body: "Never forget an oil change again. We build the plan around your year, make and model.",
       chips: ["Oil", "Tires", "Battery"],
     },
     {

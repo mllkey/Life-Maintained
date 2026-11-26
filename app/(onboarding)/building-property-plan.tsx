@@ -5,6 +5,13 @@ import { supabase } from "@/lib/supabase";
 import { Colors } from "@/constants/colors";
 import { BuildingScene, oneParam, getInvokeStatus, type BuildingConfig } from "@/components/onboarding/BuildingScene";
 
+// Lower-case nouns for the status line. Anything unrecognised reads as "home".
+const PROPERTY_TYPE_NOUNS: Record<string, string> = {
+  house: "house", condo: "condo", apartment: "apartment",
+  townhouse: "townhouse", commercial: "commercial building",
+  vacation: "vacation home",
+};
+
 export default function BuildingPropertyPlanScreen() {
   const params = useLocalSearchParams<Record<string, string | string[]>>();
   const qc = useQueryClient();
@@ -14,6 +21,8 @@ export default function BuildingPropertyPlanScreen() {
   const yearBuiltStr = oneParam(params.yearBuilt);
   const squareFootageStr = oneParam(params.squareFootage);
   const zipCode = oneParam(params.zipCode);
+  const city = oneParam(params.city).trim();
+  const propertyNoun = PROPERTY_TYPE_NOUNS[propertyType] ?? "home";
 
   const config: BuildingConfig = {
     tint: Colors.home,
@@ -28,26 +37,27 @@ export default function BuildingPropertyPlanScreen() {
       { lib: "mci", icon: "home-variant-outline", label: "Seasonal upkeep", anim: "spinSequence" },
     ],
     copy: {
-      initial: "Reading regional climate data",
-      beat1: `Reading ${propertyName}’s climate zone`,
-      beat2: "Checking seasonal maintenance",
-      beat3: "Building your home checklist",
-      slow: "Cross-checking the schedule — a few more seconds.",
-      ready: "Your home plan is ready.",
+      beat1: `Reading your ${propertyNoun}'s maintenance calendar`,
+      // City only when the form supplied one; never inferred.
+      beat2: city ? `Tailoring it for ${city}` : "Tailoring it to your home's needs",
+      beat3: (count) => `${count} items written to your plan`,
+      slow: "Still working. Some homes take up to a minute.",
     },
     failedTitle: "Couldn’t build your plan",
     failedSubtitle: "Your home is saved. Retry now, or build it later from the home screen.",
-    invokeGenerate: async () => {
+    invokeGenerate: async (signal) => {
       const yearBuiltNum = yearBuiltStr ? parseInt(yearBuiltStr, 10) : null;
       const sqftNum = squareFootageStr ? parseInt(squareFootageStr, 10) : null;
-      const { error } = await supabase.functions.invoke("generate-property-schedule", {
+      const { data, error } = await supabase.functions.invoke("generate-property-schedule", {
         body: { property_id: propertyId, property_type: propertyType, year_built: yearBuiltNum, square_footage: sqftNum, zip_code: zipCode || null },
+        signal,
       });
-      if (!error) return { ok: true };
+      if (!error) return { kind: "success", data };
       const status = getInvokeStatus(error);
-      if (status === 409) return { ok: true };
+      // 409 = rows already exist. Never a success on its own.
+      if (status === 409) return { kind: "conflict" };
       if (__DEV__) console.warn("[onboarding] property schedule error:", error.message);
-      return { ok: false, status, error };
+      return { kind: "failure", status, error };
     },
     onGenerated: () => {
       qc.invalidateQueries({ queryKey: ["properties"] });

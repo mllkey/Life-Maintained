@@ -686,7 +686,7 @@ export default function VehicleDetailScreen() {
         // the interval deliver the rows. No success claim here.
         pollStartRef.current = null;
         setPollEpoch(v => v + 1);
-        showToast("Your schedule is already being built — it'll appear in a few seconds.");
+        showToast("Your schedule is already being built — it'll appear here once it's saved.");
         return;
       }
       pollStartRef.current = null;
@@ -707,7 +707,7 @@ export default function VehicleDetailScreen() {
         generatedOnScreen.current = false;
         pollStartRef.current = null;
         setPollEpoch(v => v + 1);
-        showToast("Almost ready — your schedule will appear in a few seconds.");
+        showToast("Almost ready — your schedule will appear here once it's saved.");
       }
     } catch {
       showToast("Couldn't build the schedule. Try again in a moment.", true);
@@ -1766,7 +1766,7 @@ export default function VehicleDetailScreen() {
                       Building your maintenance plan
                     </Text>
                     <Text style={{ ...Typography.footnote, color: Colors.textTertiary }}>
-                      This usually takes about 10–20 seconds
+                      Your schedule will show up here once it is built
                     </Text>
                   </View>
                   {!generatingSchedule && (

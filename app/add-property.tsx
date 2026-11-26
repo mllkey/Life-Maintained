@@ -372,6 +372,7 @@ export default function AddPropertyScreen() {
           yearBuilt: yearBuilt || "",
           squareFootage: sqft || "",
           zipCode: zip.trim() || "",
+          city: city.trim(),
         },
       });
       return;

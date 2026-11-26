@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { setPendingIntent } from "@/lib/onboardingIntent";
@@ -10,7 +10,7 @@ import { Radius } from "@/constants/radius";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
-import { formatCostDisplay } from "@/lib/costFormat";
+import { loadOnboardingRevealData, parseRevealPreview, type RevealData, type RevealVertical } from "@/lib/onboardingRevealData";
 import { useAuth, getOnboardingKey } from "@/context/AuthContext";
 import { capture } from "@/lib/analytics";
 import { useQuery } from "@tanstack/react-query";
@@ -24,75 +24,30 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-const MAX_POLL_ATTEMPTS = 15; // 15 * 2s = 30s max
+// Fallback path only (no validated payload from the building scene, e.g. a deep
+// link or cold entry). Two windows, counted in elapsed time by an explicit
+// effect, never inside the query's refetchInterval callback.
+const POLL_MS = 2000;
+const MAX_POLL_ATTEMPTS = 15; // 15 * 2s = 30s first window
 // E1c: after the first window the degraded block shows, but generation may still
 // land. Keep polling more slowly for another 120s before giving up for good.
 const EXTENDED_POLL_MS = 5000;
 const MAX_EXTENDED_ATTEMPTS = 24; // 24 * 5s = 120s
+const FIRST_WINDOW_MS = MAX_POLL_ATTEMPTS * POLL_MS;
+const EXTENDED_WINDOW_MS = MAX_EXTENDED_ATTEMPTS * EXTENDED_POLL_MS;
 const DEGRADED_FADE_MS = 200;
 
-type Vertical = "vehicle" | "home" | "health";
-type RevealItem = { name: string; dueLabel: string; costStr: string | null };
-type RevealData = { items: RevealItem[]; count: number; heroSentence: string | null };
+type Vertical = RevealVertical;
 type SecondaryKind = "add-vehicle" | "add-home" | "add-another-vehicle";
-
-type VehicleTaskRow = {
-  name: string;
-  next_due_date: string | null;
-  next_due_miles: number | null;
-  next_due_hours: number | null;
-  interval_miles: number | null;
-  interval_hours: number | null;
-  interval_months: number | null;
-};
 
 function oneParam(v: string | string[] | undefined): string {
   if (v == null) return "";
   return Array.isArray(v) ? (v[0] ?? "") : v;
 }
 
-function parseDate(dateStr: string | null): Date | null {
-  const s = dateStr != null ? String(dateStr).trim() : "";
-  const d = s.length > 0 ? new Date(s + (s.includes("T") ? "" : "T12:00:00")) : null;
-  return d != null && !isNaN(d.getTime()) ? d : null;
-}
-
-function formatDue(dateStr: string | null, fallback: string | null): string {
-  const d = parseDate(dateStr);
-  if (d) return "Due " + d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  return fallback || "Added to your plan";
-}
-
-function formatCost(v: number | null | undefined): string | null {
-  if (v == null || Number(v) <= 0) return null;
-  return "$" + Math.round(Number(v)).toLocaleString();
-}
-
-function vehicleDueLabel(t: VehicleTaskRow): string {
-  const d = parseDate(t.next_due_date);
-  if (d) return "Due " + d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  if (t.next_due_miles != null) return "Due at " + Number(t.next_due_miles).toLocaleString() + " mi";
-  if (t.next_due_hours != null) return "Due at " + Number(t.next_due_hours).toLocaleString() + " hrs";
-  if (t.interval_months != null) return "Every " + t.interval_months + " months";
-  if (t.interval_miles != null) return "Every " + Number(t.interval_miles).toLocaleString() + " mi";
-  if (t.interval_hours != null) return "Every " + Number(t.interval_hours).toLocaleString() + " hrs";
-  return "Added to your maintenance plan";
-}
-
-function vehicleHeroSentence(t: VehicleTaskRow, displayName: string): string {
-  const name = t.name.trim();
-  const service = name.toLowerCase();
-  if (t.next_due_miles != null) return `${displayName} needs ${service} at ${Number(t.next_due_miles).toLocaleString()} miles.`;
-  if (t.next_due_hours != null) return `${displayName} needs ${service} at ${Number(t.next_due_hours).toLocaleString()} hours.`;
-  const d = parseDate(t.next_due_date);
-  if (d) return `${name} is coming up ${d.toLocaleDateString("en-US", { month: "long", day: "numeric" })}.`;
-  return `${name} is first in your maintenance plan.`;
-}
-
 const CONFIG: Record<Vertical, {
   tint: string;
   heroBadgeIcon: IconName;
-  coverageNoun: (n: number) => string;
   bridge: { icon: IconName; tint: string; text: string };
   secondaries: SecondaryKind[];
   infoText: string | null;
@@ -105,40 +60,37 @@ const CONFIG: Record<Vertical, {
   vehicle: {
     tint: Colors.vehicle,
     heroBadgeIcon: "sparkles",
-    coverageNoun: (n) => (n === 1 ? "1 maintenance item" : `${n} maintenance items`),
     bridge: { icon: "home-outline", tint: Colors.home, text: "You\u2019re tracking 1 vehicle. Add your home next to see what you\u2019ve been missing." },
     secondaries: ["add-home", "add-another-vehicle"],
     infoText: "Log your last service dates to make due dates more accurate.",
     nameFallback: "vehicle",
     savedTitle: () => "Your vehicle is saved",
     buildingTitle: "Building your schedule",
-    stillGeneratingSub: "Your schedule is still generating. It\u2019ll appear in the app shortly.",
+    stillGeneratingSub: "Your schedule isn\u2019t ready yet. It will show up on your vehicle\u2019s screen once it is built.",
     waitingSub: (name) => `Waiting for your ${name} schedule...`,
   },
   home: {
     tint: Colors.home,
     heroBadgeIcon: "home",
-    coverageNoun: (n) => (n === 1 ? "1 maintenance item" : `${n} maintenance items`),
     bridge: { icon: "car-outline", tint: Colors.vehicle, text: "Add a vehicle next to bring your whole life into one plan." },
     secondaries: ["add-vehicle"],
     infoText: null,
     nameFallback: "home",
     savedTitle: (name) => `${name} is saved`,
     buildingTitle: "Building your plan",
-    stillGeneratingSub: "Your plan is still generating. It\u2019ll appear in the app shortly.",
+    stillGeneratingSub: "Your plan isn\u2019t ready yet. It will show up in the app once it is built.",
     waitingSub: (name) => `Finishing ${name}\u2019s plan...`,
   },
   health: {
     tint: Colors.health,
     heroBadgeIcon: "heart",
-    coverageNoun: (n) => (n === 1 ? "1 appointment" : `${n} appointments`),
     bridge: { icon: "car-outline", tint: Colors.vehicle, text: "Add a vehicle next to bring your whole life into one plan." },
     secondaries: ["add-vehicle"],
     infoText: null,
     nameFallback: "your loved one",
     savedTitle: (name) => `${name} is saved`,
     buildingTitle: "Building your plan",
-    stillGeneratingSub: "Your plan is still generating. It\u2019ll appear in the app shortly.",
+    stillGeneratingSub: "Your plan isn\u2019t ready yet. It will show up in the app once it is built.",
     waitingSub: (name) => `Finishing ${name}\u2019s plan...`,
   },
 };
@@ -155,16 +107,26 @@ export default function PlanRevealScreen() {
     vertical?: string | string[];
     assetId?: string | string[];
     assetName?: string | string[];
+    taskCount?: string | string[];
+    preview?: string | string[];
   }>();
   const vRaw = oneParam(params.vertical);
   const vertical: Vertical = vRaw === "vehicle" ? "vehicle" : vRaw === "health" ? "health" : "home";
   const assetId = oneParam(params.assetId);
   const cfg = CONFIG[vertical];
   const assetName = oneParam(params.assetName) || cfg.nameFallback;
+  const taskCountParam = oneParam(params.taskCount);
+  const previewParam = oneParam(params.preview);
+  // The building scene hands over a preview it has already verified against
+  // the database. When that payload validates in full, this screen renders
+  // from it at once and never queries, polls, or shows a skeleton.
+  const scenePayload = useMemo<RevealData | null>(
+    () => (assetId ? parseRevealPreview(previewParam, taskCountParam) : null),
+    [assetId, previewParam, taskCountParam],
+  );
+  const usesFallback = scenePayload === null;
 
   const { setOnboardingCompleted, user } = useAuth();
-  const pollCount = useRef(0);
-  const extendedCount = useRef(0);
   const [pollTimedOut, setPollTimedOut] = useState(!assetId);
   const [extendedGaveUp, setExtendedGaveUp] = useState(!assetId);
   const sawDegraded = useRef(false);
@@ -187,130 +149,43 @@ export default function PlanRevealScreen() {
     capture("onboarding_step_viewed", { step: "plan_reveal", vertical });
   }, [vertical]);
 
-  const { data } = useQuery<RevealData>({
+  const { data: fallbackData } = useQuery<RevealData>({
     queryKey: ["onboarding_reveal", vertical, assetId],
-    queryFn: async () => {
-      if (!assetId) return { items: [], count: 0, heroSentence: null };
-
-      if (vertical === "vehicle") {
-        const [rowsRes, countRes] = await Promise.all([
-          supabase
-            .from("user_vehicle_maintenance_tasks")
-            .select("name, next_due_date, next_due_miles, next_due_hours, interval_miles, interval_hours, interval_months")
-            .eq("vehicle_id", assetId)
-            .order("next_due_date", { ascending: true, nullsFirst: false })
-            .limit(5),
-          supabase
-            .from("user_vehicle_maintenance_tasks")
-            .select("id", { count: "exact", head: true })
-            .eq("vehicle_id", assetId),
-        ]);
-        const raw = (rowsRes.data ?? []).filter((r) => typeof r.name === "string" && r.name.length > 0) as VehicleTaskRow[];
-        const costMap: Record<string, string | null> = {};
-        if (raw.length > 0) {
-          const { data: vehicle } = await supabase
-            .from("vehicles")
-            .select("year, make, model, vehicle_type")
-            .eq("id", assetId)
-            .maybeSingle();
-          if (vehicle) {
-            const vehicleKey = `${vehicle.year ?? ""}|${vehicle.make}|${vehicle.model ?? ""}|${vehicle.vehicle_type ?? ""}`.toLowerCase();
-            const names = raw.map((t) => t.name.toLowerCase().trim());
-            const { data: cached } = await supabase
-              .from("repair_cost_cache")
-              .select("service_name, shop_low, shop_high")
-              .eq("vehicle_key", vehicleKey)
-              .in("service_name", names);
-            for (const c of cached ?? []) {
-              costMap[String(c.service_name).toLowerCase().trim()] =
-                formatCostDisplay(
-                  c.shop_low != null ? Number(c.shop_low) : null,
-                  c.shop_high != null ? Number(c.shop_high) : null,
-                ) || null;
-            }
-          }
+    queryFn: () => loadOnboardingRevealData(vertical, assetId, assetName),
+    enabled: usesFallback && !!assetId && !extendedGaveUp,
+    // Pure: no counters and no setState in here. The windows are advanced by
+    // the elapsed-time effect below.
+    refetchInterval: usesFallback
+      ? (query) => {
+          const hasData = (query.state.data?.items?.length ?? 0) > 0;
+          if (hasData) return false;
+          return pollTimedOut ? EXTENDED_POLL_MS : POLL_MS;
         }
-        const items = raw.map((r) => ({
-          name: r.name,
-          dueLabel: vehicleDueLabel(r),
-          costStr: costMap[r.name.toLowerCase().trim()] ?? null,
-        }));
-        const heroSentence = items.length > 0 ? vehicleHeroSentence(raw[0], assetName) : null;
-        return { items, count: countRes.count ?? 0, heroSentence };
-      }
-
-      if (vertical === "home") {
-        const [rowsRes, countRes] = await Promise.all([
-          supabase
-            .from("property_maintenance_tasks")
-            .select("task, next_due_date, estimated_cost, interval")
-            .eq("property_id", assetId)
-            .order("next_due_date", { ascending: true, nullsFirst: false })
-            .limit(5),
-          supabase
-            .from("property_maintenance_tasks")
-            .select("id", { count: "exact", head: true })
-            .eq("property_id", assetId),
-        ]);
-        const items = (rowsRes.data ?? [])
-          .filter((r) => typeof r.task === "string" && r.task.length > 0)
-          .map((r) => ({
-            name: r.task,
-            dueLabel: formatDue(r.next_due_date, r.interval ? String(r.interval) : null),
-            costStr: formatCost(r.estimated_cost),
-          }));
-        return { items, count: countRes.count ?? 0, heroSentence: null };
-      }
-
-      const [rowsRes, countRes] = await Promise.all([
-        supabase
-          .from("health_appointments")
-          .select("appointment_type, next_due_date, estimated_cost, interval_months")
-          .eq("family_member_id", assetId)
-          .is("retired_at", null)
-          .order("next_due_date", { ascending: true, nullsFirst: false })
-          .limit(5),
-        supabase
-          .from("health_appointments")
-          .select("id", { count: "exact", head: true })
-          .eq("family_member_id", assetId)
-          .is("retired_at", null),
-      ]);
-      const items = (rowsRes.data ?? [])
-        .filter((r) => typeof r.appointment_type === "string" && r.appointment_type.length > 0)
-        .map((r) => ({
-          name: r.appointment_type,
-          dueLabel: formatDue(r.next_due_date, r.interval_months != null ? `Every ${r.interval_months} months` : null),
-          costStr: formatCost(r.estimated_cost),
-        }));
-      return { items, count: countRes.count ?? 0, heroSentence: null };
-    },
-    enabled: !!assetId && !extendedGaveUp,
-    refetchInterval: (query) => {
-      const hasData = (query.state.data?.items?.length ?? 0) > 0;
-      if (hasData) return false;
-      pollCount.current++;
-      if (pollCount.current >= MAX_POLL_ATTEMPTS) {
-        // First window is spent: show the degraded block, but keep listening.
-        setPollTimedOut(true);
-        extendedCount.current++;
-        if (extendedCount.current >= MAX_EXTENDED_ATTEMPTS) {
-          setExtendedGaveUp(true);
-          return false;
-        }
-        return EXTENDED_POLL_MS;
-      }
-      return 2000;
-    },
+      : false,
   });
+  const data: RevealData | undefined = scenePayload ?? fallbackData;
+  const fallbackHasItems = (fallbackData?.items?.length ?? 0) > 0;
+
+  // Fallback windows, measured in elapsed time from mount: degraded copy after
+  // the first window, stop polling after the extended one. Nothing to time once
+  // rows have arrived or when the scene payload is in use.
+  const fallbackStartedAt = useRef(Date.now());
+  useEffect(() => {
+    if (!usesFallback || !assetId || fallbackHasItems || extendedGaveUp) return;
+    const elapsed = Date.now() - fallbackStartedAt.current;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    if (!pollTimedOut) {
+      timers.push(setTimeout(() => setPollTimedOut(true), Math.max(FIRST_WINDOW_MS - elapsed, 0)));
+    }
+    timers.push(setTimeout(() => setExtendedGaveUp(true), Math.max(FIRST_WINDOW_MS + EXTENDED_WINDOW_MS - elapsed, 0)));
+    return () => timers.forEach(clearTimeout);
+  }, [usesFallback, assetId, fallbackHasItems, pollTimedOut, extendedGaveUp]);
 
   const itemsToShow = (data?.items ?? []).slice(0, 3);
   const hasItems = itemsToShow.length > 0;
   const heroItem = itemsToShow[0] ?? null;
   const heroSentence = data?.heroSentence ?? null;
   const supportingItems = itemsToShow.slice(1, 3);
-  const rawCount = data?.count ?? 0;
-  const coverageTotal = rawCount > 0 ? rawCount : itemsToShow.length;
 
   async function completeOnboarding(): Promise<boolean> {
     setCompletionError(null);
@@ -429,9 +304,6 @@ export default function PlanRevealScreen() {
               <Icon name="shield-checkmark" size={20} color={Colors.good} />
             </View>
             <Text style={styles.coverageTitle}>{assetName} is covered</Text>
-            <Text style={styles.coverageSub}>
-              {`We\u2019re watching ${cfg.coverageNoun(coverageTotal)}. We\u2019ll remind you before the first one is due.`}
-            </Text>
           </Animated.View>
         )}
 
@@ -540,7 +412,6 @@ const styles = StyleSheet.create({
   coverageBlock: { backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 20, borderWidth: 1, borderColor: Colors.goodMuted, gap: 8, alignItems: "flex-start" },
   coverageIcon: { width: 40, height: 40, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: Colors.goodMuted, marginBottom: 2 },
   coverageTitle: { ...Typography.title2, color: Colors.text },
-  coverageSub: { ...Typography.subheadline, color: Colors.textSecondary },
   tasksSection: { gap: 12 },
   sectionLabel: { ...Typography.footnote, fontWeight: "600", color: Colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
   heroCard: { backgroundColor: Colors.card, borderRadius: Radius.xl, padding: 20, borderWidth: 1, gap: 12 },
